@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "541413670501",
+    "project_id": "adoptme-7b50c",
+    "storage_bucket": "adoptme-7b50c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541413670501:android:0379855b1a57c56e2a108c",
+        "android_client_info": {
+          "package_name": "com.adoptmevaluescalc"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "541413670501-2a13njokb6rc325f27arkdhjp5a40r4h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adoptmevaluescalc",
+            "certificate_hash": "d195a122f91d23f1b1ad2221fccbf09993087af1"
+          }
+        },
+        {
+          "client_id": "541413670501-ajkeff0qd03331dun20aonr0sh50n271.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adoptmevaluescalc",
+            "certificate_hash": "cea83f7ab4ec070d2930ec28cfb9513728cc5630"
+          }
+        },
+        {
+          "client_id": "541413670501-kc50a85fuieumga9a453f8njdphbt2cs.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adoptmevaluescalc",
+            "certificate_hash": "724ade3150c7715988564d76e71675a6ea19d558"
+          }
+        },
+        {
+          "client_id": "541413670501-aj1f61kv0k9f3v515tsu3768ef9hpfjt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQb8iHNTjeCj--IIiPb2tCkSHN9F2Ep30"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "541413670501-aj1f61kv0k9f3v515tsu3768ef9hpfjt.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
