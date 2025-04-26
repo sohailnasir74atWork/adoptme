@@ -286,7 +286,7 @@ export const GlobalStateProvider = ({ children }) => {
         // console.log("📌 Fetching codes & data from database...");
 
         const [xlsSnapshot, codeSnapShot] = await Promise.all([
-          get(ref(appdatabase, 'fruit_data')),
+          get(ref(appdatabase, 'xlsData')),
           get(ref(appdatabase, 'codes')),
         ]);
 

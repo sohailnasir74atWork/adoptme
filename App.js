@@ -26,8 +26,8 @@ import {
 import getAdUnitId from './Code/Ads/ads';
 import OnboardingScreen from './Code/AppHelper/OnBoardingScreen';
 import { useTranslation } from 'react-i18next';
-import RewardCenterScreen from './Code/SettingScreen/RewardCenter';
-import RewardRulesModal from './Code/SettingScreen/RewardRulesModel';
+// import RewardCenterScreen from './Code/SettingScreen/RewardCenter';
+// import RewardRulesModal from './Code/SettingScreen/RewardRulesModel';
 import InterstitialAdManager from './Code/Ads/IntAd';
 import AppOpenAdManager from './Code/Ads/openApp';
 import RNBootSplash from "react-native-bootsplash";
@@ -188,7 +188,7 @@ function App() {
             <Stack.Screen name="Home" options={{ headerShown: false }}>
               {() => <MainTabs selectedTheme={selectedTheme} setChatFocused={setChatFocused} chatFocused={chatFocused} setModalVisibleChatinfo={setModalVisibleChatinfo} modalVisibleChatinfo={modalVisibleChatinfo} />}
             </Stack.Screen>
-            <Stack.Screen
+            {/* <Stack.Screen
               name="Reward"
               options={{
                 title: "Reward Center",
@@ -202,7 +202,7 @@ function App() {
               }}
             >
               {() => <RewardCenterScreen selectedTheme={selectedTheme} />}
-            </Stack.Screen>
+            </Stack.Screen> */}
 
             {/* Move this outside of <Stack.Navigator> */}
 

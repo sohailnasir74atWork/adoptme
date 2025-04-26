@@ -21,7 +21,7 @@ import { mixpanel } from './MixPenel';
 
 const { width } = Dimensions.get('window');
 
-const icon = config.isNoman ? require('../../assets/icon.webp') : require('../../assets/logo.webp');
+const icon = config.isNoman ? require('../../assets/splashscreen.png') : require('../../assets/logo.webp');
 
 
 const OnboardingScreen = ({ onFinish, selectedTheme }) => {
@@ -119,7 +119,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <View style={styles.sliderContainer}>{renderSlider(translateX3, thirdSliderImages)}</View></View> */}
             <View>
               {/* <View style={styles.spacer}></View> */}
-              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>{t("first.welcome_title")}</Text>
+              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Adoptme Values</Text>
               <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>{t("first.welcome_text")}</Text>
             </View>
           </View>

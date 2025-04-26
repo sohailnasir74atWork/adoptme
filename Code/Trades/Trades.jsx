@@ -300,7 +300,7 @@ const TradeList = ({ route }) => {
     } else if (value >= 1_000) {
       return `${(value / 1_000).toFixed(1)}K`; // Thousands
     } else {
-      return value.toLocaleString(); // Default formatting
+      return value?.toLocaleString(); // Default formatting
     }
   };
   const fetchMoreTrades = useCallback(async () => {
@@ -745,7 +745,7 @@ const TradeList = ({ route }) => {
                 <View key={`${hasItem.name}-${hasItem.type}`} style={{ justifyContent: 'center', alignItems: 'center' }}>
                   <Image
                     source={{
-                      uri: hasItem.type === 'p' ? `https://bloxfruitscalc.com/wp-content/uploads/2024/08/${formatName(hasItem.name)}_Icon.webp` : `https://bloxfruitscalc.com/wp-content/uploads/2024/09/${formatName(hasItem.name)}_Icon.webp`,
+                      uri: `https://elvebredd.com${item.image}`,
                     }}
                     style={[styles.itemImage, { backgroundColor: hasItem.type === 'p' ? '#FFCC00' : '' }]}
                   />
@@ -779,7 +779,7 @@ const TradeList = ({ route }) => {
                 <View key={`${wantnItem.name}-${wantnItem.type}`} style={{ justifyContent: 'center', alignItems: 'center' }}>
                   <Image
                     source={{
-                      uri: wantnItem.type === 'p' ? `https://bloxfruitscalc.com/wp-content/uploads/2024/08/${formatName(wantnItem.name)}_Icon.webp` : `https://bloxfruitscalc.com/wp-content/uploads/2024/09/${formatName(wantnItem.name)}_Icon.webp`,
+                      uri:`https://elvebredd.com${item.image}`,
                     }}
                     style={[styles.itemImage, { backgroundColor: wantnItem.type === 'p' ? '#FFCC00' : '' }]}
                   />
