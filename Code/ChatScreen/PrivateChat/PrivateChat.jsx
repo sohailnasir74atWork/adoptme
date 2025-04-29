@@ -223,12 +223,15 @@ const handleRating = async () => {
   // console.log(selectedUser.sender)
   const groupItems = (items) => {
     const grouped = {};
-    items.forEach(({ name, type }) => {
-      const key = `${name}-${type}`;
+    items.forEach((item) => {
+      const key = `${item.name}-${item.type}`;
       if (grouped[key]) {
         grouped[key].count += 1;
       } else {
-        grouped[key] = { name, type, count: 1 };
+        grouped[key] = { 
+          ...item,
+          count: 1
+        };
       }
     });
     return Object.values(grouped);
@@ -260,7 +263,7 @@ const handleRating = async () => {
     }
   }, []);
   
-
+console.log(trade)
   const groupedHasItems = groupItems(trade?.hasItems || []);
   const groupedWantsItems = groupItems(trade?.wantsItems || []);
 
@@ -389,74 +392,103 @@ const handleRating = async () => {
             {/* <View style={{ flex: 1 }}> */}
               {trade && (
                 <View>
-                <View style={styles.tradeDetails}>
-                  <View style={styles.itemList}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor:'grey' }}>
+                  <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
                     {groupedHasItems?.map((hasItem, index) => (
-                      <View key={`${hasItem.name}-${hasItem.type}`} style={{ justifyContent: 'center', alignItems: 'center'}}>
+                      <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: '19%', alignItems: 'center', marginBottom: 4 }}>
                         <Image
-                          source={{
-                            uri: hasItem.type === 'p' ? `https://bloxfruitscalc.com/wp-content/uploads/2024/08/${formatName(hasItem.name)}_Icon.webp` : `https://bloxfruitscalc.com/wp-content/uploads/2024/09/${formatName(hasItem.name)}_Icon.webp`,
-                          }}
-                          style={[styles.itemImage, { backgroundColor: hasItem.type === 'p' ? '#FFCC00' : '' }]}
+                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${hasItem.image?.replace(/^\//, "")}` }}
+                          style={{ width: 30, height: 30}}
                         />
-                        <Text style={styles.names}>
-                          {hasItem.name}{hasItem.type === 'p' && " (P)"}
-                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
+                          {hasItem.isFly && (
+                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>F</Text>
+                            </View>
+                          )}
+                          {hasItem.isRide && (
+                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>R</Text>
+                            </View>
+                          )}
+                          {hasItem.valueType === 'm' && (
+                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>M</Text>
+                            </View>
+                          )}
+                          {hasItem.valueType === 'n' && (
+                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>N</Text>
+                            </View>
+                          )}
+                        </View>
                         {hasItem.count > 1 && (
-                          <View style={styles.tagcount}>
-                            <Text style={styles.tagcounttext}>{hasItem.count}</Text>
+                          <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 1, paddingVertical: 1 }}>
+                            <Text style={{ color: 'white', fontSize: 7}}>{hasItem.count}</Text>
                           </View>
                         )}
                       </View>
                     ))}
                   </View>
-                  <View style={styles.transfer}>
-                    <Image source={require('../../../assets/transfer.png')} style={styles.transferImage} />
+                  <View style={{ width: '2%', justifyContent: 'center', alignItems: 'center' }}>
+                    <Image source={require('../../../assets/transfer.png')} style={{ width: 10, height: 10 }} />
                   </View>
-                  <View style={styles.itemList}>
-                  {groupedWantsItems?.map((wantitem, index) => (
-                    <View key={`${wantitem.name}-${wantitem.type}`} style={{ justifyContent: 'center', alignItems: 'center'}}>
-                      <Image
-                        source={{
-                          uri: wantitem.type === 'p' ? `https://bloxfruitscalc.com/wp-content/uploads/2024/08/${formatName(wantitem.name)}_Icon.webp` : `https://bloxfruitscalc.com/wp-content/uploads/2024/09/${formatName(wantitem.name)}_Icon.webp`,
-                        }}
-                        style={[styles.itemImage, { backgroundColor: wantitem.type === 'p' ? '#FFCC00' : '' }]}
-                      />
-                      <Text style={styles.names}>
-                        {wantitem.name}{wantitem.type === 'p' && " (P)"}
-                      </Text>
-                      {wantitem.count > 1 && (
-                        <View style={styles.tagcount}>
-                          <Text style={styles.tagcounttext}>{wantitem.count}</Text>
+                  <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
+                    {groupedWantsItems?.map((wantitem, index) => (
+                      <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: '19%', alignItems: 'center', marginBottom: 4 }}>
+                        <Image
+                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${wantitem.image?.replace(/^\//, "")}` }}
+                          style={{ width: 35, height: 35 }}
+                        />
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
+                          {wantitem.isFly && (
+                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>F</Text>
+                            </View>
+                          )}
+                          {wantitem.isRide && (
+                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>R</Text>
+                            </View>
+                          )}
+                          {wantitem.valueType === 'm' && (
+                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>M</Text>
+                            </View>
+                          )}
+                          {wantitem.valueType === 'n' && (
+                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>N</Text>
+                            </View>
+                          )}
                         </View>
-                      )}
-                    </View>
-                  ))}
+                        {wantitem.count > 1 && (
+                          <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 1, paddingVertical: 1 }}>
+                            <Text style={{ color: 'white', fontSize: 7 }}>{wantitem.count}</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))}
                   </View>
-                 
                 </View>
                 {canRate && !hasRated && (
-  <View style={{ alignItems: 'center', marginTop: 5, }}>
-    <TouchableOpacity
-      style={{
-        backgroundColor: config.colors.primary,
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-      }}
-      onPress={() => {setShowRatingModal(true)
-      }}
-    >
-      <Text style={{ color: 'white', fontSize: 12 }}>
-        Rate Trader and Get 100 points
-      </Text>
-    </TouchableOpacity>
-  </View>
-)}
-
-
+                  <View style={{ alignItems: 'center', marginTop: 5 }}>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: config.colors.primary,
+                        borderRadius: 10,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                      }}
+                      onPress={() => setShowRatingModal(true)}
+                    >
+                      <Text style={{ color: 'white', fontSize: 12 }}>
+                        Rate Trader and Get 100 points
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 </View>
-
               )}
 
               {!loading && messages.length === 0 ? (

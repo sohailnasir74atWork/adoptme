@@ -18,6 +18,7 @@ import ShareTradeModal from '../Trades/SharetradeModel';
 import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
+import Share from 'react-native-share';
 
 const INITIAL_ITEMS = [null, null, null, null, null, null, null, null, null];
 const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
@@ -29,27 +30,27 @@ const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, is
   if (!item) return 0;
   
   // Categories that only use 'value' field
-  const simpleValueCategories = ['VEHICLES', 'PET WEAR', 'OTHER'];
+  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
   
-  // If item is from a simple value category or has a direct value field, use that
-  if (simpleValueCategories.includes(item.type) || item.value !== undefined) {
-    return Number(Number(item.value).toFixed(2)) || 0;
+  // Handle simple value categories
+  if (simpleValueCategories.includes(item.type)) {
+    const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
+    return Number((isSharkMode ? value : value / 131.85).toFixed(2));
   }
   
-  // For other categories (PETS, EGGS), use the selected value type
+  // For pets, use the exact value key based on selected type and modifiers
   if (!selectedValueType) return 0;
   
-  let valueKey = '';
-  if (selectedValueType === 'n') valueKey = 'nvalue';
-  else if (selectedValueType === 'm') valueKey = 'mvalue';
-  else if (selectedValueType === 'd') valueKey = 'rvalue';
-
-  if (isFlySelected && isRideSelected) valueKey += ' - fly&ride';
-  else if (isFlySelected) valueKey += ' - fly';
-  else if (isRideSelected) valueKey += ' - ride';
-  else if (!isFlySelected && !isRideSelected) valueKey += ' - nopotion';
-
-  const value = Number(item[valueKey]) || 0;
+  // Determine value key based on selected type
+  const valueKey = selectedValueType === 'n' ? 'nvalue' : 
+                  selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+  
+  // Add modifier suffix
+  const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
+                        isFlySelected ? ' - fly' :
+                        isRideSelected ? ' - ride' : ' - nopotion';
+  
+  const value = Number(item[valueKey + modifierSuffix]) || 0;
   return Number((isSharkMode ? value : value / 131.85).toFixed(2));
 };
 
@@ -65,11 +66,11 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user, appdatabase } = useGlobalState();
+  const { theme, user } = useGlobalState();
   const tradesCollection = useMemo(() => firestore().collection('trades_new'), []);
   const [hasItems, setHasItems] = useState(INITIAL_ITEMS);
   const [fruitRecords, setFruitRecords] = useState([]);
-  const [selectedPetType, setSelectedPetType] = useState('PETS');
+  const [selectedPetType, setSelectedPetType] = useState('ALL');
   const [wantsItems, setWantsItems] = useState(INITIAL_ITEMS);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedSection, setSelectedSection] = useState(null);
@@ -77,7 +78,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [hasTotal, setHasTotal] = useState(0);
   const [wantsTotal, setWantsTotal] = useState(0);
   const { triggerHapticFeedback } = useHaptic();
-  const { localState } = useLocalState();
+  const { localState, updateLocalState } = useLocalState();
   const [modalVisible, setModalVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
@@ -95,13 +96,15 @@ const HomeScreen = ({ selectedTheme }) => {
   const [isFlySelected, setIsFlySelected] = useState(false);
   const [isRideSelected, setIsRideSelected] = useState(false);
   const [isSharkMode, setIsSharkMode] = useState(true);
+  const [isAddingToFavorites, setIsAddingToFavorites] = useState(false);
 
   const tradeStatus = useMemo(() => 
     getTradeStatus(hasTotal, wantsTotal)
   , [hasTotal, wantsTotal]);
 
   const progressBarStyle = useMemo(() => {
-    if (!hasTotal && !wantsTotal) return { left: 0, right: 0 };
+    // When both sides are empty, show a balanced fair state (50-50)
+    if (!hasTotal && !wantsTotal) return { left: '50%', right: '50%' };
     
     const total = hasTotal + wantsTotal;
     const hasPercentage = (hasTotal / total) * 100;
@@ -205,7 +208,7 @@ const HomeScreen = ({ selectedTheme }) => {
         setWantsItems(updatedItems);
         updateTotal(item, 'wants', false, true);
       }
-    } else {
+        } else {
       triggerHapticFeedback('impactLight');
       setSelectedSection(isHas ? 'has' : 'wants');
       setIsDrawerVisible(true);
@@ -239,38 +242,137 @@ const HomeScreen = ({ selectedTheme }) => {
     
     updates();
   }, [isSharkMode, updateItemsForMode]);
+  // Add toggleFavorite function
+  const toggleFavorite = useCallback((item) => {
+    if (!item) return;
+    
+    const currentFavorites = localState.favorites || [];
+    const isFavorite = currentFavorites.some(fav => fav.id === item.id);
+    
+    let newFavorites;
+    if (isFavorite) {
+      newFavorites = currentFavorites.filter(fav => fav.id !== item.id);
+    } else {
+      newFavorites = [...currentFavorites, item];
+    }
+    
+    updateLocalState('favorites', newFavorites);
+    triggerHapticFeedback('impactLight');
+  }, [localState.favorites, updateLocalState, triggerHapticFeedback]);
 
-  // Memoize filtered data calculation
+  // Update filteredData to include favorites
   const filteredData = useMemo(() => {
-    return fruitRecords
-      .filter(item => {
-        if (!item?.name || !item?.type) return false;
-        const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
-        const matchesType = selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
-        return matchesSearch && matchesType;
-      })
-      .sort((a, b) => {
-        const valueA = getItemValue(a, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-        const valueB = getItemValue(b, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-        return valueB - valueA;
-      });
-  }, [fruitRecords, searchText, selectedPetType, selectedValueType, isFlySelected, isRideSelected, isSharkMode]);
+    if (selectedPetType === 'FAVORITES') {
+      // For FAVORITES tab, only show favorited items
+      return (localState.favorites || [])
+        .filter(item => {
+          if (!item?.name || !item?.type) return false;
+          const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
+          return matchesSearch;
+        })
+        .sort((a, b) => {
+          const valueA = getItemValue(a, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
+          const valueB = getItemValue(b, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
+          return valueB - valueA;
+        });
+    } else {
+      // For other tabs, show all items with type filter
+      return fruitRecords
+        .filter(item => {
+          if (!item?.name || !item?.type) return false;
+          const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
+          const matchesType = selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
+          return matchesSearch && matchesType;
+        })
+        .sort((a, b) => {
+          const valueA = getItemValue(a, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
+          const valueB = getItemValue(b, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
+          return valueB - valueA;
+        });
+    }
+  }, [fruitRecords, searchText, selectedPetType, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.favorites]);
 
-  // Memoize grid item render function
+  // Update renderGridItem to handle favorites mode
   const renderGridItem = useCallback(({ item }) => (
     <TouchableOpacity 
       style={styles.gridItem} 
-      onPress={() => selectItem(item)}
+      onPress={() => {
+        if (isAddingToFavorites) {
+          toggleFavorite(item);
+        } else {
+          selectItem(item);
+        }
+      }}
     >
+
+
       <Image
-        source={{ uri: `https://elvebredd.com${item.image}` }}
-        style={styles.gridItemImage}
+     source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+
+      style={styles.gridItemImage}
       />
       <Text numberOfLines={1} style={styles.gridItemText}>
         {item.name}
       </Text>
+      {isAddingToFavorites && (
+        <TouchableOpacity 
+          style={styles.favoriteButton}
+          onPress={() => toggleFavorite(item)}
+        >
+          <Icon 
+            name={(localState.favorites || []).some(fav => fav.id === item.id) ? "heart" : "heart-outline"} 
+            size={20} 
+            color={(localState.favorites || []).some(fav => fav.id === item.id) ? "#e74c3c" : "#666"} 
+          />
+        </TouchableOpacity>
+      )}
+      {selectedPetType === 'FAVORITES' && (
+        <TouchableOpacity 
+          style={styles.removeButton}
+          onPress={() => toggleFavorite(item)}
+        >
+          <Icon 
+            name="close-circle" 
+            size={20} 
+            color="#e74c3c" 
+          />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
-  ), [selectItem]);
+  ), [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, selectedPetType]);
+
+  // Update renderFavoritesHeader function
+  const renderFavoritesHeader = useCallback(() => {
+    if (selectedPetType === 'FAVORITES') {
+      return (
+        <View style={styles.favoritesHeader}>
+          <Text style={styles.favoritesTitle}>Your Favorites</Text>
+        </View>
+      );
+    }
+    return null;
+  }, [selectedPetType]);
+
+  // Update renderFavoritesFooter function
+  const renderFavoritesFooter = useCallback(() => {
+    if (selectedPetType === 'FAVORITES') {
+      return (
+        <View style={styles.badgeContainer}>
+          <TouchableOpacity 
+            style={styles.addToFavoritesButton}
+            onPress={() => {
+              setIsAddingToFavorites(true);
+              setSelectedPetType('ALL');
+            }}
+          >
+            <Icon name="add-circle" size={30} color={config.colors.hasBlockGreen} />
+            <Text style={styles.addToFavoritesText}>Add Items to Favorites</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return null;
+  }, [selectedPetType]);
 
   // Memoize key extractor
   const keyExtractor = useCallback((item) => 
@@ -354,29 +456,25 @@ const HomeScreen = ({ selectedTheme }) => {
       
       const userRating = avgRatingData?.value || null;
       const ratingCount = avgRatingData?.count || 0;
-      
+
+      const mapTradeItem = item => ({
+        name: item.name || item.Name,
+        type: item.type || item.Type,
+        value: item.selectedValue,
+        valueType: item.valueType,
+        isFly: item.isFly,
+        isRide: item.isRide,
+        image: item.image,
+      });
+
       const newTrade = {
         userId: user?.id || "Anonymous",
         traderName: user?.displayName || "Anonymous",
         avatar: user?.avatar || null,
         isPro: localState.isPro,
         isFeatured: false,
-        hasItems: hasItems.filter(item => item?.Name).map(item => ({ 
-          name: item.Name, 
-          type: item.Type, 
-          value: item.selectedValue,
-          valueType: item.valueType,
-          isFly: item.isFly,
-          isRide: item.isRide
-        })),
-        wantsItems: wantsItems.filter(item => item?.Name).map(item => ({ 
-          name: item.Name, 
-          type: item.Type, 
-          value: item.selectedValue,
-          valueType: item.valueType,
-          isFly: item.isFly,
-          isRide: item.isRide
-        })),
+        hasItems: hasItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
+        wantsItems: wantsItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
         hasTotal,
         wantsTotal,
         description: description || "",
@@ -422,17 +520,32 @@ const HomeScreen = ({ selectedTheme }) => {
     }
   }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t]);
 
+  const handleShareTrade = useCallback(async () => {
+    if (!viewRef.current) return;
+    try {
+      const uri = await viewRef.current.capture();
+      await Share.open({
+        url: uri,
+        type: 'image/png',
+        failOnCancel: false,
+      });
+    } catch (error) {
+      console.error('Error sharing trade screenshot:', error);
+      showErrorMessage('Error', 'Could not share the trade screenshot.');
+    }
+  }, [viewRef]);
+
   const profitLoss = wantsTotal - hasTotal;
   const isProfit = profitLoss >= 0;
   const neutral = profitLoss === 0;
 
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  
+
   const lastFilledIndexHas = useMemo(() => 
     hasItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
   , [hasItems]);
-  
+
   const lastFilledIndexWant = useMemo(() => 
     wantsItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
   , [wantsItems]);
@@ -461,9 +574,9 @@ const HomeScreen = ({ selectedTheme }) => {
                           styles.statusText,
                           tradeStatus === 'lose' ? styles.statusActive : styles.statusInactive
                         ]}>LOSE</Text>
-                      </View>
+                </View>
                       <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
-                    </View>
+                </View>
                     <View style={styles.progressContainer}>
                       <View style={styles.progressBar}>
                         <View 
@@ -502,95 +615,109 @@ const HomeScreen = ({ selectedTheme }) => {
               </View>
 
               <View style={{flexDirection:'row', justifyContent:'space-between'}}>
-                <View style={styles.itemRow}>
-                  {hasItems?.map((item, index) => (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[styles.addItemBlockNew]} 
-                      onPress={() => handleCellPress(index, true)}
-                    >
-                      {item ? (
-                        <>
-                          <Image
-                            source={{ uri: `https://elvebredd.com/${item.image}`}}
-                            style={[styles.itemImageOverlay]}
-                          />
-                          {!hideBadge.includes(item.type?.toUpperCase()) && (
-                            <View style={styles.itemBadgesContainer}>
-                              {item?.isFly && (
-                                <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
-                              )}
-                              {item?.isRide && (
-                                <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
-                              )}
-                              {item?.valueType && item.valueType !== 'd' && (
-                                <Text style={[
-                                  styles.itemBadge,
-                                  item.valueType === 'm' && styles.itemBadgeMega,
-                                  item.valueType === 'n' && styles.itemBadgeNeon,
-                                ]}>{item.valueType.toUpperCase()}</Text>
-                              )}
-                            </View>
-                          )}
-                        </>
-                      ) : (
-                        index === lastFilledIndexHas + 1 && (
-                          <Icon 
-                            name="add-circle" 
-                            size={30} 
-                            color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
-                          />
-                        )
-                      )}
-                    </TouchableOpacity>
-                  ))}
+              <View style={styles.itemRow}>
+                  {hasItems?.map((item, index) => {
+                    // For 3 columns
+                    const isLastColumn = (index + 1) % 3 === 0;
+                    const isLastRow = index >= hasItems.length - 3;
+                    return (
+                      <TouchableOpacity 
+                        key={index} 
+                        style={[
+                          styles.addItemBlockNew,
+                          isLastColumn && { borderRightWidth: 0 },
+                          isLastRow && { borderBottomWidth: 0 }
+                        ]}
+                        onPress={() => handleCellPress(index, true)}
+                      >
+                    {item ? (
+                      <>
+                        <Image
+                             source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+                             style={[styles.itemImageOverlay]}
+                            />
+                            {!hideBadge.includes(item.type?.toUpperCase()) && (
+                              <View style={styles.itemBadgesContainer}>
+                                {item?.isFly && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
+                                )}
+                                {item?.isRide && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
+                                )}
+                                {item?.valueType && item.valueType !== 'd' && (
+                                  <Text style={[
+                                    styles.itemBadge,
+                                    item.valueType === 'm' && styles.itemBadgeMega,
+                                    item.valueType === 'n' && styles.itemBadgeNeon,
+                                  ]}>{item.valueType.toUpperCase()}</Text>
+                                )}
+                              </View>
+                            )}
+                      </>
+                    ) : (
+                          index === lastFilledIndexHas + 1 && (
+                            <Icon 
+                              name="add-circle" 
+                              size={30} 
+                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
+                            />
+                          )
+                    )}
+                  </TouchableOpacity>
+                    );
+                  })}
                 </View>
-
-               
-
                 <View style={[styles.itemRow]}>
-                  {wantsItems?.map((item, index) => (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[styles.addItemBlockNew]} 
-                      onPress={() => handleCellPress(index, false)}
-                    >
-                      {item ? (
-                        <>
-                          <Image
-                            source={{ uri: `https://elvebredd.com/${item.image}`}}
-                            style={[styles.itemImageOverlay]}
-                          />
-                          {!hideBadge.includes(item.type?.toUpperCase()) && (
-                            <View style={styles.itemBadgesContainer}>
-                              {item?.isFly && (
-                                <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
-                              )}
-                              {item?.isRide && (
-                                <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
-                              )}
-                              {item?.valueType && item.valueType !== 'd' && (
-                                <Text style={[
-                                  styles.itemBadge,
-                                  item.valueType === 'm' && styles.itemBadgeMega,
-                                  item.valueType === 'n' && styles.itemBadgeNeon,
-                                ]}>{item.valueType.toUpperCase()}</Text>
-                              )}
-                            </View>
-                          )}
-                        </>
-                      ) : (
-                        index === lastFilledIndexWant + 1 && (
-                          <Icon 
-                            name="add-circle" 
-                            size={30} 
-                            color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
-                          />
-                        )
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                  {wantsItems?.map((item, index) => {
+                    const isLastColumn = (index + 1) % 3 === 0;
+                    const isLastRow = index >= wantsItems.length - 3;
+                    return (
+                      <TouchableOpacity 
+                        key={index} 
+                        style={[
+                          styles.addItemBlockNew,
+                          isLastColumn && { borderRightWidth: 0 },
+                          isLastRow && { borderBottomWidth: 0 }
+                        ]}
+                        onPress={() => handleCellPress(index, false)}
+                      >
+                    {item ? (
+                      <>
+                        <Image
+                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+                              style={[styles.itemImageOverlay]}
+                            />
+                            {!hideBadge.includes(item.type?.toUpperCase()) && (
+                              <View style={styles.itemBadgesContainer}>
+                                {item?.isFly && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
+                                )}
+                                {item?.isRide && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
+                                )}
+                                {item?.valueType && item.valueType !== 'd' && (
+                                  <Text style={[
+                                    styles.itemBadge,
+                                    item.valueType === 'm' && styles.itemBadgeMega,
+                                    item.valueType === 'n' && styles.itemBadgeNeon,
+                                  ]}>{item.valueType.toUpperCase()}</Text>
+                                )}
+                              </View>
+                            )}
+                      </>
+                    ) : (
+                          index === lastFilledIndexWant + 1 && (
+                            <Icon 
+                              name="add-circle" 
+                              size={30} 
+                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
+                            />
+                          )
+                    )}
+                  </TouchableOpacity>
+                    );
+                  })}
+              </View>
               </View>
 
               <View style={styles.typeContainer}>
@@ -609,7 +736,7 @@ const HomeScreen = ({ selectedTheme }) => {
                     <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
                   </TouchableOpacity>
                   
-                </View>
+              </View>
                 <View style={styles.recommendedContainer}>
                   <Icon 
                     name="return-up-forward-outline" 
@@ -618,24 +745,24 @@ const HomeScreen = ({ selectedTheme }) => {
                     style={styles.curvedArrow}
                   />
                   <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                </View>
+                      </View>
               </View>
 
               {!config.isNoman && (
                 <View style={styles.summaryContainer}>
-                  <View style={[styles.summaryBox, styles.hasBox]}>
-                    <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
-                    <View style={{justifyContent:'space-between', flexDirection:'row' }} >
-                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                <View style={[styles.summaryBox, styles.hasBox]}>
+                  <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
+                  <View style={{justifyContent:'space-between', flexDirection:'row' }} >
+                  <Text style={styles.priceValue}>{t('home.value')}:</Text>
                       <Text style={styles.priceValue}>${hasTotal?.toLocaleString()}</Text>
-                    </View>
                   </View>
-                  <View style={[styles.summaryBox, styles.wantsBox]}>
-                    <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
-                    <View style={{justifyContent:'space-between', flexDirection:'row' }} >
-                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                </View>
+                <View style={[styles.summaryBox, styles.wantsBox]}>
+                  <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
+                  <View style={{justifyContent:'space-between', flexDirection:'row' }} >
+                  <Text style={styles.priceValue}>{t('home.value')}:</Text>
                       <Text style={styles.priceValue}>${wantsTotal?.toLocaleString()}</Text>
-                    </View>
+                  </View>
                   </View>
                 </View>
               )}
@@ -649,7 +776,7 @@ const HomeScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.shareTradeButton} 
-                onPress={() => handleCreateTradePress('share')}
+                onPress={handleShareTrade}
               >
                 <Text style={{ color: 'white' }}>{t('home.share_trade')}</Text>
               </TouchableOpacity>
@@ -688,7 +815,12 @@ const HomeScreen = ({ selectedTheme }) => {
                         styles.categoryButton,
                         selectedPetType === category && styles.categoryButtonActive
                       ]}
-                      onPress={() => setSelectedPetType(category)}
+                      onPress={() => {
+                        setSelectedPetType(category);
+                        if (category !== 'FAVORITES') {
+                          setIsAddingToFavorites(false);
+                        }
+                      }}
                     >
                       <Text style={[
                         styles.categoryButtonText,
@@ -699,6 +831,7 @@ const HomeScreen = ({ selectedTheme }) => {
                 </View>
 
                 <View style={styles.gridContainer}>
+                  {renderFavoritesHeader()}
                   <FlatList
                     data={filteredData}
                     keyExtractor={keyExtractor}
@@ -710,40 +843,50 @@ const HomeScreen = ({ selectedTheme }) => {
                     removeClippedSubviews={true}
                     getItemLayout={getItemLayout}
                   />
-                  
-                  <View style={styles.badgeContainer}>
-                    {VALUE_TYPES.map((badge) => (
-                      <TouchableOpacity
-                        key={badge}
-                        onPress={() => handleBadgePress(badge)}
-                        style={[
-                          styles.badgeButton,
-                          selectedValueType === badge.toLowerCase() && styles.badgeButtonActive
-                        ]}
-                      >
-                        <Text style={[
-                          styles.badgeButtonText,
-                          selectedValueType === badge.toLowerCase() && styles.badgeButtonTextActive
-                        ]}>{badge}</Text>
-                      </TouchableOpacity>
-                    ))}
+                  {selectedPetType === 'FAVORITES' ? renderFavoritesFooter() : (
+                    <View style={styles.badgeContainer}>
+                      {VALUE_TYPES.map((badge) => (
+                        <TouchableOpacity
+                          key={badge}
+                          onPress={() => handleBadgePress(badge)}
+                          style={[
+                            styles.badgeButton,
+                            selectedValueType === badge.toLowerCase() && [
+                              styles.badgeButtonActive,
+                              badge === 'D' && { backgroundColor: config.colors.hasBlockGreen },
+                              badge === 'M' && { backgroundColor: '#9b59b6' },
+                              badge === 'N' && { backgroundColor: '#2ecc71' }
+                            ]
+                          ]}
+                        >
+                          <Text style={[
+                            styles.badgeButtonText,
+                            selectedValueType === badge.toLowerCase() && styles.badgeButtonTextActive
+                          ]}>{badge}</Text>
+                        </TouchableOpacity>
+                      ))}
 
-                    {MODIFIERS.map((badge) => (
-                      <TouchableOpacity
-                        key={badge}
-                        onPress={() => handleBadgePress(badge)}
-                        style={[
-                          styles.badgeButton,
-                          (badge === 'F' ? isFlySelected : isRideSelected) && styles.badgeButtonActive
-                        ]}
-                      >
-                        <Text style={[
-                          styles.badgeButtonText,
-                          (badge === 'F' ? isFlySelected : isRideSelected) && styles.badgeButtonTextActive
-                        ]}>{badge}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                      {MODIFIERS.map((badge) => (
+                        <TouchableOpacity
+                          key={badge}
+                          onPress={() => handleBadgePress(badge)}
+                          style={[
+                            styles.badgeButton,
+                            (badge === 'F' ? isFlySelected : isRideSelected) && [
+                              styles.badgeButtonActive,
+                              badge === 'F' && { backgroundColor: '#3498db' },
+                              badge === 'R' && { backgroundColor: config.colors.hasBlockGreen }
+                            ]
+                          ]}
+                        >
+                          <Text style={[
+                            styles.badgeButtonText,
+                            (badge === 'F' ? isFlySelected : isRideSelected) && styles.badgeButtonTextActive
+                          ]}>{badge}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
@@ -757,7 +900,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)} />
             <ConditionalKeyboardWrapper>
               <View style={{flexDirection:'row', flex:1}}>
-                <View style={[styles.drawerContainer, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
+                <View style={[styles.drawerContainer2, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
                   <Text style={styles.modalMessage}>
                     {t("home.trade_description")}
                   </Text>
@@ -822,7 +965,7 @@ const getStyles = (isDarkMode) =>
       width: '100%',
     },
     summaryInner: {
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
       borderRadius: 30,
       
       padding: 15,
@@ -847,12 +990,16 @@ const getStyles = (isDarkMode) =>
       fontWeight: 'bold',
       color: '#333',
       textAlign: 'center',
+      color: isDarkMode ? 'white' : '#333',
+
     },
     bigNumber2: {
       fontSize: 40,
       fontWeight: 'bold',
       color: '#333',
       textAlign: 'center',
+      color: isDarkMode ? 'white' : '#333',
+
     },
     statusContainer: {
       flexDirection: 'row',
@@ -869,10 +1016,10 @@ const getStyles = (isDarkMode) =>
       paddingHorizontal: 15,
     },
     statusActive: {
-      color: '#333',
+      color: isDarkMode ? 'white' : '#333',
     },
     statusInactive: {
-      color: '#999',
+      color: isDarkMode ? '#999' : '#999',
     },
     progressContainer: {
       marginVertical: 10,
@@ -892,7 +1039,7 @@ const getStyles = (isDarkMode) =>
     },
     progressRight: {
       height: '100%',
-      backgroundColor: config.colors.wantBlockRed,
+      backgroundColor: '#f3d0c7',
       transition: 'width 0.3s ease',
     },
     labelContainer: {
@@ -904,7 +1051,7 @@ const getStyles = (isDarkMode) =>
     },
     offerLabel: {
       fontSize: 14,
-      color: '#666',
+      color: isDarkMode ? '#999' : '#666',
       fontWeight: '600',
       paddingHorizontal: 10,
     },
@@ -947,17 +1094,18 @@ paddingVertical:10,
       borderColor: 'rgb(255, 102, 102)',
       marginHorizontal: 'auto',
       borderRadius: 4,
-      // backgroundColor: 'rgb(255, 102, 102)',
+      overflow: 'hidden',
     },
     addItemBlockNew: {
       width: '33.33%',
-      height: 55,
-      backgroundColor: '#f3d0c7',
-      borderWidth: 1,
-      borderColor: 'rgb(255, 102, 102)',
+      height: 60,
+      backgroundColor: isDarkMode ? 'transparent' : '#f3d0c7',
       justifyContent: 'center',
       alignItems: 'center',
-      borderRadius: 0,
+      position: 'relative',
+      borderRightWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: 'rgb(255, 102, 102)',
     },
     itemText: {
       color: isDarkMode ? 'white' : 'black',
@@ -969,7 +1117,7 @@ paddingVertical:10,
       position: 'absolute',
       top: 2,
       right: 2,
-      backgroundColor: config.colors.wantBlockRed,
+      // backgroundColor: config.colors.wantBlockRed,
       borderRadius: 50,
       opacity: .7
     },
@@ -990,6 +1138,18 @@ paddingVertical:10,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       height: '80%',
+      paddingTop: 16,
+      paddingHorizontal: 16,
+    },
+    drawerContainer2: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: isDarkMode ? '#3B404C' : 'white',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      // height: '80%',
       paddingTop: 16,
       paddingHorizontal: 16,
     },
@@ -1028,6 +1188,7 @@ paddingVertical:10,
     },
     gridContainer: {
       flex: 1,
+      // paddingBottom: 60,
     },
     gridItem: {
       flex: 1,
@@ -1047,19 +1208,20 @@ paddingVertical:10,
     badgeContainer: {
       flexDirection: 'row',
       justifyContent: 'center',
-      paddingVertical: 12,
+      paddingVertical: 8,
       borderTopWidth: 1,
       borderTopColor: isDarkMode ? '#4A4A4A' : '#E0E0E0',
-      marginTop: 8,
+      // marginTop: 8,
     },
     badge: {
       color: 'white',
-      backgroundColor: '#FF6666',
-      padding: 2,
-      borderRadius: 5,
-      fontSize: 10,
-      minWidth: 14,
+      padding: 0.5,
+      borderRadius: 10,
+      fontSize: 6,
+      minWidth: 10,
       textAlign: 'center',
+      overflow: 'hidden',
+      fontWeight: '600',
     },
     badgeButton: {
       marginHorizontal: 4,
@@ -1069,7 +1231,7 @@ paddingVertical:10,
       backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
     },
     badgeButtonActive: {
-      backgroundColor: '#FF6666',
+      backgroundColor: '#3498db',
     },
     badgeButtonText: {
       fontSize: 12,
@@ -1325,7 +1487,7 @@ paddingVertical:10,
       color: 'white',
       padding: 1,
       borderRadius: 5,
-      fontSize: 8,
+      fontSize: 6,
       minWidth: 10,
       textAlign: 'center',
       overflow: 'hidden',
@@ -1343,23 +1505,49 @@ paddingVertical:10,
     itemBadgeNeon: {
       backgroundColor: '#2ecc71',
     },
-    newBadgeContainer: {
+    favoriteButton: {
       position: 'absolute',
-      bottom: 0,
-      right: 0,
-      flexDirection: 'row',
-      gap: 1,
-      padding: 1,
+      top: 5,
+      right: 5,
+      padding: 5,
+      borderRadius: 50,
     },
-    newBadge: {
-      color: 'white',
-      backgroundColor: '#FF6666',
-      padding: 2,
-      borderRadius: 6,
-      fontSize: 8,
-      minWidth: 14,
-      textAlign: 'center',
-      overflow: 'hidden',
+    emptyFavoritesContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+      marginTop: 50,
+    },
+    emptyFavoritesText: {
+      fontSize: 16,
+      color: isDarkMode ? '#fff' : '#666',
+      marginTop: 10,
+      marginBottom: 20,
+    },
+    addToFavoritesButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+      padding: 15,
+      borderRadius: 8,
+      margin: 10,
+      width: '100%',
+    },
+    addToFavoritesText: {
+      marginLeft: 8,
+      fontSize: 14,
+      color: isDarkMode ? '#fff' : '#666',
+    },
+    favoritesHeader: {
+      padding: 10,
+      alignItems: 'center',
+    },
+    favoritesTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: isDarkMode ? '#fff' : '#333',
     },
   });
 

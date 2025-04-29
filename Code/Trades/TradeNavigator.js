@@ -65,7 +65,7 @@ export const TradeStack = ({ selectedTheme }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
-  const navigation = useNavigation()
+  // const navigation = useNavigation()
 
 
   const headerOptions = useMemo(
@@ -88,32 +88,19 @@ export const TradeStack = ({ selectedTheme }) => {
           options={({ navigation }) => ({
             title: t("tabs.trade"),
             headerRight: () => (
-              <View style={{ flexDirection: 'row',  flex:1, justifyContent:'flex-end'}}>
-                {/* <TouchableOpacity onPress={() => navigation.navigate('Server')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
-                  <Image
-                    source={
-                      isDarkMode
-                        ? require('../../assets/roblox.png')
-                        : require('../../assets/roblox.png')
-                    }
-                    style={{
-                      width: 20,
-                      height:25,
-                      // transform: [{ scale: 1.2 }],
-                      tintColor: config.colors.white,
-                      justifyContent:'center',
-                      alignItems:'center'
-                    }}
-                    resizeMode="contain"
-                  />
-                  <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Pvt Servers</Text>
-                </TouchableOpacity> */}
-          
-                <TouchableOpacity onPress={() => setModalVisible(true)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center',  }}>
+                <TouchableOpacity 
+                  onPress={() => setModalVisible(true)}
+                  style={{ 
+                    padding: 8,
+                    // backgroundColor: isDarkMode ? '#333' : '#f5f5f5',
+                    borderRadius: 8,
+                  }}
+                >
                   <Icon
                     name="information-circle-outline"
                     size={24}
-                    color={config.colors.primary}
+                    color={isDarkMode ? 'white' : 'config.colors.primary'}
                   />
                 </TouchableOpacity>
               </View>

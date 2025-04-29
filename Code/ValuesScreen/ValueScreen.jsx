@@ -8,6 +8,7 @@ import {
   Image,
   FlatList,
   Modal,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { debounce } from '../Helper/debounce';
@@ -26,6 +27,12 @@ import BannerAdComponent from '../Ads/bannerAds';
 
 const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
+
+const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+
+const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+
+const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
 const ItemBadge = React.memo(({ type, style, styles }) => (
   <Text style={[styles.itemBadge, style]}>{type}</Text>
@@ -71,30 +78,34 @@ const ItemImage = React.memo(({ uri, badges, styles }) => (
 
 const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles }) => {
   const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
+  const { localState } = useLocalState()
   const badges = [];
 
-  if (itemSelection.isFly) {
-    badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
-  }
-  if (itemSelection.isRide) {
-    badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
-  }
-  if (itemSelection.valueType !== 'd') {
-    badges.push(
-      <ItemBadge
-        key="value"
-        type={itemSelection.valueType.toUpperCase()}
-        style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
-        styles={styles}
-      />
-    );
+  // Only show badges if the item type is not in hideBadge
+  if (!hideBadge.includes(item.type?.toUpperCase())) {
+    if (itemSelection.isFly) {
+      badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
+    }
+    if (itemSelection.isRide) {
+      badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
+    }
+    if (itemSelection.valueType !== 'd') {
+      badges.push(
+        <ItemBadge
+          key="value"
+          type={itemSelection.valueType.toUpperCase()}
+          style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
+          styles={styles}
+        />
+      );
+    }
   }
 
   return (
     <View style={styles.itemContainer}>
       <View style={styles.imageContainer}>
         <ItemImage
-          uri={`https://elvebredd.com${item.image}`}
+          uri={`${localState?.imgurl}/${item.image}`}
           badges={badges}
           styles={styles}
         />
@@ -156,6 +167,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false); // State for pull-to-refresh
   const [itemSelections, setItemSelections] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
 
   const editValuesRef = useRef({
     Value: '',
@@ -265,19 +277,18 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     if (localState.data) {
       try {
         const parsedValues = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
-
         if (typeof parsedValues !== 'object' || parsedValues === null) {
           throw new Error('Parsed data is not a valid object');
         }
-
         const values = Object.values(parsedValues);
         setValuesData(values);
-
         // Extract unique rarities and update filters
-        const uniqueRarities = ['All', ...new Set(values.map(item => 
+        const uniqueRarities = [...new Set(values.map(item => 
           item.rarity ? item.rarity.toUpperCase() : null
         ).filter(Boolean))];
-        setFilters(uniqueRarities);
+        // Combine CATEGORIES and unique rarities, removing duplicates
+        const allFilters = [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
+        setFilters(allFilters);
       } catch (error) {
         console.error("❌ Error parsing data:", error, "📝 Raw Data:", localState.data);
         setValuesData([]);
@@ -323,17 +334,19 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
       setFilteredData([]);
       return;
     }
-
     const filtered = valuesData.filter((item) => {
       if (!item?.name) return false;
-
       const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
-      const matchesRarity = selectedFilter === 'All' || 
-        (item.rarity && item.rarity.toUpperCase() === selectedFilter);
-      
-      return matchesSearch && matchesRarity;
+      let matches = false;
+      if (selectedFilter === 'ALL' || selectedFilter === 'All') {
+        matches = true;
+      } else if (CATEGORIES.includes(selectedFilter)) {
+        matches = item.type && item.type.toUpperCase() === selectedFilter;
+      } else {
+        matches = item.rarity && item.rarity.toUpperCase() === selectedFilter;
+      }
+      return matchesSearch && matches;
     });
-
     setFilteredData(filtered);
   }, [valuesData, searchText, selectedFilter]);
   const EditFruitModal = () => (
@@ -400,27 +413,28 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     if (!item) return 0;
     
     // Categories that only use 'value' field
-    const simpleValueCategories = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
     
-    // If item is from a simple value category or has a direct value field, use that
-    if (simpleValueCategories.includes(item.type) || item.value !== undefined || item.rvalue !== undefined) {
-      return Number(Number(item.value || item.rvalue).toFixed(2)) || 0;
+    // Handle simple value categories
+    if (simpleValueCategories.includes(item.type)) {
+      const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
+      return Number(value.toFixed(2));
     }
     
-    // For other categories (PETS), use the selected value type
+    // For pets, use the exact value key based on selected type and modifiers
     if (!selectedValueType) return 0;
     
-    let valueKey = '';
-    if (selectedValueType === 'n') valueKey = 'nvalue';
-    else if (selectedValueType === 'm') valueKey = 'mvalue';
-    else if (selectedValueType === 'd') valueKey = 'rvalue';
-
-    if (isFlySelected && isRideSelected) valueKey += ' - fly&ride';
-    else if (isFlySelected) valueKey += ' - fly';
-    else if (isRideSelected) valueKey += ' - ride';
-    else if (!isFlySelected && !isRideSelected) valueKey += ' - nopotion';
-
-    return Number(item[valueKey]) || 0;
+    // Determine value key based on selected type
+    const valueKey = selectedValueType === 'n' ? 'nvalue' : 
+                    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+    
+    // Add modifier suffix
+    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
+                          isFlySelected ? ' - fly' :
+                          isRideSelected ? ' - ride' : ' - nopotion';
+    
+    const value = Number(item[valueKey + modifierSuffix]) || 0;
+    return Number(value.toFixed(2));
   };
 
   const handleItemBadgePress = useCallback((itemId, badge) => {
@@ -495,11 +509,18 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
             </TouchableOpacity> */}
           </View>
 
-
-
-
-
-
+          {/* Category filter bar */}
+          {/* <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryBar} contentContainerStyle={styles.categoryBarContent}>
+            {CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.categoryButton, selectedCategory === cat && styles.categoryButtonActive]}
+                onPress={() => setSelectedCategory(cat)}
+              >
+                <Text style={[styles.categoryButtonText, selectedCategory === cat && styles.categoryButtonTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView> */}
 
           {filteredData.length > 0 ? (
             <>
@@ -509,10 +530,10 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
                 renderItem={renderItem}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={true}
-                numColumns={!config.isNoman ? 1 : 1}
+                numColumns={2}
+                columnWrapperStyle={styles.columnWrapper}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-              // columnWrapperStyle={!config.isNoman ? styles.columnWrapper : styles.columnWrapper}
               />
               {isModalVisible && selectedFruit && <EditFruitModal />}
             </>
@@ -550,6 +571,12 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
     paddingTop: 16,
   },
+  columnWrapper: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    // marginBottom: 4,
+  },
   searchFilterContainer: { 
     flexDirection: 'row', 
     marginBottom: 16,
@@ -568,7 +595,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 5,
+    shadowRadius: 2,
     elevation: 2,
   },
   filterButton: {
@@ -582,61 +609,57 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
-    elevation: 3,
+    elevation: 2,
   },
   itemContainer: {
     backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
-    borderRadius: 20,
-    marginHorizontal: 16,
+    borderRadius: 10,
     marginBottom: 12,
-    padding: 16,
+    padding: 10,
+    width: '49%', // 2 per row with spacing
+    alignSelf: 'flex-start',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 1,
   },
   imageContainer: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
   },
   imageWrapper: {
     position: 'relative',
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#f8f9fa',
   },
   icon: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 12,
   },
   itemInfo: {
-    flex: 1,
+      flex: 1,
     justifyContent: 'center',
   },
-  name: {
-    fontSize: 20,
+    name: {
+    fontSize: 14,
     fontWeight: '700',
     color: isDarkMode ? '#ffffff' : '#000000',
-    marginBottom: 6,
+    marginBottom: 2,
     letterSpacing: -0.5,
-  },
-  value: {
-    fontSize: 16,
+    },
+    value: {
+    fontSize: 12,
     color: isDarkMode ? '#e0e0e0' : '#333333',
-    marginBottom: 6,
+    marginBottom: 2,
     fontWeight: '500',
   },
   rarity: {
-    fontSize: 14,
+    fontSize: 10,
     color: config.colors.primary,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -644,20 +667,21 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   itemBadgesContainer: {
     position: 'absolute',
-    bottom: 4,
-    left: 4,
-    flexDirection: 'row',
-    gap: 4,
+      bottom: 0,
+      right: 0,
+      flexDirection: 'row',
+      gap: 1,
+      padding: 1,
   },
   itemBadge: {
     color: 'white',
-    padding: 4,
-    borderRadius: 8,
-    fontSize: 12,
-    minWidth: 24,
-    textAlign: 'center',
-    overflow: 'hidden',
-    fontWeight: '700',
+      padding: 1,
+      borderRadius: 5,
+      fontSize: 6,
+      minWidth: 10,
+      textAlign: 'center',
+      overflow: 'hidden',
+      fontWeight: '600',
   },
   itemBadgeFly: {
     backgroundColor: '#3498db',
@@ -672,11 +696,11 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     backgroundColor: '#2ecc71',
   },
   badgesContainer: {
-    flexDirection: 'row',
+      flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
-    padding: 16,
+    // padding: 16,
     borderRadius: 16,
     marginTop: 8,
   },
@@ -711,8 +735,8 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   filterOptionText: {
     fontSize: 16,
-    padding: 16,
-    color: isDarkMode ? '#ffffff' : '#333333',
+    padding: 10,
+    color: isDarkMode ? '#fff' : '#333',
   },
   selectedOption: {
     fontWeight: '700',
@@ -734,100 +758,100 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 24,
     color: isDarkMode ? '#888888' : '#666666',
     fontWeight: '500',
+    },
+    modalContainer: {
+      backgroundColor: "#fff",
+      padding: 20,
+      borderRadius: 10,
+      width: '80%',
+      alignSelf: 'center', // Centers the modal horizontally
+      position: 'absolute',
+      top: '50%', // Moves modal halfway down the screen
+      left: '10%', // Centers horizontally considering width: '80%'
+      transform: [{ translateY: -150 }], // Adjusts for perfect vertical centering
+      justifyContent: 'center',
+      elevation: 5, // Adds a shadow on Android
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
   },
-  modalContainer: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 10,
-    width: '80%',
-    alignSelf: 'center', // Centers the modal horizontally
-    position: 'absolute',
-    top: '50%', // Moves modal halfway down the screen
-    left: '10%', // Centers horizontally considering width: '80%'
-    transform: [{ translateY: -150 }], // Adjusts for perfect vertical centering
-    justifyContent: 'center',
-    elevation: 5, // Adds a shadow on Android
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Lato-Bold',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 8,
-    marginVertical: 5,
-    borderRadius: 5,
-  },
-  saveButton: {
-    backgroundColor: "#2ecc71",
-    paddingVertical: 10,
-    borderRadius: 5,
-    marginTop: 10,
-  },
-  cencelButton: {
-    backgroundColor: "red",
-    paddingVertical: 10,
-    borderRadius: 5,
-    marginTop: 10,
-  },
-  headertext: {
-    backgroundColor: 'rgb(255, 102, 102)',
-    paddingVertical: 1,
-    paddingHorizontal: 5,
-    borderRadius: 5,
-    color: 'white',
-    fontSize: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: "flex-start",
-    marginRight: 10
+    modalTitle: {
+      fontSize: 18,
+      fontFamily: 'Lato-Bold',
+      marginBottom: 10,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: "#ccc",
+      padding: 8,
+      marginVertical: 5,
+      borderRadius: 5,
+    },
+    saveButton: {
+      backgroundColor: "#2ecc71",
+      paddingVertical: 10,
+      borderRadius: 5,
+      marginTop: 10,
+    },
+    cencelButton: {
+      backgroundColor: "red",
+      paddingVertical: 10,
+      borderRadius: 5,
+      marginTop: 10,
+    },
+    headertext: {
+      backgroundColor: 'rgb(255, 102, 102)',
+      paddingVertical: 1,
+      paddingHorizontal: 5,
+      borderRadius: 5,
+      color: 'white',
+      fontSize: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+      alignSelf: "flex-start",
+      marginRight: 10
 
-  },
-  pointsBox: {
-    width: '49%', // Ensures even spacing
-    backgroundColor: isDarkMode ? '#34495E' : '#f3d0c7', // Dark: darker contrast, Light: White
-    borderRadius: 8,
-    padding: 10,
-  },
-  rowcenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    fontSize: 12,
-    marginTop: 5,
+    },
+    pointsBox: {
+      width: '49%', // Ensures even spacing
+      backgroundColor: isDarkMode ? '#34495E' : '#f3d0c7', // Dark: darker contrast, Light: White
+      borderRadius: 8,
+      padding: 10,
+    },
+    rowcenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      fontSize: 12,
+      marginTop: 5,
 
-  },
-  menuContainer: {
-    alignSelf: "center",
-  },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: config.colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-  },
-  filterText: {
-    color: "white",
-    fontSize: 14,
-    fontFamily: 'Lato-Bold',
-    marginRight: 5,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    padding: 10,
-    color: "#333",
-  },
-  selectedOption: {
-    fontFamily: 'Lato-Bold',
-    color: "#34C759",
-  },
+    },
+    menuContainer: {
+      alignSelf: "center",
+    },
+    filterButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: config.colors.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 15,
+      borderRadius: 8,
+    },
+    filterText: {
+      color: "white",
+      fontSize: 14,
+      fontFamily: 'Lato-Bold',
+      marginRight: 5,
+    },
+    // filterOptionText: {
+    //   fontSize: 14,
+    //   padding: 10,
+    //   color: "#333",
+    // },
+    selectedOption: {
+      fontFamily: 'Lato-Bold',
+      color: "#34C759",
+    },
   badgesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -865,10 +889,10 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 8,
   },
   badgeButton: {
-    marginHorizontal: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    // marginHorizontal: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 14,
     backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
   },
   badgeButtonActive: {
@@ -906,8 +930,8 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     color: 'white',
     backgroundColor: '#FF6666',
     padding: 2,
-    borderRadius: 4,
-    fontSize: 8,
+    borderRadius: 6,
+    fontSize: 7,
     minWidth: 12,
     textAlign: 'center',
     overflow: 'hidden',
@@ -924,7 +948,34 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   itemBadgeNeon: {
     backgroundColor: '#2ecc71',
+    },
+  categoryBar: {
+    marginBottom: 8,
+    paddingVertical: 4,
+    backgroundColor: isDarkMode ? '#181c22' : '#f8f9fa',
   },
-});
+  categoryBarContent: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  categoryButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: isDarkMode ? '#23272f' : '#f0f0f0',
+    marginRight: 8,
+  },
+  categoryButtonActive: {
+    backgroundColor: config.colors.primary,
+  },
+  categoryButtonText: {
+    fontSize: 13,
+    color: isDarkMode ? '#bbb' : '#333',
+    fontWeight: '600',
+  },
+  categoryButtonTextActive: {
+    color: '#fff',
+  },
+  });
 
 export default ValueScreen;

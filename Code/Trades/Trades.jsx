@@ -60,7 +60,7 @@ const TradeList = ({ route }) => {
   };
 
 
-
+console.log(trades, 'trades')
 
   const [selectedFilters, setSelectedFilters] = useState([]);
 
@@ -99,34 +99,6 @@ const TradeList = ({ route }) => {
           matchesAnyFilter = matchesAnyFilter || trade.userId === user.id;
         }
 
-        const { deal } = getTradeDeal(trade.hasTotal, trade.wantsTotal);
-        const tradeLabel = deal?.label || "trade.unknown_deal"; // Fallback to avoid undefined
-
-
-        if (selectedFilters.includes("fairDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.fair_deal";
-        }
-
-        if (selectedFilters.includes("riskyDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.risky_deal";
-        }
-
-        if (selectedFilters.includes("bestDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.best_deal";
-        }
-
-        if (selectedFilters.includes("decentDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.decent_deal";
-        }
-
-        if (selectedFilters.includes("weakDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.weak_deal";
-        }
-
-        if (selectedFilters.includes("greatDeal")) {
-          matchesAnyFilter = matchesAnyFilter || tradeLabel === "trade.great_deal";
-        }
-
         return matchesAnyFilter; // Show if it matches at least one selected filter
       })
     );
@@ -134,30 +106,30 @@ const TradeList = ({ route }) => {
 
 
 
-  const getTradeDeal = (hasTotal, wantsTotal) => {
-    if (hasTotal.value <= 0) {
-      return { label: "trade.unknown_deal", color: "#8E8E93" }; // ⚠️ Unknown deal (invalid input)
-    }
+  // const getTradeDeal = (hasTotal, wantsTotal) => {
+  //   if (hasTotal.value <= 0) {
+  //     return { label: "trade.unknown_deal", color: "#8E8E93" }; // ⚠️ Unknown deal (invalid input)
+  //   }
 
-    const tradeRatio = wantsTotal.value / hasTotal.value;
-    let deal;
+  //   const tradeRatio = wantsTotal.value / hasTotal.value;
+  //   let deal;
 
-    if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
-      deal = { label: "trade.best_deal", color: "#34C759" }; // ✅ Best Deal
-    } else if (tradeRatio > 0.6 && tradeRatio <= 0.75) {
-      deal = { label: "trade.great_deal", color: "#32D74B" }; // 🟢 Great Deal
-    } else if (tradeRatio > 0.75 && tradeRatio <= 1.25) {
-      deal = { label: "trade.fair_deal", color: "#FFCC00" }; // ⚖️ Fair Deal
-    } else if (tradeRatio > 1.25 && tradeRatio <= 1.4) {
-      deal = { label: "trade.decent_deal", color: "#FF9F0A" }; // 🟠 Decent Deal
-    } else if (tradeRatio > 1.4 && tradeRatio <= 1.55) {
-      deal = { label: "trade.weak_deal", color: "#D65A31" }; // 🔴 Weak Deal
-    } else {
-      deal = { label: "trade.risky_deal", color: "#7D1128" }; // ❌ Risky Deal (Missing in your original code)
-    }
+  //   if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
+  //     deal = { label: "trade.best_deal", color: "#34C759" }; // ✅ Best Deal
+  //   } else if (tradeRatio > 0.6 && tradeRatio <= 0.75) {
+  //     deal = { label: "trade.great_deal", color: "#32D74B" }; // 🟢 Great Deal
+  //   } else if (tradeRatio > 0.75 && tradeRatio <= 1.25) {
+  //     deal = { label: "trade.fair_deal", color: "#FFCC00" }; // ⚖️ Fair Deal
+  //   } else if (tradeRatio > 1.25 && tradeRatio <= 1.4) {
+  //     deal = { label: "trade.decent_deal", color: "#FF9F0A" }; // 🟠 Decent Deal
+  //   } else if (tradeRatio > 1.4 && tradeRatio <= 1.55) {
+  //     deal = { label: "trade.weak_deal", color: "#D65A31" }; // 🔴 Weak Deal
+  //   } else {
+  //     deal = { label: "trade.risky_deal", color: "#7D1128" }; // ❌ Risky Deal (Missing in your original code)
+  //   }
 
-    return { deal, tradeRatio };
-  };
+  //   return { deal, tradeRatio };
+  // };
   // console.log(localState.featuredCount, 'featu')
   const handleDelete = useCallback((item) => {
     Alert.alert(
@@ -208,20 +180,20 @@ const TradeList = ({ route }) => {
   // console.log(isProStatus, 'from trade model')
 
   const handleMakeFeatureTrade = async (item) => {
-    if (!isProStatus) {
-      Alert.alert(
-        t("trade.feature_pro_only_title"),
-        t("trade.feature_pro_only_message"),
-        [
-          { text: t("trade.cancel"), style: "cancel" },
-          {
-            text: t("trade.upgrade"),
-            onPress: () => setShowofferwall(true),
-          },
-        ]
-      );
-      return;
-    }
+    // if (!isProStatus) {
+    //   Alert.alert(
+    //     t("trade.feature_pro_only_title"),
+    //     t("trade.feature_pro_only_message"),
+    //     [
+    //       { text: t("trade.cancel"), style: "cancel" },
+    //       {
+    //         text: t("trade.upgrade"),
+    //         onPress: () => setShowofferwall(true),
+    //       },
+    //     ]
+    //   );
+    //   return;
+    // }
 
     try {
       // 🔐 Check from Firestore how many featured trades user already has
@@ -613,11 +585,10 @@ const TradeList = ({ route }) => {
 
 
   const renderTrade = ({ item, index }) => {
-    const { deal, tradeRatio } = getTradeDeal(item.hasTotal, item.wantsTotal);
-    const tradePercentage = Math.abs(((tradeRatio - 1) * 100).toFixed(0));
+    // const { deal } = getTradeDeal(item.hasTotal, item.wantsTotal);
 
-    const isProfit = tradeRatio > 1; // Profit if trade ratio > 1
-    const neutral = tradeRatio === 1; // Exactly 1:1 trade
+    const isProfit = item.hasTotal > item.wantsTotal; // Profit if trade ratio > 1
+    const neutral = item.hasTotal === item.wantsTotal // Exactly 1:1 trade
     const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : "Anonymous";
 
     // if ((index + 1) % 10 === 0 && !isProStatus) {
@@ -738,87 +709,140 @@ const TradeList = ({ route }) => {
         </View>
         {/* Trade Items */}
         <View style={styles.tradeDetails}>
-          {/* Has Items */}
-          <View style={styles.itemList}>
-            {groupedHasItems.length > 0 ? (
-              groupedHasItems.map((hasItem, index) => (
-                <View key={`${hasItem.name}-${hasItem.type}`} style={{ justifyContent: 'center', alignItems: 'center' }}>
-                  <Image
-                    source={{
-                      uri: `https://elvebredd.com${item.image}`,
-                    }}
-                    style={[styles.itemImage, { backgroundColor: hasItem.type === 'p' ? '#FFCC00' : '' }]}
-                  />
-                  <Text style={styles.names}>
-                    {hasItem.name}{hasItem.type === 'p' && " (P)"}
-                  </Text>
-                  {hasItem.count > 1 && (
-                    <View style={styles.tagcount}>
-                      <Text style={styles.tagcounttext}>{hasItem.count}</Text>
-                    </View>
-                  )}
-                </View>
-              ))
-            ) : (
-              <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
-                <Text style={styles.dealText}>Give offer</Text>
-              </TouchableOpacity>
-            )}
-
-          </View>
-
+          {/* Has Items Grid or Give Offer */}
+          {item.hasItems && item.hasItems.length > 0 ? (
+            <View style={styles.itemGrid}>
+              {Array.from({
+                length: Math.max(4, Math.ceil(item.hasItems.length / 4) * 4)
+              }).map((_, idx) => {
+                const tradeItem = item.hasItems[idx];
+                // console.log(`${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}`)
+                return (
+                  <View key={idx} style={styles.gridCell}>
+                    {tradeItem ? (
+                      <>
+                        <Image
+                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
+                          style={styles.gridItemImage}
+                        />
+                        <View style={styles.itemBadgesContainer}>
+                          {tradeItem.isFly && (
+                            <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
+                          )}
+                          {tradeItem.isRide && (
+                            <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
+                          )}
+                          {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                            <Text style={[
+                              styles.itemBadge,
+                              tradeItem.valueType === 'm' && styles.itemBadgeMega,
+                              tradeItem.valueType === 'n' && styles.itemBadgeNeon,
+                            ]}>{tradeItem.valueType.toUpperCase()}</Text>
+                          )}
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
+              <Text style={styles.dealText}>Give offer</Text>
+            </TouchableOpacity>
+          )}
           {/* Transfer Icon */}
           <View style={styles.transfer}>
-            <Image source={require('../../assets/transfer.png')} style={styles.transferImage} />
+            <Image source={require('../../assets/left-right.png')} style={styles.transferImage} />
           </View>
-
-          {/* Wants Items */}
-          <View style={styles.itemList}>
-            {groupedWantsItems.length > 0 ? (
-              groupedWantsItems.map((wantnItem, index) => (
-                <View key={`${wantnItem.name}-${wantnItem.type}`} style={{ justifyContent: 'center', alignItems: 'center' }}>
-                  <Image
-                    source={{
-                      uri:`https://elvebredd.com${item.image}`,
-                    }}
-                    style={[styles.itemImage, { backgroundColor: wantnItem.type === 'p' ? '#FFCC00' : '' }]}
-                  />
-                  <Text style={styles.names}>
-                    {wantnItem.name}{wantnItem.type === 'p' && " (P)"}
-                  </Text>
-                  {wantnItem.count > 1 && (
-                    <View style={styles.tagcount}>
-                      <Text style={styles.tagcounttext}>{wantnItem.count}</Text>
-                    </View>
-                  )}
-                </View>
-              ))
-            ) : (
-              <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
-                <Text style={styles.dealText}>Give offer</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Wants Items Grid or Give Offer */}
+          {item.wantsItems && item.wantsItems.length > 0 ? (
+            <View style={styles.itemGrid}>
+              {Array.from({
+                length: Math.max(4, Math.ceil(item.wantsItems.length / 4) * 4)
+              }).map((_, idx) => {
+                const tradeItem = item.wantsItems[idx];
+                return (
+                  <View key={idx} style={styles.gridCell}>
+                    {tradeItem ? (
+                      <>
+                        <Image
+                            source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
+                          style={styles.gridItemImage}
+                        />
+                        <View style={styles.itemBadgesContainer}>
+                          {tradeItem.isFly && (
+                            <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
+                          )}
+                          {tradeItem.isRide && (
+                            <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
+                          )}
+                          {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                            <Text style={[
+                              styles.itemBadge,
+                              tradeItem.valueType === 'm' && styles.itemBadgeMega,
+                              tradeItem.valueType === 'n' && styles.itemBadgeNeon,
+                            ]}>{tradeItem.valueType.toUpperCase()}</Text>
+                          )}
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
+              <Text style={styles.dealText}>Give offer</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.tradeTotals}>
-          {groupedHasItems.length > 0 && <Text style={[styles.priceText, styles.hasBackground]}>
-            {t("trade.price_has")} {formatValue(item.hasTotal.value)}
-          </Text>}
+          {item.hasItems && item.hasItems.length > 0 && (
+            <Text style={[styles.priceText, styles.hasBackground]}>
+              Your Offer: {formatValue(item.hasTotal)}
+            </Text>
+          )}
           <View style={styles.transfer}>
-            {(groupedHasItems.length > 0 && groupedWantsItems.length > 0) && <Text style={[styles.priceTextProfit, { color: !isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
-              {tradePercentage}% {!neutral && (
-                <Icon
-                  name={isProfit ? 'arrow-down-outline' : 'arrow-up-outline'}
-                  size={10}
-                  color={isProfit ? config.colors.wantBlockRed : config.colors.hasBlockGreen}
-                  style={styles.icon}
-                />
-              )}
-            </Text>}
+            {(item.hasItems && item.hasItems.length > 0 && item.wantsItems && item.wantsItems.length > 0) && (
+              <>
+                {item.hasTotal > item.wantsTotal && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Icon
+                      name="arrow-up-outline"
+                      size={12}
+                      color={'green'}
+                      style={styles.icon}
+                    />
+                    <Text style={[styles.priceText, { color: 'green', }]}>
+                      {formatValue(item.hasTotal - item.wantsTotal)}
+                    </Text>
+                  </View>
+                )}
+                {item.hasTotal < item.wantsTotal && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Icon
+                      name="arrow-down-outline"
+                      size={12}
+                      color={config.colors.hasBlockGreen}
+                      style={styles.icon}
+                    />
+                    <Text style={[styles.priceText, { color: config.colors.hasBlockGreen}]}>
+                      {formatValue(item.wantsTotal - item.hasTotal)}
+                    </Text>
+                  </View>
+                )}
+                {item.hasTotal === item.wantsTotal && (
+                  <Text style={[styles.priceText, { color: config.colors.primary }]}>-</Text>
+                )}
+              </>
+            )}
           </View>
-          {groupedWantsItems.length > 0 && <Text style={[styles.priceText, styles.wantBackground]}>
-            {t("trade.price_want")} {formatValue(item.wantsTotal.value)}
-          </Text>}
+          {item.wantsItems && item.wantsItems.length > 0 && (
+            <Text style={[styles.priceText, styles.wantBackground]}>
+              Their Offer: {formatValue(item.wantsTotal)}
+            </Text>
+          )}
         </View>
 
         {/* Description */}
@@ -998,16 +1022,69 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       color: isDarkMode ? 'white' : "black",
+      marginVertical:10
 
 
     },
-    itemList: {
+    itemGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'space-evenly',
-      width: "45%",
-      paddingVertical: 15,
-      alignSelf: 'center'
+      width: '48%',
+      // alignItems: 'center',
+      // justifyContent: 'center',
+      // marginVertical: 6,
+    },
+    gridCell: {
+      width: '22%',
+      height: 40,
+      margin: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+      marginBottom:10
+    },
+    gridItemImage: {
+      width: 30,
+      height: 30,
+      borderRadius: 6,
+    },
+    itemBadgesContainer: {
+      position: 'absolute',
+      bottom: -5,
+      right: 0,
+      flexDirection: 'row',
+      gap: 2,
+      padding: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+          //  backgroundColor:'red'
+
+    },
+    itemBadge: {
+      color: 'white',
+      backgroundColor: '#888',
+      borderRadius: 12, // Make it perfectly round
+      width: 12, // Fixed width
+      height: 12, // Fixed height
+      fontSize: 7,
+      textAlign: 'center',
+      lineHeight: 12, // Center text vertically
+      fontWeight: '600',
+      overflow: 'hidden',
+      padding: 0,
+      margin: 0,
+    },
+    itemBadgeFly: {
+      backgroundColor: '#3498db',
+    },
+    itemBadgeRide: {
+      backgroundColor: '#e74c3c',
+    },
+    itemBadgeMega: {
+      backgroundColor: '#9b59b6',
+    },
+    itemBadgeNeon: {
+      backgroundColor: '#2ecc71',
     },
     itemImage: {
       width: 30,
@@ -1028,10 +1105,11 @@ const getStyles = (isDarkMode) =>
       backgroundColor: 'white'
     },
     transferImage: {
-      width: 15,
-      height: 15,
+      width: 20,
+      height: 20,
       // marginRight: 5,
       borderRadius: 5,
+      // width:'4%',
     },
     tradeTotals: {
       flexDirection: 'row',
@@ -1041,7 +1119,7 @@ const getStyles = (isDarkMode) =>
 
     },
     priceText: {
-      fontSize: 8,
+      fontSize: 10,
       fontFamily: 'Lato-Regular',
       color: '#007BFF',
       // width: '40%',
@@ -1120,16 +1198,18 @@ const getStyles = (isDarkMode) =>
       // height:30,
       // marginRight: 10,
       backgroundColor: 'black',
-      justifyContent: 'center',
-      alignItems: 'center'
+      // justifyContent: 'center',
+      alignItems: 'center',
+      marginHorizontal:'auto'
+      // flexD1
     },
     dealText: {
       color: 'white',
       fontWeight: 'Lato-Bold',
       fontSize: 8,
       textAlign: 'center',
-      alignItems: 'center',
-      justifyContent: 'center'
+      // alignItems: 'center',
+      // justifyContent: 'center'
       // backgroundColor:'black'
 
     },
@@ -1172,6 +1252,10 @@ const getStyles = (isDarkMode) =>
       width: 15,  // Increased width for proportion
       borderTopLeftRadius: 10,  // Increased to make it more curved
       borderBottomRightRadius: 30, // Further increased for more curve
+    },
+    icon: {
+      // marginRight: 1,
+      fontSize: 12,
     }
 
   });

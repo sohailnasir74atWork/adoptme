@@ -10,6 +10,7 @@ import { TradeStack } from '../Trades/TradeNavigator';
 import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
+import { useGlobalState } from '../GlobelStats';
 
 
 
@@ -34,6 +35,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   const { t } = useTranslation();
     const getTabIcon = useCallback((routeName, focused) => {
     const isNoman = config.isNoman; // ✅ Extracted to avoid repeated checks
+    
 
     const icons = {
       Calculator: ['house', 'house'], // Solid icons look same for focused/unfocused
@@ -61,6 +63,8 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
         tabBarButton: (props) => {
           const { accessibilityState, children, onPress } = props;
           const isSelected = accessibilityState?.selected;
+            const {theme} = useGlobalState()
+      const isDarkMode = theme === 'dark'
       
           return (
             <TouchableOpacity
@@ -68,7 +72,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
               activeOpacity={0.9}
               style={{
                 flex: 1,
-                backgroundColor: isSelected ? '#f3d0c7' : 'transparent',
+                backgroundColor: isSelected ? isDarkMode ? '#5c4c49' : '#f3d0c7' : 'transparent',
                 borderRadius: 12,
                 marginHorizontal: 4,
                 marginVertical:2,

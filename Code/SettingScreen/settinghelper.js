@@ -14,7 +14,7 @@ export const getAppDownloadLink = () => {
     try {
       const appLink = getAppDownloadLink();
       const shareOptions = {
-        message: `Explore the ultimate Blox Fruits value calculator! Learn about Blox Fruits, check values, and make smarter trades. Download now: ${appLink}`,
+        message: `Explore the Adoptme value calculator, check values, and make smarter trades. Download now: ${appLink}`,
         title: 'Share App',
       };
       await Share.open(shareOptions);
@@ -94,6 +94,20 @@ I would like to share the following suggestions:
 
   export const imageOptions = [
     'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/101.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/102.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/103.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/104.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/105.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/106.png',
+
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/107.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/108.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/109.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/110.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/111.png',
+    'https://bloxfruitscalc.com/wp-content/uploads/2025/woman.png',
+    
     'https://bloxfruitscalc.com/wp-content/uploads/2025/eagle.png',
     'https://bloxfruitscalc.com/wp-content/uploads/2025/patch.png',
     'https://bloxfruitscalc.com/wp-content/uploads/2025/pirate1.png',
@@ -107,7 +121,6 @@ I would like to share the following suggestions:
     'https://bloxfruitscalc.com/wp-content/uploads/2025/pirate-skull.png',
     'https://bloxfruitscalc.com/wp-content/uploads/2025/pirate.png',
     'https://bloxfruitscalc.com/wp-content/uploads/2025/steering-wheel.png',
-    'https://bloxfruitscalc.com/wp-content/uploads/2025/woman.png',
   ];
  
 

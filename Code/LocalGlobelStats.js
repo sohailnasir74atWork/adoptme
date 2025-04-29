@@ -46,7 +46,8 @@ export const LocalStateProvider = ({ children }) => {
     showOnBoardingScreen: storage.getBoolean('showOnBoardingScreen') ?? true,
     user_name: storage.getString('user_name') || 'Anonymous',
     translationUsage: safeParseJSON('translationUsage', { count: 0, date: new Date().toDateString() }),
-
+    favorites: safeParseJSON('favorites', []),
+    imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
   }));
 
 

@@ -285,21 +285,23 @@ export const GlobalStateProvider = ({ children }) => {
       if (shouldFetchCodesData) {
         // console.log("📌 Fetching codes & data from database...");
 
-        const [xlsSnapshot, codeSnapShot] = await Promise.all([
+        const [xlsSnapshot,  imageSnapShot] = await Promise.all([
           get(ref(appdatabase, 'xlsData')),
-          get(ref(appdatabase, 'codes')),
+          // get(ref(appdatabase, 'codes')),
+           get(ref(appdatabase, 'image_url')),
         ]);
 
-        const codes = codeSnapShot.exists() ? codeSnapShot.val() : {};
+        // const codes = codeSnapShot.exists() ? codeSnapShot.val() : {};
         const data = xlsSnapshot.exists() ? xlsSnapshot.val() : {};
-
+        const image = imageSnapShot.exists() ? imageSnapShot.val() : 'https://elvebredd.com';
         // console.log(data)
 
 
 
 
         // ✅ Store fetched data locally
-        await updateLocalState('codes', JSON.stringify(codes));
+        // await updateLocalState('codes', JSON.stringify(codes));
+         await updateLocalState('imgurl', JSON.stringify(image));
         await updateLocalState('data', JSON.stringify(data));
         // console.log(data)
         // ✅ Update last fetch timestamp
@@ -312,23 +314,23 @@ export const GlobalStateProvider = ({ children }) => {
 
       // ✅ Always fetch stock data (`calcData`) on app load
       // console.log("📌 Fetching fresh stock data...");
-      const [calcSnapshot, preSnapshot] = await Promise.all([
-        get(ref(appdatabase, 'calcData')), // ✅ Always updated stock data
-        get(ref(appdatabase, 'previousStock')),
-      ]);
+      // const [calcSnapshot, preSnapshot] = await Promise.all([
+      //   get(ref(appdatabase, 'calcData')), // ✅ Always updated stock data
+      //   get(ref(appdatabase, 'previousStock')),
+      // ]);
 
       // ✅ Extract relevant stock data
-      const normalStock = calcSnapshot.exists() ? calcSnapshot.val()?.test || {} : {};
-      const mirageStock = calcSnapshot.exists() ? calcSnapshot.val()?.mirage || {} : {};
-      const prenormalStock = preSnapshot.exists() ? preSnapshot.val()?.normalStock || {} : {};
-      const premirageStock = preSnapshot.exists() ? preSnapshot.val()?.mirageStock || {} : {};
+      // const normalStock = calcSnapshot.exists() ? calcSnapshot.val()?.test || {} : {};
+      // const mirageStock = calcSnapshot.exists() ? calcSnapshot.val()?.mirage || {} : {};
+      // const prenormalStock = preSnapshot.exists() ? preSnapshot.val()?.normalStock || {} : {};
+      // const premirageStock = preSnapshot.exists() ? preSnapshot.val()?.mirageStock || {} : {};
 
 
       // ✅ Store frequently updated stock data
-      await updateLocalState('normalStock', JSON.stringify(normalStock));
-      await updateLocalState('mirageStock', JSON.stringify(mirageStock));
-      await updateLocalState('prenormalStock', JSON.stringify(prenormalStock));
-      await updateLocalState('premirageStock', JSON.stringify(premirageStock));
+      // await updateLocalState('normalStock', JSON.stringify(normalStock));
+      // await updateLocalState('mirageStock', JSON.stringify(mirageStock));
+      // await updateLocalState('prenormalStock', JSON.stringify(prenormalStock));
+      // await updateLocalState('premirageStock', JSON.stringify(premirageStock));
 
       // console.log("✅ Stock data processed and stored successfully.");
     } catch (error) {

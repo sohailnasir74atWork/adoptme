@@ -6,7 +6,6 @@ import {
   Animated,
   ActivityIndicator,
   AppState,
-  TouchableOpacity,
   Appearance,
   InteractionManager,
 } from 'react-native';
@@ -17,13 +16,11 @@ import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
 import { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
-import Icon from 'react-native-vector-icons/Ionicons';
 import {
   MyDarkTheme,
   MyLightTheme,
   requestReview,
 } from './Code/AppHelper/AppHelperFunction';
-import getAdUnitId from './Code/Ads/ads';
 import OnboardingScreen from './Code/AppHelper/OnBoardingScreen';
 import { useTranslation } from 'react-i18next';
 // import RewardCenterScreen from './Code/SettingScreen/RewardCenter';

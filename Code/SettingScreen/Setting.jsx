@@ -17,7 +17,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import { getStyles } from './settingstyle';
-import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRateApp, handleShareApp, imageOptions, } from './settinghelper';
+import { handleGetSuggestions, handleOpenWebsite, handleRateApp, handleShareApp, imageOptions, } from './settinghelper';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import auth from '@react-native-firebase/auth';
@@ -518,12 +518,12 @@ const formatPlanName = (plan) => {
             <Icon name="star-outline" size={18} color={'white'} style={{backgroundColor:'#A2B38B', padding:5, borderRadius:5}}/>
             <Text style={styles.optionText}>{t('settings.rate_us')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={() => {
+          {/* <TouchableOpacity style={styles.option} onPress={() => {
             handleOpenFacebook(); triggerHapticFeedback('impactLight');
           }}>
             <Icon name="logo-facebook" size={18} color={'white'} style={{backgroundColor:'#566D5D', padding:5, borderRadius:5}}/>
             <Text style={styles.optionText}>{t('settings.visit_facebook_group')}</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
             handleOpenWebsite(); triggerHapticFeedback('impactLight');
           }}>
