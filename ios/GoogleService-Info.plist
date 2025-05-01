@@ -3,23 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>409137828081-5hsdhsorirt9c2k9s3umlknjj15tvk6v.apps.googleusercontent.com</string>
+	<string>541413670501-6kb78ehnmllmlhikgvse82c6v0qcdku4.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.409137828081-5hsdhsorirt9c2k9s3umlknjj15tvk6v</string>
+	<string>com.googleusercontent.apps.541413670501-6kb78ehnmllmlhikgvse82c6v0qcdku4</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>409137828081-cic6tf2lv18es9jkub2mc11ijjjvjmo3.apps.googleusercontent.com</string>
+	<string>541413670501-2a13njokb6rc325f27arkdhjp5a40r4h.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyCLiqupmxebqVf1TnKtjvJkLVWcZcgmgOg</string>
+	<string>AIzaSyAVHlHQs0L-zcxf_KJ6lEXUlA8bZzz_uY8</string>
 	<key>GCM_SENDER_ID</key>
-	<string>409137828081</string>
+	<string>541413670501</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.adoptmevaluescalc</string>
+	<string>com.adoptmevalues</string>
 	<key>PROJECT_ID</key>
-	<string>fruiteblocks</string>
+	<string>adoptme-7b50c</string>
 	<key>STORAGE_BUCKET</key>
-	<string>fruiteblocks.firebasestorage.app</string>
+	<string>adoptme-7b50c.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,7 +31,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:409137828081:ios:fa4c5accef32a958f39950</string>
+	<string>1:541413670501:ios:9adf0dd5c625fe5b2a108c</string>
 	<key>DATABASE_URL</key>
 	<string>https://adoptme-7b50c-default-rtdb.firebaseio.com</string>
 </dict>

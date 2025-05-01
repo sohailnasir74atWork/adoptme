@@ -1053,7 +1053,7 @@ const getStyles = (isDarkMode) =>
       bottom: -5,
       right: 0,
       flexDirection: 'row',
-      gap: 2,
+      gap: 1,
       padding: 1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1063,12 +1063,12 @@ const getStyles = (isDarkMode) =>
     itemBadge: {
       color: 'white',
       backgroundColor: '#888',
-      borderRadius: 12, // Make it perfectly round
-      width: 12, // Fixed width
-      height: 12, // Fixed height
-      fontSize: 7,
+      borderRadius: 10, // Make it perfectly round
+      width: 10, // Fixed width
+      height: 10, // Fixed height
+      fontSize: 6,
       textAlign: 'center',
-      lineHeight: 12, // Center text vertically
+      lineHeight: 10, // Center text vertically
       fontWeight: '600',
       overflow: 'hidden',
       padding: 0,

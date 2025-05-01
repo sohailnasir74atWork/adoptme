@@ -14,11 +14,11 @@ import firestore from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../Translation/LanguageProvider';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
-import ShareTradeModal from '../Trades/SharetradeModel';
 import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
+import ShareTradeModal from '../Trades/ShareTradeModal';
 
 const INITIAL_ITEMS = [null, null, null, null, null, null, null, null, null];
 const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
@@ -97,6 +97,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [isRideSelected, setIsRideSelected] = useState(false);
   const [isSharkMode, setIsSharkMode] = useState(true);
   const [isAddingToFavorites, setIsAddingToFavorites] = useState(false);
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
 
   const tradeStatus = useMemo(() => 
     getTradeStatus(hasTotal, wantsTotal)
@@ -128,16 +129,6 @@ const HomeScreen = ({ selectedTheme }) => {
     setHasItems(INITIAL_ITEMS);
     setWantsItems(INITIAL_ITEMS);
   }, [triggerHapticFeedback]);
-
-  const resetTradeState = useCallback(() => {
-    setHasItems(INITIAL_ITEMS);
-    setWantsItems(INITIAL_ITEMS);
-    setHasTotal(0);
-    setWantsTotal(0);
-    setDescription("");
-    setSelectedSection(null);
-    setModalVisible(false);
-  }, []);
 
   const updateTotal = useCallback((item, section, add = true, isNew = false) => {
     if (!item) return;
@@ -419,31 +410,31 @@ const HomeScreen = ({ selectedTheme }) => {
     return () => { isMounted = false; };
   }, [localState.data]);
 
-  const handleCreateTradePress = useCallback(async (type) => {
-    if (!user?.id && type === 'create') {
+  const handleCreateTradePress = useCallback(async () => {
+    if (!user?.id) {
       setIsSigninDrawerVisible(true);
       return;
     }
 
-    const hasItemsCount = hasItems.filter(Boolean).length;
-    const wantsItemsCount = wantsItems.filter(Boolean).length;
+    // const hasItemsCount = hasItems.filter(Boolean).length;
+    // const wantsItemsCount = wantsItems.filter(Boolean).length;
 
-    if (hasItemsCount === 0 && wantsItemsCount === 0) {
-      showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
-      return;
-    }
+    // if (hasItemsCount === 0 && wantsItemsCount === 0) {
+    //   showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
+    //   return;
+    // }
 
-    setType(type);
+    // setType(type);
 
-    if (type !== 'share') {
-      setModalVisible(true);
-    } else {
-      setModalVisible(false);
-      setSelectedTrade(null);
-      setOpenShareModel(true);
-      mixpanel.track("Start Sharing");
-    }
-  }, [user?.id, hasItems, wantsItems, type, t]);
+    // if (type !== 'share') {
+    //   setModalVisible(true);
+    // } else {
+    //   setModalVisible(false);
+    //   setSelectedTrade(null);
+    //   setOpenShareModel(true);
+    //   mixpanel.track("Start Sharing");
+    // }
+  }, [user?.id]);
 
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
@@ -482,13 +473,6 @@ const HomeScreen = ({ selectedTheme }) => {
         rating: userRating,
         ratingCount
       };
-
-      if (type === 'share') {
-        setModalVisible(false);
-        setSelectedTrade(newTrade);
-        setOpenShareModel(true);
-        mixpanel.track("Trade Created", { user: user?.id });
-      } else {
         const now = Date.now();
         if (lastTradeTime && now - lastTradeTime < 60000) {
           showErrorMessage(t("home.alert.error"), "Please wait for 1 minute before creating new trade");
@@ -511,7 +495,7 @@ const HomeScreen = ({ selectedTheme }) => {
         } else {
           callbackfunction();
         }
-      }
+
     } catch (error) {
       console.error("Error creating trade:", error);
       showErrorMessage(t("home.alert.error"), "Something went wrong while posting the trade.");
@@ -520,20 +504,17 @@ const HomeScreen = ({ selectedTheme }) => {
     }
   }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t]);
 
-  const handleShareTrade = useCallback(async () => {
-    if (!viewRef.current) return;
-    try {
-      const uri = await viewRef.current.capture();
-      await Share.open({
-        url: uri,
-        type: 'image/png',
-        failOnCancel: false,
-      });
-    } catch (error) {
-      console.error('Error sharing trade screenshot:', error);
-      showErrorMessage('Error', 'Could not share the trade screenshot.');
+  const handleShareTrade = useCallback(() => {
+    const hasItemsCount = hasItems.filter(Boolean).length;
+    const wantsItemsCount = wantsItems.filter(Boolean).length;
+
+    if (hasItemsCount === 0 && wantsItemsCount === 0) {
+      showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
+      return;
     }
-  }, [viewRef]);
+
+    setIsShareModalVisible(true);
+  }, [hasItems, wantsItems, t]);
 
   const profitLoss = wantsTotal - hasTotal;
   const isProfit = profitLoss >= 0;
@@ -770,7 +751,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <View style={styles.createtrade}>
               <TouchableOpacity 
                 style={styles.createtradeButton} 
-                onPress={() => handleCreateTradePress('create')}
+                onPress={() => handleCreateTradePress()}
               >
                 <Text style={{ color: 'white' }}>{t('home.create_trade')}</Text>
               </TouchableOpacity>
@@ -935,11 +916,7 @@ const HomeScreen = ({ selectedTheme }) => {
               </View>
             </ConditionalKeyboardWrapper>
           </Modal>
-          <ShareTradeModal
-            visible={openShareModel}
-            onClose={() => setOpenShareModel(false)}
-            tradeData={selectedTrade}
-          />
+
           <SignInDrawer
             visible={isSigninDrawerVisible}
             onClose={handleLoginSuccess}
@@ -950,6 +927,15 @@ const HomeScreen = ({ selectedTheme }) => {
         </View>
       </GestureHandlerRootView>
       {!localState.isPro && <BannerAdComponent/>}
+      <ShareTradeModal
+        visible={isShareModalVisible}
+        onClose={() => setIsShareModalVisible(false)}
+        hasItems={hasItems}
+        wantsItems={wantsItems}
+        hasTotal={hasTotal}
+        wantsTotal={wantsTotal}
+        description={description}
+      />
     </>
   );
 };
@@ -1022,7 +1008,7 @@ const getStyles = (isDarkMode) =>
       color: isDarkMode ? '#999' : '#999',
     },
     progressContainer: {
-      marginVertical: 10,
+      marginVertical: 5,
       
     },
     progressBar: {
@@ -1046,11 +1032,11 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 5,
+      // marginTop: 5,
       
     },
     offerLabel: {
-      fontSize: 14,
+      fontSize: 10,
       color: isDarkMode ? '#999' : '#666',
       fontWeight: '600',
       paddingHorizontal: 10,

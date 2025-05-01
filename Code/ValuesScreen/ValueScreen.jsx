@@ -150,7 +150,6 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const { analytics, appdatabase, isAdmin, reload, theme } = useGlobalState()
   const isDarkMode = theme === 'dark'
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  const [filteredData, setFilteredData] = useState([]);
   const { localState } = useLocalState()
   const [valuesData, setValuesData] = useState([]);
   const [codesData, setCodesData] = useState([]);
@@ -165,7 +164,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const { triggerHapticFeedback } = useHaptic();
   const [selectedFruit, setSelectedFruit] = useState(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [refreshing, setRefreshing] = useState(false); // State for pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
   const [itemSelections, setItemSelections] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('ALL');
 
@@ -176,7 +175,117 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     Robuxprice: '',
   });
 
+  // Memoize the parsed data to prevent unnecessary re-parsing
+  const parsedValuesData = useMemo(() => {
+    if (!localState.data) return [];
+    try {
+      const parsed = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
+      return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
+    } catch (error) {
+      console.error("❌ Error parsing data:", error);
+      return [];
+    }
+  }, [localState.data]);
 
+  // Memoize the parsed codes data
+  const parsedCodesData = useMemo(() => {
+    if (!localState.codes) return [];
+    try {
+      const parsed = typeof localState.codes === 'string' ? JSON.parse(localState.codes) : localState.codes;
+      return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
+    } catch (error) {
+      console.error("❌ Error parsing codes:", error);
+      return [];
+    }
+  }, [localState.codes]);
+
+  // Memoize the filters
+  const availableFilters = useMemo(() => {
+    const uniqueRarities = [...new Set(parsedValuesData.map(item => 
+      item.rarity ? item.rarity.toUpperCase() : null
+    ).filter(Boolean))];
+    return [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
+  }, [parsedValuesData]);
+
+  // Optimize the search and filter logic
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
+    
+    const searchLower = searchText.toLowerCase();
+    const filterUpper = selectedFilter.toUpperCase();
+    
+    return parsedValuesData.filter((item) => {
+      if (!item?.name) return false;
+      
+      const matchesSearch = item.name.toLowerCase().includes(searchLower);
+      const matchesFilter = filterUpper === 'ALL' || 
+        (CATEGORIES.includes(filterUpper) ? 
+          item.type?.toUpperCase() === filterUpper : 
+          item.rarity?.toUpperCase() === filterUpper);
+      
+      return matchesSearch && matchesFilter;
+    });
+  }, [parsedValuesData, searchText, selectedFilter]);
+
+  // Optimize the getItemValue function
+  const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
+    if (!item) return 0;
+    
+    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
+    if (simpleValueCategories.includes(item.type)) {
+      return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
+    }
+    
+    if (!selectedValueType) return 0;
+    
+    const valueKey = selectedValueType === 'n' ? 'nvalue' : 
+                    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+    
+    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
+                          isFlySelected ? ' - fly' :
+                          isRideSelected ? ' - ride' : ' - nopotion';
+    
+    return Number((item[valueKey + modifierSuffix] || 0)).toFixed(2);
+  }, []);
+
+  // Optimize the handleItemBadgePress function
+  const handleItemBadgePress = useCallback((itemId, badge) => {
+    triggerHapticFeedback('impactLight');
+    setItemSelections(prev => {
+      const currentSelection = prev[itemId] || { valueType: 'd', isFly: false, isRide: false };
+      const newSelection = { ...currentSelection };
+      
+      switch (badge) {
+        case 'F': newSelection.isFly = !currentSelection.isFly; break;
+        case 'R': newSelection.isRide = !currentSelection.isRide; break;
+        default: newSelection.valueType = badge.toLowerCase();
+      }
+      
+      return { ...prev, [itemId]: newSelection };
+    });
+  }, [triggerHapticFeedback]);
+
+  // Optimize the renderItem function
+  const renderItem = useCallback(({ item }) => (
+    <ListItem
+      item={item}
+      itemSelection={itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false }}
+      onBadgePress={handleItemBadgePress}
+      getItemValue={getItemValue}
+      styles={styles}
+    />
+  ), [itemSelections, handleItemBadgePress, getItemValue, styles]);
+
+  // Update the useEffect for values data
+  useEffect(() => {
+    setValuesData(parsedValuesData);
+    setFilters(availableFilters);
+  }, [parsedValuesData, availableFilters]);
+
+  // Update the useEffect for codes data
+  useEffect(() => {
+    setCodesData(parsedCodesData);
+  }, [parsedCodesData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -191,7 +300,6 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   };
 
   const toggleDrawer = () => {
-
     triggerHapticFeedback('impactLight');
     const callbackfunction = () => {
       setHasAdBeenShown(true); // Mark the ad as shown
@@ -203,7 +311,6 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     }
     else {
       setIsDrawerVisible(!isDrawerVisible);
-
     }
     mixpanel.track("Code Drawer Open");
   }
@@ -272,83 +379,13 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     setSelectedFilter(filter);
   };
 
-
-  useEffect(() => {
-    if (localState.data) {
-      try {
-        const parsedValues = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
-        if (typeof parsedValues !== 'object' || parsedValues === null) {
-          throw new Error('Parsed data is not a valid object');
-        }
-        const values = Object.values(parsedValues);
-        setValuesData(values);
-        // Extract unique rarities and update filters
-        const uniqueRarities = [...new Set(values.map(item => 
-          item.rarity ? item.rarity.toUpperCase() : null
-        ).filter(Boolean))];
-        // Combine CATEGORIES and unique rarities, removing duplicates
-        const allFilters = [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
-        setFilters(allFilters);
-      } catch (error) {
-        console.error("❌ Error parsing data:", error, "📝 Raw Data:", localState.data);
-        setValuesData([]);
-      }
-    }
-  }, [localState.data]);
-
-
-  useEffect(() => {
-    if (localState.codes) {
-      try {
-        // ✅ Handle both JSON string & object cases
-        const parsedCodes = typeof localState.codes === 'string' ? JSON.parse(localState.codes) : localState.codes;
-
-        // ✅ Ensure parsedCodes is a valid object
-        if (typeof parsedCodes !== 'object' || parsedCodes === null) {
-          throw new Error('Parsed codes is not a valid object');
-        }
-
-        const extractedCodes = Object.values(parsedCodes);
-        setCodesData(extractedCodes.length > 0 ? extractedCodes : []);
-      } catch (error) {
-        console.error("❌ Error parsing codes:", error, "📝 Raw Codes Data:", localState.codes);
-        setCodesData([]); // Fallback to empty array
-      }
-    }
-  }, [localState.codes]);
-
-  const handleFilterChange = (filter) => {
-    triggerHapticFeedback('impactLight');
-    setSelectedFilter(filter === 'GAME PASS' ? 'PREMIUM' : filter);
-    setFilterDropdownVisible(false);
-  };
-
   const handleSearchChange = debounce((text) => {
     setSearchText(text);
   }, 300);
   const closeDrawer = () => {
     setFilterDropdownVisible(false);
   };
-  useEffect(() => {
-    if (!Array.isArray(valuesData) || valuesData.length === 0) {
-      setFilteredData([]);
-      return;
-    }
-    const filtered = valuesData.filter((item) => {
-      if (!item?.name) return false;
-      const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
-      let matches = false;
-      if (selectedFilter === 'ALL' || selectedFilter === 'All') {
-        matches = true;
-      } else if (CATEGORIES.includes(selectedFilter)) {
-        matches = item.type && item.type.toUpperCase() === selectedFilter;
-      } else {
-        matches = item.rarity && item.rarity.toUpperCase() === selectedFilter;
-      }
-      return matchesSearch && matches;
-    });
-    setFilteredData(filtered);
-  }, [valuesData, searchText, selectedFilter]);
+
   const EditFruitModal = () => (
     <Modal visible={isModalVisible} transparent={true} animationType="slide">
       <View style={styles.modalContainer}>
@@ -409,74 +446,16 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     }
   }, [triggerHapticFeedback]);
 
-  const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected) => {
-    if (!item) return 0;
-    
-    // Categories that only use 'value' field
-    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
-    
-    // Handle simple value categories
-    if (simpleValueCategories.includes(item.type)) {
-      const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
-      return Number(value.toFixed(2));
-    }
-    
-    // For pets, use the exact value key based on selected type and modifiers
-    if (!selectedValueType) return 0;
-    
-    // Determine value key based on selected type
-    const valueKey = selectedValueType === 'n' ? 'nvalue' : 
-                    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-    
-    // Add modifier suffix
-    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-                          isFlySelected ? ' - fly' :
-                          isRideSelected ? ' - ride' : ' - nopotion';
-    
-    const value = Number(item[valueKey + modifierSuffix]) || 0;
-    return Number(value.toFixed(2));
-  };
-
-  const handleItemBadgePress = useCallback((itemId, badge) => {
-    triggerHapticFeedback('impactLight');
-    setItemSelections(prev => {
-      const currentSelection = prev[itemId] || { valueType: 'd', isFly: false, isRide: false };
-      
-      if (badge === 'F') {
-        return { ...prev, [itemId]: { ...currentSelection, isFly: !currentSelection.isFly }};
-      } else if (badge === 'R') {
-        return { ...prev, [itemId]: { ...currentSelection, isRide: !currentSelection.isRide }};
-      } else {
-        return { ...prev, [itemId]: { ...currentSelection, valueType: badge.toLowerCase() }};
-      }
-    });
-  }, [triggerHapticFeedback]);
-
-  const renderItem = useCallback(({ item }) => (
-    <ListItem
-      item={item}
-      itemSelection={itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false }}
-      onBadgePress={handleItemBadgePress}
-      getItemValue={getItemValue}
-      styles={styles}
-    />
-  ), [itemSelections, handleItemBadgePress, getItemValue, styles]);
-
   return (
     <>
       <GestureHandlerRootView>
-
         <View style={styles.container}>
-          {/* <Text style={[styles.description, { color: selectedTheme.colors.text }]}>
-            {t("value.description")}
-          </Text> */}
           <View style={styles.searchFilterContainer}>
             <TextInput
               style={styles.searchInput}
               placeholder="Search"
               placeholderTextColor="#888"
               onChangeText={handleSearchChange}
-
             />
             <Menu>
               <MenuTrigger onPress={() => {}}>
@@ -485,14 +464,11 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
                   <Icon name="chevron-down-outline" size={18} color="white" />
                 </View>
               </MenuTrigger>
-
               <MenuOptions customStyles={{ optionsContainer: styles.menuOptions }}>
                 {filters.map((filter) => (
                   <MenuOption
                     key={filter}
-                    onSelect={() => {
-                      applyFilter(filter);
-                    }}
+                    onSelect={() => applyFilter(filter)}
                   >
                     <Text style={[styles.filterOptionText, selectedFilter === filter && styles.selectedOption]}>
                       {filter}
@@ -501,67 +477,32 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
                 ))}
               </MenuOptions>
             </Menu>
-            {/* <TouchableOpacity
-              style={[styles.filterDropdown, { backgroundColor: config.colors.primary }]}
-              onPress={toggleDrawer}
-            >
-              <Text style={[styles.filterText, { color: 'white' }]}> {t("value.codes")}</Text>
-            </TouchableOpacity> */}
           </View>
 
-          {/* Category filter bar */}
-          {/* <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryBar} contentContainerStyle={styles.categoryBarContent}>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.categoryButton, selectedCategory === cat && styles.categoryButtonActive]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text style={[styles.categoryButtonText, selectedCategory === cat && styles.categoryButtonTextActive]}>{cat}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView> */}
-
           {filteredData.length > 0 ? (
-            <>
-              <FlatList
-                data={filteredData}
-                keyExtractor={(item) => item.id || item.name}
-                renderItem={renderItem}
-                showsVerticalScrollIndicator={false}
-                removeClippedSubviews={true}
-                numColumns={2}
-                columnWrapperStyle={styles.columnWrapper}
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-              />
-              {isModalVisible && selectedFruit && <EditFruitModal />}
-            </>
+            <FlatList
+              data={filteredData}
+              keyExtractor={(item) => item.id || item.name}
+              renderItem={renderItem}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              numColumns={2}
+              columnWrapperStyle={styles.columnWrapper}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              initialNumToRender={10}
+            />
           ) : (
             <Text style={[styles.description, { textAlign: 'center', marginTop: 20, color: 'gray' }]}>
               {t("value.no_results")}
             </Text>
-          )
-          }
-
+          )}
         </View>
         <CodesDrawer isVisible={isDrawerVisible} toggleModal={toggleDrawer} codes={codesData} />
       </GestureHandlerRootView>
       {!localState.isPro && <BannerAdComponent/>}
-
-      {/* {!localState.isPro && <View style={{ alignSelf: 'center' }}>
-        {isAdVisible && (
-          <BannerAd
-            unitId={bannerAdUnitId}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            onAdLoaded={() => setIsAdVisible(true)}
-            onAdFailedToLoad={() => setIsAdVisible(false)}
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-          />
-        )}
-      </View>} */}
     </>
   );
 });
@@ -698,16 +639,16 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   badgesContainer: {
       flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 3,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
     // padding: 16,
     borderRadius: 16,
     marginTop: 8,
   },
   badgeButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 15,
+    borderRadius: 15,
     backgroundColor: isDarkMode ? '#3a3a3a' : '#ffffff',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -719,7 +660,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     backgroundColor: config.colors.primary,
   },
   badgeButtonText: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: '600',
     color: isDarkMode ? '#ffffff' : '#666666',
     textAlign: 'center',
@@ -890,16 +831,16 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   badgeButton: {
     // marginHorizontal: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 12,
     backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
   },
   badgeButtonActive: {
     backgroundColor: '#FF6666',
   },
   badgeButtonText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: isDarkMode ? '#fff' : '#666',
   },
