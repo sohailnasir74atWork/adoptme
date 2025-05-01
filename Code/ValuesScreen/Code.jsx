@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Pressable,
   FlatList,
-  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -22,7 +21,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
   const { theme, analytics } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const { triggerHapticFeedback } = useHaptic();
-  const platform = Platform.OS.toLowerCase();
+  // const platform = Platform.OS.toLowerCase();
 
 
   const normalizedCodes =

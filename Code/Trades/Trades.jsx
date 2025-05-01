@@ -26,7 +26,7 @@ dayjs.extend(relativeTime);
 
 const TradeList = ({ route }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isAdVisible, setIsAdVisible] = useState(true);
+  // const [isAdVisible, setIsAdVisible] = useState(true);
   const { selectedTheme } = route.params
   const { user, analytics, updateLocalStateAndDatabase, appdatabase } = useGlobalState()
   const [trades, setTrades] = useState([]);
@@ -60,7 +60,7 @@ const TradeList = ({ route }) => {
   };
 
 
-console.log(trades, 'trades')
+// console.log(trades, 'trades')
 
   const [selectedFilters, setSelectedFilters] = useState([]);
 

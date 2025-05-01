@@ -32,7 +32,7 @@ const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
 const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
-const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+// const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
 const ItemBadge = React.memo(({ type, style, styles }) => (
   <Text style={[styles.itemBadge, style]}>{type}</Text>
@@ -105,7 +105,7 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
     <View style={styles.itemContainer}>
       <View style={styles.imageContainer}>
         <ItemImage
-          uri={`${localState?.imgurl}/${item.image}`}
+          uri={`${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}`}
           badges={badges}
           styles={styles}
         />
@@ -569,7 +569,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   container: { 
     flex: 1,
     backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
-    paddingTop: 16,
+    // paddingTop: 16,
   },
   columnWrapper: {
     flexDirection: 'row',

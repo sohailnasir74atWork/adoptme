@@ -95,12 +95,12 @@ import { useTranslation } from 'react-i18next';
       { icon: 'shield-checkmark', label: t('offer.adsFree'), color: '#4CAF50' }, // Green
       { icon: 'swap-horizontal', label: t('offer.unlimitedTrade'), color: '#FF9800' }, // Orange
       // { icon: 'chatbubbles', label: t('offer.unlimitedChat'), color: '#2196F3' }, // Blue
-      { icon: 'notifications', label: t('offer.unlimitedAlerts'), color: '#9C27B0' }, // Purple
+      // { icon: 'notifications', label: t('offer.unlimitedAlerts'), color: '#9C27B0' }, // Purple
       { icon: 'trending-up', label: t('offer.priorityListing'), color: '#E91E63' }, // Pink
       { icon: 'checkmark-done-circle', label: t('offer.proTag'), color: config.colors.hasBlockGreen },
       // { icon: 'star', label: t('offer.featureListing'), color: '#FFD700' },
       // { icon: 'language', label: 'You can select multiple languages', color: config.colors.wantBlockRed },
-      { icon: 'trophy', label: 'Win prizes on every weekend', color: 'red' }    
+      // { icon: 'trophy', label: 'Win prizes on every weekend', color: 'red' }    
     ];
     const calculateDiscount = (monthlyPrice, quarterlyPrice, annualPrice) => {
       if (!monthlyPrice || !quarterlyPrice || !annualPrice) return {};

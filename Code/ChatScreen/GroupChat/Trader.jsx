@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Text,
-  Platform,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useGlobalState } from '../../GlobelStats';
@@ -14,7 +13,6 @@ import AdminHeader from './AdminHeader';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import getAdUnitId from '../../Ads/ads';
 import { banUser, isUserOnline, makeAdmin, removeAdmin, unbanUser } from '../utils';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
@@ -31,7 +29,7 @@ import { logoutUser } from '../../Firebase/UserLogics';
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
 
-const bannerAdUnitId = getAdUnitId('banner');
+
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount }) => {
   const { user, theme, onlineMembersCount, appdatabase, setUser } = useGlobalState();
@@ -46,13 +44,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null); // Store the selected user's details
   const [isOnline, setIsOnline] = useState(false);
-  const [isAdVisible, setIsAdVisible] = useState(true);
   const [isCooldown, setIsCooldown] = useState(false);
   const [signinMessage, setSigninMessage] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
   const { localState } = useLocalState()
   const { t } = useTranslation();
-  const platform = Platform.OS.toLowerCase();
   const [pendingMessages, setPendingMessages] = useState([]);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isFocused = useIsFocused();

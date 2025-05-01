@@ -33,6 +33,6 @@
 	<key>GOOGLE_APP_ID</key>
 	<string>1:409137828081:ios:fa4c5accef32a958f39950</string>
 	<key>DATABASE_URL</key>
-	<string>https://fruiteblocks-default-rtdb.firebaseio.com</string>
+	<string>https://adoptme-7b50c-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

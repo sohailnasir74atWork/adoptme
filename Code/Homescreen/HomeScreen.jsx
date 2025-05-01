@@ -164,7 +164,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const selectItem = useCallback((item) => {
     if (!item) return;
-    console.log(item);
+    // console.log(item);
     
     triggerHapticFeedback('impactLight');
     const value = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
@@ -966,7 +966,7 @@ const getStyles = (isDarkMode) =>
     },
     summaryInner: {
       backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
-      borderRadius: 30,
+      borderRadius: 15,
       
       padding: 15,
       shadowColor: 'rgba(255, 255, 255, 0.9)',
@@ -1099,7 +1099,7 @@ paddingVertical:10,
     addItemBlockNew: {
       width: '33.33%',
       height: 60,
-      backgroundColor: isDarkMode ? 'transparent' : '#f3d0c7',
+      backgroundColor: isDarkMode ? '#5c4c49' : '#f3d0c7',
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',

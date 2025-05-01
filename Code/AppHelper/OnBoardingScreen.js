@@ -13,7 +13,6 @@ import { useGlobalState } from '../GlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import config from '../Helper/Environment';
-import { useLanguage } from '../Translation/LanguageProvider';
 import { useTranslation } from 'react-i18next';
 import {  GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -29,7 +28,6 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const [openSignin, setOpenSignin] = useState(false);
   const { theme, user, analytics } = useGlobalState();
   const isDarkMode = theme === 'dark' || selectedTheme === 'dark';
-  const { language, changeLanguage } = useLanguage();
   const { t } = useTranslation();
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // const platform = Platform.OS.toLowerCase();
@@ -120,7 +118,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
             <View>
               {/* <View style={styles.spacer}></View> */}
               <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Adoptme Values</Text>
-              <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>{t("first.welcome_text")}</Text>
+              <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>Track pets values & optimize your trades.</Text>
             </View>
           </View>
         );

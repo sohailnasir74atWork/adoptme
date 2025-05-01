@@ -1,13 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, {  useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
    Modal,
   Linking,
-  Platform
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -25,17 +23,14 @@ const AdminHeader = ({
   setModalVisibleChatinfo, triggerHapticFeedback, unreadcount, setunreadcount
 
 }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [randomBase, setRandomBase] = useState(0); // Random base for online count
-  const animatedHeight = useRef(new Animated.Value(60)).current;
-  const [contentHeight, setContentHeight] = useState(0);
-  const { theme, analytics } = useGlobalState();
+ 
+  const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const { user } = useGlobalState()
   const navigation = useNavigation()
-  const [onlineUsers, setOnlineUsers] = useState(0);
+  // const [setOnlineUsers] = useState(0);
   const { t } = useTranslation();
-  const platform = Platform.OS.toLowerCase();
+  // const platform = Platform.OS.toLowerCase();
 
   const getLocalizedRules = (lang) => {
     switch (lang) {
@@ -60,8 +55,8 @@ const AdminHeader = ({
   const rules = getLocalizedRules(i18n.language);
   useEffect(() => {
     // Generate a random number between 30 and 50
-    const randomOnlineCount = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
-    setOnlineUsers(randomOnlineCount);
+    // const randomOnlineCount = Math.floor(Math.random() * (50 - 30 + 1)) + 30;
+    // setOnlineUsers(randomOnlineCount);
   }, []);
 
 

@@ -48,7 +48,6 @@ export default function SettingsScreen({ selectedTheme }) {
   const { language, changeLanguage } = useLanguage();
 
   const { t } = useTranslation();
-  const platform = Platform.OS.toLowerCase();
   // console.log(analytics)
 
 

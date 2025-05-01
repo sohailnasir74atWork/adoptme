@@ -13,17 +13,17 @@ const persistenceMMKV = {
 
 // Initialize Firebase App
 const firebaseConfig = {
-    apiKey: "AIzaSyDUXkQcecnhrNmeagvtRsKmDBmwz4AsRC0",
-    authDomain: "fruiteblocks.firebaseapp.com",
-    databaseURL: "https://fruiteblocks-default-rtdb.firebaseio.com",
-    projectId: "fruiteblocks",
-    storageBucket: "fruiteblocks.appspot.com",
-    messagingSenderId: "409137828081",
-    appId: Platform.select({
-      ios: "1:409137828081:ios:89f062c9951cd664f39950",
-      android: "1:409137828081:android:2b2e10b900614979f39950",
-    }),
-    measurementId: "G-C3T24PS3SF",
+  apiKey: "AIzaSyBQb8iHNTjeCj--IIiPb2tCkSHN9F2Ep30",
+  authDomain: "fruiteblocks.firebaseapp.com",
+  databaseURL: "https://adoptme-7b50c-default-rtdb.firebaseio.com/",
+  projectId: "adoptme-7b50c",
+  storageBucket: "fruiteblocks.appspot.com",
+  messagingSenderId: "409137828081",
+  appId: Platform.select({
+    ios: "1:409137828081:ios:89f062c9951cd664f39950",
+    android: "1:541413670501:android:0379855b1a57c56e2a108c",
+  }),
+  measurementId: "G-C3T24PS3SF",
   };
   
 

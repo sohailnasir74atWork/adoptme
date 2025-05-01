@@ -36,7 +36,6 @@ const PrivateChatScreen = () => {
   const [lastLoadedKey, setLastLoadedKey] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [input, setInput] = useState('');
-  const [isAdVisible, setIsAdVisible] = useState(true);
   const { localState } = useLocalState()
   const selectedUserId = selectedUser?.senderId;
   const myUserId = user?.id;
@@ -263,7 +262,7 @@ const handleRating = async () => {
     }
   }, []);
   
-console.log(trade)
+// console.log(trade)
   const groupedHasItems = groupItems(trade?.hasItems || []);
   const groupedWantsItems = groupItems(trade?.wantsItems || []);
 
