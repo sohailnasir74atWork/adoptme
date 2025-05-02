@@ -520,19 +520,19 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   searchFilterContainer: { 
     flexDirection: 'row', 
-    marginBottom: 16,
-    paddingHorizontal: 16,
+    marginVertical: 8,
+    paddingHorizontal: 8,
     gap: 12,
     alignItems: 'center',
   },
   searchInput: {   
-    height: 48,
+    height: 40,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#ffffff',
-    borderRadius: 24,
+    borderRadius: 8,
     paddingHorizontal: 20,
     color: isDarkMode ? '#ffffff' : '#000000',
     flex: 1,
-    fontSize: 16,
+    fontSize: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -555,7 +555,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   itemContainer: {
     backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
     borderRadius: 10,
-    marginBottom: 12,
+    marginBottom: 8,
     padding: 10,
     width: '49%', // 2 per row with spacing
     alignSelf: 'flex-start',

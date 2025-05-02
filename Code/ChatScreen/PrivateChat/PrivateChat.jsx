@@ -391,32 +391,32 @@ const handleRating = async () => {
             {/* <View style={{ flex: 1 }}> */}
               {trade && (
                 <View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor:'grey' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, borderBottomColor:!isDarkMode ? 'lightgrey' : 'grey', borderBottomWidth:1 }}>
                   <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
                     {groupedHasItems?.map((hasItem, index) => (
-                      <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: '19%', alignItems: 'center', marginBottom: 4 }}>
+                      <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: '19%', alignItems: 'center' }}>
                         <Image
                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${hasItem.image?.replace(/^\//, "")}` }}
                           style={{ width: 30, height: 30}}
                         />
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
                           {hasItem.isFly && (
-                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>F</Text>
+                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>F</Text>
                             </View>
                           )}
                           {hasItem.isRide && (
-                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>R</Text>
+                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>R</Text>
                             </View>
                           )}
                           {hasItem.valueType === 'm' && (
-                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>M</Text>
+                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>M</Text>
                             </View>
                           )}
                           {hasItem.valueType === 'n' && (
-                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
                               <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>N</Text>
                             </View>
                           )}
@@ -434,36 +434,36 @@ const handleRating = async () => {
                   </View>
                   <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
                     {groupedWantsItems?.map((wantitem, index) => (
-                      <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: '19%', alignItems: 'center', marginBottom: 4 }}>
+                      <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: '19%', alignItems: 'center' }}>
                         <Image
                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${wantitem.image?.replace(/^\//, "")}` }}
                           style={{ width: 35, height: 35 }}
                         />
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
                           {wantitem.isFly && (
-                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
+                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
                               <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>F</Text>
                             </View>
                           )}
                           {wantitem.isRide && (
-                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>R</Text>
+                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>R</Text>
                             </View>
                           )}
                           {wantitem.valueType === 'm' && (
-                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>M</Text>
+                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>M</Text>
                             </View>
                           )}
                           {wantitem.valueType === 'n' && (
-                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8, minWidth: 16 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>N</Text>
+                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
+                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>N</Text>
                             </View>
                           )}
                         </View>
                         {wantitem.count > 1 && (
                           <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 1, paddingVertical: 1 }}>
-                            <Text style={{ color: 'white', fontSize: 7 }}>{wantitem.count}</Text>
+                            <Text style={{ color: 'white', fontSize: 6 }}>{wantitem.count}</Text>
                           </View>
                         )}
                       </View>

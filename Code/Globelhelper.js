@@ -77,7 +77,6 @@ export const firebaseConfig = {
           let fcmToken = null;
   
           if (Platform.OS === 'ios') {
-              // console.log('🍏 Fetching APNS Token...');
               const apnsToken = await messaging().getAPNSToken();
   
               if (!apnsToken) {
@@ -86,18 +85,14 @@ export const firebaseConfig = {
               }
           }
   
-        //   console.log('📡 Fetching FCM Token...');
           fcmToken = await messaging().getToken();
-        //   console.log(fcmToken)
   
           if (!fcmToken) {
               console.error('❌ Failed to fetch FCM token. Token is null or undefined.');
               return;
           }
   
-          // console.log('💾 Saving token to database...');
           await saveTokenToDatabase(fcmToken, currentUserId);
-          // console.log('✅ FCM token registered successfully.');
           
       } catch (error) {
           console.error(`🔥 Error registering for notifications: ${error.message || error}`);

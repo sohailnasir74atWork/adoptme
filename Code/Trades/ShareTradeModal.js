@@ -26,7 +26,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
     const [showLeftGrid, setShowLeftGrid] = useState(true);
     const [showRightGrid, setShowRightGrid] = useState(true);
     const [showBadges, setShowBadges] = useState(true);
-    const [showNotes, setShowNotes] = useState(true);
+    // const [showNotes, setShowNotes] = useState(true);
 
     const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
     const tradeStatus = useMemo(() => getTradeStatus(hasTotal, wantsTotal), [hasTotal, wantsTotal]);
@@ -86,8 +86,27 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
 
     const renderBadge = useCallback((type, text) => {
         if (!showBadges) return null;
+        
+        let backgroundColor;
+        switch (type) {
+            case 'fly':
+                backgroundColor = '#3498db';
+                break;
+            case 'ride':
+                backgroundColor = '#e74c3c';
+                break;
+            case 'mega':
+                backgroundColor = '#9b59b6';
+                break;
+            case 'neon':
+                backgroundColor = '#2ecc71';
+                break;
+            default:
+                backgroundColor = '#FF6666';
+        }
+        
         return (
-            <View style={[styles.badge, { backgroundColor: type === 'fly' ? '#3498db' : '#e74c3c' }]}>
+            <View style={[styles.badge, { backgroundColor }]}>
                 <Text style={styles.badgeText}>{text}</Text>
             </View>
         );
@@ -118,6 +137,10 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                 <View style={styles.itemBadgesContainer}>
                     {item.isFly && renderBadge('fly', 'F')}
                     {item.isRide && renderBadge('ride', 'R')}
+                    {item.valueType && item.valueType !== 'd' && renderBadge(
+                        item.valueType === 'm' ? 'mega' : 'neon',
+                        item.valueType.toUpperCase()
+                    )}
                 </View>
             </View>
         );
@@ -222,9 +245,9 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                             {renderGrid(wantsItems, false)}
                         </View>
 
-                        {showNotes && description && (
+                        {/* {showNotes && description && (
                             <Text style={styles.description}>Note: {description}</Text>
-                        )}
+                        )} */}
                     </ViewShot>
 
                     <View style={styles.toggleContainer}>
@@ -232,8 +255,8 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                         {renderToggleButton('trending-up', 'Profit/Loss', showProfitLoss, setShowProfitLoss)}
                         {renderToggleButton('grid', 'Left Grid', showLeftGrid, setShowLeftGrid)}
                         {renderToggleButton('grid', 'Right Grid', showRightGrid, setShowRightGrid)}
-                        {renderToggleButton('ribbon', 'Badges', showBadges, setShowBadges)}
-                        {renderToggleButton('document-text', 'Notes', showNotes, setShowNotes)}
+                        {/* {renderToggleButton('ribbon', 'Badges', showBadges, setShowBadges)} */}
+                        {/* {renderToggleButton('document-text', 'Notes', showNotes, setShowNotes)} */}
                     </View>
 
                     <View style={styles.buttonContainer}>
@@ -303,7 +326,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         fontWeight: 'bold',
         color: isDarkMode ? 'white' : '#333',
         textAlign: 'center',
-        minWidth: 80,
+        minWidth: 100,
     },
     statusContainer: {
         flexDirection: 'row',
@@ -485,20 +508,20 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     },
     itemBadgesContainer: {
         position: 'absolute',
-        bottom: '5%',
+        bottom: '1%',
         right: '5%',
         flexDirection: 'row',
-        gap: 1,
+        gap: 0,
     },
     badge: {
-        paddingHorizontal: 5,
-        paddingVertical: 2,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
         borderRadius: '50%',
         marginHorizontal: 1,
     },
     badgeText: {
         color: 'white',
-        fontSize: 7,
+        fontSize: 6,
         fontWeight: 'bold',
         lineHeight: 10,
     },

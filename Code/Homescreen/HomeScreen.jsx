@@ -410,31 +410,26 @@ const HomeScreen = ({ selectedTheme }) => {
     return () => { isMounted = false; };
   }, [localState.data]);
 
-  const handleCreateTradePress = useCallback(async () => {
+  const handleCreateTradePress = useCallback(() => {
     if (!user?.id) {
-      setIsSigninDrawerVisible(true);
+      setIsSigninDrawerVisible(true); // Open SignInDrawer if not logged in
       return;
     }
-
-    // const hasItemsCount = hasItems.filter(Boolean).length;
-    // const wantsItemsCount = wantsItems.filter(Boolean).length;
-
-    // if (hasItemsCount === 0 && wantsItemsCount === 0) {
-    //   showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
-    //   return;
-    // }
-
-    // setType(type);
-
-    // if (type !== 'share') {
-    //   setModalVisible(true);
-    // } else {
-    //   setModalVisible(false);
-    //   setSelectedTrade(null);
-    //   setOpenShareModel(true);
-    //   mixpanel.track("Start Sharing");
-    // }
-  }, [user?.id]);
+  
+    setTimeout(() => {
+      const hasItemsCount = hasItems.filter(Boolean).length;
+      const wantsItemsCount = wantsItems.filter(Boolean).length;
+  
+      if (hasItemsCount === 0 && wantsItemsCount === 0) {
+        showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
+        return;
+      }
+  
+      setType('create');
+      setModalVisible(true);
+    }, 100); // Small delay to allow React state to settle
+  }, [hasItems, wantsItems, t]);
+  
 
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
@@ -481,20 +476,33 @@ const HomeScreen = ({ selectedTheme }) => {
         }
 
         await tradesCollection.add(newTrade);
-        setModalVisible(false);
-        
-        const callbackfunction = () => {
-          showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
-        };
+      // Step 1: Close modal first
+setModalVisible(false);
 
-        setLastTradeTime(now);
-        mixpanel.track("Trade Created", { user: user?.id });
+// Step 2: Define the success callback
+const callbackfunction = () => {
+  showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
+};
 
-        if (!localState.isPro) {
-          InterstitialAdManager.showAd(callbackfunction);
-        } else {
-          callbackfunction();
-        }
+// Step 3: Update timestamp and analytics
+setLastTradeTime(now);
+mixpanel.track("Trade Created", { user: user?.id });
+
+// Step 4: Wait for next frame (modal animation finish) then delay for iOS
+requestAnimationFrame(() => {
+  setTimeout(() => {
+    if (!localState.isPro) {
+      try {
+        InterstitialAdManager.showAd(callbackfunction);
+      } catch (err) {
+        console.warn('[AdManager] Failed to show ad:', err);
+        callbackfunction(); // fallback if ad fails
+      }
+    } else {
+      callbackfunction();
+    }
+  }, Platform.OS === 'ios' ? 500 : 300); // iOS needs a longer delay
+});
 
     } catch (error) {
       console.error("Error creating trade:", error);
@@ -972,11 +980,12 @@ const getStyles = (isDarkMode) =>
       
     },
     bigNumber: {
-      fontSize: 30,
+      fontSize: 22,
       fontWeight: 'bold',
       color: '#333',
       textAlign: 'center',
       color: isDarkMode ? 'white' : '#333',
+      minWidth:100
 
     },
     bigNumber2: {
@@ -997,9 +1006,9 @@ const getStyles = (isDarkMode) =>
 
     },
     statusText: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '600',
-      paddingHorizontal: 15,
+      paddingHorizontal: 10,
     },
     statusActive: {
       color: isDarkMode ? 'white' : '#333',

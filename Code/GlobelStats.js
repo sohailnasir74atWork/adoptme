@@ -56,7 +56,6 @@ export const GlobalStateProvider = ({ children }) => {
   }, [localState.theme, colorScheme]);
 
   // const isAdmin = user?.id  ? user?.id == '3CAAolfaX3UE3BLTZ7ghFbNnY513' : false
-  // console.log(isAdmin, user)
 
   const updateLocalStateAndDatabase = async (keyOrUpdates, value) => {
     if (!user.id) return; // Prevent updates if user is not logged in
@@ -87,7 +86,6 @@ export const GlobalStateProvider = ({ children }) => {
   };
 
 
-  // console.log(robloxUsernameRef?.current, 'robloxUsername_outside')
 
 
   // ✅ Memoize resetUserState to prevent unnecessary re-renders
@@ -118,27 +116,22 @@ export const GlobalStateProvider = ({ children }) => {
       const userId = loggedInUser.uid;
       const userRef = ref(appdatabase, `users/${userId}`);
 
-      // console.log(snapshot, userId, 'userData', userRef)
 
       // 🔄 Fetch user data
       const snapshot = await get(userRef);
       let userData;
 
-      // console.log(loggedInUser.email)
       const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'mastermind@gmail.com';
       if (makeadmin) { setIsAdmin(makeadmin) }
 
       if (snapshot.exists()) {
         userData = { ...snapshot.val(), id: userId };
-        // console.log(userData, 'userData')
 
 
       } else {
-        // console.log(robloxUsernameRef?.current, 'robloxUsername_inside')
         userData = createNewUser(userId, loggedInUser, robloxUsernameRef?.current);
         await set(userRef, userData);
       }
-      // console.log(userData, 'user')
       setUser(userData);
 
       // 🔥 Refresh and update FCM token
@@ -182,7 +175,6 @@ export const GlobalStateProvider = ({ children }) => {
       if (snapshotApi.exists()) {
         const value = snapshotApi.val();
         setApi(value);
-        // console.log('🔑 [Firebase] Google API Key from /api:', value);
       } else {
         console.warn('⚠️ No Google Translate API key found at /api');
       }
@@ -190,7 +182,6 @@ export const GlobalStateProvider = ({ children }) => {
       if (snapshotFree.exists()) {
         const value = snapshotFree.val();
         setFreeTranslation(value);
-        // console.log('🔑 [Firebase] Free Translation Key from /free_translation:', value);
       } else {
         console.warn('⚠️ No free translation key found at /free_translation');
       }
@@ -216,7 +207,6 @@ export const GlobalStateProvider = ({ children }) => {
 
     set(userIsProRef, localState?.isPro)
       .then(() => {
-        // console.log("User online status updated to true");
       })
       .catch((error) => {
         console.error("Error updating online status:", error);
@@ -272,7 +262,6 @@ export const GlobalStateProvider = ({ children }) => {
       const now = Date.now();
       const timeElapsed = now - lastActivity;
       const TWENTY_FOUR_HOURS = refresh ? 24 * 60 * 60 * 1000 : 1 * 1 * 60 * 1000; // 24 hours in ms
-      // console.log(TWENTY_FOUR_HOURS, refresh)
 
       // ✅ Fetch `codes & data` only if 24 hours have passed OR they are missing
       const shouldFetchCodesData =
@@ -283,7 +272,6 @@ export const GlobalStateProvider = ({ children }) => {
         !Object.keys(localState.data).length;
 
       if (shouldFetchCodesData) {
-        // console.log("📌 Fetching codes & data from database...");
 
         const [xlsSnapshot,  imageSnapShot] = await Promise.all([
           get(ref(appdatabase, 'xlsData')),
@@ -294,7 +282,6 @@ export const GlobalStateProvider = ({ children }) => {
         // const codes = codeSnapShot.exists() ? codeSnapShot.val() : {};
         const data = xlsSnapshot.exists() ? xlsSnapshot.val() : {};
         const image = imageSnapShot.exists() ? imageSnapShot.val() : 'https://elvebredd.com';
-        // console.log(data)
 
 
 

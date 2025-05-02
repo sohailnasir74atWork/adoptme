@@ -34,10 +34,10 @@ const config = {
 
   colors: isNoman
     ? {
-      primary: 'rgb(255, 102, 102)', // Muted grayish blue
+      primary: '#ff6666', // Muted grayish blue
       secondary: '#3E8BFC', // Bright action blue
       hasBlockGreen: 'rgb(255, 102, 102)', // Vibrant success green
-      wantBlockRed: '#7C4585', // Vivid warning red
+      wantBlockRed: '#66b266', // Vivid warning red
       backgroundLight: '#f2f2f7',
       backgroundDark: '#121212',
       white:'white',
