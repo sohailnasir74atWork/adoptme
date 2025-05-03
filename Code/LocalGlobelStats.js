@@ -212,6 +212,8 @@ export const LocalStateProvider = ({ children }) => {
         (key) => key.toLowerCase() === 'pro'
       );
 
+      // console.log(customerInfo)
+
       // console.log(customerInfo.activeSubscriptions)
       const proStatus = !!(proKey && entitlements[proKey]);
       if (proStatus) {

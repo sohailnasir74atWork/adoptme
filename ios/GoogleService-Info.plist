@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>541413670501-6kb78ehnmllmlhikgvse82c6v0qcdku4.apps.googleusercontent.com</string>
+	<string>541413670501-d2cn6f80hrqg8dl8jo459em4asr9ub9n.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.541413670501-6kb78ehnmllmlhikgvse82c6v0qcdku4</string>
+	<string>com.googleusercontent.apps.541413670501-d2cn6f80hrqg8dl8jo459em4asr9ub9n</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>541413670501-2a13njokb6rc325f27arkdhjp5a40r4h.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.adoptmevalues</string>
+	<string>com.adoptmevaluescalc</string>
 	<key>PROJECT_ID</key>
 	<string>adoptme-7b50c</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,7 +31,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:541413670501:ios:9adf0dd5c625fe5b2a108c</string>
+	<string>1:541413670501:ios:f6bab2ea6e18aa852a108c</string>
 	<key>DATABASE_URL</key>
 	<string>https://adoptme-7b50c-default-rtdb.firebaseio.com</string>
 </dict>

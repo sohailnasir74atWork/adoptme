@@ -189,7 +189,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                         </TouchableOpacity>
                     </View>
 
-                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }}>
+                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }} style={{ backgroundColor: isDarkMode ? '#121212' : '#f2f2f7' , padding: 8,}}>
                         {showSummary && showLeftGrid && showRightGrid && (
                             <View style={styles.summaryContainer}>
                                 <View style={styles.summaryInner}>
@@ -285,7 +285,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         borderRadius: 12,
         width: '98%',
         maxHeight: '90%',
-        padding: 8,
+        // padding: 8,
     },
     header: {
         flexDirection: 'row',
@@ -297,6 +297,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: isDarkMode ? '#f2f2f7' : '#121212',
+         padding: 8,
     },
     summaryContainer: {
         width: '100%',
@@ -457,6 +458,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
         borderRadius: 12,
         padding: 8,
+
     },
     toggleButton: {
         flexDirection: 'row',
@@ -486,6 +488,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: 16,
+         padding: 8,
     },
     cancelButton: {
         backgroundColor: config.colors.wantBlockRed,

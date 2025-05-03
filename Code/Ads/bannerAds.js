@@ -10,7 +10,7 @@ const BannerAdComponent = ({ adType = 'banner', visible = true }) => {
   if (!visible || !isAdVisible) return null;
 
   return (
-    <View style={{ alignItems: 'center' }}>
+    <View style={{ alignItems: 'center', justifyContent:'center', margin:'auto' }}>
       <BannerAd
         unitId={unitId}
         size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}

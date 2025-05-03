@@ -409,8 +409,8 @@ const HomeScreen = ({ selectedTheme }) => {
     parseAndSetData();
     return () => { isMounted = false; };
   }, [localState.data]);
-
   const handleCreateTradePress = useCallback(() => {
+    // console.log(user.id);
     if (!user?.id) {
       setIsSigninDrawerVisible(true); // Open SignInDrawer if not logged in
       return;
@@ -428,7 +428,7 @@ const HomeScreen = ({ selectedTheme }) => {
       setType('create');
       setModalVisible(true);
     }, 100); // Small delay to allow React state to settle
-  }, [hasItems, wantsItems, t]);
+  }, [hasItems, wantsItems, t, user?.id]);
   
 
   const handleCreateTrade = useCallback(async () => {
@@ -490,18 +490,24 @@ mixpanel.track("Trade Created", { user: user?.id });
 
 // Step 4: Wait for next frame (modal animation finish) then delay for iOS
 requestAnimationFrame(() => {
-  setTimeout(() => {
-    if (!localState.isPro) {
-      try {
-        InterstitialAdManager.showAd(callbackfunction);
-      } catch (err) {
-        console.warn('[AdManager] Failed to show ad:', err);
-        callbackfunction(); // fallback if ad fails
-      }
-    } else {
-      callbackfunction();
-    }
-  }, Platform.OS === 'ios' ? 500 : 300); // iOS needs a longer delay
+ // Step 4: Wait for modal animation to finish before showing ad
+setTimeout(() => {
+  if (!localState.isPro) {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        try {
+          InterstitialAdManager.showAd(callbackfunction);
+        } catch (err) {
+          console.warn('[AdManager] Failed to show ad:', err);
+          callbackfunction();
+        }
+      }, 400); // Adjust based on animation time
+    });
+  } else {
+    callbackfunction();
+  }
+}, 500); // Give modal time to fully disappear on iOS
+
 });
 
     } catch (error) {

@@ -91,7 +91,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 t("home.alert.success"),
                 t("signin.success_signin")
             );
-            onClose();
+            // onClose();
             mixpanel.track(`Login with apple from ${screen}`);
         } catch (error) {
             showErrorMessage(
@@ -99,7 +99,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 error?.message || t("signin.error_signin_message")
             );
         }
-    }, [t, triggerHapticFeedback, onClose]);
+    }, [t, triggerHapticFeedback]);
     
     
     
@@ -148,7 +148,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 // Handle user login
                 await auth().signInWithEmailAndPassword(email, password);
                 mixpanel.track(`Login with email from ${screen}`);
-                onClose(); // Close modal after successful operation
+                // onClose(); // Close modal after successful operation
 
                 // Alert.alert(t("signin.alert_welcome_back"), t("signin.success_signin"));
                 showSuccessMessage(
@@ -200,7 +200,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 t("signin.alert_welcome_back"),
                 t("signin.success_signin")
             );
-            onClose()
+            // onClose()
             mixpanel.track(`Login with google from ${screen}`);
 
         } catch (error) {
@@ -211,7 +211,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [onClose]);
+    }, []);
     
     
 
