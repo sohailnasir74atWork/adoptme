@@ -6,12 +6,12 @@ export const logoutUser = async (setUser) => {
     await auth().signOut();
      setUser({
       id: null,
-      selectedFruits: [],
-      isReminderEnabled: false,
-      isSelectedReminderEnabled: false,
+      // selectedFruits: [],
+      // isReminderEnabled: false,
+      // isSelectedReminderEnabled: false,
       displayName: '',
       avatar: null,
-      points: 0, 
+      // point  s: 0, 
       isBlock:false,
       fcmToken:null,
       lastactivity:null,

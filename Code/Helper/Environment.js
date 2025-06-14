@@ -21,7 +21,7 @@ const config = {
   IOsOpenApp: isNoman ? 'ca-app-pub-5740215782746766/6747304345' : '',
   IOsNative: isNoman ? 'ca-app-pub-5740215782746766/8838394066' : '',
 
-  apiKey: isNoman ? rev_cat_id : '',
+  apiKey: isNoman ? rev_cat_id : rev_cat_id,
 
   supportEmail: isNoman ? 'thesolanalabs@gmail.com' : 'mindfusionio.help@gmail.com',
   andriodShareLink: isNoman ? 'https://play.google.com/store/apps/details?id=com.adoptmevaluescalc' : 'https://play.google.com/store/apps/details?id=com.bloxfruitstock',
@@ -31,7 +31,8 @@ const config = {
 
   isNoman: isNoman ? true : false,
 
-
+  otherapplink: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.bloxfruitevalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
+  otherapplink2: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.mm2tradesvalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
   colors: isNoman
     ? {
       primary: '#ff6666', // Muted grayish blue

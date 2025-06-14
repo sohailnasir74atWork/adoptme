@@ -21,46 +21,58 @@ import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 
 const INITIAL_ITEMS = [null, null, null, null, null, null, null, null, null];
-const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
+
+
+
+// const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
 const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
 const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
-const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true) => {
+const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true, isGG = false, factor) => {
   if (!item) return 0;
-  
+
+  // console.log(isGG, 'VALUES')
+
   // Categories that only use 'value' field
   const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
-  
+  const simpleValueCategoriesgg = ['petWear', 'foods', 'vehicles', 'toys', 'gifts', 'strollers', 'stickers'];
+
+
   // Handle simple value categories
-  if (simpleValueCategories.includes(item.type)) {
+  if (simpleValueCategories.includes(item.type) && !isGG) {
     const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
-    return Number((isSharkMode ? value : value / 131.85).toFixed(2));
+    return Number((isSharkMode ? value : value / factor).toFixed(2));
   }
-  
+  if (simpleValueCategoriesgg.includes(item.type) && isGG) {
+    const value = Number(item.value) || 0;
+    return Number((isSharkMode ? value : value / factor).toFixed(2));
+  }
+
   // For pets, use the exact value key based on selected type and modifiers
   if (!selectedValueType) return 0;
-  
+
   // Determine value key based on selected type
-  const valueKey = selectedValueType === 'n' ? 'nvalue' : 
-                  selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-  
+  const valueKey = selectedValueType === 'n' ? 'nvalue' :
+    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+
   // Add modifier suffix
   const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-                        isFlySelected ? ' - fly' :
-                        isRideSelected ? ' - ride' : ' - nopotion';
-  
+    isFlySelected ? ' - fly' :
+      isRideSelected ? ' - ride' : ' - nopotion';
+
   const value = Number(item[valueKey + modifierSuffix]) || 0;
-  return Number((isSharkMode ? value : value / 131.85).toFixed(2));
+  // console.log(value)
+  return Number((isSharkMode ? value : value / factor).toFixed(2));
 };
 
 const getTradeStatus = (hasTotal, wantsTotal) => {
   // If only has items are selected (wantsTotal is 0), show LOSE
-  if (hasTotal > 0 && wantsTotal === 0) return 'lose';
-  
+  if (hasTotal > wantsTotal) return 'lose';
+
   // If only wants items are selected (hasTotal is 0), show WIN
-  if (hasTotal === 0 && wantsTotal > 0) return 'win';
-  
+  if (hasTotal < wantsTotal) return 'win';
+
   // If both are 0 or both have values, show FAIR
   return 'fair';
 };
@@ -98,24 +110,43 @@ const HomeScreen = ({ selectedTheme }) => {
   const [isSharkMode, setIsSharkMode] = useState(true);
   const [isAddingToFavorites, setIsAddingToFavorites] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
+  const [factor, setFactor] = useState(null);
 
-  const tradeStatus = useMemo(() => 
+
+  const CATEGORIES = useMemo(() => {
+    return localState.isGG
+      ? ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS', 'FAVORITES']
+      : ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
+  }, [localState.isGG]);
+
+  const tradeStatus = useMemo(() =>
     getTradeStatus(hasTotal, wantsTotal)
-  , [hasTotal, wantsTotal]);
+    , [hasTotal, wantsTotal]);
 
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+    }, 300); // Adjust delay as needed
+
+    return () => clearTimeout(timeout);
+  }, [searchText]);
   const progressBarStyle = useMemo(() => {
     // When both sides are empty, show a balanced fair state (50-50)
     if (!hasTotal && !wantsTotal) return { left: '50%', right: '50%' };
-    
+
     const total = hasTotal + wantsTotal;
     const hasPercentage = (hasTotal / total) * 100;
     const wantsPercentage = (wantsTotal / total) * 100;
-    
+
     return {
       left: `${hasPercentage}%`,
       right: `${wantsPercentage}%`
     };
   }, [hasTotal, wantsTotal]);
+
+
 
   const handleLoginSuccess = useCallback(() => {
     setIsSigninDrawerVisible(false);
@@ -130,9 +161,23 @@ const HomeScreen = ({ selectedTheme }) => {
     setWantsItems(INITIAL_ITEMS);
   }, [triggerHapticFeedback]);
 
+  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+    if (!item || !item.name) return '';
+
+    if (isGG) {
+      const encoded = encodeURIComponent(item.name);
+      // console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
+      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
+    }
+
+    if (!item.image || !baseImgUrl) return '';
+    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+  };
+
+
   const updateTotal = useCallback((item, section, add = true, isNew = false) => {
     if (!item) return;
-    
+
     const value = Number(item.selectedValue) || 0;
     const valueChange = isNew ? (add ? value : -value) : 0;
 
@@ -156,9 +201,9 @@ const HomeScreen = ({ selectedTheme }) => {
   const selectItem = useCallback((item) => {
     if (!item) return;
     // console.log(item);
-    
+
     triggerHapticFeedback('impactLight');
-    const value = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
+    const value = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor);
     const selectedItem = {
       ...item,
       selectedValue: value,
@@ -166,10 +211,10 @@ const HomeScreen = ({ selectedTheme }) => {
       isFly: isFlySelected,
       isRide: isRideSelected
     };
-    
+
     const updateItems = selectedSection === 'has' ? [...hasItems] : [...wantsItems];
     const nextEmptyIndex = updateItems.indexOf(null);
-    
+
     if (nextEmptyIndex !== -1) {
       updateItems[nextEmptyIndex] = selectedItem;
       if (selectedSection === 'has') {
@@ -185,13 +230,13 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
-    
+
     if (items[index]) {
       triggerHapticFeedback('impactLight');
       const item = items[index];
       const updatedItems = [...items];
       updatedItems[index] = null;
-      
+
       if (isHas) {
         setHasItems(updatedItems);
         updateTotal(item, 'has', false, true);
@@ -199,7 +244,7 @@ const HomeScreen = ({ selectedTheme }) => {
         setWantsItems(updatedItems);
         updateTotal(item, 'wants', false, true);
       }
-        } else {
+    } else {
       triggerHapticFeedback('impactLight');
       setSelectedSection(isHas ? 'has' : 'wants');
       setIsDrawerVisible(true);
@@ -210,7 +255,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const updateItemsForMode = useCallback((items) => {
     return items.map(item => {
       if (!item) return null;
-      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode);
+      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, localState.isGG, factor);
       return { ...item, selectedValue: value };
     });
   }, [isSharkMode]);
@@ -219,74 +264,81 @@ const HomeScreen = ({ selectedTheme }) => {
   useEffect(() => {
     const updatedHasItems = updateItemsForMode(hasItems);
     const updatedWantsItems = updateItemsForMode(wantsItems);
-    
+
     // Batch state updates
     const updates = () => {
       setHasItems(updatedHasItems);
       setWantsItems(updatedWantsItems);
-      
+
       const newHasTotal = updatedHasItems.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
       const newWantsTotal = updatedWantsItems.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
       setHasTotal(newHasTotal);
       setWantsTotal(newWantsTotal);
     };
-    
+
     updates();
   }, [isSharkMode, updateItemsForMode]);
   // Add toggleFavorite function
   const toggleFavorite = useCallback((item) => {
     if (!item) return;
-    
+
     const currentFavorites = localState.favorites || [];
     const isFavorite = currentFavorites.some(fav => fav.id === item.id);
-    
+
     let newFavorites;
     if (isFavorite) {
       newFavorites = currentFavorites.filter(fav => fav.id !== item.id);
     } else {
       newFavorites = [...currentFavorites, item];
     }
-    
+
     updateLocalState('favorites', newFavorites);
     triggerHapticFeedback('impactLight');
   }, [localState.favorites, updateLocalState, triggerHapticFeedback]);
 
   // Update filteredData to include favorites
-  const filteredData = useMemo(() => {
-    if (selectedPetType === 'FAVORITES') {
-      // For FAVORITES tab, only show favorited items
-      return (localState.favorites || [])
-        .filter(item => {
-          if (!item?.name || !item?.type) return false;
-          const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
-          return matchesSearch;
-        })
-        .sort((a, b) => {
-          const valueA = getItemValue(a, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-          const valueB = getItemValue(b, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-          return valueB - valueA;
-        });
-    } else {
-      // For other tabs, show all items with type filter
-      return fruitRecords
-        .filter(item => {
-          if (!item?.name || !item?.type) return false;
-          const matchesSearch = item.name.toLowerCase().includes(searchText.toLowerCase());
-          const matchesType = selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
-          return matchesSearch && matchesType;
-        })
-        .sort((a, b) => {
-          const valueA = getItemValue(a, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-          const valueB = getItemValue(b, selectedValueType, isFlySelected, isRideSelected, isSharkMode);
-          return valueB - valueA;
-        });
-    }
-  }, [fruitRecords, searchText, selectedPetType, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.favorites]);
+  const memoizedFruitRecords = useMemo(() => {
+    return fruitRecords.map(item => {
+      if (!item) return null;
+      return {
+        ...item,
+        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, selectedPetType, localState.isGG, factor),
+      };
+    });
+  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, selectedPetType]);
 
+  // Step 3: Use optimized filteredData
+  const filteredData = useMemo(() => {
+    const list = selectedPetType === 'FAVORITES'
+      ? (localState.favorites || []).map(item => ({
+        ...item,
+        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
+      }))
+      : memoizedFruitRecords;
+    return list
+      .filter(item => {
+
+        if (!item?.type) return false;
+        const matchesSearch = item.name.toLowerCase().includes(debouncedSearchText.toLowerCase());
+        const matchesType = selectedPetType === 'FAVORITES' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
+        return matchesSearch && matchesType;
+      })
+      .sort((a, b) => (b.cachedValue || 0) - (a.cachedValue || 0));
+  }, [
+    memoizedFruitRecords,
+    debouncedSearchText,
+    selectedPetType,
+    selectedValueType,
+    isFlySelected,
+    isRideSelected,
+    isSharkMode,
+    localState.favorites,
+    localState.isGG
+  ]);
   // Update renderGridItem to handle favorites mode
   const renderGridItem = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={styles.gridItem} 
+    <TouchableOpacity
+      style={styles.gridItem}
       onPress={() => {
         if (isAddingToFavorites) {
           toggleFavorite(item);
@@ -298,34 +350,35 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
       <Image
-     source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+        source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
 
-      style={styles.gridItemImage}
+
+        style={styles.gridItemImage}
       />
       <Text numberOfLines={1} style={styles.gridItemText}>
         {item.name}
       </Text>
       {isAddingToFavorites && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.favoriteButton}
           onPress={() => toggleFavorite(item)}
         >
-          <Icon 
-            name={(localState.favorites || []).some(fav => fav.id === item.id) ? "heart" : "heart-outline"} 
-            size={20} 
-            color={(localState.favorites || []).some(fav => fav.id === item.id) ? "#e74c3c" : "#666"} 
+          <Icon
+            name={(localState.favorites || []).some(fav => fav.id === item.id) ? "heart" : "heart-outline"}
+            size={20}
+            color={(localState.favorites || []).some(fav => fav.id === item.id) ? "#e74c3c" : "#666"}
           />
         </TouchableOpacity>
       )}
       {selectedPetType === 'FAVORITES' && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.removeButton}
           onPress={() => toggleFavorite(item)}
         >
-          <Icon 
-            name="close-circle" 
-            size={20} 
-            color="#e74c3c" 
+          <Icon
+            name="close-circle"
+            size={20}
+            color="#e74c3c"
           />
         </TouchableOpacity>
       )}
@@ -349,7 +402,7 @@ const HomeScreen = ({ selectedTheme }) => {
     if (selectedPetType === 'FAVORITES') {
       return (
         <View style={styles.badgeContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.addToFavoritesButton}
             onPress={() => {
               setIsAddingToFavorites(true);
@@ -366,9 +419,9 @@ const HomeScreen = ({ selectedTheme }) => {
   }, [selectedPetType]);
 
   // Memoize key extractor
-  const keyExtractor = useCallback((item) => 
-    item.id?.toString() || Math.random().toString()
-  , []);
+  const keyExtractor = useCallback((item, index) =>
+    item.id?.toString() || `${item.name}-${item.type}-${index}`, []);
+
 
   // Optimize FlatList performance
   const getItemLayout = useCallback((data, index) => ({
@@ -377,59 +430,85 @@ const HomeScreen = ({ selectedTheme }) => {
     index,
   }), []);
 
+
+
+  useEffect(() => {
+    const fetchFactor = async () => {
+      try {
+        const database = getDatabase();
+        const snapshot = await ref(database, 'factor').once('value');
+        const factor = snapshot.val();
+        setFactor(factor);
+      } catch (error) {
+        console.error('Error fetching factor:', error);
+      }
+    };
+
+    fetchFactor();
+  }, []);
+
+  // console.log(localState.isGG)
+
   useEffect(() => {
     let isMounted = true;
 
     const parseAndSetData = async () => {
-      if (!localState.data) return;
-
       try {
-        let parsedData = localState.data;
-        if (typeof localState.data === 'string') {
-          parsedData = JSON.parse(localState.data);
+        const source = localState.isGG ? localState.ggData : localState.data;
+
+        if (!source) {
+          if (isMounted) setFruitRecords([]);
+          return;
         }
 
-        if (parsedData && typeof parsedData === 'object' && Object.keys(parsedData).length > 0) {
+        const parsed = typeof source === 'string' ? JSON.parse(source) : source;
+
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
           if (isMounted) {
-            setFruitRecords(Object.values(parsedData));
+            setFruitRecords(Object.values(parsed));
           }
         } else {
-          if (isMounted) {
-            setFruitRecords([]);
-          }
+          if (isMounted) setFruitRecords([]);
         }
-      } catch (error) {
-        console.error("Error parsing data:", error);
-        if (isMounted) {
-          setFruitRecords([]);
-        }
+      } catch (err) {
+        console.error("❌ Error parsing data in HomeScreen:", err);
+        if (isMounted) setFruitRecords([]);
       }
     };
 
     parseAndSetData();
-    return () => { isMounted = false; };
-  }, [localState.data]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [localState.isGG]);
+
+  // console.log(filteredData.length)
+
+
+
+
+
   const handleCreateTradePress = useCallback(() => {
     // console.log(user.id);
     if (!user?.id) {
       setIsSigninDrawerVisible(true); // Open SignInDrawer if not logged in
       return;
     }
-  
+
     setTimeout(() => {
       const hasItemsCount = hasItems.filter(Boolean).length;
       const wantsItemsCount = wantsItems.filter(Boolean).length;
-  
+
       if (hasItemsCount === 0 && wantsItemsCount === 0) {
         showErrorMessage(t("home.alert.error"), t("home.alert.missing_items_error"));
         return;
       }
-  
+
       setType('create');
       setModalVisible(true);
     }, 100); // Small delay to allow React state to settle
   }, [hasItems, wantsItems, t, user?.id]);
-  
 
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
@@ -439,7 +518,7 @@ const HomeScreen = ({ selectedTheme }) => {
       const database = getDatabase();
       const avgRatingSnap = await ref(database, `averageRatings/${user?.id}`).once('value');
       const avgRatingData = avgRatingSnap.val();
-      
+
       const userRating = avgRatingData?.value || null;
       const ratingCount = avgRatingData?.count || 0;
 
@@ -450,9 +529,8 @@ const HomeScreen = ({ selectedTheme }) => {
         valueType: item.valueType,
         isFly: item.isFly,
         isRide: item.isRide,
-        image: item.image,
+        image: item.image ? item.image : '' ,
       });
-
       const newTrade = {
         userId: user?.id || "Anonymous",
         traderName: user?.displayName || "Anonymous",
@@ -466,49 +544,51 @@ const HomeScreen = ({ selectedTheme }) => {
         description: description || "",
         timestamp: firestore.FieldValue.serverTimestamp(),
         rating: userRating,
-        ratingCount
+        ratingCount,
+        isSharkMode: localState.isGG ? 'GG' : isSharkMode
+
       };
-        const now = Date.now();
-        if (lastTradeTime && now - lastTradeTime < 60000) {
-          showErrorMessage(t("home.alert.error"), "Please wait for 1 minute before creating new trade");
-          setIsSubmitting(false);
-          return;
-        }
+      const now = Date.now();
+      if (lastTradeTime && now - lastTradeTime < 60000) {
+        showErrorMessage(t("home.alert.error"), "Please wait for 1 minute before creating new trade");
+        setIsSubmitting(false);
+        return;
+      }
 
-        await tradesCollection.add(newTrade);
+      await tradesCollection.add(newTrade);
       // Step 1: Close modal first
-setModalVisible(false);
+      setModalVisible(false);
 
-// Step 2: Define the success callback
-const callbackfunction = () => {
-  showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
-};
+      // Step 2: Define the success callback
+      const callbackfunction = () => {
+        showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
+      };
 
-// Step 3: Update timestamp and analytics
-setLastTradeTime(now);
-mixpanel.track("Trade Created", { user: user?.id });
+      // Step 3: Update timestamp and analytics
+      setLastTradeTime(now);
+      mixpanel.track("Trade Created", { user: user?.id });
 
-// Step 4: Wait for next frame (modal animation finish) then delay for iOS
-requestAnimationFrame(() => {
- // Step 4: Wait for modal animation to finish before showing ad
-setTimeout(() => {
-  if (!localState.isPro) {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        try {
-          InterstitialAdManager.showAd(callbackfunction);
-        } catch (err) {
-          console.warn('[AdManager] Failed to show ad:', err);
-          callbackfunction();
-        }
-      }, 400); // Adjust based on animation time
-    });
-  } else {
-    callbackfunction();
-  }
-}, 500); // Give modal time to fully disappear on iOS
+      // Step 4: Wait for next frame (modal animation finish) then delay for iOS
+      requestAnimationFrame(() => {
+        // Step 4: Wait for modal animation to finish before showing ad
+        setTimeout(() => {
+          if (!localState.isPro) {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                try {
+                  InterstitialAdManager.showAd(callbackfunction);
+                } catch (err) {
+                  console.warn('[AdManager] Failed to show ad:', err);
+                  callbackfunction();
+                }
+              }, 400); // Adjust based on animation time
+            });
+          } else {
+            callbackfunction();
+          }
+        }, 500); // Give modal time to fully disappear on iOS
 
-});
+      });
 
     } catch (error) {
       console.error("Error creating trade:", error);
@@ -534,16 +614,17 @@ setTimeout(() => {
   const isProfit = profitLoss >= 0;
   const neutral = profitLoss === 0;
 
+  const  isGG = localState.isGG
 
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, isGG), [isDarkMode, isGG]);
 
-  const lastFilledIndexHas = useMemo(() => 
+  const lastFilledIndexHas = useMemo(() =>
     hasItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
-  , [hasItems]);
+    , [hasItems]);
 
-  const lastFilledIndexWant = useMemo(() => 
+  const lastFilledIndexWant = useMemo(() =>
     wantsItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
-  , [wantsItems]);
+    , [wantsItems]);
 
   return (
     <>
@@ -569,22 +650,22 @@ setTimeout(() => {
                           styles.statusText,
                           tradeStatus === 'lose' ? styles.statusActive : styles.statusInactive
                         ]}>LOSE</Text>
-                </View>
+                      </View>
                       <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
-                </View>
+                    </View>
                     <View style={styles.progressContainer}>
                       <View style={styles.progressBar}>
-                        <View 
+                        <View
                           style={[
                             styles.progressLeft,
                             { width: progressBarStyle.left }
-                          ]} 
+                          ]}
                         />
-                        <View 
+                        <View
                           style={[
                             styles.progressRight,
                             { width: progressBarStyle.right }
-                          ]} 
+                          ]}
                         />
                       </View>
                     </View>
@@ -598,9 +679,9 @@ setTimeout(() => {
               )}
               <View style={styles.profitLossBox}>
                 <Text style={[styles.bigNumber2, { color: isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
-                  {Math.abs(profitLoss).toLocaleString()} 
+                  {Math.abs(profitLoss).toLocaleString()}
                 </Text>
-                <View style={[styles.divider, {position:'absolute', right:0}]}>
+                <View style={[styles.divider, { position: 'absolute', right: 0 }]}>
                   <Image
                     source={require('../../assets/reset.png')}
                     style={{ width: 18, height: 18, tintColor: 'white' }}
@@ -609,15 +690,15 @@ setTimeout(() => {
                 </View>
               </View>
 
-              <View style={{flexDirection:'row', justifyContent:'space-between'}}>
-              <View style={styles.itemRow}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <View style={styles.itemRow}>
                   {hasItems?.map((item, index) => {
                     // For 3 columns
                     const isLastColumn = (index + 1) % 3 === 0;
                     const isLastRow = index >= hasItems.length - 3;
                     return (
-                      <TouchableOpacity 
-                        key={index} 
+                      <TouchableOpacity
+                        key={index}
                         style={[
                           styles.addItemBlockNew,
                           isLastColumn && { borderRightWidth: 0 },
@@ -625,61 +706,10 @@ setTimeout(() => {
                         ]}
                         onPress={() => handleCellPress(index, true)}
                       >
-                    {item ? (
-                      <>
-                        <Image
-                             source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
-                             style={[styles.itemImageOverlay]}
-                            />
-                            {!hideBadge.includes(item.type?.toUpperCase()) && (
-                              <View style={styles.itemBadgesContainer}>
-                                {item?.isFly && (
-                                  <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
-                                )}
-                                {item?.isRide && (
-                                  <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
-                                )}
-                                {item?.valueType && item.valueType !== 'd' && (
-                                  <Text style={[
-                                    styles.itemBadge,
-                                    item.valueType === 'm' && styles.itemBadgeMega,
-                                    item.valueType === 'n' && styles.itemBadgeNeon,
-                                  ]}>{item.valueType.toUpperCase()}</Text>
-                                )}
-                              </View>
-                            )}
-                      </>
-                    ) : (
-                          index === lastFilledIndexHas + 1 && (
-                            <Icon 
-                              name="add-circle" 
-                              size={30} 
-                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
-                            />
-                          )
-                    )}
-                  </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <View style={[styles.itemRow]}>
-                  {wantsItems?.map((item, index) => {
-                    const isLastColumn = (index + 1) % 3 === 0;
-                    const isLastRow = index >= wantsItems.length - 3;
-                    return (
-                      <TouchableOpacity 
-                        key={index} 
-                        style={[
-                          styles.addItemBlockNew,
-                          isLastColumn && { borderRightWidth: 0 },
-                          isLastRow && { borderBottomWidth: 0 }
-                        ]}
-                        onPress={() => handleCellPress(index, false)}
-                      >
-                    {item ? (
-                      <>
-                        <Image
-                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+                        {item ? (
+                          <>
+                            <Image
+                              source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
                               style={[styles.itemImageOverlay]}
                             />
                             {!hideBadge.includes(item.type?.toUpperCase()) && (
@@ -699,78 +729,158 @@ setTimeout(() => {
                                 )}
                               </View>
                             )}
-                      </>
-                    ) : (
-                          index === lastFilledIndexWant + 1 && (
-                            <Icon 
-                              name="add-circle" 
-                              size={30} 
-                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
+                          </>
+                        ) : (
+                          index === lastFilledIndexHas + 1 && (
+                            <Icon
+                              name="add-circle"
+                              size={30}
+                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'}
                             />
                           )
-                    )}
-                  </TouchableOpacity>
+                        )}
+                      </TouchableOpacity>
                     );
                   })}
-              </View>
-              </View>
+                </View>
+                <View style={[styles.itemRow]}>
+                  {wantsItems?.map((item, index) => {
+                    const isLastColumn = (index + 1) % 3 === 0;
+                    const isLastRow = index >= wantsItems.length - 3;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.addItemBlockNew,
+                          isLastColumn && { borderRightWidth: 0 },
+                          isLastRow && { borderBottomWidth: 0 }
+                        ]}
+                        onPress={() => handleCellPress(index, false)}
+                      >
+                        {item ? (
+                          <>
+                            <Image
+                              source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
 
-              <View style={styles.typeContainer}>
-                
-                <View style={styles.typeButtonsContainer}>
-                  <TouchableOpacity 
-                    style={[styles.typeButton, isSharkMode && styles.typeButtonActive]}
-                    onPress={() => setIsSharkMode(true)}
-                  >
-                    <Text style={[styles.typeButtonText, isSharkMode && styles.typeButtonTextActive]}>Shark</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
-                    onPress={() => setIsSharkMode(false)}
-                  >
-                    <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
-                  </TouchableOpacity>
-                  
+                              style={[styles.itemImageOverlay]}
+                            />
+                            {!hideBadge.includes(item.type?.toUpperCase()) && (
+                              <View style={styles.itemBadgesContainer}>
+                                {item?.isFly && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
+                                )}
+                                {item?.isRide && (
+                                  <Text style={[styles.itemBadge, styles.itemBadgeRide]}>R</Text>
+                                )}
+                                {item?.valueType && item.valueType !== 'd' && (
+                                  <Text style={[
+                                    styles.itemBadge,
+                                    item.valueType === 'm' && styles.itemBadgeMega,
+                                    item.valueType === 'n' && styles.itemBadgeNeon,
+                                  ]}>{item.valueType.toUpperCase()}</Text>
+                                )}
+                              </View>
+                            )}
+                          </>
+                        ) : (
+                          index === lastFilledIndexWant + 1 && (
+                            <Icon
+                              name="add-circle"
+                              size={30}
+                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'}
+                            />
+                          )
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-                <View style={styles.recommendedContainer}>
-                  <Icon 
-                    name="return-up-forward-outline" 
-                    size={20} 
-                    color="#666" 
-                    style={styles.curvedArrow}
-                  />
-                  <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                      </View>
-              </View>
+              {!localState.isGG &&
+                <View style={styles.typeContainer}>
+
+                  <View style={styles.typeButtonsContainer}>
+                    <TouchableOpacity
+                      style={[styles.typeButton, isSharkMode && styles.typeButtonActive]}
+                      onPress={() => setIsSharkMode(true)}
+                    >
+                      <Text style={[styles.typeButtonText, isSharkMode && styles.typeButtonTextActive]}>Shark</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
+                      onPress={() => setIsSharkMode(false)}
+                    >
+                      <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
+                    </TouchableOpacity>
+
+                  </View>
+                  <View style={styles.recommendedContainer}>
+                    <Icon
+                      name="return-up-forward-outline"
+                      size={20}
+                      color="#666"
+                      style={styles.curvedArrow}
+                    />
+                    <Text style={styles.recommendedText}>RECOMMENDED</Text>
+                  </View>
+                </View>}
+                {localState.isGG &&
+                <View style={[styles.typeContainer]}>
+
+                  <View style={[styles.typeButtonsContainer, {padding:0}]}>
+                    <TouchableOpacity
+                      style={[styles.typeButton, {backgroundColor:'#939992'}]}
+                      onPress={() => setIsSharkMode(true) } disabled
+                    >
+                      <Text style={[styles.typeButtonText, styles.typeButtonTextActive]}>GG Values</Text>
+                    </TouchableOpacity>
+                    {/* <TouchableOpacity
+                      style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
+                      onPress={() => setIsSharkMode(false)}
+                    >
+                      <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
+                    </TouchableOpacity> */}
+
+                  </View>
+                  {/* <View style={styles.recommendedContainer}>
+                    <Icon
+                      name="return-up-forward-outline"
+                      size={20}
+                      color="#666"
+                      style={styles.curvedArrow}
+                    />
+                    <Text style={styles.recommendedText}>RECOMMENDED</Text>
+                  </View> */}
+                </View>}
 
               {!config.isNoman && (
                 <View style={styles.summaryContainer}>
-                <View style={[styles.summaryBox, styles.hasBox]}>
-                  <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
-                  <View style={{justifyContent:'space-between', flexDirection:'row' }} >
-                  <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                  <View style={[styles.summaryBox, styles.hasBox]}>
+                    <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
+                    <View style={{ justifyContent: 'space-between', flexDirection: 'row' }} >
+                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
                       <Text style={styles.priceValue}>${hasTotal?.toLocaleString()}</Text>
+                    </View>
                   </View>
-                </View>
-                <View style={[styles.summaryBox, styles.wantsBox]}>
-                  <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
-                  <View style={{justifyContent:'space-between', flexDirection:'row' }} >
-                  <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                  <View style={[styles.summaryBox, styles.wantsBox]}>
+                    <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
+                    <View style={{ justifyContent: 'space-between', flexDirection: 'row' }} >
+                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
                       <Text style={styles.priceValue}>${wantsTotal?.toLocaleString()}</Text>
-                  </View>
+                    </View>
                   </View>
                 </View>
               )}
             </ViewShot>
             <View style={styles.createtrade}>
-              <TouchableOpacity 
-                style={styles.createtradeButton} 
+              <TouchableOpacity
+                style={styles.createtradeButton}
                 onPress={() => handleCreateTradePress()}
               >
                 <Text style={{ color: 'white' }}>{t('home.create_trade')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.shareTradeButton} 
+              <TouchableOpacity
+                style={styles.shareTradeButton}
                 onPress={handleShareTrade}
               >
                 <Text style={{ color: 'white' }}>{t('home.share_trade')}</Text>
@@ -793,8 +903,8 @@ setTimeout(() => {
                   onChangeText={setSearchText}
                   placeholderTextColor={isDarkMode ? '#999' : '#666'}
                 />
-                <TouchableOpacity 
-                  onPress={() => setIsDrawerVisible(false)} 
+                <TouchableOpacity
+                  onPress={() => setIsDrawerVisible(false)}
                   style={styles.closeButton}
                 >
                   <Text style={styles.closeButtonText}>{t('home.close')}</Text>
@@ -894,7 +1004,7 @@ setTimeout(() => {
           >
             <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)} />
             <ConditionalKeyboardWrapper>
-              <View style={{flexDirection:'row', flex:1}}>
+              <View style={{ flexDirection: 'row', flex: 1 }}>
                 <View style={[styles.drawerContainer2, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
                   <Text style={styles.modalMessage}>
                     {t("home.trade_description")}
@@ -940,7 +1050,7 @@ setTimeout(() => {
           />
         </View>
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent/>}
+      {!localState.isPro && <BannerAdComponent />}
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}
@@ -954,7 +1064,7 @@ setTimeout(() => {
   );
 };
 
-const getStyles = (isDarkMode) =>
+const getStyles = (isDarkMode,isGG) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -967,7 +1077,7 @@ const getStyles = (isDarkMode) =>
     summaryInner: {
       backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
       borderRadius: 15,
-      
+
       padding: 15,
       shadowColor: 'rgba(255, 255, 255, 0.9)',
       shadowOffset: {
@@ -983,7 +1093,7 @@ const getStyles = (isDarkMode) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 10,
-      
+
     },
     bigNumber: {
       fontSize: 22,
@@ -991,7 +1101,7 @@ const getStyles = (isDarkMode) =>
       color: '#333',
       textAlign: 'center',
       color: isDarkMode ? 'white' : '#333',
-      minWidth:100
+      minWidth: 100
 
     },
     bigNumber2: {
@@ -1024,7 +1134,7 @@ const getStyles = (isDarkMode) =>
     },
     progressContainer: {
       marginVertical: 5,
-      
+
     },
     progressBar: {
       height: 6,
@@ -1048,7 +1158,7 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'center',
       // marginTop: 5,
-      
+
     },
     offerLabel: {
       fontSize: 10,
@@ -1066,11 +1176,11 @@ const getStyles = (isDarkMode) =>
       padding: 5,
       borderRadius: 8,
     },
-    profitLossBox:{
-justifyContent:'center',
-alignItems:'center',
-flexDirection:'row',
-paddingVertical:10,
+    profitLossBox: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexDirection: 'row',
+      paddingVertical: 10,
     },
     hasBox: {
       backgroundColor: config.colors.hasBlockGreen,
@@ -1092,7 +1202,7 @@ paddingVertical:10,
       alignItems: 'center',
       marginBottom: 5,
       borderWidth: 1,
-      borderColor: 'rgb(255, 102, 102)',
+      borderColor: isGG ? '#333333' : 'rgb(255, 102, 102)',
       marginHorizontal: 'auto',
       borderRadius: 4,
       overflow: 'hidden',
@@ -1100,13 +1210,13 @@ paddingVertical:10,
     addItemBlockNew: {
       width: '33.33%',
       height: 60,
-      backgroundColor: isDarkMode ? '#5c4c49' : '#f3d0c7',
+      backgroundColor: isDarkMode ? '#5c4c49' :  isGG ? '#939992' : '#f3d0c7',
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
       borderRightWidth: 1,
       borderBottomWidth: 1,
-      borderColor: 'rgb(255, 102, 102)',
+      borderColor: isGG ? '#333333' : 'rgb(255, 102, 102)',
     },
     itemText: {
       color: isDarkMode ? 'white' : 'black',
@@ -1260,7 +1370,7 @@ paddingVertical:10,
       backgroundColor: config.colors.wantBlockRed,
       padding: 10,
       borderRadius: 5,
-            height: 40,
+      height: 40,
 
       width: '24%',
       alignItems: 'center',
@@ -1272,53 +1382,18 @@ paddingVertical:10,
       fontFamily: 'Lato-Regular',
       fontSize: 12
     },
-    flatListContainer: {
-      justifyContent: 'space-between',
-      paddingBottom: 20
-    },
-    columnWrapper: {
-      flex: 1,
-      justifyContent: 'space-around',
-    },
     itemImageOverlay: {
       width: 40,
       height: 40,
       borderRadius: 5,
+      resizeMode: 'contain',
     },
     screenshotView: {
       padding: 10,
       flex: 1,
     },
-    float: {
-      position: 'absolute',
-      right: 5,
-      bottom: 5,
-      zIndex: 1,
-    },
-    titleText: {
-      fontFamily: 'Lato-Regular',
-      fontSize: 10
-    },
-    loaderContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    loaderText: {
-      fontSize: 16,
-      fontFamily: 'Lato-Bold',
-    },
-    noDataContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#f9f9f9',
-    },
-    noDataText: {
-      fontSize: 16,
-      color: 'gray',
-      fontFamily: 'Lato-Bold',
-    },
+
+
     createtrade: {
       alignSelf: 'center',
       justifyContent: 'center',
@@ -1392,40 +1467,15 @@ paddingVertical:10,
       fontSize: 14,
       fontFamily: 'Lato-Bold',
     },
-    notification: {
-      justifyContent: "space-between",
-      padding: 12,
-      paddingTop: 20,
-      backgroundColor: config.colors.secondary,
-      marginHorizontal: 10,
-      marginTop: 10,
-      borderRadius: 8
-    },
+
     text: {
       color: "white",
       fontSize: 12,
       fontFamily: "Lato-Regular",
       lineHeight: 12
     },
-    closeButtonNotification: {
-      marginLeft: 10,
-      padding: 5,
-      position: 'absolute',
-      top: 0,
-      right: 0
-    },
-    itemBlock: {
-      width: '11.11%',
-      height: 110,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderRadius: 10,
-      marginBottom: 10,
-      position: 'relative',
-      ...(!config.isNoman && {
-        borderColor: config.colors.hasBlockGreen,
-      }),
-    },
+
+
     typeContainer: {
       alignItems: 'center',
       justifyContent: 'center',

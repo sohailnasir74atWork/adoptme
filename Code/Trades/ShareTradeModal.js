@@ -32,7 +32,21 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
     const tradeStatus = useMemo(() => getTradeStatus(hasTotal, wantsTotal), [hasTotal, wantsTotal]);
     const profitLoss = wantsTotal - hasTotal;
     const isProfit = profitLoss >= 0;
+    const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
 
+        if (!item || !item.name) return '';
+    
+        if (isGG) {
+          const encoded = encodeURIComponent(item.name);
+        //   console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
+          return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
+        }
+    
+        if (!item.image || !baseImgUrl) return '';
+        return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+      };
+    
+    
     const progressBarStyle = useMemo(() => {
         if (!hasTotal && !wantsTotal) return { left: '50%', right: '50%' };
         const total = hasTotal + wantsTotal;
@@ -131,7 +145,8 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
         return (
             <View style={styles.gridItem}>
                 <Image
-                    source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}` }}
+                    source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+
                     style={styles.gridItemImage}
                 />
                 <View style={styles.itemBadgesContainer}>
@@ -183,9 +198,9 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             <View style={styles.modalContainer}>
                 <View style={styles.modalContent}>
                     <View style={styles.header}>
-                        <Text style={styles.title}>Share Trade</Text>
+                        {/* <Text style={styles.title}>Share Trade</Text> */}
                         <TouchableOpacity onPress={onClose}>
-                            <Icon name="close" size={24} color={isDarkMode ? '#f2f2f7' : '#121212'} />
+                            {/* <Icon name="close" size={24} color={isDarkMode ? '#f2f2f7' : '#121212'} /> */}
                         </TouchableOpacity>
                     </View>
 

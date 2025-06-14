@@ -17,7 +17,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import { getStyles } from './settingstyle';
-import { handleGetSuggestions, handleOpenWebsite, handleRateApp, handleShareApp, imageOptions, } from './settinghelper';
+import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRateApp, handleadoptme, handleShareApp, imageOptions, handleBloxFruit, handleRefresh} from './settinghelper';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import auth from '@react-native-firebase/auth';
@@ -41,7 +41,7 @@ export default function SettingsScreen({ selectedTheme }) {
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [openSingnin, setOpenSignin] = useState(false);
-  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, analytics } = useGlobalState()
+  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, reload } = useGlobalState()
   const { updateLocalState, localState, mySubscriptions } = useLocalState()
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [showOfferWall, setShowofferWall] = useState(false);
@@ -382,7 +382,7 @@ const formatPlanName = (plan) => {
         <Text style={styles.subtitle}>{t('settings.app_settings')}</Text>
         <View style={styles.cardContainer}>
           <View style={styles.option} onPress={() => {
-            handleShareApp(); triggerHapticFeedback('impactLight');
+            handleToggle(); triggerHapticFeedback('impactLight');
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -407,7 +407,7 @@ const formatPlanName = (plan) => {
 
           </View>
 
-          <View style={styles.optionLast} onPress={() => {
+          <View style={styles.option} onPress={() => {
             handleShareApp(); triggerHapticFeedback('impactLight');
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
@@ -436,6 +436,37 @@ const formatPlanName = (plan) => {
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+            
+          </View>
+          <View style={styles.optionLast} onPress={() => {
+            HANDLEH(); triggerHapticFeedback('impactLight');
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Icon name="contrast-outline" size={18} color={'white'} style={{ backgroundColor: '#4A90E2', padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>Active Values</Text>
+              </TouchableOpacity>
+              <View style={styles.containertheme}>
+                <TouchableOpacity
+                  style={[styles.box, !localState.isGG && styles.selectedBox]}
+                  onPress={() => { updateLocalState('isGG', false); handleRefresh(reload) }}
+                >
+                  <Text style={[styles.text, !localState.isGG && styles.selectedText]}>
+                  Elvebredd Values
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.box, localState.isGG && styles.selectedBox]}
+                  onPress={() => { updateLocalState('isGG', true); handleRefresh(reload) }}
+                >
+                  <Text style={[styles.text, localState.isGG && styles.selectedText]}>
+                    GG Values
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
             </View>
           </View>
         </View>
@@ -540,6 +571,73 @@ const formatPlanName = (plan) => {
 
         </View>
         
+        <Text style={styles.subtitle}>Our Other APPS</Text>
+       
+       <View style={styles.cardContainer}>
+
+
+<TouchableOpacity style={styles.option} onPress={() => {
+ handleBloxFruit(); triggerHapticFeedback('impactLight');
+}}>
+<Image 
+ source={require('../../assets/logo.webp')} 
+ style={{ width: 40, height: 40,   borderRadius: 5 }} 
+/>
+
+ <Text style={styles.optionText}>Blox Fruits Values</Text>
+</TouchableOpacity>
+<TouchableOpacity style={styles.optionLast} onPress={() => {
+  handleadoptme(); triggerHapticFeedback('impactLight');
+}}>
+ <Image 
+  source={require('../../assets/MM2logo.webp')} 
+  style={{ width: 40, height: 40,   borderRadius: 5 }} 
+/>
+
+  <Text style={styles.optionText}>MM2 Values</Text>
+</TouchableOpacity>
+
+
+
+</View>
+<Text style={styles.subtitle}>Business Enquiries
+</Text>
+
+<Text style={styles.textlink}>
+   For collaborations, partnerships, or other business-related queries, feel free to contact us at:{' '}
+   <TouchableOpacity onPress={() => Linking.openURL('mailto:thesolanalabs@gmail.com')}>
+     <Text style={styles.emailText}>thesolanalabs@gmail.com</Text>
+   </TouchableOpacity>
+ </Text>
+ {/* <Text style={styles.subtitle}>Our Other APPS</Text> */}
+       
+        {/* <View style={styles.cardContainer}> */}
+
+
+
+{/* <TouchableOpacity style={styles.optionLast} onPress={() => {
+            handleMM2(); triggerHapticFeedback('impactLight');
+          }}>
+            <Image
+              source={require('../../assets/MM2logo.webp')}
+              style={{ width: 40, height: 40, borderRadius: 5 }}
+            />
+
+            <Text style={styles.optionText}>MM2 Values</Text>
+          </TouchableOpacity> */}
+
+
+{/* </View> */}
+{/* <Text style={styles.subtitle}>Business Enquiries
+</Text> */}
+
+{/* <Text style={styles.text}>
+    For collaborations, partnerships, or other business-related queries, feel free to contact us at:{' '}
+    <TouchableOpacity onPress={() => Linking.openURL('mailto:thesolanalabs@gmail.com')}>
+      <Text style={styles.emailText}>thesolanalabs@gmail.com</Text>
+    </TouchableOpacity>
+  </Text> */}
+
 
       </ScrollView>
 

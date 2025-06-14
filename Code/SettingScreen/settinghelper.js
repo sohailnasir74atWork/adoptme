@@ -66,7 +66,12 @@ I would like to share the following suggestions:
     Alert.alert('Error', 'Could not prepare the email. Please try again.');
   }
 };
-
+export const handleBloxFruit = () => {
+  const websiteUrl = config.otherapplink;
+  Linking.openURL(websiteUrl).catch(() =>
+    Alert.alert('Error', 'Unable to open the website. Please try again later.')
+  );
+};
 
   export const handleRateApp = () => {
     const storeLink =
@@ -75,6 +80,12 @@ I would like to share the following suggestions:
         : config.andriodShareLink;
     Linking.openURL(storeLink).catch(() =>
       Alert.alert('Error', 'Unable to open the app store. Please try again later.')
+    );
+  };
+  export const handleadoptme  = () => {
+    const websiteUrl = config.otherapplink2;
+    Linking.openURL(websiteUrl).catch(() =>
+      Alert.alert('Error', 'Unable to open the website. Please try again later.')
     );
   };
 
@@ -124,3 +135,16 @@ I would like to share the following suggestions:
   ];
  
 
+  export const handleRefresh = async (reload) => {
+    // setRefreshing(true);
+
+    try {
+      await reload(); // Re-fetch stock data
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      // setRefreshing(false);
+    }
+  };
+
+  

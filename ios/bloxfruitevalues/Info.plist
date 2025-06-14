@@ -27,7 +27,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.409137828081-5hsdhsorirt9c2k9s3umlknjj15tvk6v</string>
+				<string>com.googleusercontent.apps.541413670501-d2cn6f80hrqg8dl8jo459em4asr9ub9n</string>
 			</array>
 		</dict>
 	</array>
@@ -44,6 +44,8 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This identifier will be used to deliver personalized ads to you.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>AntDesign.ttf</string>

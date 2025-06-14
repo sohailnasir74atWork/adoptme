@@ -32,6 +32,7 @@ import SystemNavigationBar from 'react-native-system-navigation-bar';
 
 
 
+
 const Stack = createNativeStackNavigator();
 const setNavigationBarAppearance = (theme) => {
   if (theme === 'dark') {
@@ -78,7 +79,16 @@ function App() {
     return () => listener.remove();
   }, [theme]);
 
-
+  // useEffect(() => {
+  //   const askPermission = async () => {
+  //     const status = await requestTrackingPermission();
+  //     console.log('Tracking status:', status); // authorized, denied, etc.
+  //   };
+  
+  //   if (Platform.OS === 'ios') {
+  //     askPermission();
+  //   }
+  // }, []);
   useEffect(() => {
     let isMounted = true;
     let unsubscribe;
@@ -145,7 +155,7 @@ function App() {
   const handleUserConsent = async () => {
     try {
       const consentInfo = await AdsConsent.requestInfoUpdate();
-
+  
       if (
         consentInfo.status === AdsConsentStatus.OBTAINED ||
         consentInfo.status === AdsConsentStatus.NOT_REQUIRED
@@ -153,8 +163,8 @@ function App() {
         saveConsentStatus(consentInfo.status);
         return;
       }
-
-      if (consentInfo.isConsentFormAvailable) {
+  
+      if (consentInfo.isConsentFormAvailable && consentInfo.isRequestLocationInEeaOrUnknown) {
         const formResult = await AdsConsent.showForm();
         saveConsentStatus(formResult.status);
       }
@@ -162,6 +172,7 @@ function App() {
       console.warn("Consent error:", error);
     }
   };
+  
 
 
   // Handle Consent

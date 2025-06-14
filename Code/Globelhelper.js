@@ -104,12 +104,12 @@ export const firebaseConfig = {
 
   export const createNewUser = (userId, loggedInUser = {}, robloxUsername) => ({
       id: userId,
-      selectedFruits: [],
-      isReminderEnabled: false,
-      isSelectedReminderEnabled: false,
+    //   selectedFruits: [],
+    //   isReminderEnabled: false,
+    //   isSelectedReminderEnabled: false,
       displayName: robloxUsername || loggedInUser.displayName || generateOnePieceUsername() || 'Anonymous',
       avatar: loggedInUser.photoURL || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-      rewardPoints: 0, 
+    //   rewardPoints: 0, 
       isBlock:false,
       fcmToken:null,
       lastactivity:null,
@@ -123,12 +123,12 @@ export const firebaseConfig = {
 export const resetUserState = (setUser) => {
     setUser({
         id: null,
-        selectedFruits: [],
-        isReminderEnabled: false,
-        isSelectedReminderEnabled: false,
+        // selectedFruits: [],
+        // isReminderEnabled: false,
+        // isSelectedReminderEnabled: false,
         displayName: '',
         avatar: null,
-        rewardPoints: 0, 
+        // rewardPoints: 0, 
         isBlock:false,
         fcmToken:null,
         lastactivity:null,

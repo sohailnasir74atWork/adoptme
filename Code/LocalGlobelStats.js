@@ -35,6 +35,7 @@ export const LocalStateProvider = ({ children }) => {
     isPro: storage.getBoolean('isPro') ?? false,
     fetchDataTime: storage.getString('fetchDataTime') || null,
     data: safeParseJSON('data', {}),
+    ggData: safeParseJSON('ggData', {}),
     codes: safeParseJSON('codes', {}),
     normalStock: safeParseJSON('normalStock', []),
     bannedUsers: safeParseJSON('bannedUsers', []),
@@ -48,6 +49,9 @@ export const LocalStateProvider = ({ children }) => {
     translationUsage: safeParseJSON('translationUsage', { count: 0, date: new Date().toDateString() }),
     favorites: safeParseJSON('favorites', []),
     imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
+    imgurlGG: storage.getString('imgurlGG') || 'https://adoptmevalues.gg',
+    isGG: storage.getBoolean('isGG') ?? false,
+    showAd1: storage.getBoolean('showAd1') ?? true,
   }));
 
 
@@ -73,7 +77,7 @@ export const LocalStateProvider = ({ children }) => {
     if (localState.data) {
       storage.set('data', JSON.stringify(localState.data)); // Force store
     }
-  }, [localState.data]);
+  }, [localState.data, localState.ggData]);
 
   // console.log(localState.isPro)
   // Update local state and MMKV storage
@@ -108,6 +112,11 @@ export const LocalStateProvider = ({ children }) => {
     }
 
     return count < 20;
+  };
+  const toggleAd = () => {
+    const newAdState = !localState.showAd1;
+    updateLocalState('showAd1', newAdState);
+    return newAdState;
   };
 
   const incrementTranslationCount = () => {
@@ -173,7 +182,7 @@ export const LocalStateProvider = ({ children }) => {
     }
   };
 
-
+// console.log(packages)
 
 
   const restorePurchases = async (setLoadingReStore) => {
@@ -212,7 +221,6 @@ export const LocalStateProvider = ({ children }) => {
         (key) => key.toLowerCase() === 'pro'
       );
 
-      // console.log(customerInfo)
 
       // console.log(customerInfo.activeSubscriptions)
       const proStatus = !!(proKey && entitlements[proKey]);
@@ -306,7 +314,7 @@ export const LocalStateProvider = ({ children }) => {
       restorePurchases,
       canTranslate,
       incrementTranslationCount,
-      getRemainingTranslationTries
+      getRemainingTranslationTries, toggleAd
     }),
     [localState, customerId, packages, mySubscriptions]
   );

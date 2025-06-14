@@ -60,7 +60,7 @@ const TradeList = ({ route }) => {
   };
 
 
-// console.log(trades, 'trades')
+  // console.log(trades, 'trades')
 
   const [selectedFilters, setSelectedFilters] = useState([]);
 
@@ -180,20 +180,20 @@ const TradeList = ({ route }) => {
   // console.log(isProStatus, 'from trade model')
 
   const handleMakeFeatureTrade = async (item) => {
-    // if (!isProStatus) {
-    //   Alert.alert(
-    //     t("trade.feature_pro_only_title"),
-    //     t("trade.feature_pro_only_message"),
-    //     [
-    //       { text: t("trade.cancel"), style: "cancel" },
-    //       {
-    //         text: t("trade.upgrade"),
-    //         onPress: () => setShowofferwall(true),
-    //       },
-    //     ]
-    //   );
-    //   return;
-    // }
+    if (!isProStatus) {
+      Alert.alert(
+        t("trade.feature_pro_only_title"),
+        t("trade.feature_pro_only_message"),
+        [
+          { text: t("trade.cancel"), style: "cancel" },
+          {
+            text: t("trade.upgrade"),
+            onPress: () => setShowofferwall(true),
+          },
+        ]
+      );
+      return;
+    }
 
     try {
       // 🔐 Check from Firestore how many featured trades user already has
@@ -324,6 +324,7 @@ const TradeList = ({ route }) => {
       const featuredTime = new Date(currentFeaturedData.time).getTime();
       const currentTime = Date.now();
       const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      // console.log(currentTime, featuredTime, TWENTY_FOUR_HOURS);
 
       if (currentTime - featuredTime >= TWENTY_FOUR_HOURS) {
         // console.log("⏳ 24 hours passed! Resetting featuredCount and time...");
@@ -388,7 +389,7 @@ const TradeList = ({ route }) => {
           ...doc.data(),
         }));
       }
-      // console.log('✅ Featured trades:', featuredTrades.length);
+      // console.log('✅ Featured trades:', featuredTrades[0]);
 
       // ✅ Keep some featured trades aside for future loadMore()
       setRemainingFeaturedTrades(featuredTrades);
@@ -570,6 +571,19 @@ const TradeList = ({ route }) => {
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
+  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+
+    if (!item || !item.name) return '';
+
+    if (isGG) {
+      const encoded = encodeURIComponent(item.name);
+      //   console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
+      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
+    }
+
+    if (!item.image || !baseImgUrl) return '';
+    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+  };
 
 
 
@@ -685,20 +699,20 @@ const TradeList = ({ route }) => {
           </TouchableOpacity>
 
           <View style={{ flexDirection: 'row' }}>
-            {/* {(groupedHasItems.length > 0 && groupedWantsItems.length > 0) &&  <View style={[styles.dealContainer, { backgroundColor: deal.color }]}>
+            <View style={[styles.dealContainer, { backgroundColor: item.isSharkMode == 'GG' ? '#5c4c49' : item.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen }]}>
               <Text style={styles.dealText}>
 
-                {t(deal.label)}
+                {item.isSharkMode == 'GG' ? 'GG Values' : item.isSharkMode === true ? 'Shark' : 'Frost'}
               </Text>
 
-            </View>} */}
- <FontAwesome
-        name='message'
-         size={18}
+            </View>
+            <FontAwesome
+              name='message'
+              size={18}
               color={config.colors.primary}
               onPress={handleChatNavigation}
-        solid={false}
-      />
+              solid={false}
+            />
             {/* <Icon
               name="chatbox-outline"
               size={18}
@@ -722,7 +736,7 @@ const TradeList = ({ route }) => {
                     {tradeItem ? (
                       <>
                         <Image
-                           source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
+                          source={{ uri: getImageUrl(tradeItem, localState.isGG, localState.imgurl, localState.imgurlGG) }}
                           style={styles.gridItemImage}
                         />
                         <View style={styles.itemBadgesContainer}>
@@ -767,7 +781,7 @@ const TradeList = ({ route }) => {
                     {tradeItem ? (
                       <>
                         <Image
-                            source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
+                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
                           style={styles.gridItemImage}
                         />
                         <View style={styles.itemBadgesContainer}>
@@ -827,7 +841,7 @@ const TradeList = ({ route }) => {
                       color={config.colors.hasBlockGreen}
                       style={styles.icon}
                     />
-                    <Text style={[styles.priceText, { color: config.colors.hasBlockGreen}]}>
+                    <Text style={[styles.priceText, { color: config.colors.hasBlockGreen }]}>
                       {formatValue(item.wantsTotal - item.hasTotal)}
                     </Text>
                   </View>
@@ -939,7 +953,7 @@ const TradeList = ({ route }) => {
         screen='Trade'
 
       />
-     
+
       {!localState.isPro && <BannerAdComponent />}
 
       {/* {!isProStatus && <View style={{ alignSelf: 'center' }}>
@@ -1022,7 +1036,7 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       color: isDarkMode ? 'white' : "black",
-      marginVertical:10
+      marginVertical: 10
 
 
     },
@@ -1041,7 +1055,7 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
-      marginBottom:10
+      marginBottom: 10
     },
     gridItemImage: {
       width: 30,
@@ -1057,7 +1071,7 @@ const getStyles = (isDarkMode) =>
       padding: 1,
       alignItems: 'center',
       justifyContent: 'center',
-          //  backgroundColor:'red'
+      //  backgroundColor:'red'
 
     },
     itemBadge: {
@@ -1200,7 +1214,7 @@ const getStyles = (isDarkMode) =>
       backgroundColor: 'black',
       // justifyContent: 'center',
       alignItems: 'center',
-      marginHorizontal:'auto'
+      marginHorizontal: 'auto'
       // flexD1
     },
     dealText: {

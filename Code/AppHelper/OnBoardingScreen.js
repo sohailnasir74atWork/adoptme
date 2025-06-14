@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,10 +17,11 @@ import { useTranslation } from 'react-i18next';
 import {  GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { mixpanel } from './MixPenel';
+import { useLocalState } from '../LocalGlobelStats';
 
 const { width } = Dimensions.get('window');
 
-const icon = config.isNoman ? require('../../assets/splashscreen.png') : require('../../assets/logo.webp');
+const icon = config.isNoman ? require('../../assets/splashscreen.webp') : require('../../assets/logo.webp');
 
 
 const OnboardingScreen = ({ onFinish, selectedTheme }) => {
@@ -31,6 +32,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const { t } = useTranslation();
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // const platform = Platform.OS.toLowerCase();
+  const { updateLocalState, localState } = useLocalState();
 
 
   // const languageOptions = [
@@ -60,11 +62,20 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
   const handleGuest = () => {
     mixpanel.track("Go as Guest");
-    setScreenIndex(2);
+    if (Platform.OS === 'ios') {
+      onFinish();
+    } else {
+      setScreenIndex(2);
+    }
   };
-
+  
   const handleLoginSuccess = () => {
     setOpenSignin(false);
+    if (Platform.OS === 'ios') {
+      onFinish();
+    } else {
+      setScreenIndex(2);
+    }
   };
 
   // const createSlideAnimation = (direction) => {
@@ -117,7 +128,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <View style={styles.sliderContainer}>{renderSlider(translateX3, thirdSliderImages)}</View></View> */}
             <View>
               {/* <View style={styles.spacer}></View> */}
-              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Adoptme Values</Text>
+              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Adopt Me Values</Text>
               <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>Track pets values & optimize your trades.</Text>
             </View>
           </View>
@@ -145,8 +156,14 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
           </View>
 
         );
-      case 2:
-        return <SubscriptionScreen visible={true} onClose={onFinish} track='On Boarding'/>;
+        case 2:
+          // if (Platform.OS === 'ios') {
+          //   useEffect(() => {
+          //     onFinish();
+          //   }, []);
+          //   return null;
+          // }
+          return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" />;
       default:
         return null;
     }
@@ -157,8 +174,34 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
       <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7' }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#121212' : '#f2f2f7'} />
         {renderScreen()}
+        
 
         {screenIndex !== 2 && <View style={styles.bottomContainer}>
+        {screenIndex === 0 && (
+  
+  <TouchableOpacity
+      style={!localState.isGG ? styles.button : styles.buttonOutline}
+      onPress={() => updateLocalState('isGG', false)}
+    >
+      <Text style={!localState.isGG ? styles.buttonText : styles.buttonTextOutline}>
+      ELVEBREDD VALUES
+      </Text>
+    </TouchableOpacity>
+
+
+)}
+ {screenIndex === 0 && (
+  
+  <TouchableOpacity
+      style={localState.isGG ? styles.button : styles.buttonOutline}
+      onPress={() => updateLocalState('isGG', true)}
+    >
+      <Text style={localState.isGG ? styles.buttonText : styles.buttonTextOutline}>
+        GG VALUES
+      </Text>
+    </TouchableOpacity>
+)}
+
          
           <TouchableOpacity style={styles.button} onPress={handleNext}>
             <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("first.signin") : t("first.continue")}</Text>
@@ -204,7 +247,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  slide: { width: width, alignItems: 'center', justifyContent: 'space-evenly', paddingHorizontal: 20,  flex: 1 },
+  slide: { width: width, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,  flex: 1, marginBottom:30 },
   title: { fontSize: 24, fontFamily: 'Lato-Bold', marginBottom: 10, textAlign: 'center', lineHeight: 30},
   text: { fontSize: 12, textAlign: 'center', paddingHorizontal: 20, fontFamily: 'Lato-Regular' },
   welcomeText: { fontSize: 18, fontFamily: 'Lato-Bold', marginBottom: 10, textAlign: 'center' },
@@ -259,7 +302,7 @@ const styles = StyleSheet.create({
     width: 150,
     alignItems: 'center',
     height: 150,
-    paddingTop: 50
+    // paddingTop: 50
   },
   languageButton: {
     alignSelf: 'center',

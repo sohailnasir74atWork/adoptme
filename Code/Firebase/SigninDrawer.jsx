@@ -57,25 +57,28 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     }, []);
     
     
-    const validateRobloxUsername = () => {
-        const name = robloxUsernameRef.current;
-        if (!name || name.trim().length === 0) {
-          setRobloxUsernameError('Roblox username is required');
-          showErrorMessage(
-            t("home.alert.error"),
-            "Please enter your Roblox username."
-          );
-          return false;
-        }
-        setRobloxUsernameError('');
-        return true;
-    };
+    // const validateRobloxUsername = () => {
+    //     if (Platform.OS === 'ios') return true; // ✅ Skip validation on iOS
+      
+    //     const name = robloxUsernameRef.current;
+    //     if (!name || name.trim().length === 0) {
+    //       setRobloxUsernameError('Roblox username is required');
+    //       showErrorMessage(
+    //         t("home.alert.error"),
+    //         "Please enter your Roblox username."
+    //       );
+    //       return false;
+    //     }
+    //     setRobloxUsernameError('');
+    //     return true;
+    //   };
+      
       
 
     // Updated onAppleButtonPress function
     const onAppleButtonPress = useCallback(async () => {
         triggerHapticFeedback('impactLight');
-        if (!validateRobloxUsername()) return;
+        // if (!validateRobloxUsername()) return;
 
 
         try {
@@ -105,7 +108,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     
     const handleSignInOrRegister = async () => {
         triggerHapticFeedback('impactLight');
-        if (!validateRobloxUsername()) return;
+        // if (!validateRobloxUsername()) return;
 
     
         if (!email || !password) {
@@ -142,7 +145,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                     t("home.alert.success"),
                     t("signin.alert_account_created")
                 );
-                  onClose(); // Close modal after successful operation
+                //   onClose(); // Close modal after successful operation
 
             } else {
                 // Handle user login
@@ -187,7 +190,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     };
     
     const handleGoogleSignIn = useCallback(async () => {
-        if (!validateRobloxUsername()) return;
+        // if (!validateRobloxUsername()) return;
         try {
             setIsLoading(true);
             await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -204,6 +207,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
             mixpanel.track(`Login with google from ${screen}`);
 
         } catch (error) {
+            // console.log(error)
             showErrorMessage(
                 t("home.alert.error"),
                 error?.message || t("signin.error_signin_message")
@@ -238,32 +242,34 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   placeholderTextColor={selectedTheme.colors.text}
 /> */}
 
-<TextInput
-  style={[
-    styles.input, 
-    { 
-      color: selectedTheme.colors.text, 
-      marginBottom: robloxUsernameError ? 0 : 15,
-      borderColor: robloxUsernameError ? 'red' : 'grey'
-    }
-  ]}
-  placeholder="Roblox Username *"
-  value={robloxUsernamelocal}
-  onChangeText={(text) => {
-    setRobloxUsernamelocal(text);
-    if (robloxUsernameError) {
-      setRobloxUsernameError('');
-    }
-  }}
-  autoCapitalize="none"
-  placeholderTextColor={selectedTheme.colors.text}
-/>
-{robloxUsernameError ? (
-  <Text style={[styles.errorText, { color: 'red', marginBottom: 15 }]}>
-    {robloxUsernameError}
-  </Text>
-) : null}
-<View style={styles.container}>
+{/* {Platform.OS !== 'ios' && (
+  <>
+    <TextInput
+      style={[
+        styles.input,
+        {
+          color: selectedTheme.colors.text,
+          marginBottom: robloxUsernameError ? 0 : 15,
+          borderColor: robloxUsernameError ? 'red' : 'grey',
+        },
+      ]}
+      placeholder="Roblox Username *"
+      value={robloxUsernamelocal}
+      onChangeText={(text) => {
+        setRobloxUsernamelocal(text);
+        if (robloxUsernameError) {
+          setRobloxUsernameError('');
+        }
+      }}
+      autoCapitalize="none"
+      placeholderTextColor={selectedTheme.colors.text}
+    />
+    {robloxUsernameError ? (
+      <Text style={[styles.errorText, { color: 'red', marginBottom: 15 }]}>
+        {robloxUsernameError}
+      </Text>
+    ) : null}
+    <View style={styles.container}>
                         <View style={styles.line} />
                         <Image
   source={require('../../assets/roblox.png')}
@@ -273,6 +279,10 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 />
                         <View style={styles.line} />
                     </View>
+  </>
+)} */}
+
+
     
                     <TextInput
                         style={[styles.input, { color: selectedTheme.colors.text }]}

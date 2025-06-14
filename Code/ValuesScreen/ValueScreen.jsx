@@ -24,13 +24,12 @@ import { mixpanel } from '../AppHelper/MixPenel';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
+import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
+
 
 const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
 
-const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
-
-const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
 // const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
@@ -76,69 +75,7 @@ const ItemImage = React.memo(({ uri, badges, styles }) => (
   </View>
 ));
 
-const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles }) => {
-  const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
-  const { localState } = useLocalState()
-  const badges = [];
 
-  // Only show badges if the item type is not in hideBadge
-  if (!hideBadge.includes(item.type?.toUpperCase())) {
-    if (itemSelection.isFly) {
-      badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
-    }
-    if (itemSelection.isRide) {
-      badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
-    }
-    if (itemSelection.valueType !== 'd') {
-      badges.push(
-        <ItemBadge
-          key="value"
-          type={itemSelection.valueType.toUpperCase()}
-          style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
-          styles={styles}
-        />
-      );
-    }
-  }
-
-  return (
-    <View style={styles.itemContainer}>
-      <View style={styles.imageContainer}>
-        <ItemImage
-          uri={`${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${item.image?.replace(/^\//, "")}`}
-          badges={badges}
-          styles={styles}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.value}>Value: {Number(currentValue).toLocaleString()}</Text>
-          <Text style={styles.rarity}>{item.rarity}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.badgesContainer}>
-        {VALUE_TYPES.map((badge) => (
-          <BadgeButton
-            key={badge}
-            badge={badge}
-            isActive={itemSelection.valueType === badge.toLowerCase()}
-            onPress={() => onBadgePress(item.id, badge)}
-            styles={styles}
-          />
-        ))}
-        {MODIFIERS.map((badge) => (
-          <BadgeButton
-            key={badge}
-            badge={badge}
-            isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
-            onPress={() => onBadgePress(item.id, badge)}
-            styles={styles}
-          />
-        ))}
-      </View>
-    </View>
-  );
-});
 
 const ValueScreen = React.memo(({ selectedTheme }) => {
   const [searchText, setSearchText] = useState('');
@@ -150,7 +87,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const { analytics, appdatabase, isAdmin, reload, theme } = useGlobalState()
   const isDarkMode = theme === 'dark'
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  const { localState } = useLocalState()
+  const { localState, toggleAd } = useLocalState()
   const [valuesData, setValuesData] = useState([]);
   const [codesData, setCodesData] = useState([]);
   const { t } = useTranslation();
@@ -167,6 +104,76 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [itemSelections, setItemSelections] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [showAd1, setShowAd1] = useState(localState?.showAd1);
+  const [sortOrder, setSortOrder] = useState('none'); // 'asc', 'desc', or 'none'
+
+
+  const hideBadge = !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+
+  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles }) => {
+    const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
+    const { localState } = useLocalState()
+    const badges = [];
+
+    // Only show badges if the item type is not in hideBadge
+    if (!hideBadge.includes(item.type?.toUpperCase())) {
+      if (itemSelection.isFly) {
+        badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
+      }
+      if (itemSelection.isRide) {
+        badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
+      }
+      if (itemSelection.valueType !== 'd') {
+        badges.push(
+          <ItemBadge
+            key="value"
+            type={itemSelection.valueType.toUpperCase()}
+            style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
+            styles={styles}
+          />
+        );
+      }
+    }
+
+    return (
+      <View style={styles.itemContainer}>
+        <View style={styles.imageContainer}>
+          <ItemImage
+            uri={getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG)}
+            badges={badges}
+            styles={styles}
+          />
+          <View style={styles.itemInfo}>
+            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.value}>Value: {Number(currentValue).toLocaleString()}</Text>
+            <Text style={styles.rarity}>{item.rarity}</Text>
+          </View>
+        </View>
+
+        <View style={styles.badgesContainer}>
+          {VALUE_TYPES.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={itemSelection.valueType === badge.toLowerCase()}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+          {MODIFIERS.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  });
 
   const editValuesRef = useRef({
     Value: '',
@@ -174,19 +181,78 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     Biliprice: '',
     Robuxprice: '',
   });
+  useEffect(() => {
+    // Toggle the ad state when the screen is mounted
+    const newAdState = toggleAd();
+    setShowAd1(newAdState);
+  }, []);
+  const CustomAd = () => (
+    <View style={styles.adContainer}>
+      <View style={styles.adContent}>
+        <Image
+          source={require('../../assets/icon.webp')} // Replace with your ad icon
+          style={styles.adIcon}
+        />
+        <View>
+          <Text style={styles.adTitle}>Blox Fruits Values</Text>
+          <Text style={styles.tryNowText}>Try Our other app</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.downloadButton} onPress={() => {
+        handleBloxFruit(); triggerHapticFeedback('impactLight');
+      }}>
+        <Text style={styles.downloadButtonText}>Download</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const CustomAd2 = () => (
+    <View style={styles.adContainer}>
+      <View style={styles.adContent}>
+        <Image
+          source={require('../../assets/MM2logo.webp')} 
+          style={styles.adIcon}
+        />
+        <View>
+          <Text style={styles.adTitle}>MM2 Values</Text>
+          <Text style={styles.tryNowText}>Try Our other app</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.downloadButton} onPress={() => {
+        handleadoptme(); triggerHapticFeedback('impactLight');
+      }}>
+        <Text style={styles.downloadButtonText}>Download</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
 
   // Memoize the parsed data to prevent unnecessary re-parsing
   const parsedValuesData = useMemo(() => {
-    if (!localState.data) return [];
     try {
-      const parsed = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
+      const rawData = localState.isGG ? localState.ggData : localState.data;
+      if (!rawData) return [];
+  
+      const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
       return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
     } catch (error) {
       console.error("❌ Error parsing data:", error);
       return [];
     }
-  }, [localState.data]);
+  }, [localState.isGG, localState.data, localState.ggData]);
+  
+  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+    if (!item || !item.name) return '';
 
+    if (isGG) {
+      const encoded = encodeURIComponent(item.name);
+      // console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
+      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
+    }
+
+    if (!item.image || !baseImgUrl) return '';
+    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+  };
   // Memoize the parsed codes data
   const parsedCodesData = useMemo(() => {
     if (!localState.codes) return [];
@@ -201,52 +267,72 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
 
   // Memoize the filters
   const availableFilters = useMemo(() => {
-    const uniqueRarities = [...new Set(parsedValuesData.map(item => 
+    const uniqueRarities = [...new Set(parsedValuesData.map(item =>
       item.rarity ? item.rarity.toUpperCase() : null
     ).filter(Boolean))];
     return [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
   }, [parsedValuesData]);
 
   // Optimize the search and filter logic
-  const filteredData = useMemo(() => {
-    if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
-    
-    const searchLower = searchText.toLowerCase();
-    const filterUpper = selectedFilter.toUpperCase();
-    
-    return parsedValuesData.filter((item) => {
-      if (!item?.name) return false;
-      
-      const matchesSearch = item.name.toLowerCase().includes(searchLower);
-      const matchesFilter = filterUpper === 'ALL' || 
-        (CATEGORIES.includes(filterUpper) ? 
-          item.type?.toUpperCase() === filterUpper : 
-          item.rarity?.toUpperCase() === filterUpper);
-      
-      return matchesSearch && matchesFilter;
-    });
-  }, [parsedValuesData, searchText, selectedFilter]);
+ 
+  // useEffect(() => {
+  //   if (localState.isGG) {
+  //     const types = new Set(parsedValuesData.map(i => (i.type || '').toUpperCase()));
+  //     // console.log("🧪 GG Types:", Array.from(types));
+  //   }
+  // }, [parsedValuesData]);
+  
 
   // Optimize the getItemValue function
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
-    
+
     const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
     if (simpleValueCategories.includes(item.type)) {
       return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
     }
-    
+
     if (!selectedValueType) return 0;
-    
-    const valueKey = selectedValueType === 'n' ? 'nvalue' : 
-                    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-    
+
+    const valueKey = selectedValueType === 'n' ? 'nvalue' :
+      selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+
     const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-                          isFlySelected ? ' - fly' :
-                          isRideSelected ? ' - ride' : ' - nopotion';
-    
+      isFlySelected ? ' - fly' :
+        isRideSelected ? ' - ride' : ' - nopotion';
+
     return Number((item[valueKey + modifierSuffix] || 0)).toFixed(2);
   }, []);
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
+  
+    const searchLower = searchText.toLowerCase();
+    const filterUpper = selectedFilter.toUpperCase();
+  
+    let filtered = parsedValuesData.filter((item) => {
+      if (!item?.name) return false;
+  
+      const matchesSearch = item.name.toLowerCase().includes(searchLower);
+      const matchesFilter = filterUpper === 'ALL' ||
+        (CATEGORIES.includes(filterUpper) ?
+          item.type?.toUpperCase() === filterUpper :
+          item.rarity?.toUpperCase() === filterUpper);
+  
+      return matchesSearch && matchesFilter;
+    });
+  
+    // Apply sort
+    if (sortOrder !== 'none') {
+      filtered.sort((a, b) => {
+        const aValue = parseFloat(getItemValue(a, selectedValueType, isFlySelected, isRideSelected));
+        const bValue = parseFloat(getItemValue(b, selectedValueType, isFlySelected, isRideSelected));
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+    }
+  
+    return filtered;
+  }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected]);
+  
 
   // Optimize the handleItemBadgePress function
   const handleItemBadgePress = useCallback((itemId, badge) => {
@@ -254,13 +340,13 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     setItemSelections(prev => {
       const currentSelection = prev[itemId] || { valueType: 'd', isFly: false, isRide: false };
       const newSelection = { ...currentSelection };
-      
+
       switch (badge) {
         case 'F': newSelection.isFly = !currentSelection.isFly; break;
         case 'R': newSelection.isRide = !currentSelection.isRide; break;
         default: newSelection.valueType = badge.toLowerCase();
       }
-      
+
       return { ...prev, [itemId]: newSelection };
     });
   }, [triggerHapticFeedback]);
@@ -450,7 +536,13 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     <>
       <GestureHandlerRootView>
         <View style={styles.container}>
-          <View style={styles.searchFilterContainer}>
+        {showAd1 ? (
+            <CustomAd />
+          ) : (
+            <CustomAd2 />
+          )}
+
+            <View style={styles.searchFilterContainer}>
             <TextInput
               style={styles.searchInput}
               placeholder="Search"
@@ -458,7 +550,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
               onChangeText={handleSearchChange}
             />
             <Menu>
-              <MenuTrigger onPress={() => {}}>
+              <MenuTrigger onPress={() => { }}>
                 <View style={styles.filterButton}>
                   <Text style={styles.filterText}>{displayedFilter}</Text>
                   <Icon name="chevron-down-outline" size={18} color="white" />
@@ -477,6 +569,18 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
                 ))}
               </MenuOptions>
             </Menu>
+            <TouchableOpacity
+  style={styles.filterButton}
+  onPress={() => {
+    setSortOrder(prev =>
+      prev === 'asc' ? 'desc' : prev === 'desc' ? 'none' : 'asc'
+    );
+  }}
+>
+  <Text style={styles.filterText}>
+    {sortOrder === 'asc' ? '▲ Asc' : sortOrder === 'desc' ? '▼ Desc' : 'Sort'}
+  </Text>
+</TouchableOpacity>
           </View>
 
           {filteredData.length > 0 ? (
@@ -502,12 +606,12 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
         </View>
         <CodesDrawer isVisible={isDrawerVisible} toggleModal={toggleDrawer} codes={codesData} />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent/>}
+      {!localState.isPro && <BannerAdComponent />}
     </>
   );
 });
 export const getStyles = (isDarkMode) => StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
     backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
     // paddingTop: 16,
@@ -518,14 +622,14 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     paddingHorizontal: 4,
     // marginBottom: 4,
   },
-  searchFilterContainer: { 
-    flexDirection: 'row', 
+  searchFilterContainer: {
+    flexDirection: 'row',
     marginVertical: 8,
     paddingHorizontal: 8,
     gap: 12,
     alignItems: 'center',
   },
-  searchInput: {   
+  searchInput: {
     height: 40,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#ffffff',
     borderRadius: 8,
@@ -539,19 +643,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  filterButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: config.colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
+
   itemContainer: {
     backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
     borderRadius: 10,
@@ -583,17 +675,17 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     borderRadius: 12,
   },
   itemInfo: {
-      flex: 1,
+    flex: 1,
     justifyContent: 'center',
   },
-    name: {
+  name: {
     fontSize: 14,
     fontWeight: '700',
     color: isDarkMode ? '#ffffff' : '#000000',
     marginBottom: 2,
     letterSpacing: -0.5,
-    },
-    value: {
+  },
+  value: {
     fontSize: 12,
     color: isDarkMode ? '#e0e0e0' : '#333333',
     marginBottom: 2,
@@ -608,21 +700,21 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   itemBadgesContainer: {
     position: 'absolute',
-      bottom: 0,
-      right: 0,
-      flexDirection: 'row',
-      gap: 1,
-      padding: 1,
+    bottom: 0,
+    right: 0,
+    flexDirection: 'row',
+    gap: 1,
+    padding: 1,
   },
   itemBadge: {
     color: 'white',
-      padding: 1,
-      borderRadius: 5,
-      fontSize: 6,
-      minWidth: 10,
-      textAlign: 'center',
-      overflow: 'hidden',
-      fontWeight: '600',
+    padding: 1,
+    borderRadius: 5,
+    fontSize: 6,
+    minWidth: 10,
+    textAlign: 'center',
+    overflow: 'hidden',
+    fontWeight: '600',
   },
   itemBadgeFly: {
     backgroundColor: '#3498db',
@@ -637,7 +729,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     backgroundColor: '#2ecc71',
   },
   badgesContainer: {
-      flexDirection: 'row',
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 3,
     backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
@@ -699,100 +791,106 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 24,
     color: isDarkMode ? '#888888' : '#666666',
     fontWeight: '500',
-    },
-    modalContainer: {
-      backgroundColor: "#fff",
-      padding: 20,
-      borderRadius: 10,
-      width: '80%',
-      alignSelf: 'center', // Centers the modal horizontally
-      position: 'absolute',
-      top: '50%', // Moves modal halfway down the screen
-      left: '10%', // Centers horizontally considering width: '80%'
-      transform: [{ translateY: -150 }], // Adjusts for perfect vertical centering
-      justifyContent: 'center',
-      elevation: 5, // Adds a shadow on Android
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 4,
   },
-    modalTitle: {
-      fontSize: 18,
-      fontFamily: 'Lato-Bold',
-      marginBottom: 10,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: "#ccc",
-      padding: 8,
-      marginVertical: 5,
-      borderRadius: 5,
-    },
-    saveButton: {
-      backgroundColor: "#2ecc71",
-      paddingVertical: 10,
-      borderRadius: 5,
-      marginTop: 10,
-    },
-    cencelButton: {
-      backgroundColor: "red",
-      paddingVertical: 10,
-      borderRadius: 5,
-      marginTop: 10,
-    },
-    headertext: {
-      backgroundColor: 'rgb(255, 102, 102)',
-      paddingVertical: 1,
-      paddingHorizontal: 5,
-      borderRadius: 5,
-      color: 'white',
-      fontSize: 10,
-      justifyContent: 'center',
-      alignItems: 'center',
-      alignSelf: "flex-start",
-      marginRight: 10
+  modalContainer: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignSelf: 'center', // Centers the modal horizontally
+    position: 'absolute',
+    top: '50%', // Moves modal halfway down the screen
+    left: '10%', // Centers horizontally considering width: '80%'
+    transform: [{ translateY: -150 }], // Adjusts for perfect vertical centering
+    justifyContent: 'center',
+    elevation: 5, // Adds a shadow on Android
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Lato-Bold',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 8,
+    marginVertical: 5,
+    borderRadius: 5,
+  },
+  saveButton: {
+    backgroundColor: "#2ecc71",
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  cencelButton: {
+    backgroundColor: "red",
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  headertext: {
+    backgroundColor: 'rgb(255, 102, 102)',
+    paddingVertical: 1,
+    paddingHorizontal: 5,
+    borderRadius: 5,
+    color: 'white',
+    fontSize: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: "flex-start",
+    marginRight: 10
 
-    },
-    pointsBox: {
-      width: '49%', // Ensures even spacing
-      backgroundColor: isDarkMode ? '#34495E' : '#f3d0c7', // Dark: darker contrast, Light: White
-      borderRadius: 8,
-      padding: 10,
-    },
-    rowcenter: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      fontSize: 12,
-      marginTop: 5,
+  },
+  pointsBox: {
+    width: '49%', // Ensures even spacing
+    backgroundColor: isDarkMode ? '#34495E' : '#f3d0c7', // Dark: darker contrast, Light: White
+    borderRadius: 8,
+    padding: 10,
+  },
+  rowcenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    fontSize: 12,
+    marginTop: 5,
 
-    },
-    menuContainer: {
-      alignSelf: "center",
-    },
-    filterButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: config.colors.primary,
-      paddingVertical: 10,
-      paddingHorizontal: 15,
-      borderRadius: 8,
-    },
-    filterText: {
-      color: "white",
-      fontSize: 14,
-      fontFamily: 'Lato-Bold',
-      marginRight: 5,
-    },
-    // filterOptionText: {
-    //   fontSize: 14,
-    //   padding: 10,
-    //   color: "#333",
-    // },
-    selectedOption: {
-      fontFamily: 'Lato-Bold',
-      color: "#34C759",
-    },
+  },
+  menuContainer: {
+    alignSelf: "center",
+  },
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: config.colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    // paddingHorizontal: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  filterText: {
+    color: "white",
+    fontSize: 14,
+    fontFamily: 'Lato-Bold',
+    marginRight: 5,
+  },
+  // filterOptionText: {
+  //   fontSize: 14,
+  //   padding: 10,
+  //   color: "#333",
+  // },
+  selectedOption: {
+    fontFamily: 'Lato-Bold',
+    color: "#34C759",
+  },
   badgesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -889,7 +987,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   itemBadgeNeon: {
     backgroundColor: '#2ecc71',
-    },
+  },
   categoryBar: {
     marginBottom: 8,
     paddingVertical: 4,
@@ -917,6 +1015,53 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   categoryButtonTextActive: {
     color: '#fff',
   },
-  });
+  adContainer: {
+    // backgroundColor: '#F5F5F5', // Light background color for the ad
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    marginHorizontal: 10
+
+  },
+  adContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start', // Aligns text and image in a row
+  },
+  adIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 5,
+    marginRight: 15,
+  },
+  adTitle: {
+    fontSize: 18,
+    fontFamily: 'Lato-Bold',
+    color: '#333',
+    // marginBottom: 5, // Adds space below the title
+  },
+  tryNowText: {
+    fontSize: 14,
+    fontFamily: 'Lato-Regular',
+    color: '#6A5ACD', // Adds a distinct color for the "Try Now" text
+    // marginTop: 5, // Adds space between the title and the "Try Now" text
+  },
+  downloadButton: {
+    backgroundColor: '#34C759',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginTop: 10, // Adds spacing between the text and the button
+  },
+  downloadButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontFamily: 'Lato-Bold',
+  },
+});
 
 export default ValueScreen;

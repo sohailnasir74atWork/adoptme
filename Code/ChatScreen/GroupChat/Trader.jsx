@@ -13,8 +13,7 @@ import AdminHeader from './AdminHeader';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import { banUser, isUserOnline, makeAdmin, removeAdmin, unbanUser } from '../utils';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { banUser, handleDeleteLast300Messages, isUserOnline,  unbanUser } from '../utils';import { useIsFocused, useNavigation } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
 import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -32,7 +31,7 @@ leoProfanity.loadDictionary('en');
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount }) => {
-  const { user, theme, onlineMembersCount, appdatabase, setUser } = useGlobalState();
+    const { user, theme, onlineMembersCount, appdatabase, setUser, isAdmin } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -380,6 +379,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         reportCount: 0,
         containsLink,
         isPro: localState.isPro,
+        isAdmin:isAdmin
+
       });
 
       setInput('');
@@ -431,15 +432,16 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 handleLoadMore={handleLoadMore}
                 onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
                 banUser={banUser}
-                makeadmin={makeAdmin}
+                // makeadmin={makeAdmin}
                 // onReport={onReport}
-                removeAdmin={removeAdmin}
+                // removeAdmin={removeAdmin}
                 unbanUser={unbanUser}
                 // isOwner={isOwner}
                 isAtBottom={isAtBottom}
                 setIsAtBottom={setIsAtBottom}
                 toggleDrawer={toggleDrawer}
                 setMessages={setMessages}
+                isAdmin={isAdmin}
               />
             )}
             {user.id ? (

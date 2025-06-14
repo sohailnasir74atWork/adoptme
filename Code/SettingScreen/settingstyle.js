@@ -181,7 +181,7 @@ export const getStyles = (isDarkMode) =>
       },
       box: {
         paddingVertical: 7,
-        paddingHorizontal: 10,
+        paddingHorizontal: 6,
         // backgroundColor: '#ccc',
         alignItems: 'center',
         justifyContent: 'center',
@@ -195,12 +195,12 @@ export const getStyles = (isDarkMode) =>
       selectedBox: {
         backgroundColor: config.colors.hasBlockGreen, // Highlight selected box
       },
-      text:{
-        fontFamily:'Lato-Regular',
-        fontSize:10,
-        color: isDarkMode ? '#fff' : '#000',
+      // text:{
+      //   fontFamily:'Lato-Regular',
+      //   fontSize:12,
+      //   color: isDarkMode ? '#fff' : '#000',
 
-      },
+      // },
       selectedText:{
         color:'white',
         fontFamily:'Lato-Regular',
@@ -243,6 +243,25 @@ export const getStyles = (isDarkMode) =>
       },
       option_menu:{
         padding:10
-      }
+      },
+      text: {
+        fontFamily:'Lato-Regular',
+        fontSize:12,
+        color: isDarkMode ? '#fff' : '#000',
+        paddingHorizontal:5
+      },
+      textlink: {
+        fontFamily:'Lato-Regular',
+        fontSize:12,
+        color: isDarkMode ? '#fff' : '#000',
+        paddingHorizontal:5,
+      },
+      emailText: {
+        fontSize: 12,
+        color: isDarkMode ? 'lightblue' : 'blue', // Blue color to make it look like a link
+        textDecorationLine: 'underline', // Underline to signify it as a link
+        lineHeight:12
+
+      },
     });
   

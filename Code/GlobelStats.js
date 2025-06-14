@@ -30,15 +30,15 @@ export const GlobalStateProvider = ({ children }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [user, setUser] = useState({
     id: null,
-    selectedFruits: [],
-    isReminderEnabled: false,
-    isSelectedReminderEnabled: false,
+    // selectedFruits: [],
+    // isReminderEnabled: false,
+    // isSelectedReminderEnabled: false,
     displayName: '',
     avatar: null,
-    rewardPoints: 0,
+    // rewardPoints: 0,
     isBlock: false,
     fcmToken: null,
-    lastactivity: null,
+    lastActivity: null,
     online: false,
     isPro: false
 
@@ -58,32 +58,34 @@ export const GlobalStateProvider = ({ children }) => {
   // const isAdmin = user?.id  ? user?.id == '3CAAolfaX3UE3BLTZ7ghFbNnY513' : false
 
   const updateLocalStateAndDatabase = async (keyOrUpdates, value) => {
-    if (!user.id) return; // Prevent updates if user is not logged in
-
     try {
-      const userRef = ref(appdatabase, `users/${user.id}`);
       let updates = {};
-
+  
       if (typeof keyOrUpdates === 'string') {
-        // Single update
         updates = { [keyOrUpdates]: value };
+        await updateLocalState(keyOrUpdates, value); // ✅ update local storage (AsyncStorage)
       } else if (typeof keyOrUpdates === 'object') {
-        // Batch update
         updates = keyOrUpdates;
+        for (const [key, val] of Object.entries(updates)) {
+          await updateLocalState(key, val); // ✅ update local storage key by key
+        }
       } else {
         throw new Error('Invalid arguments for update.');
       }
-
-      // ✅ Update local state
+  
+      // ✅ Update in-memory user state
       setUser((prev) => ({ ...prev, ...updates }));
-
-
-      // ✅ Update Firebase database
-      await update(userRef, updates);
+  
+      // ✅ Update Firebase only if user is logged in
+      if (user?.id) {
+        const userRef = ref(appdatabase, `users/${user.id}`);
+        await update(userRef, updates);
+      }
     } catch (error) {
-      console.error('Error updating user state or database:', error);
+      console.error('❌ Error updating user state or database:', error);
     }
   };
+  
 
 
 
@@ -92,15 +94,15 @@ export const GlobalStateProvider = ({ children }) => {
   const resetUserState = useCallback(() => {
     setUser({
       id: null,
-      selectedFruits: [],
-      isReminderEnabled: false,
-      isSelectedReminderEnabled: false,
+      // selectedFruits: [],
+      // isReminderEnabled: false,
+      // isSelectedReminderEnabled: false,
       displayName: '',
       avatar: null,
-      rewardPoints: 0,
+      // rewardPoints: 0,
       isBlock: false,
       fcmToken: null,
-      lastactivity: null,
+      lastActivity: null,
       online: false,
       isPro: false
     });
@@ -240,92 +242,153 @@ export const GlobalStateProvider = ({ children }) => {
 
 
   useEffect(() => {
-
-    const lastActivity = localState.lastactivity ? new Date(localState.lastactivity).getTime() : 0;
-    const now = Date.now();
-    const THREE_HOURS = 36 * 60 * 60 * 1000; // 3 hours in milliseconds
-
-    if (now - lastActivity > THREE_HOURS) {
-      updateLocalStateAndDatabase('lastactivity', new Date().toISOString());
-
-    }
-  }, [localState.lastactivity]);
+    // console.log("🕓 Saving lastActivity:", new Date().toISOString());
+    updateLocalStateAndDatabase('lastActivity', new Date().toISOString());
+  }, []);
 
 
+
+  // const fetchStockData = async (refresh) => {
+  //   try {
+  //     setLoading(true);
+  
+  //     const lastActivity = localState.lastActivity ? new Date(localState.lastActivity).getTime() : 0;
+  //     const now = Date.now();
+  //     const timeElapsed = now - lastActivity;
+  //     const EXPIRY_LIMIT = refresh ? 1 * 10 * 1000 : 1 * 6 * 60 * 1000; // 30 min or 6 hrs
+  
+  //     const shouldFetch =
+  //       timeElapsed > EXPIRY_LIMIT ||
+  //       !localState.data ||
+  //       !Object.keys(localState.data).length ||
+  //       !localState.imgurl;
+  
+  //     if (shouldFetch) {
+  //       let data = {};
+  //       let image = '';
+  
+  //       // ✅ First try to fetch `data` from Bunny CDN
+  //       try {
+  //         const dataRes = await fetch('https://adoptme.b-cdn.net');
+  //         const dataJson = await dataRes.json();
+  //         // console.log(dataJson)
+  
+  //         if (!dataJson || typeof dataJson !== 'object' || dataJson.error || !Object.keys(dataJson).length) {
+  //           throw new Error('CDN returned invalid or error data');
+  //         }
+  
+  //         data = dataJson;
+  
+  //         console.log('✅ Loaded data from Bunny CDN');
+  //       } catch (err) {
+  //         console.warn('⚠️ Failed to load from CDN, falling back to Firebase:', err.message);
+  
+  //         const xlsSnapshot = await get(ref(appdatabase, 'xlsData'));
+  //         data = xlsSnapshot.exists() ? xlsSnapshot.val() : {};
+  //       }
+  
+  //       // ✅ Always fetch `image_url` from Firebase
+  //       const imageSnapShot = await get(ref(appdatabase, 'image_url'));
+  //       image = imageSnapShot.exists() ? imageSnapShot.val() : '';
+  
+  //       // ✅ Store in local state
+  //       await updateLocalState('data', JSON.stringify(data));
+  //       await updateLocalState('imgurl', JSON.stringify(image));
+  //       await updateLocalState('lastActivity', new Date().toISOString());
+  //     }
+  
+  //   } catch (error) {
+  //     console.error("❌ Error fetching stock data:", error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const fetchStockData = async (refresh) => {
     try {
       setLoading(true);
-
-      // ✅ Check when `codes & data` were last fetched
+  
       const lastActivity = localState.lastActivity ? new Date(localState.lastActivity).getTime() : 0;
       const now = Date.now();
       const timeElapsed = now - lastActivity;
-      const TWENTY_FOUR_HOURS = refresh ? 1 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000; // 24 hours in ms
-
-      // ✅ Fetch `codes & data` only if 24 hours have passed OR they are missing
-      const shouldFetchCodesData =
-        timeElapsed > TWENTY_FOUR_HOURS ||
-        !localState.codes ||
-        !Object.keys(localState.codes).length ||
+      const EXPIRY_LIMIT = refresh ? 1 * 1000 : 6 * 60 * 1000; // 10s for refresh, 6min default
+      const shouldFetch =
+        timeElapsed > EXPIRY_LIMIT ||
         !localState.data ||
-        !Object.keys(localState.data).length;
+        !Object.keys(localState.data).length ||
+        !localState.imgurl || !localState.ggData ||
+        !Object.keys(localState.ggData).length || !localState.imgurlGG;
 
-      if (shouldFetchCodesData) {
-
-        const [xlsSnapshot,  imageSnapShot] = await Promise.all([
-          get(ref(appdatabase, 'xlsData')),
-          // get(ref(appdatabase, 'codes')),
-           get(ref(appdatabase, 'image_url')),
-        ]);
-
-        // const codes = codeSnapShot.exists() ? codeSnapShot.val() : {};
-        const data = xlsSnapshot.exists() ? xlsSnapshot.val() : {};
-        const image = imageSnapShot.exists() ? imageSnapShot.val() : 'https://elvebredd.com';
-
-
-
-
-        // ✅ Store fetched data locally
-        // await updateLocalState('codes', JSON.stringify(codes));
-         await updateLocalState('imgurl', JSON.stringify(image));
-        await updateLocalState('data', JSON.stringify(data));
-        // console.log(data)
-        // ✅ Update last fetch timestamp
-        await updateLocalState('lastActivity', new Date().toISOString());
-
-        // console.log("✅ Data updated successfully.");
-      } else {
-        // console.log("⏳ Using cached codes & data, no need to fetch.");
+  
+      if (shouldFetch) {
+        let image = '';
+        let imageGG = ''
+        // console.log(shouldFetch, 'shouldfetch')
+  
+        const valuesNotGG = `https://adoptme.b-cdn.net?cb=${Date.now()}`;
+        const valuesGG = 'https://adoptme-gg-values.b-cdn.net/adoptme_gg_values.json';
+  
+        // 🔹 Fetch non-GG data
+        try {
+          // console.log('🌐 Fetching non-GG data from:', valuesNotGG);
+          const res = await fetch(valuesNotGG, {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          const json = await res.json();
+  
+          if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
+            throw new Error('Non-GG CDN returned invalid data');
+          }
+          
+          await updateLocalState('data', JSON.stringify(json));
+        } catch (err) {
+          console.warn('⚠️ Non-GG CDN failed, fallback to Firebase:', err.message);
+          const snapshot = await get(ref(appdatabase, 'xlsData'));
+          const fallbackData = snapshot.exists() ? snapshot.val() : {};
+          await updateLocalState('data', JSON.stringify(fallbackData));
+        }
+  
+        // 🔹 Fetch GG data
+        try {
+          // console.log('🌐 Fetching GG data from:', valuesGG);
+          const res = await fetch(valuesGG, {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          const json = await res.json();
+  
+          if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
+            throw new Error('GG CDN returned invalid data');
+          }
+          // console.log(JSON.stringify(json[0]))
+          await updateLocalState('ggData', JSON.stringify(json));
+        } catch (err) {
+          console.warn('⚠️ GG CDN failed, fallback to Firebase:', err.message);
+          const snapshot = await get(ref(appdatabase, 'ggData'));
+          const fallbackData = snapshot.exists() ? snapshot.val() : {};
+          await updateLocalState('ggData', JSON.stringify(fallbackData));
+        }
+  
+        // 🔹 Fetch shared image_url
+        const imageSnapShot = await get(ref(appdatabase, 'image_url'));
+        const imageSnapShotgg = await get(ref(appdatabase, 'image_url_gg'));
+        image = imageSnapShot.exists() ? imageSnapShot.val() : '';
+        imageGG = imageSnapShotgg.exists() ? imageSnapShotgg.val() : '';
+        await updateLocalState('imgurl', JSON.stringify(image));
+        await updateLocalState('imgurlGG', JSON.stringify(imageGG));
+        console.log('updated everything')
       }
-
-      // ✅ Always fetch stock data (`calcData`) on app load
-      // console.log("📌 Fetching fresh stock data...");
-      // const [calcSnapshot, preSnapshot] = await Promise.all([
-      //   get(ref(appdatabase, 'calcData')), // ✅ Always updated stock data
-      //   get(ref(appdatabase, 'previousStock')),
-      // ]);
-
-      // ✅ Extract relevant stock data
-      // const normalStock = calcSnapshot.exists() ? calcSnapshot.val()?.test || {} : {};
-      // const mirageStock = calcSnapshot.exists() ? calcSnapshot.val()?.mirage || {} : {};
-      // const prenormalStock = preSnapshot.exists() ? preSnapshot.val()?.normalStock || {} : {};
-      // const premirageStock = preSnapshot.exists() ? preSnapshot.val()?.mirageStock || {} : {};
-
-
-      // ✅ Store frequently updated stock data
-      // await updateLocalState('normalStock', JSON.stringify(normalStock));
-      // await updateLocalState('mirageStock', JSON.stringify(mirageStock));
-      // await updateLocalState('prenormalStock', JSON.stringify(prenormalStock));
-      // await updateLocalState('premirageStock', JSON.stringify(premirageStock));
-
-      // console.log("✅ Stock data processed and stored successfully.");
     } catch (error) {
       console.error("❌ Error fetching stock data:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  
+  
+  
   // console.log(user)
 
   // ✅ Run the function only if needed
@@ -340,7 +403,7 @@ export const GlobalStateProvider = ({ children }) => {
   const reload = () => {
     fetchStockData(true);
   };
-
+// console.log(localState.ggData[0])
   useEffect(() => {
     if (!user?.id) return;
 
