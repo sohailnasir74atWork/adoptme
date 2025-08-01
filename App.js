@@ -29,6 +29,7 @@ import InterstitialAdManager from './Code/Ads/IntAd';
 import AppOpenAdManager from './Code/Ads/openApp';
 import RNBootSplash from "react-native-bootsplash";
 import SystemNavigationBar from 'react-native-system-navigation-bar';
+import AppUpdateChecker from './Code/AppHelper/InAppUpdateChecker';
 
 
 
@@ -89,41 +90,41 @@ function App() {
   //     askPermission();
   //   }
   // }, []);
-  useEffect(() => {
-    let isMounted = true;
-    let unsubscribe;
+  // useEffect(() => {
+  //   let isMounted = true;
+  //   let unsubscribe;
 
-    const initializeAds = async () => {
-      try {
-        await AppOpenAdManager.init();
-      } catch (error) {
-        console.error('❌ Error initializing ads:', error);
-      }
-    };
+  //   const initializeAds = async () => {
+  //     try {
+  //       await AppOpenAdManager.init();
+  //     } catch (error) {
+  //       console.error('❌ Error initializing ads:', error);
+  //     }
+  //   };
 
-    const handleAppStateChange = async (state) => {
-      if (!isMounted) return;
+  //   const handleAppStateChange = async (state) => {
+  //     if (!isMounted) return;
 
-      try {
-        if (state === 'active' && !localState?.isPro) {
-          await AppOpenAdManager.showAd();
-        }
-      } catch (error) {
-        console.error('❌ Error showing ad:', error);
-      }
-    };
+  //     try {
+  //       if (state === 'active' && !localState?.isPro) {
+  //         await AppOpenAdManager.showAd();
+  //       }
+  //     } catch (error) {
+  //       console.error('❌ Error showing ad:', error);
+  //     }
+  //   };
 
-    initializeAds();
-    unsubscribe = AppState.addEventListener('change', handleAppStateChange);
+  //   initializeAds();
+  //   unsubscribe = AppState.addEventListener('change', handleAppStateChange);
 
-    return () => {
-      isMounted = false;
-      if (unsubscribe) {
-        unsubscribe.remove();
-      }
-      AppOpenAdManager.cleanup();
-    };
-  }, [localState?.isPro]);
+  //   return () => {
+  //     isMounted = false;
+  //     if (unsubscribe) {
+  //       unsubscribe.remove();
+  //     }
+  //     AppOpenAdManager.cleanup();
+  //   };
+  // }, [localState?.isPro]);
 
 
 
@@ -226,6 +227,7 @@ function App() {
               {() => <SettingsScreen selectedTheme={selectedTheme} />}
             </Stack.Screen>
           </Stack.Navigator>
+          <AppUpdateChecker/>
         </NavigationContainer>
         {modalVisible && (
           <RewardRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} selectedTheme={selectedTheme} />
@@ -245,6 +247,10 @@ export default function AppWrapper() {
       });
     }
   }, [localState.isAppReady]);
+  useEffect(() => {
+    if (!localState.showOnBoardingScreen) 
+   { (!localState.isPro) && AppOpenAdManager.initAndShow();}
+  }, [localState.isPro]);
 
   const selectedTheme = useMemo(() => {
     if (!theme) {

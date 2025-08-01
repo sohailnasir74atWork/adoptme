@@ -13,25 +13,26 @@ import AdminHeader from './AdminHeader';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import { banUser, handleDeleteLast300Messages, isUserOnline,  unbanUser } from '../utils';import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { banUser, handleDeleteLast300Messages, isUserOnline, unbanUser } from '../utils'; import { useIsFocused, useNavigation } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
 import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import { ref } from '@react-native-firebase/database';
+import { onValue, ref } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { logoutUser } from '../../Firebase/UserLogics';
+import { showMessage } from 'react-native-flash-message';
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
 
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount }) => {
-    const { user, theme, onlineMembersCount, appdatabase, setUser, isAdmin } = useGlobalState();
+  const { user, theme, onlineMembersCount, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -51,6 +52,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [pendingMessages, setPendingMessages] = useState([]);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isFocused = useIsFocused();
+  const [strikeInfo, setStrikeInfo] = useState(null);
+
 
   const flatListRef = useRef();
 
@@ -179,7 +182,35 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     },
     [chatRef, lastLoadedKey, validateMessage, bannedUsers]
   );
-
+  useEffect(() => {
+    const fetchPinnedMessages = async () => {
+      try {
+        const snapshot = await pinnedMessagesRef.once('value');
+        const pinnedMessagesData = snapshot.val() || {};
+  
+        // Transform data into an array and update pinned messages state
+        const pinnedMessagesArray = Object.entries(pinnedMessagesData).map(([key, value]) => ({
+          firebaseKey: key,
+          ...value,
+        }));
+  
+        setPinnedMessages(pinnedMessagesArray);
+      } catch (error) {
+        console.error('Error loading pinned messages:', error);
+      }
+    };
+  
+    fetchPinnedMessages();  // Fetch pinned messages initially
+  
+    // Listen to real-time updates on pinned messages
+    const listener = pinnedMessagesRef.on('child_added', (snapshot) => {
+      const newPinnedMessage = { firebaseKey: snapshot.key, ...snapshot.val() };
+      setPinnedMessages((prev) => [...prev, newPinnedMessage]);
+    });
+  
+    return () => pinnedMessagesRef.off('child_added', listener); // Cleanup listener
+  }, []);
+  
   useEffect(() => {
     // console.log('Initial loading of messages.');
     loadMessages(true); // Reset and load the latest messages
@@ -189,7 +220,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   // const bannedUserIds = bannedUsers.map((user) => user.id); // Extract IDs from bannedUsers
 
   useEffect(() => {
-    if(!isFocused) return
+    if (!isFocused) return
     const listener = chatRef.limitToLast(1).on('child_added', (snapshot) => {
       const newMessage = validateMessage({ id: snapshot.key, ...snapshot.val() });
 
@@ -238,40 +269,32 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
 
-
   const handlePinMessage = async (message) => {
     try {
       const pinnedMessage = { ...message, pinnedAt: Date.now() };
       const newRef = await pinnedMessagesRef.push(pinnedMessage);
-
+  
       // Use the Firebase key for tracking the message
       setPinnedMessages((prev) => [
         ...prev,
         { firebaseKey: newRef.key, ...pinnedMessage },
       ]);
-      // console.log('Pinned message added with firebaseKey:', newRef.key);
     } catch (error) {
       console.error('Error pinning message:', error);
       Alert.alert(t('home.alert.error'), 'Could not pin the message. Please try again.');
     }
   };
-
+  
 
 
   const unpinSingleMessage = async (firebaseKey) => {
     try {
-      // console.log(`Received firebaseKey for unpinning: ${firebaseKey}`);
-
-      // Remove the message from Firebase
       const messageRef = pinnedMessagesRef.child(firebaseKey);
-      // console.log(`Firebase reference for removal: ${messageRef.toString()}`);
-      await messageRef.remove();
-      // console.log(`Message with Firebase key: ${firebaseKey} successfully removed from Firebase.`);
-
-      // Update the local state by filtering out the removed message
+      await messageRef.remove();  // Remove from Firebase
+  
+      // Update local state by filtering out the removed message
       setPinnedMessages((prev) => {
         const updatedMessages = prev.filter((msg) => msg.firebaseKey !== firebaseKey);
-        // console.log('Updated pinned messages after removal:', updatedMessages);
         return updatedMessages;
       });
     } catch (error) {
@@ -279,6 +302,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       Alert.alert(t('home.alert.error'), 'Could not unpin the message. Please try again.');
     }
   };
+  
 
 
 
@@ -298,30 +322,20 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   };
 
 
+
   useEffect(() => {
-    if (!user?.id) return;
+    if (!currentUserEmail) return;
 
-    const userRef = ref(appdatabase, `users/${user.id}/isBlock`);
+    const encodedEmail = currentUserEmail.replace(/\./g, '(dot)');
+    const banRef = ref(appdatabase, `banned_users_by_email/${encodedEmail}`);
 
-    const unsubscribe = userRef.on('value', (snapshot) => {
-      const isBlocked = snapshot.val();
-      if (isBlocked === true) {
-        Alert.alert(
-          '🚫 Blocked',
-          'You have been blocked by the admin. Logging you out.',
-          [{
-            text: 'OK', onPress: () => {
-              logoutUser(setUser)
-            }
-          }]
-        );
-      }
+    const unsubscribe = onValue(banRef, (snapshot) => {
+      const banData = snapshot.val();
+      setStrikeInfo(banData || null);
     });
 
-    return () => {
-      userRef.off('value', unsubscribe);
-    };
-  }, [user?.id]);
+    return () => unsubscribe();
+  }, [currentUserEmail]);
 
 
   const handleRefresh = async () => {
@@ -335,10 +349,44 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const MAX_CHARACTERS = 250;
     const MESSAGE_COOLDOWN = 100;
     const LINK_REGEX = /(https?:\/\/[^\s]+)/g;
-
-    if (!user?.id || user?.isBlock) {
-      Alert.alert(t('home.alert.error'), user?.isBlock ? 'You are blocked by an Admin' : 'You must be logged in.');
+    if (!user?.id || !currentUserEmail) {
+      showMessage({
+        message: 'You are not loggedin',
+        description: 'You must be logged in to send Messages',
+        type: 'danger',
+      });
       return;
+
+    }
+
+    if (strikeInfo) {
+      const { strikeCount, bannedUntil } = strikeInfo;
+      const now = Date.now();
+
+      if (bannedUntil === 'permanent') {
+        showMessage({
+          message: '⛔ Permanently Banned',
+          description: 'You are permanently banned from sending messages.',
+          type: 'danger',
+        });
+        return;
+      }
+
+      if (typeof bannedUntil === 'number' && now < bannedUntil) {
+        const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+        showMessage({
+          message: `⚠️ Strike ${strikeCount}`,
+          description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+          type: 'warning',
+          duration: 5000,
+
+        });
+        return;
+      }
     }
 
     const trimmedInput = input.trim();
@@ -363,7 +411,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
 
     const containsLink = LINK_REGEX.test(trimmedInput);
-    if (containsLink && !localState?.isPro) {
+    if (containsLink && !localState?.isPro && !isAdmin) {
       Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
       return;
     }
@@ -379,7 +427,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         reportCount: 0,
         containsLink,
         isPro: localState.isPro,
-        isAdmin:isAdmin
+        isAdmin: isAdmin,
+        strikeCount: strikeInfo?.strikeCount || null,
+        currentUserEmail: currentUserEmail
 
       });
 
@@ -413,6 +463,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
             unreadMessagesCount={unreadMessagesCount}
             unreadcount={unreadcount}
             setunreadcount={setunreadcount}
+            pinnedMessage={pinnedMessages}
+            // unpinSingleMessage={unpinSingleMessage}
           />
 
           <ConditionalKeyboardWrapper style={{ flex: 1 }} chatscreen={true}>
@@ -429,6 +481,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 // isAdmin={isAdmin}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
+                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId)}
                 handleLoadMore={handleLoadMore}
                 onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
                 banUser={banUser}

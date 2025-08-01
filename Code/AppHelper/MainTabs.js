@@ -1,5 +1,5 @@
-import React, {  useCallback } from 'react';
-import {  TouchableOpacity } from 'react-native';
+import React, { useCallback } from 'react';
+import { TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -11,37 +11,40 @@ import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useGlobalState } from '../GlobelStats';
+import DesignUploader from '../Design/DesignMainScreen';
+import DesignStack from '../Design/DesignNavigation';
 
 
 
 const Tab = createBottomTabNavigator();
 
-const AnimatedTabIcon = React.memo(({iconName, color, size }) => {
+const AnimatedTabIcon = React.memo(({ iconName, color, size }) => {
 
 
 
   return (
-      <FontAwesome
-        name={iconName}
-        size={size}
-        color={color}
-        solid={true}
-      />
+    <FontAwesome
+      name={iconName}
+      size={size}
+      color={color}
+      solid={true}
+    />
   );
 });
 
 
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t } = useTranslation();
-    const getTabIcon = useCallback((routeName, focused) => {
+  const getTabIcon = useCallback((routeName, focused) => {
     const isNoman = config.isNoman; // ✅ Extracted to avoid repeated checks
-    
+
 
     const icons = {
-      Calculator: ['house', 'house'], // Solid icons look same for focused/unfocused
+      Calculator: ['calculator', 'calculator'], // Solid icons look same for focused/unfocused
       Stock: ['cart-shopping', 'cart-shopping'],
       Trade: ['handshake', 'handshake'],
       Chat: ['envelope', 'envelope'],
+      Designs: ['house-chimney-crack', 'house-chimney-crack'],
       Values: ['chart-simple', 'chart-simple'],
     };
 
@@ -63,9 +66,9 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
         tabBarButton: (props) => {
           const { accessibilityState, children, onPress } = props;
           const isSelected = accessibilityState?.selected;
-            const {theme} = useGlobalState()
-      const isDarkMode = theme === 'dark'
-      
+          const { theme } = useGlobalState()
+          const isDarkMode = theme === 'dark'
+
           return (
             <TouchableOpacity
               onPress={onPress}
@@ -75,9 +78,9 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
                 backgroundColor: isSelected ? isDarkMode ? '#5c4c49' : '#f3d0c7' : 'transparent',
                 borderRadius: 12,
                 marginHorizontal: 4,
-                marginVertical:2,
-                justifyContent:'center',
-                alignItems:'center',
+                marginVertical: 2,
+                justifyContent: 'center',
+                alignItems: 'center',
               }}
             >
               {children}
@@ -92,7 +95,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           fontSize: 9, // 👈 Your custom label font size
           fontFamily: 'Lato-Bold', // Optional: Custom font family
           color: config.colors.primary,
-          
+
         },
         tabBarActiveTintColor: config.colors.primary,
         tabBarInactiveTintColor: selectedTheme.colors.text,
@@ -116,11 +119,11 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
                 />
               </TouchableOpacity> */}
               <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
-              <Icon
-                name="settings"
-                size={24}
-                color={selectedTheme.colors.text}
-              />
+                <Icon
+                  name="settings"
+                  size={24}
+                  color={selectedTheme.colors.text}
+                />
               </TouchableOpacity>
             </>
 
@@ -156,6 +159,15 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           />
         )}
       </Tab.Screen>
+      <Tab.Screen
+        name="Designs"
+        options={{
+          title: 'HouseHub', // Translation applied here
+          headerShown: false
+        }}
+      >
+        {() => <DesignStack selectedTheme={selectedTheme} />}
+      </Tab.Screen>
 
       <Tab.Screen
         name="Chat"
@@ -183,6 +195,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
         )}
       </Tab.Screen>
 
+
       <Tab.Screen
         name="Values"
         options={{
@@ -191,6 +204,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       >
         {() => <ValueScreen selectedTheme={selectedTheme} />}
       </Tab.Screen>
+
     </Tab.Navigator>
   );
 });

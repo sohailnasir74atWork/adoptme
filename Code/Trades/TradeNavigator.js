@@ -9,8 +9,9 @@ import { useTranslation } from 'react-i18next';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
-// import ServerScreen from './Server';
+import ServerScreen from './Server';
 import { useNavigation } from '@react-navigation/native';
+import NotifierDrawer from './Notifier';
 
 const Stack = createNativeStackNavigator();
 
@@ -88,19 +89,41 @@ export const TradeStack = ({ selectedTheme }) => {
           options={({ navigation }) => ({
             title: t("tabs.trade"),
             headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center',  }}>
-                <TouchableOpacity 
-                  onPress={() => setModalVisible(true)}
-                  style={{ 
-                    padding: 8,
-                    // backgroundColor: isDarkMode ? '#333' : '#f5f5f5',
-                    borderRadius: 8,
-                  }}
-                >
+              <View style={{ flexDirection: 'row', }}>
+                <TouchableOpacity onPress={() => navigation.navigate('Server')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
+                  <Image
+                    source={
+                      isDarkMode
+                        ? require('../../assets/roblox.png')
+                        : require('../../assets/roblox.png')
+                    }
+                    style={{
+                      width: 20,
+                      height:25,
+                      // transform: [{ scale: 1.2 }],
+                      tintColor: config.colors.white,
+                      justifyContent:'center',
+                      alignItems:'center'
+                    }}
+                    resizeMode="contain"
+                  />
+                  <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Pvt Servers</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
+                <Icon
+                    name="notifications"
+                    size={16}
+                    color={'white'}
+                  />
+                  <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Trade Notifier</Text>
+                </TouchableOpacity>
+          
+                <TouchableOpacity onPress={() => setModalVisible(true)} style={{ marginRight: 8 }}>
                   <Icon
                     name="information-circle-outline"
                     size={24}
-                    color={isDarkMode ? 'white' : 'config.colors.primary'}
+                    color={config.colors.primary}
                   />
                 </TouchableOpacity>
               </View>
@@ -131,12 +154,18 @@ export const TradeStack = ({ selectedTheme }) => {
           }}
         />
 
-{/* <Stack.Screen
+<Stack.Screen
           name="Server"
           component={ServerScreen}
          
-        /> */}
+        />
+        <Stack.Screen
+          name="Trade Notifier"
+          component={NotifierDrawer}
+         
+        />
       </Stack.Navigator>
+      
 
       {/* Trade Rules Modal */}
       <TradeRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} />

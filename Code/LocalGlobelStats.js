@@ -5,6 +5,8 @@ import Purchases from 'react-native-purchases';
 import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { InteractionManager } from 'react-native';
+import { mixpanel } from './AppHelper/MixPenel';
+import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 
 const storage = new MMKV();
 const LocalStateContext = createContext();
@@ -52,6 +54,8 @@ export const LocalStateProvider = ({ children }) => {
     imgurlGG: storage.getString('imgurlGG') || 'https://adoptmevalues.gg',
     isGG: storage.getBoolean('isGG') ?? false,
     showAd1: storage.getBoolean('showAd1') ?? true,
+    postsCache: safeParseJSON('postsCache', []),
+
   }));
 
 

@@ -199,91 +199,79 @@ export default function SettingsScreen({ selectedTheme }) {
   
   const handleDeleteUser = async () => {
     triggerHapticFeedback('impactLight');
-    try {
-      if (!user || !user?.id) {
-        showErrorMessage(
-          t("home.alert.error"),
-          t("settings.delete_error")
+  
+    if (!user?.id) {
+      showErrorMessage(t("home.alert.error"), t("settings.delete_error"));
+      return;
+    }
+  
+    const userId = user.id;
+  
+    // Step 1: Acknowledge irreversible action
+    const showAcknowledgment = () =>
+      new Promise((resolve, reject) => {
+        Alert.alert(
+          t("settings.delete_account"),
+          t("settings.delete_account_warning"),
+          [
+            { text: t("home.cancel"), style: 'cancel', onPress: reject },
+            { text: t("settings.proceed"), style: 'destructive', onPress: resolve },
+          ]
         );
-        return;
-      }
+      });
   
-      const userId = user?.id;
+    // Step 2: Final confirmation
+    const showFinalConfirmation = () =>
+      new Promise((resolve, reject) => {
+        Alert.alert(
+          t("settings.confirm_deletion"),
+          t("settings.confirm_deletion_warning"),
+          [
+            { text: t("home.cancel"), style: 'cancel', onPress: reject },
+            { text: t("trade.delete"), style: 'destructive', onPress: resolve },
+          ]
+        );
+      });
   
-      // Step 1: Acknowledge the irreversible action
-      const showAcknowledgment = () =>
-        new Promise((resolve, reject) => {
-          Alert.alert(
-            t("settings.delete_account"),
-            t("settings.delete_account_warning"),
-            [
-              { text: t("home.cancel"), style: 'cancel', onPress: reject },
-              { text:  t("settings.proceed"), style: 'destructive', onPress: resolve },
-            ]
-          );
-        });
-  
-      // Step 2: Confirm the action again
-      const showFinalConfirmation = () =>
-        new Promise((resolve, reject) => {
-          Alert.alert(
-            t("settings.confirm_deletion"),
-            t("settings.confirm_deletion_warning"),
-            [
-              { text: t("home.cancel"), style: 'cancel', onPress: reject },
-              { text: t("trade.delete"), style: 'destructive', onPress: resolve },
-            ]
-          );
-        });
-  
-      // Await acknowledgment and confirmation
+    try {
+      // Confirm both steps
       await showAcknowledgment();
       await showFinalConfirmation();
   
-      // Step 3: Remove user data from Firebase Realtime Database
+      // Step 3: Delete from Realtime DB
       const userRef = ref(appdatabase, `users/${userId}`);
-
+      await remove(userRef);
   
-      await Promise.all([
-        remove(userRef), // ✅ Delete user profile
-      ]);
-      // Step 4: Delete user from Firebase Authentication
+      // Step 4: Delete from Firebase Auth
       const currentUser = auth().currentUser;
       if (currentUser) {
-        await currentUser.delete();
-
+        await currentUser.delete(); // 🔐 Requires recent login
       } else {
-        // Alert.alert(t(".alerthome.error"), t("settings.user_not_found"));
-        showErrorMessage(
-          t("home.alert.error"),
-          t("settings.user_not_found")
-        );
+        showErrorMessage(t("home.alert.error"), t("settings.user_not_found"));
         return;
       }
   
       // Step 5: Reset local state
       await resetUserState(setUser);
   
-      // Alert.alert(t("home.alert.success"), t("home.alert.success"));
+      // ✅ Success
       showSuccessMessage(
         t("home.alert.success"),
-        t("home.alert.success")
+        t("settings.success_deleted")
       );
-    } catch (error) {
-      // console.error('Error deleting user:', error.message);
   
-      if (error.code === 'auth/requires-recent-login') {
-        // Alert.alert(
-        //   t("settings.session_expired"),
-        //   t("settings.session_expired_message"),
-        //   [{ text: 'OK' }]
-        // );
+    } catch (error) {
+      if (error?.code === 'auth/requires-recent-login') {
         showErrorMessage(
           t("settings.session_expired"),
           t("settings.session_expired_message")
         );
+      } else if (error?.message) {
+        showErrorMessage(
+          t("home.alert.error"),
+          error.message
+        );
       } else {
-        // Alert.alert(t("home.alert.error"), t("settings.delete_error"));
         showErrorMessage(
           t("home.alert.error"),
           t("settings.delete_error")
@@ -291,6 +279,7 @@ export default function SettingsScreen({ selectedTheme }) {
       }
     }
   };
+  
   
   const manageSubscription = () => {
     const url = Platform.select({
@@ -360,12 +349,11 @@ const formatPlanName = (plan) => {
               <Text style={!user?.id ? styles.userNameLogout : styles.userName}>
                 {!user?.id ? t("settings.login_register") : displayName}
                 {user?.isPro &&  
-        <Icon
-          name="checkmark-done-circle"
-          size={16}
-          color={config.colors.hasBlockGreen}
-          
-        />}
+        <Image
+        source={require('../../assets/pro.png')} 
+        style={{ width: 14, height: 14 }} 
+      />
+        }
               </Text>
               {!user?.id && <Text style={styles.rewardLogout}>{t('settings.login_description')}</Text>}
               {user?.id && <Text style={styles.reward}>{t("settings.my_points")}: {user?.rewardPoints || 0}</Text>}

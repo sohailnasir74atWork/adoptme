@@ -62,20 +62,20 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
   const handleGuest = () => {
     mixpanel.track("Go as Guest");
-    if (Platform.OS === 'ios') {
-      onFinish();
-    } else {
+    // if (Platform.OS === 'ios') {
+    //   onFinish();
+    // } else {
       setScreenIndex(2);
-    }
+    // }
   };
   
   const handleLoginSuccess = () => {
     setOpenSignin(false);
-    if (Platform.OS === 'ios') {
-      onFinish();
-    } else {
+    // if (Platform.OS === 'ios') {
+    //   onFinish();
+    // } else {
       setScreenIndex(2);
-    }
+    // }
   };
 
   // const createSlideAnimation = (direction) => {

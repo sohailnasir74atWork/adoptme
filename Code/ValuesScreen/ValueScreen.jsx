@@ -268,7 +268,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   // Memoize the filters
   const availableFilters = useMemo(() => {
     const uniqueRarities = [...new Set(parsedValuesData.map(item =>
-      item.rarity ? item.rarity.toUpperCase() : null
+      item?.rarity ? item.rarity.toUpperCase() : null
     ).filter(Boolean))];
     return [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
   }, [parsedValuesData]);
@@ -1041,7 +1041,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   adTitle: {
     fontSize: 18,
     fontFamily: 'Lato-Bold',
-    color: '#333',
+    color: isDarkMode ? '#bbb' : '#333',
     // marginBottom: 5, // Adds space below the title
   },
   tryNowText: {

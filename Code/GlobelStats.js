@@ -25,6 +25,7 @@ export const GlobalStateProvider = ({ children }) => {
   const [theme, setTheme] = useState(resolvedTheme);
   const [api, setApi] = useState(null);
   const [freeTranslation, setFreeTranslation] = useState(null);
+  const [currentUserEmail, setCurrentuserEmail] = useState('')
 
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -123,8 +124,9 @@ export const GlobalStateProvider = ({ children }) => {
       const snapshot = await get(userRef);
       let userData;
 
-      const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'mastermind@gmail.com';
+      const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com';
       if (makeadmin) { setIsAdmin(makeadmin) }
+      setCurrentuserEmail(loggedInUser.email)
 
       if (snapshot.exists()) {
         userData = { ...snapshot.val(), id: userId };
@@ -137,7 +139,7 @@ export const GlobalStateProvider = ({ children }) => {
       setUser(userData);
 
       // 🔥 Refresh and update FCM token
-      await Promise.all([registerForNotifications(userId), requestPermission()]);
+      await Promise.all([registerForNotifications(userId)]);
 
     } catch (error) {
       console.error("❌ Auth state change error:", error);
@@ -146,21 +148,27 @@ export const GlobalStateProvider = ({ children }) => {
 
   // ✅ Ensure useEffect runs only when necessary
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (loggedInUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (loggedInUser) => {
+      if (loggedInUser && !loggedInUser.emailVerified) {
+        await auth().signOut();
+        // showErrorMessage("Email Not Verified", "Please check your inbox and verify your email.");
+        return;
+      }
+  
       InteractionManager.runAfterInteractions(async () => {
         await handleUserLogin(loggedInUser);
-
+  
         if (loggedInUser?.uid) {
           await registerForNotifications(loggedInUser.uid);
-          await requestPermission();
         }
-
+  
         await updateLocalState('isAppReady', true);
       });
     });
-
+  
     return () => unsubscribe();
   }, []);
+  
 
 
  useEffect(() => {
@@ -440,9 +448,9 @@ export const GlobalStateProvider = ({ children }) => {
       freeTranslation,
       isAdmin,
       reload,
-      robloxUsernameRef, api
+      robloxUsernameRef, api, currentUserEmail
     }),
-    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api,freeTranslation]
+    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api,freeTranslation, currentUserEmail]
   );
 
   return (

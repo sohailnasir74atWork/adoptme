@@ -20,7 +20,7 @@ const MessageInput = ({
   const { triggerHapticFeedback } = useHaptic();
   const [messageCount, setMessageCount] = useState(0);
   const { t } = useTranslation();
-  const {localState} = useLocalState()
+  const { localState } = useLocalState()
   const handleSend = async () => {
     triggerHapticFeedback('impactLight');
     const trimmedInput = input.trim();
@@ -30,12 +30,12 @@ const MessageInput = ({
     const callbackfunction = () => {
       setIsSending(false)
     };
-  
+
     try {
       await handleSendMessage(replyTo, trimmedInput);
       setInput('');
       if (onCancelReply) onCancelReply();
-  
+
       // Increment message count
       setMessageCount(prevCount => {
         const newCount = prevCount + 1;
@@ -52,7 +52,7 @@ const MessageInput = ({
       setIsSending(false);
     }
   };
-  
+
   return (
     <View style={styles.inputWrapper}>
       {/* Reply context UI */}

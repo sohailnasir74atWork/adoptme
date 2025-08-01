@@ -657,7 +657,7 @@ const TradeList = ({ route }) => {
         Alert.alert('Error', 'Unable to navigate to the chat. Please try again later.');
       }
     };
-
+const GG = item.isSharkMode === 'GG'
     return (
       <View style={[styles.tradeItem, item.isFeatured && { backgroundColor: isDarkMode ? '#34495E' : 'rgba(245, 222, 179, 0.6)' }]}>
         {item.isFeatured && <View style={styles.tag}></View>}
@@ -670,12 +670,12 @@ const TradeList = ({ route }) => {
             <View style={{ justifyContent: 'center', marginLeft: 10 }}>
               <Text style={styles.traderName}>
                 {item.traderName}{' '}
-                {item.isPro &&
-                  <Icon
-                    name="checkmark-done-circle"
-                    size={14}
-                    color={config.colors.hasBlockGreen}
-                  />}
+                {item.isPro && (
+  <Image
+    source={require('../../assets/pro.png')} 
+    style={{ width: 14, height: 14 }} 
+  />
+)}
                 {item.rating ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#FFD700', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
                     <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />
@@ -736,7 +736,7 @@ const TradeList = ({ route }) => {
                     {tradeItem ? (
                       <>
                         <Image
-                          source={{ uri: getImageUrl(tradeItem, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
                           style={styles.gridItemImage}
                         />
                         <View style={styles.itemBadgesContainer}>
@@ -781,7 +781,8 @@ const TradeList = ({ route }) => {
                     {tradeItem ? (
                       <>
                         <Image
-                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${tradeItem.image?.replace(/^\//, "")}` }}
+                                                   source={{ uri: getImageUrl(tradeItem,GG,  localState.imgurl, localState.imgurlGG) }}
+
                           style={styles.gridItemImage}
                         />
                         <View style={styles.itemBadgesContainer}>
