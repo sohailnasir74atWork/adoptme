@@ -63,7 +63,7 @@ const AdminHeader = ({
   return (
     <View>
       <View style={styles.stackContainer}>
-        <View><Text style={styles.stackHeader}>Community Chat</Text></View>
+        <View style={{paddingVertical:10}}><Text style={styles.stackHeader}>Community Chat</Text></View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           {user?.id && (
             <View style={styles.iconContainer}>
@@ -131,10 +131,13 @@ const AdminHeader = ({
               <View>
                 <Text style={styles.pinnedTextheader}>Pin Message</Text>
                 <Text style={styles.pinnedText}>
-                  {msg.text.length > 40 ? msg.text.substring(0, 40) + '...' : msg.text}
-                </Text>
+  {msg.text.replace(/\n/g, ' ').length > 40 ? 
+    msg.text.replace(/\n/g, ' ').substring(0, 40) + '...' : 
+    msg.text.replace(/\n/g, ' ')}
+</Text>
+
               </View>
-              <TouchableOpacity onPress={() => setModalVisibleChatinfo(true)}>
+              <TouchableOpacity onPress={() => setModalVisibleChatinfo(true)} style={{ justifyContent:'center'}}>
                 <Icon name="chevron-forward-outline" size={20} color={config.colors.primary} style={styles.pinIcon} />
               </TouchableOpacity>
             </View>
@@ -184,7 +187,9 @@ export const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
-      paddingVertical: 10,
+      // paddingVertical: 10,
+
+
       borderBottomWidth: 0.5,
       borderBottomColor: 'lightgrey',
     },
@@ -196,14 +201,14 @@ export const getStyles = (isDarkMode) =>
     },
     pinnedContainer: {
       paddingHorizontal: 10,
-      paddingVertical: 5,
+      // paddingVertical: 1,
       borderBottomWidth: 0.5,
       borderBottomColor: 'lightgrey',
     },
     singlePinnedMessage: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 10,
+      paddingVertical: 5,
       borderBottomWidth: 0.2,
     },
     singlePinnedMessageModal: {
@@ -225,6 +230,8 @@ export const getStyles = (isDarkMode) =>
     },
     pinIcon: {
       marginLeft: 10,
+      // alignItems:'center',
+      // backgroundColor:'red'
     },
     modalContainer: {
       flex: 1,
