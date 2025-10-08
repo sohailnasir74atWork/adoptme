@@ -95,7 +95,7 @@ export const getStyles = (isDarkMode) =>
 
     },
     timestamp: {
-      fontSize: 8,
+      fontSize: 5,
       color: '#bbb',
       textAlign: 'right',
       paddingHorizontal: 5

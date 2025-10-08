@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
 import Share from 'react-native-share';
@@ -8,6 +8,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
 import { showErrorMessage } from '../Helper/MessageHelper';
 import { mixpanel } from '../AppHelper/MixPenel';
+import InterstitialAdManager from '../Ads/IntAd';
 
 const getTradeStatus = (hasTotal, wantsTotal) => {
     if (hasTotal > 0 && wantsTotal === 0) return 'lose';
@@ -69,12 +70,39 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             if (!viewRef.current) return;
             mixpanel.track("Trade Share");
             const uri = await viewRef.current.capture();
-            await Share.open({
-                url: uri,
-                type: 'image/png',
-                failOnCancel: false,
-            });
+            const callbackfunction = async ()=>{
+                await Share.open({
+                    url: uri,
+                    type: 'image/png',
+                    failOnCancel: false,
+                });
+            }
+           if(Platform.OS !== 'ios'){ setTimeout(() => {
+                if (!localState.isPro) {
+                  requestAnimationFrame(() => {
+                    setTimeout(() => {
+                      try {
+                        InterstitialAdManager.showAd(callbackfunction);
+                      } catch (err) {
+                        console.warn('[AdManager] Failed to show ad:', err);
+                        callbackfunction();
+                      }
+                    }, 100); 
+                  });
+                } else {
+                  callbackfunction();
+                }
+              }, 10); }
+          
+            if(Platform.OS === 'ios'){
+                 await Share.open({
+                    url: uri,
+                    type: 'image/png',
+                    failOnCancel: false,
+                });
+            }
             onClose();
+         
         } catch (error) {
             console.error('Error sharing trade screenshot:', error);
             showErrorMessage('Error', 'Could not share the trade screenshot.');

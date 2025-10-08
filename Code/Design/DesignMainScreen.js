@@ -7,21 +7,26 @@ import {
   ActivityIndicator,
   Text,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
 import firestore from '@react-native-firebase/firestore';
+import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
-
-
 import PostCard from './componenets/PostCard';
 import UploadModal from './componenets/UploadModal';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import config from '../Helper/Environment';
 import { Platform } from 'react-native';
-import BannerAdComponent from '../Ads/bannerAds';
 import { showMessage } from 'react-native-flash-message';
+// import { nativeAdPool } from '../Ads/NativeAdPool';
+// import SingleNativeAd from '../Ads/SingleNative';
+import InterstitialAdManager from '../Ads/IntAd';
+import BannerAdComponent from '../Ads/bannerAds';
+
+
+const availableTags = ['Scam Alert', 'Looking for Trade', 'Discussion', 'Real or Fake', 'Need Help', 'Misc'];
+
 
 const DesignFeedScreen = ({ route }) => {
   const { selectedTheme } = route.params;
@@ -39,28 +44,81 @@ const DesignFeedScreen = ({ route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [filterMyPosts, setFilterMyPosts] = useState(false);
   const [myPosts, setMyPosts] = useState([]);
+  const [selectedTag, setSelectedTag] = useState(null);
+  const AD_FREQUENCY = 5;
 
+  function interleaveAds(items, showAds) {
+     if (!showAds) return items;
+      const out = [];
+     let real = 0;
+    for (let i = 0; i < items.length; i++) {
+       out.push(items[i]);
+        real++;
+        if (real > 0 && real % AD_FREQUENCY === 0) {
+          out.push({ __type: 'ad', id: `ad-${i}` });
+        }
+     }
+    return out;
+     }
   // console.log('mainscreen')
-  const fetchMyPosts = async () => {
+  const fetchMyPosts = async (tag = null) => {
     if (!user?.id) return;
+    // console.log('📦 Fetching My Posts...');
     setInitialLoading(true);
     try {
-      const snapshot = await firestore()
+      let query = firestore()
         .collection('designPosts')
         .where('userId', '==', user.id)
-        .orderBy('createdAt', 'desc')
-        .get();
+        .orderBy('createdAt', 'desc');
   
+      if (tag) {
+        query = query.where('selectedTags', 'array-contains', tag);
+      }
+  
+      const snapshot = await query.get();
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // console.log('✅ My Posts fetched:', data.length);
       setMyPosts(data);
+      setHasMore(snapshot.docs.length > 0);
     } catch (err) {
-      console.error('Error fetching my posts:', err);
+      console.error('❌ Error fetching my posts:', err);
       showMessage({ message: 'Failed to fetch your posts', type: 'danger' });
+    } finally {
+      setInitialLoading(false);
+      setRefreshing(false);
+    }
+  };
+  
+
+  // useEffect(() => {
+  //   nativeAdPool.fillIfNeeded();
+  //   return () => nativeAdPool.destroyAll();
+  // }, []);
+
+
+  const fetchPostsByTag = async (tag) => {
+    try {
+      setInitialLoading(true);
+
+      const snapshot = await firestore()
+        .collection('designPosts')
+        .where('selectedTags', 'array-contains', tag)
+        .orderBy('createdAt', 'desc')
+        .limit(5)
+        .get();
+
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPosts(data);
+      setLastVisibleDoc(snapshot.docs[snapshot.docs.length - 1]);
+      setHasMore(snapshot.docs.length === 5);
+    } catch (err) {
+      console.error('Error fetching posts by tag:', err);
+      showMessage({ message: 'Failed to fetch posts', type: 'danger' });
     } finally {
       setInitialLoading(false);
     }
   };
-  
+
 
   const skeletonArray = useMemo(() => Array.from({ length: 5 }), []);
   const handleDeletePost = async (postId) => {
@@ -72,7 +130,9 @@ const DesignFeedScreen = ({ route }) => {
       showMessage({ message: 'Failed to delete post', type: 'danger' });
     }
   };
-  
+
+
+
   const fetchInitialPosts = async () => {
     try {
       const snapshot = await firestore()
@@ -98,7 +158,7 @@ const DesignFeedScreen = ({ route }) => {
   }, []);
   useEffect(() => {
     if (posts.length === 0) return;
-  
+
     const unsubscribers = posts.map(post =>
       firestore()
         .collection('designPosts')
@@ -112,34 +172,39 @@ const DesignFeedScreen = ({ route }) => {
           }
         })
     );
-  
+
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
   }, [JSON.stringify(posts.map(p => p.id))]); // Triggers when post IDs change
-  
+
   const loadMorePosts = async () => {
     if (loadingMore || !hasMore || !lastVisibleDoc) return;
 
     setLoadingMore(true);
     try {
-      const snapshot = await firestore()
+      let query = firestore()
         .collection('designPosts')
         .orderBy('createdAt', 'desc')
         .startAfter(lastVisibleDoc)
-        .limit(5)
-        .get();
+        .limit(10);
 
+      if (selectedTag) {
+        query = query.where('selectedTags', 'array-contains', selectedTag);
+      }
+
+      const snapshot = await query.get();
       const newPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPosts(prev => [...prev, ...newPosts]);
       setLastVisibleDoc(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === 5);
+      setHasMore(snapshot.docs.length === 10);
     } catch (err) {
       console.error('Pagination load error:', err);
     } finally {
       setLoadingMore(false);
     }
   };
+
 
   const handleLike = async (post) => {
     const postRef = firestore().collection('designPosts').doc(post.id);
@@ -150,7 +215,7 @@ const DesignFeedScreen = ({ route }) => {
     });
   };
 
-  const handleUploadPost = async (desc, imageUrl, selectedTags) => {
+  const handleUploadPost = async (desc, imageUrl, selectedTags, currentUserEmail) => {
     if (!user?.id) return;
     const post = {
       imageUrl,
@@ -161,6 +226,7 @@ const DesignFeedScreen = ({ route }) => {
       createdAt: firestore.FieldValue.serverTimestamp(),
       likes: {},
       selectedTags,
+      email:currentUserEmail
     };
     await firestore().collection('designPosts').add(post);
   };
@@ -169,6 +235,12 @@ const DesignFeedScreen = ({ route }) => {
     if (initialLoading) {
       return <View style={[styles.skeletonPost, isDarkMode && { backgroundColor: '#444' }]} />;
     }
+      // if (item?.__type === 'ad') {
+      //    return <NativeFeedAd mediaHeight={220} />;
+      //  }
+      //  if (item?.__type === 'ad') {
+      //    return <View style={{flex:1}}><SingleNativeAd  /></View>;
+      //  }
 
     return (
       <PostCard
@@ -183,39 +255,134 @@ const DesignFeedScreen = ({ route }) => {
     );
   };
 
-  const dataToRender = initialLoading
-  ? skeletonArray
-  : filterMyPosts
-    ? myPosts
-    : posts;
+  // const dataToRender = initialLoading
+  //   ? skeletonArray
+  //   : filterMyPosts
+  //     ? myPosts
+  //     : posts;
+      const baseList = initialLoading ? skeletonArray : (filterMyPosts ? myPosts : posts);
+     const dataToRender = initialLoading
+        ? skeletonArray
+        : interleaveAds(baseList, !localState?.isPro);
 
   const keyExtractor = (item, index) =>
-    initialLoading ? `skeleton-${index}` : item?.id || `post-${index}`;
+    // initialLoading ? `skeleton-${index}` : item?.id || `post-${index}`;
+   initialLoading
+  ? `skeleton-${index}`
+   : item?.__type === 'ad'
+      ? item.id
+      : `${item?.id}_${index}}` || `post-${index}`;
 
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-<View style={[styles.header, isDarkMode && styles.headerDark, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-  <Text style={[styles.headerText, isDarkMode && styles.headerTextDark]}>House Hub</Text>
-  <TouchableOpacity
-   onPress={() => {
-    if (!user?.id) {
-      showMessage({ message: 'Please sign in to filter your posts', type: 'info' });
-      return;
+      <View style={[styles.header, isDarkMode && styles.headerDark, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+        <Text style={[styles.headerText, isDarkMode && styles.headerTextDark]}>Feed</Text>
+        <Menu>
+          <MenuTrigger style={{flexDirection:'row', alignItems:'center'}}>
+          <Text style={{color:config.colors.primary, fontSize:10, fontWeight:'900'}}>{selectedTag}</Text>
+            <FontAwesome
+              name="filter"
+              size={20}
+              style={{ padding: 6 }}
+              color={filterMyPosts || selectedTag ? config.colors.primary : isDarkMode ? '#ccc' : '#444'}
+            />
+            
+          </MenuTrigger>
+          <MenuOptions customStyles={{ optionsContainer: { width: 200 } }}>
+            {/* All Posts */}
+            <MenuOption
+  onSelect={() => {
+    const handleAction = () => {
+      setFilterMyPosts(false);
+      setSelectedTag(null);
+      fetchInitialPosts();
+    };
+
+    if (!localState.isPro) {
+      // Make sure InterstitialAdManager.showAd supports a callback
+      InterstitialAdManager.showAd(handleAction);
+    } else {
+      handleAction();
     }
-    const newState = !filterMyPosts;
-    setFilterMyPosts(newState);
-    if (newState) fetchMyPosts();
-  }}
-  
-    style={{ padding: 6 }}
-  >
-    <FontAwesome
-      name="filter"
-      size={20}
-      color={filterMyPosts ? config.colors.primary : isDarkMode ? '#ccc' : '#444'}
-    />
-  </TouchableOpacity>
-</View>
+  }
+  }
+>
+
+              <View style={styles.menuItem}>
+                <Text style={[styles.menuText, !filterMyPosts && !selectedTag && styles.selectedText]}>
+                  All Posts
+                </Text>
+                {!filterMyPosts && !selectedTag && <FontAwesome name="check" size={14} color={config.colors.primary} />}
+              </View>
+            </MenuOption>
+
+            {/* My Posts */}
+            <MenuOption
+              onSelect={() => {
+                const handleAction = () => {
+                  setFilterMyPosts(true);
+                  setSelectedTag(null);
+                  fetchMyPosts();
+                };
+              
+                if (!localState.isPro) {
+                  // Make sure InterstitialAdManager.showAd supports a callback
+                  InterstitialAdManager.showAd(handleAction);
+                } else {
+                  handleAction();
+                }
+              }}
+            >
+              <View style={styles.menuItem}>
+                <Text style={[styles.menuText, filterMyPosts && styles.selectedText]}>
+                  My Posts
+                </Text>
+                {filterMyPosts && <FontAwesome name="check" size={14} color={config.colors.primary} />}
+              </View>
+            </MenuOption>
+
+            {/* Divider & Label */}
+            <View style={styles.menuDivider}>
+              <Text style={[styles.menuLabel, isDarkMode && { color: '#aaa' }]}>Filter by Tag</Text>
+            </View>
+
+            {/* Tag Filters */}
+            {availableTags.map((tag, index) => (
+              <MenuOption
+                key={index}
+                onSelect={() => {
+                  const handleAction = () => {
+                    setFilterMyPosts(false);
+                    setSelectedTag(tag);
+                    fetchPostsByTag(tag);
+                  };
+                  if (!localState.isPro) {
+                    // Make sure InterstitialAdManager.showAd supports a callback
+                    InterstitialAdManager.showAd(handleAction);
+                  } else {
+                    handleAction();
+                  }
+                
+                
+                }}
+              >
+                <View style={styles.menuItem}>
+                  <Text style={[styles.menuText, selectedTag === tag && styles.selectedText]}>
+                    {tag}
+                  </Text>
+                  {selectedTag === tag && (
+                    <FontAwesome name="check" size={14} color={config.colors.primary} />
+                  )}
+                </View>
+              </MenuOption>
+            ))}
+          </MenuOptions>
+
+        </Menu>
+
+
+
+      </View>
 
 
       <FlatList
@@ -243,7 +410,7 @@ const DesignFeedScreen = ({ route }) => {
             </Text>
           )
         }
-        
+
       />
 
       {/* <TouchableOpacity
@@ -254,10 +421,10 @@ const DesignFeedScreen = ({ route }) => {
       >
         <Icon name="plus" size={24} color="white" />
       </TouchableOpacity> */}
-      <TouchableOpacity  style={styles.fab} onPress={() =>
-          user?.id ? setModalVisible(true) : setSigninDrawerVisible(true)
-        }>
-      <FontAwesome name="circle-plus" size={44}  color={config.colors.primary}/>
+      <TouchableOpacity style={styles.fab} onPress={() =>
+        user?.id ? setModalVisible(true) : setSigninDrawerVisible(true)
+      }>
+        <FontAwesome name="circle-plus" size={44} color={config.colors.primary} />
       </TouchableOpacity>
 
       <UploadModal
@@ -274,7 +441,7 @@ const DesignFeedScreen = ({ route }) => {
         screen="Design"
         message="Sign in to upload designs"
       />
-            {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent />}
 
     </View>
   );
@@ -283,10 +450,14 @@ const DesignFeedScreen = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    // backgroundColor: '#fff',
+    paddingTop: Platform.OS === 'android' ? 60 : 0
+
   },
   darkContainer: {
     backgroundColor: '#121212',
+    paddingTop: Platform.OS === 'android' ? 60 : 0
+
   },
   fab: {
     position: 'absolute',
@@ -315,13 +486,13 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 10,
-    paddingBottom: 15,
+    paddingBottom: 10,
     // backgroundColor: '#fff',
     // alignItems: 'center',
     // justifyContent: 'center',
     borderBottomWidth: 1,
     borderColor: '#ddd',
-    paddingHorizontal:20
+    paddingHorizontal: 20
   },
   headerDark: {
     // backgroundColor: '#1e1e1e',
@@ -335,7 +506,41 @@ const styles = StyleSheet.create({
   headerTextDark: {
     color: '#fff',
   },
-  
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+
+  menuText: {
+    fontSize: 14,
+    color: '#333',
+    fontFamily: 'Lato-Regular',
+  },
+
+  selectedText: {
+    color: config.colors.primary,
+    fontFamily: 'Lato-Bold',
+  },
+
+  menuDivider: {
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+  },
+
+  menuLabel: {
+    fontWeight: 'bold',
+    fontSize: 12,
+    color: '#444',
+    fontFamily: 'Lato-Bold',
+  },
+
+
 });
 
 export default DesignFeedScreen;

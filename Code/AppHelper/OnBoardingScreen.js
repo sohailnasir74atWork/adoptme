@@ -33,6 +33,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // const platform = Platform.OS.toLowerCase();
   const { updateLocalState, localState } = useLocalState();
+  
 
 
   // const languageOptions = [
@@ -48,6 +49,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   //   { code: "ar", label: t("settings.languages.ar"), flag: "🇸🇦" }
 
   // ];
+
 
   const handleNext = () => {
     if (screenIndex === 0) {
@@ -170,8 +172,8 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   };
 
   return (
-    <GestureHandlerRootView>
-      <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7' }]}>
+    <GestureHandlerRootView style={{ paddingBottom: 50, flex: 1 }}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',  }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#121212' : '#f2f2f7'} />
         {renderScreen()}
         

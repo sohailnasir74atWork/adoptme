@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { Image, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -18,16 +18,13 @@ import DesignStack from '../Design/DesignNavigation';
 
 const Tab = createBottomTabNavigator();
 
-const AnimatedTabIcon = React.memo(({ iconName, color, size }) => {
-
-
-
+const AnimatedTabIcon = React.memo(({ iconName, color, size, focused }) => {
   return (
     <FontAwesome
       name={iconName}
       size={size}
       color={color}
-      solid={true}
+      solid={focused}
     />
   );
 });
@@ -35,10 +32,12 @@ const AnimatedTabIcon = React.memo(({ iconName, color, size }) => {
 
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t } = useTranslation();
+  const {isAdmin, } = useGlobalState()
+
   const getTabIcon = useCallback((routeName, focused) => {
     const isNoman = config.isNoman; // ✅ Extracted to avoid repeated checks
 
-
+// console.log(focused, routeName)
     const icons = {
       Calculator: ['calculator', 'calculator'], // Solid icons look same for focused/unfocused
       Stock: ['cart-shopping', 'cart-shopping'],
@@ -59,23 +58,28 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           <AnimatedTabIcon
             focused={focused}
             iconName={getTabIcon(route.name, focused)}
-            color={config.colors.primary}
+            color={focused ? config.colors.primary : config.colors.primary}
             size={18}
           />
         ),
         tabBarButton: (props) => {
-          const { accessibilityState, children, onPress } = props;
-          const isSelected = accessibilityState?.selected;
-          const { theme } = useGlobalState()
-          const isDarkMode = theme === 'dark'
-
+          const { onPress, children } = props;
+          const isSelected = props?.['aria-selected'];
+          // console.log(props)
+          const { theme } = useGlobalState();
+          const isDarkMode = theme === 'dark';
+        
           return (
             <TouchableOpacity
               onPress={onPress}
               activeOpacity={0.9}
               style={{
                 flex: 1,
-                backgroundColor: isSelected ? isDarkMode ? '#5c4c49' : '#f3d0c7' : 'transparent',
+                backgroundColor: isSelected
+                  ? isDarkMode
+                    ? '#5c4c49'
+                    : '#f3d0c7'
+                  : 'transparent',
                 borderRadius: 12,
                 marginHorizontal: 4,
                 marginVertical: 2,
@@ -87,8 +91,9 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
             </TouchableOpacity>
           );
         },
+        
         tabBarStyle: {
-          height: 50,
+          // height: 50,
           backgroundColor: selectedTheme.colors.background,
         },
         tabBarLabelStyle: {
@@ -112,12 +117,12 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           title: t('tabs.calculator'), // Translation applied here
           headerRight: () => (
             <>
-              {/* <TouchableOpacity onPress={() => navigation.navigate('Reward')}>
+             {isAdmin && <TouchableOpacity onPress={() => navigation.navigate('Admin')}>
                 <Image
                   source={require('../../assets/trophy.webp')} // ✅ Ensure the correct path
                   style={{ width: 20, height: 20, marginRight: 16 }}
                 />
-              </TouchableOpacity> */}
+              </TouchableOpacity>}
               <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
                 <Icon
                   name="settings"
@@ -162,7 +167,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       <Tab.Screen
         name="Designs"
         options={{
-          title: 'HouseHub', // Translation applied here
+          title: 'Feed', // Translation applied here
           headerShown: false
         }}
       >

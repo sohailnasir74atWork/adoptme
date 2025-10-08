@@ -3,7 +3,7 @@ import { enableScreens } from 'react-native-screens';
 enableScreens(); 
 
 import React, { useEffect, lazy, Suspense } from 'react';
-import { AppRegistry, Text } from 'react-native';
+import { AppRegistry, Text, Platform, StatusBar } from 'react-native';
 import AppWrapper from './App';
 import { name as appName } from './app.json';
 import { GlobalStateProvider } from './Code/GlobelStats';
@@ -18,7 +18,13 @@ const NotificationHandler = lazy(() => import('./Code/Firebase/FrontendNotificat
 
 // ✅ Background Notification Handler
 messaging().setBackgroundMessageHandler(async remoteMessage => {
+  // handle background notification (optional)
 });
+
+// 🧠 Calculate StatusBar height (Android vs iOS)
+const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 18 : 44;
+
+// 🛑 Error Boundary
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
   static getDerivedStateFromError(error) {
@@ -35,21 +41,29 @@ class ErrorBoundary extends React.Component {
 // ✅ Memoized App component to prevent unnecessary re-renders
 const App = React.memo(() => (
   <MenuProvider skipInstanceCheck>
-  <LanguageProvider>
-    <LocalStateProvider>
-      <GlobalStateProvider>
-        <ErrorBoundary>
-          <AppWrapper />
-        </ErrorBoundary>
-        <FlashMessage position="top" />
-        <Suspense fallback={null}>
-          <NotificationHandler />
-        </Suspense>
-      </GlobalStateProvider>
-    </LocalStateProvider>                
-  </LanguageProvider>
-</MenuProvider>
+    <LanguageProvider>
+      <LocalStateProvider>
+        <GlobalStateProvider>
+          <ErrorBoundary>
+            <AppWrapper />
+          </ErrorBoundary>
 
+          {/* ✅ Flash Message below status bar */}
+          <FlashMessage
+            position="top"
+            floating
+            statusBarHeight={STATUS_BAR_HEIGHT}
+          />
+
+          {/* Lazy loaded Notification Handler */}
+          <Suspense fallback={null}>
+            <NotificationHandler />
+          </Suspense>
+        </GlobalStateProvider>
+      </LocalStateProvider>                
+    </LanguageProvider>
+  </MenuProvider>
 ));
 
+// ✅ Register the app entry point
 AppRegistry.registerComponent(appName, () => App);

@@ -97,7 +97,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { language } = useLanguage();
   const [lastTradeTime, setLastTradeTime] = useState(null);
-  const [openShareModel, setOpenShareModel] = useState(false);
+  const [adShowen, setadShowen] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [type, setType] = useState(null);
   const platform = Platform.OS.toLowerCase();
@@ -230,6 +230,29 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
+    const callbackfunction = ()=>{}
+    console.log(index)
+    // if()
+      requestAnimationFrame(() => {
+        // Step 4: Wait for modal animation to finish before showing ad
+        setTimeout(() => {
+          if (!adShowen && index ==1 && !localState.isPro && !isHas) {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                try {
+                  InterstitialAdManager.showAd(callbackfunction);
+                } catch (err) {
+                  console.warn('[AdManager] Failed to show ad:', err);
+                  callbackfunction();
+                }
+              }, 400); // Adjust based on animation time
+            });
+          } else {
+            callbackfunction();
+          }
+        }, 500); // Give modal time to fully disappear on iOS
+
+      });
 
     if (items[index]) {
       triggerHapticFeedback('impactLight');
@@ -240,6 +263,8 @@ const HomeScreen = ({ selectedTheme }) => {
       if (isHas) {
         setHasItems(updatedItems);
         updateTotal(item, 'has', false, true);
+
+
       } else {
         setWantsItems(updatedItems);
         updateTotal(item, 'wants', false, true);

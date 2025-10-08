@@ -365,8 +365,8 @@ export const banUserwithEmail = async (email) => {
     const snap = await get(banRef);
 
     let strikeCount = 1;
-    // let bannedUntil = Date.now() + 24 * 60 * 60 * 1000; // 1 day
-    let bannedUntil = Date.now() +  1 * 60 * 1000; // 1 day
+    let bannedUntil = Date.now() + 24 * 60 * 60 * 1000; // 1 day
+    // let bannedUntil = Date.now() +  1 * 60 * 1000; // 1 day
 
     
 
@@ -374,8 +374,8 @@ export const banUserwithEmail = async (email) => {
       const data = snap.val();
       strikeCount = data.strikeCount + 1;
 
-      // if (strikeCount === 2) bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
-       if (strikeCount === 2) bannedUntil = Date.now() + 2  * 60 * 1000; // 3 days
+      if (strikeCount === 2) bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
+      //  if (strikeCount === 2) bannedUntil = Date.now() + 2  * 60 * 1000; // 3 days
       else if (strikeCount >= 3) bannedUntil = "permanent";
     }
 

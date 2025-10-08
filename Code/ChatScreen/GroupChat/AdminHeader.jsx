@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Modal,
   Linking,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -14,6 +15,7 @@ import config from '../../Helper/Environment';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
+import ChatRulesModal from './ChatRuleModal';
 
 // Regular expression to detect URLs in the message
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
@@ -21,17 +23,18 @@ const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 const AdminHeader = ({
   selectedTheme,
   modalVisibleChatinfo,
-  setModalVisibleChatinfo, 
-  triggerHapticFeedback, 
-  unreadcount, 
-  setunreadcount, 
-  pinnedMessages, 
+  setModalVisibleChatinfo,
+  triggerHapticFeedback,
+  unreadcount,
+  setunreadcount,
+  pinnedMessages,
   onUnpinMessage
 }) => {
   const { theme, user, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
   const { t } = useTranslation();
+  const [pinMessageOpen, setPinMessageOpen] = useState(false)
 
   const styles = getStyles(isDarkMode);
 
@@ -63,7 +66,7 @@ const AdminHeader = ({
   return (
     <View>
       <View style={styles.stackContainer}>
-        <View style={{paddingVertical:10}}><Text style={styles.stackHeader}>Community Chat</Text></View>
+        <View style={{ paddingVertical: 10 }}><Text style={styles.stackHeader}>Community Chat</Text></View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           {user?.id && (
             <View style={styles.iconContainer}>
@@ -101,14 +104,7 @@ const AdminHeader = ({
                   },
                 }}
               >
-                <MenuOption onSelect={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
-                    <Icon name="information-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
-                    <Text style={{ fontSize: 16, color: config.colors.text || '#000' }}>
-                      {t("chat.chat_rules")}
-                    </Text>
-                  </View>
-                </MenuOption>
+
                 <MenuOption onSelect={() => navigation?.navigate('BlockedUsers')}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
                     <Icon name="ban-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
@@ -122,6 +118,19 @@ const AdminHeader = ({
           )}
         </View>
       </View>
+      <View style={{
+        flexDirection: 'row', justifyContent: 'space-between', padding: 10, alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
+      }}>
+        <Text style={{ fontSize: 12, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
+        </Text>
+        <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
+
+          <Icon name="information-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+          {/* <Text style={{ fontSize: 16, color: config.colors.text || '#000' }}>
+                      {t("chat.chat_rules")}
+                    </Text> */}
+        </TouchableOpacity>
+      </View>
 
       {/* Displaying truncated pinned messages */}
       {uniquePinnedMessages.length > 0 && (
@@ -131,13 +140,13 @@ const AdminHeader = ({
               <View>
                 <Text style={styles.pinnedTextheader}>Pin Message</Text>
                 <Text style={styles.pinnedText}>
-  {msg.text.replace(/\n/g, ' ').length > 40 ? 
-    msg.text.replace(/\n/g, ' ').substring(0, 40) + '...' : 
-    msg.text.replace(/\n/g, ' ')}
-</Text>
+                  {msg.text.replace(/\n/g, ' ').length > 40 ?
+                    msg.text.replace(/\n/g, ' ').substring(0, 40) + '...' :
+                    msg.text.replace(/\n/g, ' ')}
+                </Text>
 
               </View>
-              <TouchableOpacity onPress={() => setModalVisibleChatinfo(true)} style={{ justifyContent:'center'}}>
+              <TouchableOpacity onPress={() => setPinMessageOpen(true)} style={{ justifyContent: 'center' }}>
                 <Icon name="chevron-forward-outline" size={20} color={config.colors.primary} style={styles.pinIcon} />
               </TouchableOpacity>
             </View>
@@ -149,16 +158,16 @@ const AdminHeader = ({
       <Modal
         animationType="slide"
         transparent={true}
-        visible={modalVisibleChatinfo}
-        onRequestClose={() => setModalVisibleChatinfo(false)}
+        visible={pinMessageOpen}
+        onRequestClose={() => setPinMessageOpen(false)}
       >
         <View style={styles.modalContainer}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' , minWidth:320}}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', minWidth: 320 }}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Pin Messages</Text>
               {uniquePinnedMessages.map((msg) => (
                 <View key={msg.firebaseKey} style={styles.singlePinnedMessageModal}>
-                  {renderMessageWithLinks(msg.text)} 
+                  {renderMessageWithLinks(msg.text)}
                   {isAdmin && (
                     <TouchableOpacity onPress={() => onUnpinMessage(msg.firebaseKey)} style={{ backgroundColor: config.colors.primary, marginVertical: 3 }}>
                       <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>Delete</Text>
@@ -168,7 +177,7 @@ const AdminHeader = ({
               ))}
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setModalVisibleChatinfo(false)}
+                onPress={() => setPinMessageOpen(false)}
               >
                 <Text style={styles.closeButtonText}>{t("chat.got_it")}</Text>
               </TouchableOpacity>
@@ -176,6 +185,11 @@ const AdminHeader = ({
           </ScrollView>
         </View>
       </Modal>
+      <ChatRulesModal
+        visible={modalVisibleChatinfo}
+        onClose={() => setModalVisibleChatinfo(false)}
+        isDarkMode={isDarkMode}
+      />
     </View>
   );
 };
@@ -187,10 +201,13 @@ export const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
+      paddingTop: Platform.OS === 'android' ? 60 : 0,
+
+
       // paddingVertical: 10,
 
 
-      borderBottomWidth: 0.5,
+      borderBottomWidth: 0.3,
       borderBottomColor: 'lightgrey',
     },
     stackHeader: {
@@ -200,9 +217,9 @@ export const getStyles = (isDarkMode) =>
       color: isDarkMode ? 'white' : 'black',
     },
     pinnedContainer: {
-      paddingHorizontal: 10,
+      // paddingHorizontal: 10,
       // paddingVertical: 1,
-      borderBottomWidth: 0.5,
+      borderBottomWidth: 0.3,
       borderBottomColor: 'lightgrey',
     },
     singlePinnedMessage: {
@@ -210,6 +227,8 @@ export const getStyles = (isDarkMode) =>
       justifyContent: 'space-between',
       paddingVertical: 5,
       borderBottomWidth: 0.2,
+      paddingHorizontal: 10,
+
     },
     singlePinnedMessageModal: {
       justifyContent: 'space-between',
@@ -226,7 +245,7 @@ export const getStyles = (isDarkMode) =>
     pinnedText: {
       fontSize: 12,
       fontFamily: 'Lato-Regular',
-      color:isDarkMode ? 'white' : 'black'
+      color: isDarkMode ? 'white' : 'black'
     },
     pinIcon: {
       marginLeft: 10,

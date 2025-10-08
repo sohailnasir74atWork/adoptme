@@ -497,6 +497,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 isAdmin={isAdmin}
               />
             )}
+            {!localState.isPro && <BannerAdComponent />}
             {user.id ? (
               <MessageInput
                 input={input}
@@ -536,7 +537,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           bannedUsers={bannedUsers}
         />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent />}
+      
 
       {/* {!localState.isPro && <View style={{ alignSelf: 'center' }}>
         {isAdVisible && (

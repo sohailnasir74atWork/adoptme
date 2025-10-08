@@ -83,7 +83,7 @@ export const LocalStateProvider = ({ children }) => {
     }
   }, [localState.data, localState.ggData]);
 
-  // console.log(localState.isPro)
+  console.log(localState.isPro)
   // Update local state and MMKV storage
   const updateLocalState = (key, value) => {
     setLocalState((prevState) => ({

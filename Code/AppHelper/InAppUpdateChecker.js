@@ -1,86 +1,47 @@
-import React, { useEffect, useState } from 'react';
-import { Platform, Alert, Linking } from 'react-native';
-import InAppUpdates from 'sp-react-native-in-app-updates';
+import { Platform, Linking } from 'react-native';
+import SpInAppUpdates, { IAUUpdateKind } from 'sp-react-native-in-app-updates';
+import DeviceInfo from 'react-native-device-info';
+import { getDatabase, ref, get } from '@react-native-firebase/database';
 
-let inAppUpdates;
+const ANDROID_UPDATER = (() => {
+  try { return new SpInAppUpdates(true); } catch { return undefined; }
+})();
 
-try {
-  inAppUpdates = new InAppUpdates(true); // true = enable logs
-} catch (error) {
-  console.warn('[Update Init] Failed to initialize InAppUpdates:', error);
-}
+const IOS_APP_ID = '6745400111';
+const IOS_STORE_DEEPLINK = `itms-apps://itunes.apple.com/app/id${IOS_APP_ID}`;
+const IOS_STORE_HTTP = `https://apps.apple.com/app/id${IOS_APP_ID}`;
 
-const AppUpdateChecker = () => {
-  const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
+export const checkForUpdate = async () => {
+  if (__DEV__) return;
 
-  useEffect(() => {
-    const checkForUpdate = async () => {
-      if (__DEV__) {
-        console.log('[Update Check] Skipped in development mode.');
-        return;
+  try {
+    // ---------- Android ----------
+    if (Platform.OS === 'android') {
+      if (!ANDROID_UPDATER) return;
+      const result = await ANDROID_UPDATER.checkNeedsUpdate();
+      if (result?.shouldUpdate) {
+        await ANDROID_UPDATER.startUpdate({ updateType: IAUUpdateKind.IMMEDIATE });
       }
-
-      if (Platform.OS === 'android') {
-        console.log('[Update Check] Starting Android update check...');
-        try {
-          if (!inAppUpdates) throw new Error('InAppUpdates not initialized');
-
-          const result = await inAppUpdates.checkNeedsUpdate();
-          console.log('[Update Check] Result:', result);
-
-          if (result?.shouldUpdate) {
-            await inAppUpdates.startUpdate({
-              updateType:
-                Platform.Version >= 21
-                  ? InAppUpdates.UPDATE_TYPE.IMMEDIATE
-                  : InAppUpdates.UPDATE_TYPE.FLEXIBLE,
-            });
-          } else {
-            console.log('[Update Check] No update needed.');
-          }
-        } catch (err) {
-          console.error('[Update Check] Android update check failed:', err?.message || err);
-        }
-      } else if (Platform.OS === 'ios') {
-        try {
-          // Check if an update is needed
-          const result = await inAppUpdates.checkNeedsUpdate();
-          if (result?.shouldUpdate) {
-            setIsUpdateAvailable(true); // Update available, set state to show popup
-          } else {
-            console.log('[iOS Update Check] No update needed.');
-          }
-        } catch (err) {
-          console.error('[iOS Update Fallback] Failed:', err?.message || err);
-        }
-      }
-    };
-
-    checkForUpdate();
-  }, []);
-
-  useEffect(() => {
-    if (isUpdateAvailable) {
-      Alert.alert(
-        'Update Available',
-        'A new version of the app is available. Please update it from the App Store.',
-        [
-          {
-            text: 'Update Now',
-            onPress: () => {
-              const storeUrl = 'https://apps.apple.com/us/app/app-name/id6745400111';
-              Linking.openURL(storeUrl).catch(error => {
-                console.warn('[iOS] Failed to open App Store:', error);
-              });
-            },
-          },
-          { text: 'Later', style: 'cancel' },
-        ]
-      );
+      return;
     }
-  }, [isUpdateAvailable]);
 
-  return null; // Pure logic component
+    // ---------- iOS ----------
+    const snap = await get(ref(getDatabase(), 'ios_version'));
+    const remoteValue = String(snap.val() ?? '').trim().toLowerCase();
+    if (!remoteValue) return;
+
+    // skip if backend flag says under review
+    if (remoteValue === 'underreview') return;
+
+    const localVersion = DeviceInfo.getVersion();
+    if (remoteValue !== localVersion) {
+      try {
+        await Linking.openURL(IOS_STORE_DEEPLINK);
+      } catch {
+        await Linking.openURL(IOS_STORE_HTTP);
+      }
+    }
+  } catch (err) {
+    console.error('Update check failed:', err?.message || err);
+  }
 };
-
-export default AppUpdateChecker;

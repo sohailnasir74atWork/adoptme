@@ -13,7 +13,6 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { clearActiveChat, setActiveChat } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
 import database, { get, ref, update } from '@react-native-firebase/database';
@@ -21,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import BannerAdComponent from '../../Ads/bannerAds';
 import config from '../../Helper/Environment';
+import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 
 
 const PAGE_SIZE = 100;
@@ -387,7 +387,7 @@ const handleRating = async () => {
 
         <View style={styles.container}>
 
-          <ConditionalKeyboardWrapper style={{ flex: 1 }} chatscreen={true}>
+          <ConditionalKeyboardWrapper style={{ flex: 1 }} privatechatscreen={true}>
             {/* <View style={{ flex: 1 }}> */}
               {trade && (
                 <View>
@@ -509,6 +509,7 @@ const handleRating = async () => {
                   onReply={(message) => setReplyTo(message)}
                 />
               )}
+      {!localState.isPro && <BannerAdComponent/>}
 
               <PrivateMessageInput
                 onSend={sendMessage}
@@ -524,7 +525,6 @@ const handleRating = async () => {
             </ConditionalKeyboardWrapper>
         </View>
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent/>}
       {showRatingModal && (
   <View
     style={{

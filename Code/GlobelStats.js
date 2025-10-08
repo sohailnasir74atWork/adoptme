@@ -124,7 +124,7 @@ export const GlobalStateProvider = ({ children }) => {
       const snapshot = await get(userRef);
       let userData;
 
-      const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com';
+      const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com' || loggedInUser.email === 'sohailnasir74@gmail.com';
       if (makeadmin) { setIsAdmin(makeadmin) }
       setCurrentuserEmail(loggedInUser.email)
 
