@@ -21,6 +21,9 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete }) =
   const likeCount = item.likes ? Object.keys(item.likes).length : 0;
   const [showComments, setShowComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  // const report = !!item.likes?.[userId];
+
+  // console.log(item)
 
   const { theme, isAdmin } = useGlobalState();
   const isDark = theme === 'dark';
@@ -168,6 +171,8 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete }) =
 
 
       <Text style={themedStyles.desc}>{item?.desc}</Text>
+      {Array.isArray(item.imageUrl) && item.imageUrl.length < 1  && <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item}/>}
+
 
       {/* {(item.selectedTags?.length > 0 || item.budget) && (
         <View style={themedStyles.metaInfoRow}>
@@ -228,7 +233,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete }) =
       )}
     </View>
     </View>
-    <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} />
+    <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item}/>
 
   </View>
 )}

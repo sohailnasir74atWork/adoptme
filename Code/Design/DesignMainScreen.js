@@ -44,8 +44,15 @@ const DesignFeedScreen = ({ route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [filterMyPosts, setFilterMyPosts] = useState(false);
   const [myPosts, setMyPosts] = useState([]);
+  const [bannedUsers, setBannedUsers] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const AD_FREQUENCY = 5;
+
+  useEffect(() => {
+    // if (!user?.id) return;
+    setBannedUsers(localState.bannedUsers)
+
+  }, [localState.bannedUsers]);
 
   function interleaveAds(items, showAds) {
      if (!showAds) return items;
@@ -152,7 +159,7 @@ const DesignFeedScreen = ({ route }) => {
       setRefreshing(false);
     }
   };
-
+// console.log(posts)
   useEffect(() => {
     fetchInitialPosts();
   }, []);
@@ -226,7 +233,8 @@ const DesignFeedScreen = ({ route }) => {
       createdAt: firestore.FieldValue.serverTimestamp(),
       likes: {},
       selectedTags,
-      email:currentUserEmail
+      email:currentUserEmail,
+      report:false
     };
     await firestore().collection('designPosts').add(post);
   };
@@ -260,10 +268,20 @@ const DesignFeedScreen = ({ route }) => {
   //   : filterMyPosts
   //     ? myPosts
   //     : posts;
-      const baseList = initialLoading ? skeletonArray : (filterMyPosts ? myPosts : posts);
-     const dataToRender = initialLoading
-        ? skeletonArray
-        : interleaveAds(baseList, !localState?.isPro);
+  const baseList = initialLoading ? skeletonArray : (filterMyPosts ? myPosts : posts);
+
+  // keep ads; drop banned users' posts
+  const filteredBase = useMemo(() => {
+    if (initialLoading) return skeletonArray;
+    if (!Array.isArray(bannedUsers) || bannedUsers.length === 0) return baseList;
+    return baseList.filter(item =>
+      item?.__type === 'ad' || !bannedUsers.includes(item?.userId)
+    );
+  }, [initialLoading, baseList, bannedUsers, skeletonArray]);
+  
+  const dataToRender = initialLoading
+    ? skeletonArray
+    : interleaveAds(filteredBase, false);
 
   const keyExtractor = (item, index) =>
     // initialLoading ? `skeleton-${index}` : item?.id || `post-${index}`;
