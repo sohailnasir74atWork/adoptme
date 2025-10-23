@@ -181,7 +181,7 @@ const handleRating = async () => {
 }
 
 
-  // const messageRef = useMemo(() => ref(appdatabase, `private_chat_new/${chatKey}/messages`), [chatKey]);
+
 
   const messagesRef = useMemo(() => database().ref(`private_messages/${chatKey}/messages`), [chatKey]);
   // console.log(selecte÷dUser)

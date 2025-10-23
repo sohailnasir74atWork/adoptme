@@ -116,7 +116,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       ...message,
       sender: message.sender?.trim() || 'Anonymous',
       text: hasText || '[No content]',
-      timestamp: hasText ? message.timestamp || Date.now() : Date.now() - 1 * 24 * 60 * 60 * 1000,
+      timestamp: hasText ? message.timestamp || Date.now() : Date.now(),
     };
   }, []);
 
