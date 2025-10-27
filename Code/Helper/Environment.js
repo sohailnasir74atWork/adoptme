@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 
 const isNoman = true; // Toggle this to switch configurations
 
-// noman app id = ca-app-pub-5740215782746766~5357820183
+// noman app id = ca-app-pub-1340655056171083~2708635067
 //waqas app id = ca-app-pub-3701208411582706~4267174419
 // noman pkgName= com.adoptmevaluescalc
 //waqas pkgName = com.bloxfruitstock
@@ -10,11 +10,11 @@ const rev_cat_id = Platform.OS === 'ios' ? 'appl_fJWiaIgCJxAeJnMeDtvGsHtEWfR' : 
 
 const config = {
   appName: isNoman ? 'Blox Fruit Values Calc' : 'Blox Fruit Stock',
-  andriodBanner: isNoman ? 'ca-app-pub-5740215782746766/7656147637' : 'ca-app-pub-3701208411582706/4133745803',
-  andriodIntestial: isNoman ? 'ca-app-pub-5740215782746766/3840191550' : 'ca-app-pub-3701208411582706/2820664136',
-  andriodRewarded: isNoman ? 'ca-app-pub-5740215782746766/6313459657' : 'ca-app-pub-3701208411582706/5175818984',
-  andriodOpenApp: isNoman ? 'ca-app-pub-5740215782746766/8634187387' : 'ca-app-pub-3701208411582706/2295931822',
-  andriodNative: isNoman ? 'ca-app-pub-5740215782746766/2941106105' : 'ca-app-pub-3701208411582706/5457520430',
+  andriodBanner: isNoman ? 'ca-app-pub-1340655056171083/3794486024' : 'ca-app-pub-3701208411582706/4133745803',
+  andriodIntestial: isNoman ? 'ca-app-pub-1340655056171083/7602595440' : 'ca-app-pub-3701208411582706/2820664136',
+  andriodRewarded: isNoman ? 'ca-app-pub-1340655056171083/8848228506' : 'ca-app-pub-3701208411582706/5175818984',
+  andriodOpenApp: isNoman ? 'ca-app-pub-1340655056171083/4976432101' : 'ca-app-pub-3701208411582706/2295931822',
+  andriodNative: isNoman ? 'ca-app-pub-1340655056171083/4915996008' : 'ca-app-pub-3701208411582706/5457520430',
   IOsIntestial: isNoman ? 'ca-app-pub-5740215782746766/5910517787' : '',
   IOsBanner: isNoman ? 'ca-app-pub-5740215782746766/9032339297' : '',
   IOsRewarded: isNoman ? 'ca-app-pub-5740215782746766/6913442412' : '',
