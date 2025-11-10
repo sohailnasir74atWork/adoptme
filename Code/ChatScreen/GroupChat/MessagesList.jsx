@@ -193,7 +193,7 @@ const MessagesList = ({
         )}
 
         {/* Render the message */}
-        <View
+       { !item.isReportedByUser && <View
           style={[
             item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
             item.senderId === user?.id ? styles.myMessage : styles.otherMessage, item.isReportedByUser && styles.reportedMessage,
@@ -353,7 +353,7 @@ const MessagesList = ({
           )}
 
 
-        </View>
+        </View>}
 
       </View>
     );

@@ -19,7 +19,7 @@ import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import { onValue, ref } from '@react-native-firebase/database';
+import database, { onValue, ref } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
@@ -116,7 +116,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       ...message,
       sender: message.sender?.trim() || 'Anonymous',
       text: hasText || '[No content]',
-      timestamp: hasText ? message.timestamp || Date.now() : Date.now(),
+      timestamp: hasText ? message.timestamp || Date.now() : Date.now() - 60 * 1000,
     };
   }, []);
 
@@ -419,7 +419,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     try {
       ref(appdatabase, 'chat_new').push({
         text: trimmedInput,
-        timestamp: Date.now(),
+        timestamp: database.ServerValue.TIMESTAMP,
         sender: user.displayName || 'Anonymous',
         senderId: user.id,
         avatar: user.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
