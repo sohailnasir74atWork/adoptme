@@ -1,4 +1,4 @@
-import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo } from '@react-native-firebase/database';
+import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo, limitToLast } from '@react-native-firebase/database';
 import { Alert } from 'react-native';
 
 // Initialize the database reference
@@ -324,13 +324,14 @@ export const handleDeleteLast300Messages = async (senderId) => {
     const chatQuery = query(
       ref(database, 'chat_new'),
       orderByChild('senderId'),
-      equalTo(senderId)
+      equalTo(senderId),
+      limitToLast(80)
     );
 
     const snapshot = await get(chatQuery);
 
     if (!snapshot.exists()) {
-      Alert.alert('⚠️ No messages found for this user.');
+      // Alert.alert('⚠️ No messages found for this user.');
       return;
     }
 
@@ -339,7 +340,7 @@ export const handleDeleteLast300Messages = async (senderId) => {
 
     const sorted = Object.entries(allMessages)
       .sort((a, b) => b[1].timestamp - a[1].timestamp)
-      .slice(0, 300);
+      .slice(0,60);
 
     const updates = {};
     sorted.forEach(([key]) => {
@@ -348,15 +349,15 @@ export const handleDeleteLast300Messages = async (senderId) => {
 
     await update(ref(database), updates);
 
-    Alert.alert('✅ Success', `Deleted ${sorted.length} messages for this user.`);
+    // Alert.alert('✅ Success', `Deleted ${sorted.length} messages for this user.`);
   } catch (error) {
-    console.error('🔥 Failed to delete messages:', error);
-    Alert.alert('❌ Error', 'Could not delete messages.');
+    // console.error('🔥 Failed to delete messages:', error);
+    // Alert.alert('❌ Error', 'Could not delete messages.');
   }
 };
 
 
-export const banUserwithEmail = async (email) => {
+export const banUserwithEmail = async (email, admin) => {
   const encodeEmail = (email) => email.replace(/\./g, '(dot)');
 
   try {
@@ -372,7 +373,8 @@ export const banUserwithEmail = async (email) => {
 
     if (snap.exists()) {
       const data = snap.val();
-      strikeCount = data.strikeCount + 1;
+      if(admin){strikeCount = data.strikeCount + 1;}
+      if(!admin){strikeCount = data.strikeCount}
 
       if (strikeCount === 2) bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
       //  if (strikeCount === 2) bannedUntil = Date.now() + 2  * 60 * 1000; // 3 days
@@ -385,7 +387,8 @@ export const banUserwithEmail = async (email) => {
       reason: `Strike ${strikeCount}`
     });
 
-    Alert.alert('User Banned', `Strike ${strikeCount} applied.`);
+    await handleDeleteLast300Messages()
+    if(admin){Alert.alert('User Banned', `Strike ${strikeCount} applied.`);}
   } catch (err) {
     console.error('Ban error:', err);
     Alert.alert('Error', 'Could not ban user.');

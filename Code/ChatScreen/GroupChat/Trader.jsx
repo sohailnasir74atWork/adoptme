@@ -19,7 +19,7 @@ import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { onValue, ref } from '@react-native-firebase/database';
+import database, { onValue, ref, remove } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
@@ -149,10 +149,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         // console.log('Banned User IDs:', bannedUserIds);
 
         const parsedMessages = Object.entries(data)
-          .map(([key, value]) => validateMessage({ id: key, ...value }))
-          .filter((msg) => !bannedUsers.includes(msg.senderId))
-          .sort((a, b) => b.timestamp - a.timestamp); // Descending order
-
+        .map(([key, value]) => validateMessage({ id: key, ...value })).filter(Boolean).filter((msg) => !bannedUsers.includes(msg.senderId)).sort((a, b) => b.timestamp - a.timestamp);
+  
         // console.log('Parsed Messages:', parsedMessages);
 
         if (parsedMessages.length === 0 && !reset) {

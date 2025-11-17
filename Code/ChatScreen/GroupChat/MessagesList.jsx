@@ -328,7 +328,7 @@ const MessagesList = ({
                   <MenuOption onSelect={() => onDeleteAllMessage(item?.senderId)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Delete All</Text>
                   </MenuOption>
-                  <MenuOption onSelect={() => banUserwithEmail(item.currentUserEmail)} style={styles.deleteButton}>
+                 <MenuOption onSelect={() => banUserwithEmail(item.currentUserEmail, item.isAdmin)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Block</Text>
                   </MenuOption>
                   <MenuOption onSelect={() => unbanUserWithEmail(item.currentUserEmail)} style={styles.deleteButton}>
@@ -337,6 +337,7 @@ const MessagesList = ({
                   <MenuOption onSelect={() => onPinMessage(item)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Pin Message</Text>
                   </MenuOption>
+                  
                   {/* {isAdmin && (
                     <MenuOption onSelect={() => makeadmin(item.senderId)} style={styles.deleteButton}>
                       <Text style={styles.adminTextAction}>Make Admin</Text>

@@ -35,7 +35,7 @@ const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, is
   // console.log(isGG, 'VALUES')
 
   // Categories that only use 'value' field
-  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
+  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'strollers', 'food', 'gifts'];
   const simpleValueCategoriesgg = ['petWear', 'foods', 'vehicles', 'toys', 'gifts', 'strollers', 'stickers'];
 
 
@@ -116,8 +116,8 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const CATEGORIES = useMemo(() => {
     return localState.isGG
-      ? ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS', 'FAVORITES']
-      : ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
+      ? ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS', 'FAVORITES', ]
+      : ['ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR','STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'FAVORITES'];
   }, [localState.isGG]);
 
   const tradeStatus = useMemo(() =>
@@ -200,8 +200,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const selectItem = useCallback((item) => {
     if (!item) return;
-    // console.log(item);
-
+console.log(item)
     triggerHapticFeedback('impactLight');
     const value = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor);
     const selectedItem = {
@@ -230,8 +229,8 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
+
     const callbackfunction = ()=>{}
-    console.log(index)
     // if()
       requestAnimationFrame(() => {
         // Step 4: Wait for modal animation to finish before showing ad
@@ -262,6 +261,8 @@ const HomeScreen = ({ selectedTheme }) => {
 
       if (isHas) {
         setHasItems(updatedItems);
+        console.log(item)
+
         updateTotal(item, 'has', false, true);
 
 

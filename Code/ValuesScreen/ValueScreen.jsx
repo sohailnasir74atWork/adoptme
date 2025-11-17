@@ -109,7 +109,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
 
 
   const hideBadge = !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
-  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', , 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS','STROLLERS', 'STICKERS'];
 
   const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles }) => {
     const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
@@ -287,7 +287,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
 
-    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other'];
+    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
     if (simpleValueCategories.includes(item.type)) {
       return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
     }

@@ -13,6 +13,8 @@ import { useGlobalState } from "../GlobelStats";
 import config from "../Helper/Environment";
 import { ref, get, update, remove } from "@react-native-firebase/database";
 import { useTranslation } from "react-i18next";
+import { banUserwithEmail } from "./utils";
+
 
 const ReportPopup = ({ visible, message, onClose }) => {
   const [selectedReason, setSelectedReason] = useState("Spam");
@@ -45,6 +47,7 @@ const ReportPopup = ({ visible, message, onClose }) => {
   
         if (reportCount >= 1) {
           // ✅ Second report: delete the message
+          banUserwithEmail(message.currentUserEmail)
           return remove(messageRef).then(() => ({ action: "deleted" }));
         } else {
           // ✅ First report: set to 1 (don’t increment beyond this)

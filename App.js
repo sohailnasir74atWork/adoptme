@@ -15,7 +15,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SettingsScreen from './Code/SettingScreen/Setting';
 import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
-import { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
+import { AdsConsent, AdsConsentStatus, MobileAds } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
 import {
   MyDarkTheme,
@@ -160,6 +160,8 @@ function App() {
   const handleUserConsent = async () => {
     try {
       const consentInfo = await AdsConsent.requestInfoUpdate();
+      await MobileAds().initialize();  
+
   
       if (
         consentInfo.status === AdsConsentStatus.OBTAINED ||

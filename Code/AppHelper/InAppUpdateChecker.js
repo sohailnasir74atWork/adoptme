@@ -12,8 +12,8 @@ const IOS_STORE_DEEPLINK = `itms-apps://itunes.apple.com/app/id${IOS_APP_ID}`;
 const IOS_STORE_HTTP = `https://apps.apple.com/app/id${IOS_APP_ID}`;
 
 export const checkForUpdate = async () => {
-  if (__DEV__) return;
-
+  // if (__DEV__) return;
+// 
   try {
     // ---------- Android ----------
     if (Platform.OS === 'android') {
@@ -28,12 +28,16 @@ export const checkForUpdate = async () => {
     // ---------- iOS ----------
     const snap = await get(ref(getDatabase(), 'ios_version'));
     const remoteValue = String(snap.val() ?? '').trim().toLowerCase();
+    const localVersion = DeviceInfo.getVersion();
+    // console.log(localVersion)
+   
+
+
     if (!remoteValue) return;
 
     // skip if backend flag says under review
     if (remoteValue === 'underreview') return;
 
-    const localVersion = DeviceInfo.getVersion();
     if (remoteValue !== localVersion) {
       try {
         await Linking.openURL(IOS_STORE_DEEPLINK);

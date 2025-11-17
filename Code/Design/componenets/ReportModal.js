@@ -7,7 +7,7 @@ import { showMessage } from 'react-native-flash-message';
 import firestore from '@react-native-firebase/firestore';
 import { useLocalState } from '../../LocalGlobelStats';
 
-const ReportModal = ({ visible, onClose, item }) => {
+const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
   const [reportText, setReportText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const {updateLocalState, localState} = useLocalState()
@@ -54,10 +54,11 @@ const ReportModal = ({ visible, onClose, item }) => {
   //     ]
   //   );
   // };
+  const REPORT_THRESHOLD = 2; 
 
   const handleSubmit = async () => {
     if (submitting) return;
-    if (!item?.id) {
+    if (!item || !item.id) {
       showMessage({ message: 'Invalid post.', type: 'danger' });
       return;
     }
@@ -71,22 +72,53 @@ const ReportModal = ({ visible, onClose, item }) => {
 
     try {
       // 1) Atomically check 'report' and update/delete
-      const result = await firestore().runTransaction(async tx => {
+      const txResult = await firestore().runTransaction(async (tx) => {
         const snap = await tx.get(postRef);
-        if (!snap.exists) throw new Error('Post not found');
-
-        const alreadyReported = !!snap.get('report'); // your field from uploader
-        if (!alreadyReported) {
-          tx.update(postRef, {
-            report: true
-          });
-          // return { action: 'flagged' };
-        } else {
-          tx.delete(postRef);
-          // return { action: 'deleted' };
+        if (!snap.exists) {
+          return { status: 'missing' };
         }
+  
+        const currentCount = snap.get('reportCount') || 0;
+        const nextCount = currentCount + 1;
+  
+        // Keep legacy boolean 'report' if your UI needs it
+        const updates = {
+          reportCount: nextCount,
+          report: true,
+        };
+  
+        // prevent double-ban by storing a flag
+        const alreadyBanned = !!snap.get('banned');
+        const shouldBan = !alreadyBanned && nextCount >= REPORT_THRESHOLD;
+  
+        if (shouldBan) {
+          updates.banned = true; // mark so future transactions don't re-ban
+        }
+  
+        tx.update(postRef, updates);
+  
+        return {
+          status: 'ok',
+          shouldBan,
+          email: snap.get('email') || null,
+          userId: snap.get('userId') || null,
+        };
       });
-
+  
+      if (txResult.status === 'missing') {
+        showMessage({ message: 'Post not found.', type: 'danger' });
+        return;
+      }
+  
+      // Side-effects OUTSIDE the transaction to avoid retries breaking things
+      if (txResult.shouldBan && txResult.email && txResult.userId) {
+        try {
+          await banUserwithEmail(txResult.email, txResult.userId);
+        } catch (err) {
+          console.error('Ban error:', err);
+          // optional: decide if you want to unset 'banned' on the post here
+        }
+      }
       await updateLocalState('bannedUsers', [...localState.bannedUsers, item.userId]);
       setReportText('');
       onClose();

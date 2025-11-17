@@ -96,7 +96,31 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
   
+  const deleteUsersLatestPosts = async (userId, n = 15) => {
+    if (!userId) throw new Error('userId is required');
+  
+    const q = firestore()
+      .collection('designPosts')
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(n);
 
+      // console.log(q)
+  
+    const snap = await q.get();
+    if (snap.empty) return [];
+  
+    const batch = firestore().batch();
+    const ids = [];
+  
+    snap.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+      ids.push(doc.id);
+    });
+  
+    await batch.commit();
+    return ids;
+  };
   // useEffect(() => {
   //   nativeAdPool.fillIfNeeded();
   //   return () => nativeAdPool.destroyAll();
@@ -258,6 +282,8 @@ const DesignFeedScreen = ({ route }) => {
         localState={localState}
         appdatabase={appdatabase}
         onDelete={handleDeletePost}
+        onDeleteAll={deleteUsersLatestPosts}
+
 
       />
     );
