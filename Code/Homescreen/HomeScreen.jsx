@@ -321,7 +321,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
             requestAnimationFrame(() => {
               setTimeout(() => {
                 try {
-                  InterstitialAdManager.showAd(callbackfunction);
+                  callbackfunction()
                 } catch (err) {
                   console.warn('[AdManager] Failed to show ad:', err);
                   callbackfunction();
@@ -783,9 +783,9 @@ await addDoc(tradesCollection, newTrade);
                       </View>
                     </View>
                     <View style={styles.labelContainer}>
-                      <Text style={styles.offerLabel}>YOUR OFFER</Text>
+                      <Text style={styles.offerLabel}>OFFER</Text>
                       <Text style={styles.dividerText}>|</Text>
-                      <Text style={styles.offerLabel}>THEIR OFFER</Text>
+                      <Text style={styles.offerLabel}>WANT</Text>
                     </View>
                   </View>
                 </View>

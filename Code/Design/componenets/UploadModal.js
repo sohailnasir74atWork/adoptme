@@ -78,7 +78,7 @@ const pickAndCompress = useCallback(async () => {
       try {
         const uri = await CompressorImage.compress(asset.uri, {
           maxWidth: 400,
-          quality: 0.8,
+          quality: 1,
         });
         compressed.push(uri);
       } catch (error) {

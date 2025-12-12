@@ -387,7 +387,7 @@ export const GlobalStateProvider = ({ children }) => {
           if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
             throw new Error('Non-GG CDN returned invalid data');
           }
-          console.log(JSON.stringify(json))
+          // console.log(JSON.stringify(json))
           await updateLocalState('data', JSON.stringify(json));
         } catch (err) {
           console.warn('⚠️ Non-GG CDN failed, fallback to Firebase:', err.message);
@@ -470,7 +470,7 @@ export const GlobalStateProvider = ({ children }) => {
     };
   }, [user?.id]);
 
-  console.log(user)
+  // console.log(user)
 
   const contextValue = useMemo(
     () => ({

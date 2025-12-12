@@ -43,6 +43,7 @@ const HDWallpaperScreen = () => {
   const [fullImageLoading, setFullImageLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [likeData, setLikeData] = useState({});
+  const [loadMoreClickCount, setLoadMoreClickCount] = useState(0); // Track load more clicks for ad logic
 
   // 🔢 Listen to Firebase count (pic_numbers)
   useEffect(() => {
@@ -228,6 +229,7 @@ const HDWallpaperScreen = () => {
     setLoadingIds({});
     setSelected(null);
     setFullImageLoading(false);
+    setLoadMoreClickCount(0); // Reset load more click counter
 
     setRefreshing(false);
   }, [totalPics]);
@@ -306,22 +308,32 @@ const HDWallpaperScreen = () => {
       });
     };
 
-    setTimeout(() => {
-      if (!localState.isPro) {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            try {
-              InterstitialAdManager.showAd(callbackfunction);
-            } catch (err) {
-              console.warn("[AdManager] Failed to show ad:", err);
-              callbackfunction();
-            }
-          }, 400);
-        });
-      } else {
-        callbackfunction();
-      }
-    }, 500);
+    // Increment click count and check if we should show ad
+    setLoadMoreClickCount((prev) => {
+      const newCount = prev + 1;
+      const isEvenClick = newCount % 2 === 0; // 2nd, 4th, 6th, etc.
+      
+      setTimeout(() => {
+        if (!localState.isPro && isEvenClick) {
+          // Show ad on even clicks (2nd, 4th, 6th, etc.)
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              try {
+                InterstitialAdManager.showAd(callbackfunction);
+              } catch (err) {
+                console.warn("[AdManager] Failed to show ad:", err);
+                callbackfunction();
+              }
+            }, 400);
+          });
+        } else {
+          // No ad on odd clicks (1st, 3rd, 5th, etc.) or if user is pro
+          callbackfunction();
+        }
+      }, 500);
+      
+      return newCount;
+    });
   }, [totalPics, localState.isPro]);
 
   const renderItem = useCallback(

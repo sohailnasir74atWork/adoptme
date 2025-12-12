@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -6,16 +6,15 @@ import {
   TouchableOpacity,
   Pressable,
   Image,
-  Platform,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { getStyles } from '../../SettingScreen/settingstyle';
 import { useLocalState } from '../../LocalGlobelStats';
-import { Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 import { mixpanel } from '../../AppHelper/MixPenel';
@@ -30,10 +29,11 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,           // ✅ moved here
 } from '@react-native-firebase/firestore';
 import { ref, get } from '@react-native-firebase/database';
 
-
+const REVIEWS_PAGE_SIZE = 5; // how many reviews per page
 
 const ProfileBottomDrawer = ({
   isVisible,
@@ -42,10 +42,10 @@ const ProfileBottomDrawer = ({
   selectedUser,
   isOnline,
   bannedUsers,
-  fromPvtChat
+  fromPvtChat,
 }) => {
-  const { theme, user, firestoreDB, appdatabase } = useGlobalState();
-  const { updateLocalState,  } = useLocalState();
+  const { theme, firestoreDB, appdatabase } = useGlobalState();
+  const { updateLocalState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
 
@@ -60,24 +60,25 @@ const ProfileBottomDrawer = ({
   const isBlock = bannedUsers?.includes(selectedUserId);
 
   // ⭐ rating summary (from RTDB /averageRatings)
-  const [ratingSummary, setRatingSummary] = useState(null); // { value, count }
-  const [createdAt, setCreatedAt] = useState(null); // { value, count }
-
+  const [ratingSummary, setRatingSummary] = useState(null);
   const [loadingRating, setLoadingRating] = useState(false);
+
+  // joined text
+  const [createdAtText, setCreatedAtText] = useState(null);
 
   // 📝 reviews list (from Firestore /reviews where toUserId == selectedUserId)
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [lastReviewDoc, setLastReviewDoc] = useState(null);
+  const [hasMoreReviews, setHasMoreReviews] = useState(false);
 
   // 🐾 pets (owned + wishlist) from Firestore doc /reviews/{userId}
   const [ownedPets, setOwnedPets] = useState([]);
   const [wishlistPets, setWishlistPets] = useState([]);
   const [loadingPets, setLoadingPets] = useState(false);
-  // state
-const [loadDetails, setLoadDetails] = useState(false);
-const [createdAtText, setCreatedAtText] = useState(null);
 
-
+  // toggle details
+  const [loadDetails, setLoadDetails] = useState(false);
 
   // ─────────────────────────────────────────────
   // Clipboard
@@ -87,31 +88,51 @@ const [createdAtText, setCreatedAtText] = useState(null);
     showSuccessMessage(t('value.copy'), 'Copied to Clipboard');
     mixpanel.track('Code UserName', { UserName: code });
   };
+
   const formatCreatedAt = (timestamp) => {
     if (!timestamp) return null;
-  
+
     const now = Date.now();
     const diffMs = now - timestamp;
-  
-    if (diffMs < 0) return null; // future / invalid
-  
+
+    if (diffMs < 0) return null;
+
     const minutes = Math.floor(diffMs / 60000);
     if (minutes < 1) return 'Just now';
     if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
-  
+
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  
+
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-  
+
     const months = Math.floor(days / 30);
     if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
-  
+
     const years = Math.floor(months / 12);
     return `${years} year${years === 1 ? '' : 's'} ago`;
   };
-  
+
+  const getTimestampMs = (ts) => {
+    if (!ts) return null;
+
+    // Firestore Timestamp instance
+    if (typeof ts.toDate === 'function') {
+      return ts.toDate().getTime();
+    }
+
+    // { seconds, nanoseconds }
+    if (typeof ts.seconds === 'number') {
+      return ts.seconds * 1000 + Math.floor((ts.nanoseconds || 0) / 1e6);
+    }
+
+    // already a number?
+    if (typeof ts === 'number') return ts;
+
+    return null;
+  };
+
   // ─────────────────────────────────────────────
   // Ban / Unban
   const handleBanToggle = async () => {
@@ -164,6 +185,7 @@ const [createdAtText, setCreatedAtText] = useState(null);
     if (startChat) startChat();
   };
 
+  // Reset when drawer closes
   useEffect(() => {
     if (!isVisible) {
       setLoadDetails(false);
@@ -171,16 +193,19 @@ const [createdAtText, setCreatedAtText] = useState(null);
       setOwnedPets([]);
       setWishlistPets([]);
       setReviews([]);
+      setLastReviewDoc(null);
+      setHasMoreReviews(false);
+      setCreatedAtText(null);
     }
   }, [isVisible]);
-  
+
   // ─────────────────────────────────────────────
-  // Fetch profile data when drawer opens
+  // Load rating summary + joined
   useEffect(() => {
     if (!isVisible || !selectedUserId || !loadDetails) return;
-  
+
     let isMounted = true;
-  
+
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
@@ -188,10 +213,9 @@ const [createdAtText, setCreatedAtText] = useState(null);
           get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
         ]);
-    
+
         if (!isMounted) return;
-    
-        // ⭐ rating
+
         if (avgSnap.exists()) {
           const val = avgSnap.val();
           setRatingSummary({
@@ -201,11 +225,9 @@ const [createdAtText, setCreatedAtText] = useState(null);
         } else {
           setRatingSummary(null);
         }
-    
-        // 🕒 createdAt
+
         if (createdSnap.exists()) {
-          const raw = createdSnap.val(); // should be Date.now() (number) from your code
-    
+          const raw = createdSnap.val();
           let ts = typeof raw === 'number' ? raw : Date.parse(raw);
           if (!Number.isNaN(ts)) {
             setCreatedAtText(formatCreatedAt(ts));
@@ -225,17 +247,30 @@ const [createdAtText, setCreatedAtText] = useState(null);
         if (isMounted) setLoadingRating(false);
       }
     };
-    
-  
+
+    loadRatingSummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isVisible, selectedUserId, loadDetails, appdatabase]);
+
+  // ─────────────────────────────────────────────
+  // Load pets
+  useEffect(() => {
+    if (!isVisible || !selectedUserId || !loadDetails) return;
+
+    let isMounted = true;
+
     const loadPets = async () => {
       setLoadingPets(true);
       try {
         const reviewDocSnap = await getDoc(
-          doc(firestoreDB, 'reviews', selectedUserId)
+          doc(firestoreDB, 'reviews', selectedUserId),
         );
-        
+
         if (!isMounted) return;
-        
+
         if (reviewDocSnap.exists) {
           const data = reviewDocSnap.data() || {};
           setOwnedPets(Array.isArray(data.ownedPets) ? data.ownedPets : []);
@@ -256,43 +291,71 @@ const [createdAtText, setCreatedAtText] = useState(null);
         if (isMounted) setLoadingPets(false);
       }
     };
-  
-    const loadReviews = async () => {
-      setLoadingReviews(true);
-      try {
-        const snap = await getDocs(
-          query(
-            collection(firestoreDB, 'reviews'),
-            where('toUserId', '==', selectedUserId),
-            orderBy('updatedAt', 'desc'),
-            limit(10)
-          )
-        );
-        if (!isMounted) return;
-  
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-  
-        setReviews(list);
-      } catch (err) {
-        console.log('Reviews load error:', err);
-        if (isMounted) setReviews([]);
-      } finally {
-        if (isMounted) setLoadingReviews(false);
-      }
-    };
-  
-    loadRatingSummary();
+
     loadPets();
-    loadReviews();
-  
+
     return () => {
       isMounted = false;
     };
-  }, [isVisible, selectedUserId, loadDetails]);
-  
+  }, [isVisible, selectedUserId, loadDetails, firestoreDB]);
+
+  // ─────────────────────────────────────────────
+  // Load reviews (paged) — OUTSIDE useEffect so handleLoadMoreReviews can use it
+  const loadReviews = async (reset = false) => {
+    if (!firestoreDB || !selectedUserId) return;
+
+    setLoadingReviews(true);
+    try {
+      let q = query(
+        collection(firestoreDB, 'reviews'),
+        where('toUserId', '==', selectedUserId),
+        orderBy('updatedAt', 'desc'),
+        limit(REVIEWS_PAGE_SIZE),
+      );
+
+      if (!reset && lastReviewDoc) {
+        q = query(
+          collection(firestoreDB, 'reviews'),
+          where('toUserId', '==', selectedUserId),
+          orderBy('updatedAt', 'desc'),
+          startAfter(lastReviewDoc),
+          limit(REVIEWS_PAGE_SIZE),
+        );
+      }
+
+      const snap = await getDocs(q);
+
+      const batch = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      setReviews((prev) => (reset ? batch : [...prev, ...batch]));
+
+      const newLastDoc = snap.docs[snap.docs.length - 1] || null;
+      setLastReviewDoc(newLastDoc);
+      setHasMoreReviews(snap.size === REVIEWS_PAGE_SIZE);
+    } catch (err) {
+      console.log('Reviews load error:', err);
+      if (reset) setReviews([]);
+      setHasMoreReviews(false);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  // initial reviews load when opening details
+  useEffect(() => {
+    if (!isVisible || !selectedUserId || !loadDetails) return;
+    // reset pagination when details open
+    setLastReviewDoc(null);
+    loadReviews(true);
+  }, [isVisible, selectedUserId, loadDetails, firestoreDB]); // firestoreDB in deps is fine
+
+  const handleLoadMoreReviews = () => {
+    if (!hasMoreReviews || loadingReviews) return;
+    loadReviews(false);
+  };
 
   // ─────────────────────────────────────────────
   // Helpers for rendering
@@ -310,14 +373,14 @@ const [createdAtText, setCreatedAtText] = useState(null);
   };
 
   const renderPetBubble = (pet, index) => {
-    const valueType = (pet.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+    const valueType = (pet.valueType || 'd').toLowerCase();
     let rarityBg = '#FF6666';
     if (valueType === 'n') rarityBg = '#2ecc71';
     if (valueType === 'm') rarityBg = '#9b59b6';
 
     return (
       <View
-      key={`${pet.id || pet.name}-${index}`}
+        key={`${pet.id || pet.name}-${index}`}
         style={{
           width: 42,
           height: 42,
@@ -447,7 +510,8 @@ const [createdAtText, setCreatedAtText] = useState(null);
                         source={require('../../../assets/pro.png')}
                         style={{ width: 14, height: 14 }}
                       />
-                    )}{' '}{selectedUser?.flage}{'   '}
+                    )}{' '}
+                    {selectedUser?.flage}{'   '}
                     <Icon
                       name="copy-outline"
                       size={16}
@@ -485,278 +549,360 @@ const [createdAtText, setCreatedAtText] = useState(null);
             </View>
 
             {/* ⭐ Rating summary */}
-           {loadDetails &&  <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              {loadingRating ? (
-                <ActivityIndicator size="small" color={config.colors.primary} />
-              ) : ratingSummary ? (
-                <>
-                  {renderStars(ratingSummary.value)}
+            {loadDetails && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                {loadingRating ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={config.colors.primary}
+                  />
+                ) : ratingSummary ? (
+                  <>
+                    {renderStars(ratingSummary.value)}
+                    <Text
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 12,
+                        color: isDarkMode ? '#e5e7eb' : '#4b5563',
+                      }}
+                    >
+                      {ratingSummary.value.toFixed(1)} / 5 ·{' '}
+                      {ratingSummary.count} rating
+                      {ratingSummary.count === 1 ? '' : 's'}
+                    </Text>
+                  </>
+                ) : (
                   <Text
                     style={{
-                      marginLeft: 6,
                       fontSize: 12,
-                      color: isDarkMode ? '#e5e7eb' : '#4b5563',
+                      color: isDarkMode ? '#9ca3af' : '#6b7280',
                     }}
                   >
-                    {ratingSummary.value.toFixed(1)} / 5 ·{' '}
-                    {ratingSummary.count} rating
-                    {ratingSummary.count === 1 ? '' : 's'}
+                    Not rated yet
                   </Text>
-                </>
-              ) : (
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
-                  }}
-                >
-                  Not rated yet
-                </Text>
-              )}
-              {!loadingRating && <Text
-  style={{
-    fontSize: 10,
-    backgroundColor: isDarkMode ? '#FACC15' : '#16A34A', 
-    paddingHorizontal:5,
-    borderRadius:4,
-    paddingVertical:1,
-    color:'white',
-    marginLeft:5
-    // paddingBottom:5
-  }}
->
-  Joined {createdAtText}
-</Text>}
-            </View>}
-            
+                )}
+
+                {!loadingRating && createdAtText && (
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      backgroundColor: isDarkMode ? '#FACC15' : '#16A34A',
+                      paddingHorizontal: 5,
+                      borderRadius: 4,
+                      paddingVertical: 1,
+                      color: 'white',
+                      marginLeft: 5,
+                    }}
+                  >
+                    Joined {createdAtText}
+                  </Text>
+                )}
+              </View>
+            )}
+
             {/* 🐾 Pets section */}
-           {loadDetails && <View
-              style={{
-                borderRadius: 12,
-                padding: 10,
-                backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
-                marginBottom: 12,
-              }}
-            >
-              <Text
+            {loadDetails && (
+              <View
                 style={{
-                  fontSize: 13,
-                  fontWeight: '600',
-                  marginBottom: 6,
-                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
+                  marginBottom: 12,
                 }}
               >
-                Pets
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    marginBottom: 6,
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                  }}
+                >
+                  Pets
+                </Text>
 
-              {loadingPets ? (
-                <ActivityIndicator size="small" color={config.colors.primary} />
-              ) : (
-                <>
-                  {/* Owned */}
-                  <View style={{ marginBottom: 8 }}>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Text
+                {loadingPets ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={config.colors.primary}
+                  />
+                ) : (
+                  <>
+                    {/* Owned */}
+                    <View style={{ marginBottom: 8 }}>
+                      <View
                         style={{
-                          fontSize: 12,
-                          fontWeight: '500',
-                          color: isDarkMode ? '#e5e7eb' : '#111827',
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          marginBottom: 4,
                         }}
                       >
-                        Owned Pets
-                      </Text>
-                    </View>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '500',
+                            color: isDarkMode ? '#e5e7eb' : '#111827',
+                          }}
+                        >
+                          Owned Pets
+                        </Text>
+                      </View>
 
-                    {ownedPets.length === 0 ? (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280',
-                        }}
-                      >
-                        No pets listed.
-                      </Text>
-                    ) : (
-                      <ScrollView
-  horizontal
-  showsHorizontalScrollIndicator={false}
-  contentContainerStyle={{ paddingRight: 6 }}
->
-  <View style={{ flexDirection: 'row' }}>
-    {ownedPets.map((pet, index) => renderPetBubble(pet, index))}
-
-    
-      
-  
-  </View>
-</ScrollView>
-
-                    )}
-                  </View>
-
-                  {/* Wishlist */}
-                  <View>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '500',
-                          color: isDarkMode ? '#e5e7eb' : '#111827',
-                        }}
-                      >
-                        Wishlist
-                      </Text>
-                    </View>
-
-                    {wishlistPets.length === 0 ? (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280',
-                        }}
-                      >
-                        No wishlist pets yet.
-                      </Text>
-                    ) : (
-                      <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ paddingRight: 6 }}
-                    >
-                      <View style={{ flexDirection: 'row' }}>
-                        {wishlistPets.map((pet, index) => renderPetBubble(pet, index))}
+                      {ownedPets.length === 0 ? (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280',
+                          }}
+                        >
+                          No pets listed.
+                        </Text>
+                      ) : (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ paddingRight: 6 }}
+                        >
+                          <View style={{ flexDirection: 'row' }}>
+                            {ownedPets.map((pet, index) =>
+                              renderPetBubble(pet, index),
+                            )}
                           </View>
-                          </ScrollView>
-                    )}
-                  </View>
-                </>
-              )}
-            </View>}
-           
+                        </ScrollView>
+                      )}
+                    </View>
 
+                    {/* Wishlist */}
+                    <View>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          marginBottom: 4,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '500',
+                            color: isDarkMode ? '#e5e7eb' : '#111827',
+                          }}
+                        >
+                          Wishlist
+                        </Text>
+                      </View>
+
+                      {wishlistPets.length === 0 ? (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280',
+                          }}
+                        >
+                          No wishlist pets yet.
+                        </Text>
+                      ) : (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ paddingRight: 6 }}
+                        >
+                          <View style={{ flexDirection: 'row' }}>
+                            {wishlistPets.map((pet, index) =>
+                              renderPetBubble(pet, index),
+                            )}
+                          </View>
+                        </ScrollView>
+                      )}
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
 
             {/* 📝 Reviews section */}
-           {loadDetails &&  <View
-              style={{
-                borderRadius: 12,
-                padding: 10,
-                backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
-                marginBottom: 16,
-              }}
-            >
-              <Text
+            {loadDetails && (
+              <View
                 style={{
-                  fontSize: 13,
-                  fontWeight: '600',
-                  marginBottom: 6,
-                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
+                  marginBottom: 16,
                 }}
               >
-                Recent Reviews
-              </Text>
-
-              {loadingReviews ? (
-                <ActivityIndicator size="small" color={config.colors.primary} />
-              ) : reviews.length === 0 ? (
                 <Text
                   style={{
-                    fontSize: 11,
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
+                    fontSize: 13,
+                    fontWeight: '600',
+                    marginBottom: 6,
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
                   }}
                 >
-                  No reviews yet.
+                  Recent Reviews
                 </Text>
-              ) : (
-                reviews.map((rev) => (
-                  <View
-                    key={rev.id}
+
+                {loadingReviews && reviews.length === 0 ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={config.colors.primary}
+                  />
+                ) : reviews.length === 0 ? (
+                  <Text
                     style={{
-                      paddingVertical: 6,
-                      borderBottomWidth: 1,
-                      borderBottomColor: isDarkMode
-                        ? '#1f2937'
-                        : '#e5e7eb',
+                      fontSize: 11,
+                      color: isDarkMode ? '#9ca3af' : '#6b7280',
                     }}
                   >
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: 2,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '600',
-                          color: isDarkMode ? '#e5e7eb' : '#111827',
-                        }}
-                      >
-                        {rev.userName || 'Anonymous'}
-                      </Text>
-                      {renderStars(rev.rating || 0)}
-                    </View>
+                    No reviews yet.
+                  </Text>
+                ) : (
+                  <>
+                    {reviews.map((rev) => {
+                      const tsMs = getTimestampMs(
+                        rev.updatedAt || rev.createdAt,
+                      );
+                      const timeLabel = tsMs ? formatCreatedAt(tsMs) : null;
 
-                    {!!rev.review && (
-                      <Text
+                      return (
+                        <View
+                          key={rev.id}
+                          style={{
+                            paddingVertical: 6,
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode
+                              ? '#1f2937'
+                              : '#e5e7eb',
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 2,
+                            }}
+                          >
+                            <View>
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: '600',
+                                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                                }}
+                              >
+                                {rev.userName || 'Anonymous'}
+                              </Text>
+                              {timeLabel && (
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    color: isDarkMode
+                                      ? '#9ca3af'
+                                      : '#9ca3af',
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {timeLabel}
+                                </Text>
+                              )}
+                            </View>
+
+                            {renderStars(rev.rating || 0)}
+                          </View>
+
+                          {!!rev.review && (
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: isDarkMode ? '#d1d5db' : '#4b5563',
+                              }}
+                            >
+                              {rev.review}
+                            </Text>
+                          )}
+
+                          {rev.edited && (
+                            <Text
+                              style={{
+                                fontSize: 10,
+                                color: isDarkMode ? '#9ca3af' : '#9ca3af',
+                                marginTop: 2,
+                              }}
+                            >
+                              Edited
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+
+                    {hasMoreReviews && !loadingReviews && (
+                      <TouchableOpacity
+                        onPress={handleLoadMoreReviews}
                         style={{
-                          fontSize: 11,
-                          color: isDarkMode ? '#d1d5db' : '#4b5563',
+                          marginTop: 8,
+                          alignSelf: 'center',
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
                         }}
                       >
-                        {rev.review}
-                      </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: isDarkMode ? '#e5e7eb' : '#111827',
+                          }}
+                        >
+                          Load more reviews
+                        </Text>
+                      </TouchableOpacity>
                     )}
 
-                    {rev.edited && (
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          color: isDarkMode ? '#9ca3af' : '#9ca3af',
-                          marginTop: 2,
-                        }}
-                      >
-                        Edited
-                      </Text>
+                    {loadingReviews && hasMoreReviews && (
+                      <ActivityIndicator
+                        size="small"
+                        color={config.colors.primary}
+                        style={{ marginTop: 6, alignSelf: 'center' }}
+                      />
                     )}
-                  </View>
-                ))
-              )}
-            </View>}
+                  </>
+                )}
+              </View>
+            )}
 
-            {/* Buttons */}
-           {!loadDetails &&  <TouchableOpacity
-  style={styles.saveButtonProfile}
-  onPress={() => setLoadDetails(true)}
->
-  <Text style={[styles.saveButtonTextProfile, { color: isDarkMode ? 'white' : 'black',}]}>
-    View Detail Profile
-  </Text>
-</TouchableOpacity>}
+            {/* View details button */}
+            {!loadDetails && (
+              <TouchableOpacity
+                style={styles.saveButtonProfile}
+                onPress={() => setLoadDetails(true)}
+              >
+                <Text
+                  style={[
+                    styles.saveButtonTextProfile,
+                    { color: isDarkMode ? 'white' : 'black' },
+                  ]}
+                >
+                  View Detail Profile
+                </Text>
+              </TouchableOpacity>
+            )}
 
-
-{!fromPvtChat && <TouchableOpacity style={styles.saveButton} onPress={handleStartChat}>
-              <Text style={styles.saveButtonText}>{t('chat.start_chat')}</Text>
-            </TouchableOpacity>}
+            {/* Start chat button */}
+            {!fromPvtChat && (
+              <TouchableOpacity style={styles.saveButton} onPress={handleStartChat}>
+                <Text style={styles.saveButtonText}>
+                  {t('chat.start_chat')}
+                </Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </View>

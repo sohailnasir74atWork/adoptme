@@ -371,25 +371,8 @@ const PrivateMessageList = ({
       ) : (
         <View style={{paddingBottom:140}}>  
         <>   
-        <ScamSafetyBox/>
-        {canRate && 
-         (
-                  <View style={{ alignItems: 'center', marginTop: 1, paddingBottom:10 }}>
-                    <TouchableOpacity
-                      style={{
-                        backgroundColor: config.colors.primary,
-                        borderRadius: 4,
-                        paddingHorizontal: 5,
-                        paddingVertical: 4,
-                      }}
-                      onPress={() => setShowRatingModal(true)}
-                    >
-                      <Text style={{ color: 'white', fontSize: 12 }}>
-                        {!hasRated ? `Rate Trader and Get 100 points` : `Update your review`}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+        <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated}/>
+     
         <FlatList
           data={filteredMessages}
           removeClippedSubviews={false} 

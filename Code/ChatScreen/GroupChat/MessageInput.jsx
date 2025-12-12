@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, Text, Modal, StyleSheet, Image } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, Modal, StyleSheet, Image, ScrollView } from 'react-native';
 import { getStyles } from './../Style';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
@@ -9,23 +9,39 @@ import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useGlobalState } from '../../GlobelStats';
 const Emojies = [
-  '1.png',
-  '2.png',
-  '3.png',
-  '4.png',
-  '5.png',
-  '6.png',
-  '7.png',
-  '8.png',
-  '9.png',
-  '10.png',
-  '11.png',
-  '12.png',
-  '13.png',
-  '14.png',
-  '15.png',
-  '16.png'
+  'pic_1.png',
+  'pic_2.png',
+  'pic_3.png',
+  'pic_4.png',
+  'pic_5.png',
+  'pic_6.png',
+  'pic_7.png',
+  'pic_8.png',
+  'pic_9.png',
+  'pic_10.png',
+  'pic_11.png',
+  'pic_12.png',
+  'pic_13.png',
+  'pic_14.png',
+  'pic_15.png',
+  'pic_16.png',
+  'pic_17.png',
+  'pic_18.png',
+  'pic_19.png',
+  'pic_20.png',
+  'pic_21.png',
+  'pic_22.png',
+  'pic_23.png',
+  'pic_24.png',
+  'pic_25.png',
+  'pic_26.png',
+  'pic_27.png',
+  'pic_28.png',
+  'pic_29.png',
+  'pic_30.png',
+  'pic_31.png',
 ];
+
 const MessageInput = ({
   input,
   setInput,
@@ -193,7 +209,11 @@ const MessageInput = ({
       <Modal visible={showEmojiPopup} transparent animationType="slide">
   <TouchableOpacity style={modalStyles.backdrop} onPress={() => setShowEmojiPopup(false)}>
     <View style={modalStyles.sheet} onPress={(e) => e.stopPropagation()}>
-      <View style={modalStyles.emojiListContainer}>
+      <ScrollView 
+        style={modalStyles.emojiScrollContainer}
+        contentContainerStyle={modalStyles.emojiListContainer}
+        showsVerticalScrollIndicator={true}
+      >
         {Emojies.map((item) => (
           <TouchableOpacity
             key={item}
@@ -206,7 +226,7 @@ const MessageInput = ({
             />
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
     </View>
   </TouchableOpacity>
 </Modal>
@@ -225,6 +245,9 @@ const modalStyles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
+  emojiScrollContainer: {
+    height: 200,
+  },
   emojiListContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap', // Allows emojis to wrap when they overflow
@@ -232,9 +255,9 @@ const modalStyles = StyleSheet.create({
     marginTop: 10,
   },
   emojiContainer: {
-    margin: 10,
-    width: 50, // emoji width
-    height: 50, // emoji height
+    margin: 15,
+    width: 30, // emoji width
+    height: 30, // emoji height
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -118,7 +118,7 @@
             "ad_error": "Error showing interstitial ad",
             "unable_to_create_trade": "Unable to create trade. Please reload the app & try again later.",
             "sign_in_required": "To create a trade, you need to sign in.",
-            "missing_items_error": "Please add at least one item to both 'You' and 'Them' sections."
+            "missing_items_error": "Please add at least one item to both 'Offer' and 'Want' sections."
         }
     },
     "value": {
