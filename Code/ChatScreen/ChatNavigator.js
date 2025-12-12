@@ -8,18 +8,22 @@ import PrivateChatHeader from './PrivateChat/PrivateChatHeader';
 import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
-import database from '@react-native-firebase/database';
+// import database from '@react-native-firebase/database';
+import ImageViewerScreenChat from './PrivateChat/ImageViewer';
+import { ref, update } from '@react-native-firebase/database';
 
 const Stack = createNativeStackNavigator();
 
 export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
-  const { user, unreadMessagesCount } = useGlobalState();
+  const { user, unreadMessagesCount, appdatabase } = useGlobalState();
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [unreadcount, setunreadcount] = useState(0);
   const { localState, updateLocalState } = useLocalState()
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+
 
 
   useEffect(() => {
@@ -40,7 +44,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     if (!user?.id) return;
   
     setLoading(true);
-    const userChatsRef = database().ref(`chat_meta_data/${user.id}`);
+    const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
   
     const onValueChange = userChatsRef.on('value', (snapshot) => {
       try {
@@ -60,9 +64,10 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   
           if (isBlocked && rawUnread > 0) {
             // 🚫 Reset unread count in Firebase for blocked user
-            database()
-              .ref(`chat_meta_data/${user.id}/${chatPartnerId}/unreadCount`)
-              .set(0);
+            update(
+              ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
+              { unreadCount: 0 }
+            );
           }
             return {
               chatId: chatData.chatId,
@@ -128,20 +133,32 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       </Stack.Screen>
 
       <Stack.Screen
-        name="PrivateChat"
-        component={PrivateChatScreen}
-        initialParams={{ bannedUsers }}
-        options={({ route }) => ({
-          headerTitle: () => (
-            <PrivateChatHeader
-              {...route.params}
-              selectedTheme={selectedTheme}
-              bannedUsers={bannedUsers}
-              setBannedUsers={setBannedUsers}
-              triggerHapticFeedback={triggerHapticFeedback}
-            />
-          ),
-        })}
+  name="PrivateChat"
+  options={({ route }) => ({
+    headerTitle: () => (
+      <PrivateChatHeader
+        selectedUser={route.params?.selectedUser}
+        selectedTheme={selectedTheme}
+        bannedUsers={bannedUsers}
+        isDrawerVisible={isDrawerVisible}
+        setIsDrawerVisible={setIsDrawerVisible}
+      />
+    ),
+  })}
+>
+  {(props) => (
+    <PrivateChatScreen
+      {...props}
+      bannedUsers={bannedUsers}
+      isDrawerVisible={isDrawerVisible}
+      setIsDrawerVisible={setIsDrawerVisible}
+    />
+  )}
+</Stack.Screen>
+        <Stack.Screen
+        name="ImageViewerScreenChat"
+        component={ImageViewerScreenChat}
+        options={{ title: 'Image' }}
       />
     </Stack.Navigator>
 

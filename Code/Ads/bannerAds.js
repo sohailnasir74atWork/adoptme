@@ -14,13 +14,13 @@ const BannerAdComponent = ({ adType = 'banner', visible = true }) => {
       <BannerAd
         unitId={unitId}
         size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        // requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
         onAdLoaded={() => {
-        //   console.log('[BannerAd] Loaded ✅');
+          // console.log('[BannerAd] Loaded ✅');
           setIsAdVisible(true);
         }}
         onAdFailedToLoad={(error) => {
-        //   console.log('[BannerAd] Failed to load ❌', error);
+          // console.log('[BannerAd] Failed to load ❌', error);
           setIsAdVisible(false);
         }}
       />

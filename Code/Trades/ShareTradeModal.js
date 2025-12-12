@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Image, Platform, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
 import Share from 'react-native-share';
@@ -223,6 +223,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             animationType="slide"
             onRequestClose={onClose}
         >
+            {/* <ScrollView> */}
             <View style={styles.modalContainer}>
                 <View style={styles.modalContent}>
                     <View style={styles.header}>
@@ -296,8 +297,8 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                     <View style={styles.toggleContainer}>
                         {renderToggleButton('stats-chart', 'Summary', showSummary, setShowSummary, (!showLeftGrid && showRightGrid) || (showLeftGrid && !showRightGrid))}
                         {renderToggleButton('trending-up', 'Profit/Loss', showProfitLoss, setShowProfitLoss)}
-                        {renderToggleButton('grid', 'Left Grid', showLeftGrid, setShowLeftGrid)}
-                        {renderToggleButton('grid', 'Right Grid', showRightGrid, setShowRightGrid)}
+                        {/* {renderToggleButton('grid', 'Left Grid', showLeftGrid, setShowLeftGrid)} */}
+                        {/* {renderToggleButton('grid', 'Right Grid', showRightGrid, setShowRightGrid)} */}
                         {/* {renderToggleButton('ribbon', 'Badges', showBadges, setShowBadges)} */}
                         {/* {renderToggleButton('document-text', 'Notes', showNotes, setShowNotes)} */}
                     </View>
@@ -312,6 +313,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                     </View>
                 </View>
             </View>
+            {/* </ScrollView> */}
         </Modal>
     );
 };
@@ -322,13 +324,17 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
         justifyContent: 'center',
         alignItems: 'center',
+       
+        
     },
     modalContent: {
         backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
         borderRadius: 12,
         width: '98%',
-        maxHeight: '90%',
+        // maxHeight: '90%',
         // padding: 8,
+        // alignItems:'center',
+        // flex:1
     },
     header: {
         flexDirection: 'row',

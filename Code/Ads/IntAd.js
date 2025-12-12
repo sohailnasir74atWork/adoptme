@@ -36,7 +36,7 @@ class InterstitialAdManager {
       AdEventType.ERROR,
       (error) => {
         this.isAdLoaded = false;
-        console.error('[AdManager] Ad failed to load ❌', error);
+        // console.error('[AdManager] Ad failed to load ❌', error);
   
         if (this.retryCount < this.maxRetries) {
           const delay = Math.pow(2, this.retryCount) * 1000; // 1s, 2s, 4s, etc.
@@ -46,7 +46,7 @@ class InterstitialAdManager {
             this.interstitialAd.load();
           }, delay);
         } else {
-          console.warn('[AdManager] Max retry limit reached. Will not retry further.');
+          // console.warn('[AdManager] Max retry limit reached. Will not retry further.');
         }
       }
     );
@@ -60,7 +60,7 @@ class InterstitialAdManager {
 
   static showAd(onAdClosedCallback, onAdUnavailableCallback) {
     if (!this.hasInitialized) {
-      console.warn('[AdManager] AdManager not initialized. Calling init...');
+      // console.warn('[AdManager] AdManager not initialized. Calling init...');
       this.init();
     }
   

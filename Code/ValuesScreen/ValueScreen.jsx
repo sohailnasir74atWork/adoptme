@@ -77,7 +77,7 @@ const ItemImage = React.memo(({ uri, badges, styles }) => (
 
 
 
-const ValueScreen = React.memo(({ selectedTheme }) => {
+const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSelectedFruits, onRequestClose, fromSetting, ownedPets, setOwnedPets, wishlistPets, setWishlistPets, owned }) => {
   const [searchText, setSearchText] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedValueType, setSelectedValueType] = useState('d');
@@ -99,7 +99,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const [isShowingAd, setIsShowingAd] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
-  const [selectedFruit, setSelectedFruit] = useState(null);
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [itemSelections, setItemSelections] = useState({});
@@ -109,9 +109,11 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
 
 
   const hideBadge = !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
-  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', , 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS','STROLLERS', 'STICKERS'];
+  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', , 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
 
-  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles }) => {
+  // console.log(selectedFruits)
+
+  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress }) => {
     const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
     const { localState } = useLocalState()
     const badges = [];
@@ -137,7 +139,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     }
 
     return (
-      <View style={styles.itemContainer}>
+      <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
         <View style={styles.imageContainer}>
           <ItemImage
             uri={getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG)}
@@ -171,7 +173,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
             />
           ))}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   });
 
@@ -210,7 +212,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     <View style={styles.adContainer}>
       <View style={styles.adContent}>
         <Image
-          source={require('../../assets/MM2logo.webp')} 
+          source={require('../../assets/MM2logo.webp')}
           style={styles.adIcon}
         />
         <View>
@@ -232,7 +234,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     try {
       const rawData = localState.isGG ? localState.ggData : localState.data;
       if (!rawData) return [];
-  
+
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
       return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
     } catch (error) {
@@ -240,7 +242,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
       return [];
     }
   }, [localState.isGG, localState.data, localState.ggData]);
-  
+
   const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
     if (!item || !item.name) return '';
 
@@ -274,14 +276,14 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   }, [parsedValuesData]);
 
   // Optimize the search and filter logic
- 
+
   // useEffect(() => {
   //   if (localState.isGG) {
   //     const types = new Set(parsedValuesData.map(i => (i.type || '').toUpperCase()));
   //     // console.log("🧪 GG Types:", Array.from(types));
   //   }
   // }, [parsedValuesData]);
-  
+
 
   // Optimize the getItemValue function
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
@@ -305,22 +307,22 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
   }, []);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
-  
+
     const searchLower = searchText.toLowerCase();
     const filterUpper = selectedFilter.toUpperCase();
-  
+
     let filtered = parsedValuesData.filter((item) => {
       if (!item?.name) return false;
-  
+
       const matchesSearch = item.name.toLowerCase().includes(searchLower);
       const matchesFilter = filterUpper === 'ALL' ||
         (CATEGORIES.includes(filterUpper) ?
           item.type?.toUpperCase() === filterUpper :
           item.rarity?.toUpperCase() === filterUpper);
-  
+
       return matchesSearch && matchesFilter;
     });
-  
+
     // Apply sort
     if (sortOrder !== 'none') {
       filtered.sort((a, b) => {
@@ -329,10 +331,10 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
       });
     }
-  
+
     return filtered;
   }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected]);
-  
+
 
   // Optimize the handleItemBadgePress function
   const handleItemBadgePress = useCallback((itemId, badge) => {
@@ -351,16 +353,112 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     });
   }, [triggerHapticFeedback]);
 
+  // 👇 Add these inside ValueScreen, after your other hooks/useState
+  const selectedList = useMemo(() => {
+    if (fromChat) {
+      return selectedFruits || [];
+    }
+    if (fromSetting) {
+      return owned ? (ownedPets || []) : (wishlistPets || []);
+    }
+    return [];
+  }, [fromChat, fromSetting, owned, selectedFruits, ownedPets, wishlistPets]);
+
+  const handleRemoveSelected = useCallback(
+    (index) => {
+      if (fromChat) {
+        setSelectedFruits?.((prev = []) => prev.filter((_, i) => i !== index));
+      } else if (fromSetting) {
+        if (owned) {
+          setOwnedPets?.((prev = []) => prev.filter((_, i) => i !== index));
+        } else {
+          setWishlistPets?.((prev = []) => prev.filter((_, i) => i !== index));
+        }
+      }
+    },
+    [fromChat, fromSetting, owned, setSelectedFruits, setOwnedPets, setWishlistPets]
+  );
+
+
   // Optimize the renderItem function
-  const renderItem = useCallback(({ item }) => (
-    <ListItem
-      item={item}
-      itemSelection={itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false }}
-      onBadgePress={handleItemBadgePress}
-      getItemValue={getItemValue}
-      styles={styles}
-    />
-  ), [itemSelections, handleItemBadgePress, getItemValue, styles]);
+  const renderItem = useCallback(
+    ({ item }) => {
+      // current selection for this item
+      const itemSelection =
+        itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
+
+      // value based on current badges
+      const currentValue = getItemValue(
+        item,
+        itemSelection.valueType,
+        itemSelection.isFly,
+        itemSelection.isRide
+      );
+
+      // image url for this item
+      const imageUrl = getImageUrl(
+        item,
+        localState.isGG,
+        localState.imgurl,
+        localState.imgurlGG
+      );
+
+      const handlePress = () => {
+        const fruitObj = {
+          Name: item.Name ?? item.name,
+          name: item.name,
+          value: Number(currentValue),
+          valueType: itemSelection.valueType,
+          isFly: itemSelection.isFly,
+          isRide: itemSelection.isRide,
+          imageUrl,
+          category: item.type,
+          id: item.id,
+        };
+
+        // 👉 From chat: always add another copy
+        if (fromChat) {
+          setSelectedFruits(prev => [...(prev || []), fruitObj]);
+        }
+
+        // 👉 From settings: always add another copy
+        if (fromSetting) {
+          if (owned) {
+            setOwnedPets(prev => [...(prev || []), fruitObj]);
+          } else {
+            setWishlistPets(prev => [...(prev || []), fruitObj]);
+          }
+        }
+      };
+
+      // const isSelected = selectedFruits ? selectedFruits?.some(f => f.id === item.id): owned ? ownedPets?.some(f => f.id === item.id) : wishlistPets?.some(f => f.id === item.id) ;
+
+
+      return (
+        <ListItem
+          item={item}
+          itemSelection={itemSelection}
+          onBadgePress={handleItemBadgePress}
+          getItemValue={getItemValue}
+          styles={styles}
+          onPress={handlePress}  // ✅ pass handler
+        // isSelected={isSelected}
+        />
+      );
+    },
+    [
+      itemSelections,
+      handleItemBadgePress,
+      getItemValue,
+      styles,
+      localState.isGG,
+      localState.imgurl,
+      localState.imgurlGG,
+      selectedFruits,
+      ownedPets, wishlistPets
+    ]
+  );
+
 
   // Update the useEffect for values data
   useEffect(() => {
@@ -401,66 +499,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     mixpanel.track("Code Drawer Open");
   }
 
-  const updateFruitData = () => {
-    if (!selectedFruit || !selectedFruit.Name) {
-      console.error("❌ No fruit selected for update or missing Name property");
-      return;
-    }
 
-    let localData = localState.data;
-
-    // Ensure localState.data is parsed correctly if it's a string
-    if (typeof localData === "string") {
-      try {
-        localData = JSON.parse(localData);
-      } catch (error) {
-        console.error("❌ Failed to parse localState.data as JSON", error, localData);
-        return;
-      }
-    }
-
-    // Check again to ensure it's a valid object
-    if (!localData || typeof localData !== "object" || Array.isArray(localData)) {
-      console.error("❌ localState.data is missing or not a valid object", localData);
-      return;
-    }
-
-    // Find the correct record key (case-insensitive match)
-    const recordKey = Object.keys(localData).find(key => {
-      const record = localData[key];
-
-      if (!record || !record.Name) {
-        console.warn(`⚠️ Skipping record ${key} due to missing Name field`, record);
-        return false;
-      }
-
-      return record.Name.trim().toLowerCase() === selectedFruit.Name.trim().toLowerCase();
-    });
-
-    if (!recordKey) {
-      console.error(`❌ Error: Record key not found for ${selectedFruit.Name}`);
-      return;
-    }
-
-    // Ensure values are valid before updating
-    const updatedValues = {
-      Value: isNaN(Number(editValuesRef.current.Value)) ? 0 : Number(editValuesRef.current.Value),
-      Permanent: isNaN(Number(editValuesRef.current.Permanent)) ? 0 : Number(editValuesRef.current.Permanent),
-      Biliprice: isNaN(Number(editValuesRef.current.Biliprice)) ? 0 : Number(editValuesRef.current.Biliprice),
-      Robuxprice: editValuesRef.current.Robuxprice || "N/A",
-    };
-
-    // Reference to the correct Firebase record
-    const fruitRef = ref(appdatabase, `/fruit_data/${recordKey}`);
-
-    update(fruitRef, updatedValues)
-      .then(() => {
-        setIsModalVisible(false);
-      })
-      .catch((error) => {
-        console.error("❌ Error updating fruit:", error);
-      });
-  };
   const applyFilter = (filter) => {
     setSelectedFilter(filter);
   };
@@ -472,54 +511,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     setFilterDropdownVisible(false);
   };
 
-  const EditFruitModal = () => (
-    <Modal visible={isModalVisible} transparent={true} animationType="slide">
-      <View style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>Edit {selectedFruit?.name}</Text>
 
-        <TextInput
-          style={styles.input}
-          defaultValue={editValuesRef.current.Value}
-          onChangeText={(text) => (editValuesRef.current.Value = text)}
-          keyboardType="numeric"
-          placeholder="Value"
-        />
-
-        <TextInput
-          style={styles.input}
-          defaultValue={editValuesRef.current.Permanent}
-          onChangeText={(text) => (editValuesRef.current.Permanent = text)}
-          keyboardType="numeric"
-          placeholder="Permanent Value"
-        />
-
-        <TextInput
-          style={styles.input}
-          defaultValue={editValuesRef.current.Biliprice}
-          onChangeText={(text) => (editValuesRef.current.Biliprice = text)}
-          keyboardType="numeric"
-          placeholder="Beli Price"
-        />
-
-        <TextInput
-          style={styles.input}
-          defaultValue={editValuesRef.current.Robuxprice}
-          onChangeText={(text) => (editValuesRef.current.Robuxprice = text)}
-          keyboardType="default"
-          placeholder="Robux Price"
-        />
-
-
-        <TouchableOpacity style={styles.saveButton}>
-          <Text style={styles.saveButtonText}>Save Changes</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.cencelButton}>
-          <Text style={styles.saveButtonText}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
 
   const handleBadgePress = useCallback((badge) => {
     triggerHapticFeedback('impactLight');
@@ -536,20 +528,68 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
     <>
       <GestureHandlerRootView>
         <View style={styles.container}>
-        {showAd1 ? (
-            <CustomAd />
-          ) : (
-            <CustomAd2 />
-          )}
+          {(fromChat || fromSetting) && selectedList?.length > 0 && (
+            <View style={styles.selectedPetsSection}>
+              <View style={styles.selectedPetsHeader}>
+                <Text style={styles.selectedPetsTitle}>
+                  {fromChat
+                    ? 'Selected pets'
+                    : owned
+                      ? 'Owned pets'
+                      : 'Wishlist'}
+                </Text>
 
-            <View style={styles.searchFilterContainer}>
+                <Text style={styles.selectedPetsCount}>
+                  {selectedList.length}
+                </Text>
+              </View>
+
+              <FlatList
+                horizontal
+                data={selectedList}
+                keyExtractor={(item, index) => `${item.id || item.name}-${index}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.selectedPetsList}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity style={styles.selectedPetCard} onPress={() => handleRemoveSelected(index)}>
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.selectedPetImage}
+                    />
+                    <Text
+                      style={styles.selectedPetName}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+
+                    <View
+                      style={styles.removePetButton}
+
+                    >
+                      <Icon name="close" size={8} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          )}
+          {/* {(!fromChat && !fromSetting) && (
+  showAd1 ? <CustomAd /> : <CustomAd2 />
+)} */}
+
+          <View style={styles.searchFilterContainer}>
+
             <TextInput
               style={styles.searchInput}
               placeholder="Search"
               placeholderTextColor="#888"
               onChangeText={handleSearchChange}
             />
-            <Menu>
+            {/* Selected / owned pets strip (chat/settings only) */}
+
+
+            {!fromChat && !fromSetting && <Menu>
               <MenuTrigger onPress={() => { }}>
                 <View style={styles.filterButton}>
                   <Text style={styles.filterText}>{displayedFilter}</Text>
@@ -568,19 +608,28 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
                   </MenuOption>
                 ))}
               </MenuOptions>
-            </Menu>
+
+            </Menu>}
             <TouchableOpacity
-  style={styles.filterButton}
-  onPress={() => {
-    setSortOrder(prev =>
-      prev === 'asc' ? 'desc' : prev === 'desc' ? 'none' : 'asc'
-    );
-  }}
->
-  <Text style={styles.filterText}>
-    {sortOrder === 'asc' ? '▲ Asc' : sortOrder === 'desc' ? '▼ Desc' : 'Sort'}
-  </Text>
-</TouchableOpacity>
+              style={styles.filterButton}
+              onPress={() => {
+                setSortOrder(prev =>
+                  prev === 'asc' ? 'desc' : prev === 'desc' ? 'none' : 'asc'
+                );
+              }}
+            >
+              <Text style={styles.filterText}>
+                {sortOrder === 'asc' ? '▲ High' : sortOrder === 'desc' ? '▼ LOw' : 'Filter'}
+              </Text>
+            </TouchableOpacity>
+            {selectedFruits?.length > 0 && <TouchableOpacity
+              style={[styles.filterButton, { backgroundColor: 'purple' }]}
+              onPress={onRequestClose}
+            >
+              <Text style={styles.filterText}>
+                Done
+              </Text>
+            </TouchableOpacity>}
           </View>
 
           {filteredData.length > 0 ? (
@@ -606,7 +655,7 @@ const ValueScreen = React.memo(({ selectedTheme }) => {
         </View>
         <CodesDrawer isVisible={isDrawerVisible} toggleModal={toggleDrawer} codes={codesData} />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && !fromChat && <BannerAdComponent />}
     </>
   );
 });
@@ -626,7 +675,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     flexDirection: 'row',
     marginVertical: 8,
     paddingHorizontal: 8,
-    gap: 12,
+    gap: 4,
     alignItems: 'center',
   },
   searchInput: {
@@ -762,12 +811,13 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   filterText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     marginRight: 8,
+
   },
   filterOptionText: {
-    fontSize: 16,
+    fontSize: 14,
     padding: 10,
     color: isDarkMode ? '#fff' : '#333',
   },
@@ -1062,6 +1112,66 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Lato-Bold',
   },
+  selectedPetsSection: {
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  selectedPetsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  selectedPetsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: isDarkMode ? '#ffffff' : '#111827',
+  },
+  selectedPetsCount: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: isDarkMode ? '#9ca3af' : '#6b7280',
+  },
+  selectedPetsList: {
+    paddingVertical: 4,
+  },
+  selectedPetCard: {
+    width: 40,
+    marginRight: 8,
+    borderRadius: 10,
+    padding: 6,
+    backgroundColor: isDarkMode ? '#1f2933' : '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  selectedPetImage: {
+    width: '100%',
+    height: 15,
+    borderRadius: 8,
+    marginBottom: 1,
+    backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
+  },
+  selectedPetName: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: isDarkMode ? '#e5e7eb' : '#111827',
+  },
+  removePetButton: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 10,
+    height: 10,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+
 });
 
 export default ValueScreen;

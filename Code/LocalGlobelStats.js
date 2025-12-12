@@ -20,7 +20,7 @@ export const LocalStateProvider = ({ children }) => {
       const value = storage.getString(key);
       return value ? JSON.parse(value) : defaultValue;
     } catch (error) {
-      console.error(`🚨 JSON Parse Error for key "${key}":`, error);
+      // console.error(`🚨 JSON Parse Error for key "${key}":`, error);
       return defaultValue; // Return a safe fallback value
     }
   };
@@ -83,7 +83,7 @@ export const LocalStateProvider = ({ children }) => {
     }
   }, [localState.data, localState.ggData]);
 
-  console.log(localState.isPro)
+  // console.log(localState.isPro)
   // Update local state and MMKV storage
   const updateLocalState = (key, value) => {
     setLocalState((prevState) => ({
@@ -101,7 +101,7 @@ export const LocalStateProvider = ({ children }) => {
     } else if (typeof value === 'object') {
       storage.set(key, JSON.stringify(value)); // ✅ Store objects/arrays as JSON
     } else {
-      console.error('🚨 MMKV supports only string, number, boolean, or JSON stringified objects.');
+      // console.error('🚨 MMKV supports only string, number, boolean, or JSON stringified objects.');
     }
   };
   const canTranslate = () => {
@@ -148,16 +148,16 @@ export const LocalStateProvider = ({ children }) => {
       // Run these in parallel for better performance
       await Promise.all([
         fetchOfferings().catch(error => {
-          console.error('❌ Error fetching offerings:', error.message);
+          // console.error('❌ Error fetching offerings:', error.message);
           return null; // Return null instead of throwing
         }),
         checkEntitlements().catch(error => {
-          console.error('❌ Error checking entitlements:', error.message);
+          // console.error('❌ Error checking entitlements:', error.message);
           return null; // Return null instead of throwing
         })
       ]);
     } catch (error) {
-      console.error('❌ Error initializing RevenueCat:', error.message);
+      // console.error('❌ Error initializing RevenueCat:', error.message);
       // Set a default state in case of failure
       setCustomerId(null);
       setPackages([]);
@@ -209,7 +209,7 @@ export const LocalStateProvider = ({ children }) => {
           : []
       );
     } catch (error) {
-      console.error('❌ Restore Purchases Error:', error);
+      // console.error('❌ Restore Purchases Error:', error);
     } finally {
       setLoadingReStore(false); // Ensure loading state resets
     }
@@ -237,7 +237,7 @@ export const LocalStateProvider = ({ children }) => {
         setMySubscriptions(activePlansWithExpiry);
       }
     } catch (error) {
-      console.error('❌ Error checking entitlements:', error);
+      // console.error('❌ Error checking entitlements:', error);
     }
   };
   // Handle in-app purchase
@@ -272,7 +272,7 @@ export const LocalStateProvider = ({ children }) => {
       showSuccessMessage("Success", "Purchase completed successfully!");
     } catch (error) {
       if (!error.userCancelled) {
-        console.error('❌ Purchase Error:', error);
+        // console.error('❌ Purchase Error:', error);
         showErrorMessage("Error", "Failed to complete purchase. Please try again.");
       }
     } finally {

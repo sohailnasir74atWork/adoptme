@@ -1,4 +1,4 @@
-import React, { useState, useCallback, memo } from 'react';
+import React, { useState, useCallback, memo, useEffect } from 'react';
 import {
   View, Text, Image, StyleSheet, TouchableOpacity, Alert, useColorScheme,
 } from 'react-native';
@@ -14,6 +14,8 @@ import { showMessage } from 'react-native-flash-message';
 import ReportModal from './ReportModal';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
+import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
+import { isUserOnline } from '../../ChatScreen/utils';
 
 const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onDeleteAll }) => {
   const navigation = useNavigation();
@@ -21,6 +23,16 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   const likeCount = item.likes ? Object.keys(item.likes).length : 0;
   const [showComments, setShowComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [bannedUsers, setBannedUsers] = useState([]);
+  const [isOnline, setIsOnline] = useState(false);
+  // const [selectedUser, setSelectedUser] = useState(null);
+
+  useEffect(() => {
+    // if (!user?.id) return;
+    setBannedUsers(localState.bannedUsers)
+
+  }, [ localState.bannedUsers]);
   // const report = !!item.likes?.[userId];
 
   // console.log(item)
@@ -81,8 +93,33 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
      if(isAdmin){ Alert.alert('Error', 'Could not ban user.');}
     }
   };
+  const closeProfileDrawer = () => {
+    setIsDrawerVisible(false);
+  };
+  const openProfileDrawer = async () => {
+    if (!userId) {
+      showMessage({
+        message: 'Please sign in to message',
+        type: 'warning',
+      });
+      return;
+    }
+    // setSelectedUser(item)
+    try {
+      const online =  isUserOnline(item?.userId);
+      setIsOnline(online);
+    } catch (error) {
+      console.error('🔥 Error checking online status:', error);
+      setIsOnline(false);
+    }
+    setIsDrawerVisible(true);
+  };
   
- 
+ const selectedUser = {
+  senderId: item.userId,
+  sender: item.displayName,
+  avatar: item.avatar,
+}
 
   const handleChatNavigation = useCallback(() => {
     const callback = () => {
@@ -93,14 +130,12 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         });
         return;
       }
+
+     
       
       mixpanel.track('Design Screen');
       navigation.navigate('PrivateChatDesign', {
-        selectedUser: {
-          senderId: item.userId,
-          sender: item.displayName,
-          avatar: item.avatar,
-        },
+        selectedUser: selectedUser,
         item,
       });
     };
@@ -125,13 +160,14 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   return (
     <View style={themedStyles.card}>
      <View style={themedStyles.header}>
-  <Image source={{ uri: item.avatar }} style={themedStyles.avatar} />
-  <View style={{ marginLeft: 10, flex: 1 }}>
+      <TouchableOpacity  onPress={openProfileDrawer}>
+  <Image source={{ uri: item.avatar }} style={themedStyles.avatar}/></TouchableOpacity>
+  <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer}>
     <Text style={themedStyles.name}>{item.displayName}</Text>
     <Text style={themedStyles.time}>
       {formattedTime}
     </Text>
-  </View>
+  </TouchableOpacity>
 
   <Menu>
     <MenuTrigger>
@@ -270,7 +306,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
       </TouchableOpacity>
       </View>
 
-        <TouchableOpacity onPress={handleChatNavigation} style={themedStyles.sendBtn}>
+        <TouchableOpacity onPress={openProfileDrawer} style={themedStyles.sendBtn}>
           <Icon name="paper-plane" size={16} color={config.colors.primary} />
           <Text style={themedStyles.sendText}>Chat</Text>
         </TouchableOpacity>
@@ -283,7 +319,14 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         appdatabase={appdatabase}
       />
 
-    
+<ProfileBottomDrawer
+          isVisible={isDrawerVisible}
+          toggleModal={closeProfileDrawer}  
+          startChat={handleChatNavigation}
+          selectedUser={selectedUser}
+          isOnline={isOnline}
+          bannedUsers={bannedUsers}
+        />
     </View>
   );
 };

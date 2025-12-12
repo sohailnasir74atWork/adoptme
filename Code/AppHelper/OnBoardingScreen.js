@@ -179,7 +179,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
         
 
         {screenIndex !== 2 && <View style={styles.bottomContainer}>
-        {screenIndex === 0 && (
+        {/* {screenIndex === 0 && (
   
   <TouchableOpacity
       style={!localState.isGG ? styles.buttonOutline : styles.buttonOutline}
@@ -191,7 +191,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
     </TouchableOpacity>
 
 
-)}
+)} */}
  {/* {screenIndex === 0 && (
   
   <TouchableOpacity

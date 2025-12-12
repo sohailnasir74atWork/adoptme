@@ -21,7 +21,10 @@ export const DesignStack = ({ selectedTheme }) => {
   const { triggerHapticFeedback } = useHaptic();
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
+  const openDrawer = useCallback(() => setIsDrawerVisible(true), []);
+  const closeDrawer = useCallback(() => setIsDrawerVisible(false), []);
   // console.log('dsignnavigator')
 
   const headerOptions = useMemo(() => ({
@@ -35,42 +38,55 @@ export const DesignStack = ({ selectedTheme }) => {
     selectedTheme,
   }), [bannedUsers, selectedTheme]);
 
-  const getPrivateChatOptions = useCallback(({ route }) => {
-    const { selectedUser, isOnline } = route.params;
-    return {
-      headerTitle: () => (
-        <PrivateChatHeader
-          selectedUser={selectedUser}
-          isOnline={isOnline}
-          selectedTheme={selectedTheme}
-          bannedUsers={bannedUsers}
-          setBannedUsers={setBannedUsers}
-          triggerHapticFeedback={triggerHapticFeedback}
-        />
-      ),
-    };
-  }, [selectedTheme, bannedUsers, triggerHapticFeedback]);
+  const getPrivateChatOptions = useCallback(
+    ({ route }) => {
+      const { selectedUser, isOnline } = route.params || {};
+      return {
+        headerTitle: () => (
+          <PrivateChatHeader
+            selectedUser={selectedUser}
+            isOnline={isOnline}
+            selectedTheme={selectedTheme}
+            bannedUsers={bannedUsers}
+            setBannedUsers={setBannedUsers}
+            triggerHapticFeedback={triggerHapticFeedback}
+            setIsDrawerVisible={setIsDrawerVisible}
+            
+            openDrawer={openDrawer}   // ✅ add this
+          />
+        ),
+      };
+    },
+    [selectedTheme, bannedUsers, triggerHapticFeedback, openDrawer]
+  );
 
   return (
     <Stack.Navigator screenOptions={headerOptions}>
-      <Stack.Screen
-        name="DesignScreen"
-        component={DesignFeedScreen}
-        initialParams={sharedParams}
-        options={{ headerShown: false, title:'Feed' }}
-      />
-      <Stack.Screen
-        name="PrivateChatDesign"
-        component={PrivateChatScreen}
-        initialParams={sharedParams}
-        options={getPrivateChatOptions}
-      />
-      <Stack.Screen
-        name="ImageViewerScreen"
-        component={ImageViewerScreen}
-        options={{ title: 'Image' }}
-      />
-    </Stack.Navigator>
+    <Stack.Screen
+      name="DesignScreen"
+      component={DesignFeedScreen}
+      initialParams={sharedParams}
+      options={{ headerShown: false, title: 'Feed' }}
+    />
+
+    <Stack.Screen name="PrivateChatDesign" options={getPrivateChatOptions}>
+      {(props) => (
+        <PrivateChatScreen
+          {...props}
+          bannedUsers={bannedUsers}
+          isDrawerVisible={isDrawerVisible}
+          setIsDrawerVisible={setIsDrawerVisible}
+          closeProfileDrawer={closeDrawer} // ✅ optional convenience prop
+        />
+      )}
+    </Stack.Screen>
+
+    <Stack.Screen
+      name="ImageViewerScreen"
+      component={ImageViewerScreen}
+      options={{ title: 'Image' }}
+    />
+  </Stack.Navigator>
   );
 };
 

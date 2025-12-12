@@ -10,7 +10,6 @@ import { FilterMenu } from './tradeHelpers';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useLocalState } from '../LocalGlobelStats';
-import firestore from '@react-native-firebase/firestore';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
@@ -19,6 +18,21 @@ import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
+import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import { isUserOnline } from '../ChatScreen/utils';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  Timestamp,
+  where,
+  query,
+  startAfter,
+  updateDoc,
+} from '@react-native-firebase/firestore';
 
 // Initialize dayjs plugins
 dayjs.extend(relativeTime);
@@ -37,8 +51,10 @@ const TradeList = ({ route }) => {
   const [hasMore, setHasMore] = useState(true);
   const [showofferwall, setShowofferwall] = useState(false);
   const [remainingFeaturedTrades, setRemainingFeaturedTrades] = useState([]);
-  const [openShareModel, setOpenShareModel] = useState(false);
-
+  // const [openShareModel, setOpenShareModel] = useState(false);
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [bannedUsers, setBannedUsers] = useState([]);
+  const [isOnline, setIsOnline] = useState(false);
 
 
   const [isAdLoaded, setIsAdLoaded] = useState(false);
@@ -48,7 +64,7 @@ const TradeList = ({ route }) => {
   const [selectedTrade, setSelectedTrade] = useState(null);
   const { localState, updateLocalState } = useLocalState()
   const navigation = useNavigation()
-  const { theme } = useGlobalState()
+  const { theme, firestoreDB } = useGlobalState()
   const [isProStatus, setIsProStatus] = useState(localState.isPro);
   const { t } = useTranslation();
   const platform = Platform.OS.toLowerCase();
@@ -62,7 +78,7 @@ const TradeList = ({ route }) => {
 
   // console.log(trades, 'trades')
 
-  const [selectedFilters, setSelectedFilters] = useState([]);
+  const [selectedFilters, setSelectedFilters] = useState(['has', 'wants']);
 
   useEffect(() => {
     // console.log(localState.isPro, 'from trade model'); // ✅ Check if isPro is updated
@@ -104,7 +120,11 @@ const TradeList = ({ route }) => {
     );
   }, [searchQuery, trades, selectedFilters]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    setBannedUsers(localState.bannedUsers)
 
+  }, [user?.id, localState.bannedUsers]);
 
   // const getTradeDeal = (hasTotal, wantsTotal) => {
   //   if (hasTotal.value <= 0) {
@@ -144,7 +164,8 @@ const TradeList = ({ route }) => {
             try {
               const tradeId = item.id.startsWith("featured-") ? item.id.replace("featured-", "") : item.id;
 
-              await firestore().collection("trades_new").doc(tradeId).delete();
+              await deleteDoc(doc(firestoreDB, "trades_new", tradeId));
+
 
               if (item.isFeatured) {
                 const currentFeaturedData = localState.featuredCount || { count: 0, time: null };
@@ -169,7 +190,7 @@ const TradeList = ({ route }) => {
         },
       ]
     );
-  }, [t, localState.featuredCount]);
+  }, [t, localState.featuredCount, firestoreDB]);
 
 
 
@@ -197,14 +218,16 @@ const TradeList = ({ route }) => {
 
     try {
       // 🔐 Check from Firestore how many featured trades user already has
-      const oneDayAgo = firestore.Timestamp.fromDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
-      const featuredSnapshot = await firestore()
-        .collection("trades_new")
-        .where("userId", "==", user.id)
-        .where("isFeatured", "==", true)
-        .where("featuredUntil", ">", oneDayAgo)
-        .get();
-
+      const oneDayAgo = Timestamp.fromDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const featuredSnapshot = await getDocs(
+        query(
+          collection(firestoreDB, "trades_new"),
+          where("userId", "==", user.id),
+          where("isFeatured", "==", true),
+          where("featuredUntil", ">", oneDayAgo)
+        )
+      );
+  
       if (featuredSnapshot.size >= 2) {
         Alert.alert(
           "Limit Reached",
@@ -223,10 +246,15 @@ const TradeList = ({ route }) => {
             text: t("feature"),
             onPress: async () => {
               try {
-                await firestore().collection("trades_new").doc(item.id).update({
-                  isFeatured: true,
-                  featuredUntil: firestore.Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
-                });
+                await updateDoc(
+                  doc(firestoreDB, "trades_new", item.id),
+                  {
+                    isFeatured: true,
+                    featuredUntil: Timestamp.fromDate(
+                      new Date(Date.now() + 24 * 60 * 60 * 1000)
+                    ),
+                  }
+                );
 
                 const newFeaturedCount = (localState.featuredCount?.count || 0) + 1;
                 updateLocalState("featuredCount", {
@@ -280,24 +308,25 @@ const TradeList = ({ route }) => {
 
     try {
       // ✅ Fetch more normal trades
-      const normalTradesQuery = await firestore()
-        .collection('trades_new')
-        .where('isFeatured', '==', false)
-        .orderBy('timestamp', 'desc')
-        .startAfter(lastDoc)
-        .limit(PAGE_SIZE)
-        .get();
-
-      const newNormalTrades = normalTradesQuery.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const normalTradesQuerySnap = await getDocs(
+        query(
+          collection(firestoreDB, 'trades_new'),
+          where('isFeatured', '==', false),
+          orderBy('timestamp', 'desc'),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        )
+      );
+  
+      const newNormalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
       }));
-
+  
       if (newNormalTrades.length === 0) {
-        setHasMore(false); // ✅ Stop pagination if no more trades exist
+        setHasMore(false);
         return;
       }
-
       // ✅ Get **2 more** featured trades if available
       const newFeaturedTrades = remainingFeaturedTrades.splice(0, 3);
       setRemainingFeaturedTrades([...remainingFeaturedTrades]); // ✅ Update remaining featured
@@ -306,12 +335,14 @@ const TradeList = ({ route }) => {
       const mergedTrades = mergeFeaturedWithNormal(newFeaturedTrades, newNormalTrades);
 
       setTrades((prevTrades) => [...prevTrades, ...mergedTrades]);
-      setLastDoc(normalTradesQuery.docs[normalTradesQuery.docs.length - 1]); // ✅ Update last doc
+      setLastDoc(
+        normalTradesQuerySnap.docs[normalTradesQuerySnap.docs.length - 1]
+      );      
       setHasMore(newNormalTrades.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ Error fetching more trades:', error);
     }
-  }, [lastDoc, hasMore, remainingFeaturedTrades]);
+  }, [lastDoc, hasMore, remainingFeaturedTrades, firestoreDB]);
 
 
 
@@ -339,8 +370,36 @@ const TradeList = ({ route }) => {
 
   }, []); // ✅ Runs only on app load
 
+  const selectedUser = {
+    senderId: selectedTrade?.userId,
+    sender: selectedTrade?.traderName,
+    avatar: selectedTrade?.avatar,
+  }
+  const handleChatNavigation2 = async () => {
+    
+
+    const callbackfunction = () => {
+      mixpanel.track("Inbox Trade");
+      navigation.navigate('PrivateChatTrade', {
+        selectedUser: selectedUser,
+        item:selectedTrade,
+        
+      });
+    };
+
+    try {
+      // const isOnline = await isUserOnline(item.userId)
 
 
+      if (!localState.isPro) { InterstitialAdManager.showAd(callbackfunction); }
+      else { callbackfunction() }
+
+
+    } catch (error) {
+      console.error('Error navigating to PrivateChat:', error);
+      Alert.alert('Error', 'Unable to navigate to the chat. Please try again later.');
+    }
+  };
 
 
 
@@ -361,32 +420,37 @@ const TradeList = ({ route }) => {
     setLoading(true);
     try {
       // ✅ Fetch latest normal trades
-      const normalTradesQuery = await firestore()
-        .collection('trades_new')
-        .orderBy('isFeatured')
-        .where('isFeatured', '!=', true) // Get only non-featured trades
-        .orderBy('timestamp', 'desc')
-        .limit(PAGE_SIZE)
-        .get();
-
-      const normalTrades = normalTradesQuery.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const normalTradesQuerySnap = await getDocs(
+        query(
+          collection(firestoreDB, 'trades_new'),
+          orderBy('isFeatured'),
+          where('isFeatured', '!=', true),
+          orderBy('timestamp', 'desc'),
+          limit(PAGE_SIZE)
+        )
+      );
+  
+      const normalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
       }));
+  
 
       // ✅ Fetch only valid featured trades (NOT expired)
-      const featuredQuerySnapshot = await firestore()
-        .collection('trades_new')
-        .where('isFeatured', '==', true)
-        .where('featuredUntil', '>', firestore.Timestamp.now()) // ✅ Only fetch active featured trades
-        .orderBy('featuredUntil', 'desc')
-        .get();
-
+      const featuredQuerySnapshot = await getDocs(
+        query(
+          collection(firestoreDB, 'trades_new'),
+          where('isFeatured', '==', true),
+          where('featuredUntil', '>', Timestamp.now()),
+          orderBy('featuredUntil', 'desc')
+        )
+      );
+  
       let featuredTrades = [];
       if (!featuredQuerySnapshot.empty) {
-        featuredTrades = featuredQuerySnapshot.docs.map((doc) => ({
-          id: `featured-${doc.id}`, // ✅ Unique keys for featured trades
-          ...doc.data(),
+        featuredTrades = featuredQuerySnapshot.docs.map((docSnap) => ({
+          id: `featured-${docSnap.id}`,
+          ...docSnap.data(),
         }));
       }
       // console.log('✅ Featured trades:', featuredTrades[0]);
@@ -402,14 +466,16 @@ const TradeList = ({ route }) => {
 
       // ✅ Update state
       setTrades(mergedTrades);
-      setLastDoc(normalTradesQuery.docs[normalTradesQuery.docs.length - 1]); // ✅ Save last doc for pagination
+      setLastDoc(
+        normalTradesQuerySnap.docs[normalTradesQuerySnap.docs.length - 1]
+      );
       setHasMore(normalTrades.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ Error fetching trades:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [firestoreDB]);
 
 
   // const captureAndSave = async () => {
@@ -543,7 +609,24 @@ const TradeList = ({ route }) => {
     }
   }, [user?.id]);
 
-
+  const closeProfileDrawer = async () => {
+    setIsDrawerVisible(false);
+  };
+  const handleOpenProfile = async(item)=>{
+    if (!user?.id) {
+      setIsSigninDrawerVisible(true);
+      return;
+    }
+    setSelectedTrade(item)
+    // console.log(item, selectedTrade)
+    try {
+      const online = await isUserOnline(item?.userId);
+      setIsOnline(online);
+    } catch (error) {
+      console.error('🔥 Error checking online status:', error);
+      setIsOnline(false);
+    }setIsDrawerVisible(true)}
+  
   const renderTextWithUsername = (description) => {
     const parts = description.split(/(@\w+)/g); // Split text by @username pattern
 
@@ -625,7 +708,11 @@ const TradeList = ({ route }) => {
     // Group and count duplicate items
     const groupedHasItems = groupItems(item.hasItems || []);
     const groupedWantsItems = groupItems(item.wantsItems || []);
-
+    const selectedUser = {
+      senderId: item.userId,
+      sender: item.traderName,
+      avatar: item.avatar,
+    }
     const handleChatNavigation = async () => {
 
       const callbackfunction = () => {
@@ -635,11 +722,7 @@ const TradeList = ({ route }) => {
         }
         mixpanel.track("Inbox Trade");
         navigation.navigate('PrivateChatTrade', {
-          selectedUser: {
-            senderId: item.userId,
-            sender: item.traderName,
-            avatar: item.avatar,
-          },
+          selectedUser: selectedUser,
           item,
         });
       };
@@ -664,7 +747,7 @@ const GG = item.isSharkMode === 'GG'
 
 
         <View style={styles.tradeHeader}>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={handleChatNavigation}>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={()=>handleOpenProfile(item)}>
             <Image source={{ uri: item.avatar }} style={styles.itemImageUser} />
 
             <View style={{ justifyContent: 'center', marginLeft: 10 }}>
@@ -710,7 +793,7 @@ const GG = item.isSharkMode === 'GG'
               name='message'
               size={18}
               color={config.colors.primary}
-              onPress={handleChatNavigation}
+              onPress={()=>handleOpenProfile(item)}
               solid={false}
             />
             {/* <Icon
@@ -761,7 +844,7 @@ const GG = item.isSharkMode === 'GG'
               })}
             </View>
           ) : (
-            <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={()=>handleOpenProfile(item)}>
               <Text style={styles.dealText}>Give offer</Text>
             </TouchableOpacity>
           )}
@@ -807,7 +890,7 @@ const GG = item.isSharkMode === 'GG'
               })}
             </View>
           ) : (
-            <TouchableOpacity style={styles.dealContainerSingle} onPress={handleChatNavigation}>
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={()=>handleOpenProfile(item)}>
               <Text style={styles.dealText}>Give offer</Text>
             </TouchableOpacity>
           )}
@@ -815,7 +898,7 @@ const GG = item.isSharkMode === 'GG'
         <View style={styles.tradeTotals}>
           {item.hasItems && item.hasItems.length > 0 && (
             <Text style={[styles.priceText, styles.hasBackground]}>
-              Your Offer: {formatValue(item.hasTotal)}
+              Offer: {formatValue(item.hasTotal)}
             </Text>
           )}
           <View style={styles.transfer}>
@@ -855,7 +938,7 @@ const GG = item.isSharkMode === 'GG'
           </View>
           {item.wantsItems && item.wantsItems.length > 0 && (
             <Text style={[styles.priceText, styles.wantBackground]}>
-              Their Offer: {formatValue(item.wantsTotal)}
+              Want: {formatValue(item.wantsTotal)}
             </Text>
           )}
         </View>
@@ -864,22 +947,26 @@ const GG = item.isSharkMode === 'GG'
         {item.description && <Text style={styles.description}>{renderTextWithUsername(item.description)}
         </Text>}
         {item.userId === user.id && (<View style={styles.footer}>
-          {!item.isFeatured && <Icon
-            name="rocket"
-            size={24}
-            color={config.colors.primary}
-            onPress={() => handleMakeFeatureTrade(item)}
-            style={{ marginRight: 20 }}
-          />}
-
-          <Icon
-            name="close-circle"
-            size={24}
-            color={config.colors.wantBlockRed}
-            style={{ marginRight: 20 }}
-            onPress={() => handleDelete(item)}
-          />
-          <Icon
+          {!item.isFeatured && 
+          <TouchableOpacity  onPress={() => handleMakeFeatureTrade(item)} style={[styles.boost, {backgroundColor:'purple'}]}>
+          <Text
+           
+           
+            
+           
+            style={{  color:'white', fontFamily:'Lato-Regular' }}
+          >BOOST IT</Text>
+          </TouchableOpacity>}
+ <TouchableOpacity  onPress={() => handleDelete(item)} style={[styles.boost, {backgroundColor:'black'}]}>
+ <Text
+           
+           
+           color={config.colors.secondary}
+          
+           style={{ color:'white', fontFamily:'Lato-Regular' }}
+         >DELETE IT</Text>
+          </TouchableOpacity>
+          {/* <Icon
             name="share-social"
             size={24}
             color={config.colors.primary}
@@ -887,7 +974,7 @@ const GG = item.isSharkMode === 'GG'
               setSelectedTrade(item); // ✅ Set the selected trade
               setOpenShareModel(true); // ✅ Then open the modal
             }}
-          />
+          /> */}
 
 
 
@@ -897,7 +984,7 @@ const GG = item.isSharkMode === 'GG'
           onClose={() => setOpenShareModel(false)}
           tradeData={selectedTrade}
         /> */}
-
+ 
       </View>
     );
   };
@@ -971,7 +1058,15 @@ const GG = item.isSharkMode === 'GG'
         )}
       </View>} */}
       <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Trade' />
-
+     
+      <ProfileBottomDrawer
+          isVisible={isDrawerVisible}
+          toggleModal={closeProfileDrawer}  
+          startChat={handleChatNavigation2}
+          selectedUser={selectedUser}
+          isOnline={isOnline}
+          bannedUsers={bannedUsers}
+        />
     </View>
   );
 };
@@ -1251,12 +1346,13 @@ const getStyles = (isDarkMode) =>
     },
     footer: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       borderTopWidth: 1,
-      borderColor: 'lightgrey',
-      paddingHorizontal: 30,
+      backgroundColor:'#F5A327',
+      // paddingHorizontal: 30,
       paddingTop: 5,
-      marginTop: 10
+      marginTop: 10,
+      borderTopColor:config.colors.hasBlockGreen
     },
     tag: {
       backgroundColor: config.colors.hasBlockGreen,
@@ -1271,6 +1367,9 @@ const getStyles = (isDarkMode) =>
     icon: {
       // marginRight: 1,
       fontSize: 12,
+    },
+    boost:{
+      justifyContent:'flex-start', paddingVertical:2, paddingHorizontal:5, borderRadius:3, alignItems:'center', margin:4
     }
 
   });

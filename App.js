@@ -33,6 +33,7 @@ import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { checkForUpdate } from './Code/AppHelper/InAppUpdateChecker';
 import AdminUnbanScreen from './Code/AppHelper/AdminDashboard';
 import Icon from 'react-native-vector-icons/Ionicons';
+import SubscriptionScreen from './Code/SettingScreen/OfferWall';
 
 
 
@@ -49,12 +50,12 @@ const setNavigationBarAppearance = (theme) => {
 // const adUnitId = getAdUnitId('openapp');
 
 function App() {
-  const { theme } = useGlobalState();
+  const { theme, single_offer_wall } = useGlobalState();
   const { t } = useTranslation();
 
   const selectedTheme = useMemo(() => {
     if (!theme && !localState.warnedAboutTheme) {
-      console.warn("⚠️ Theme not found! Falling back to Light Theme.");
+      // console.warn("⚠️ Theme not found! Falling back to Light Theme.");
       updateLocalState('warnedAboutTheme', true); // Prevent future warnings
     }
     return theme === 'dark' ? MyDarkTheme : MyLightTheme;
@@ -66,6 +67,8 @@ function App() {
   const [modalVisibleChatinfo, setModalVisibleChatinfo] = useState(false)
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [showofferwall, setShowofferwall] = useState(false);
+
 
   useEffect(() => {
     InterstitialAdManager.init();
@@ -149,6 +152,9 @@ function App() {
     if (reviewCount % 6 === 0 && reviewCount > 0) {
       requestReview();
     }
+    // if (reviewCount % 7 === 0 && reviewCount > 0 && !localState.isPro){
+    //   setShowofferwall(true)
+    // }
 
     updateLocalState('reviewCount', Number(reviewCount) + 1);
   }, []);
@@ -176,7 +182,7 @@ function App() {
         saveConsentStatus(formResult.status);
       }
     } catch (error) {
-      console.warn("Consent error:", error);
+      // console.warn("Consent error:", error);
     }
   };
   
@@ -233,10 +239,12 @@ function App() {
               {() => <SettingsScreen selectedTheme={selectedTheme} />}
             </Stack.Screen>
           </Stack.Navigator>
+          
         </NavigationContainer>
         {modalVisible && (
           <RewardRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} selectedTheme={selectedTheme} />
         )}
+          <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall}   oneWallOnly={single_offer_wall}/>
       </Animated.View>
     </SafeAreaView>
   );
@@ -259,7 +267,7 @@ export default function AppWrapper() {
 
   const selectedTheme = useMemo(() => {
     if (!theme) {
-      console.warn("⚠️ Theme not found! Falling back to Light Theme.");
+      // console.warn("⚠️ Theme not found! Falling back to Light Theme.");
     }
     return theme === 'dark' ? MyDarkTheme : MyLightTheme;
   }, [theme]);

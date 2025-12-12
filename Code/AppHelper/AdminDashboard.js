@@ -58,7 +58,7 @@ const AdminUnbanScreen = () => {
       setEmailBans(emailList);
       setPostBans(postList);
     } catch (err) {
-      console.error('Failed to fetch bans:', err);
+      // console.error('Failed to fetch bans:', err);
       Alert.alert('Error', 'Could not load banned users.');
     } finally {
       setLoading(false);
@@ -83,7 +83,7 @@ const AdminUnbanScreen = () => {
       await unbanUserWithEmail(decodedEmail);
       await fetchAll();
     } catch (err) {
-      console.error('Unban failed (email node):', err);
+      // console.error('Unban failed (email node):', err);
       Alert.alert('Error', 'Could not unban user.');
     }
   };

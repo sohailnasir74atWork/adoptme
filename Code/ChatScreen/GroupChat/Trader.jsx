@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Text,
+  Platform,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useGlobalState } from '../../GlobelStats';
@@ -26,8 +27,11 @@ import InterstitialAdManager from '../../Ads/IntAd';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { logoutUser } from '../../Firebase/UserLogics';
 import { showMessage } from 'react-native-flash-message';
+import PetModal from '../PrivateChat/PetsModel';
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
+
+
 
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
@@ -53,9 +57,16 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isFocused = useIsFocused();
   const [strikeInfo, setStrikeInfo] = useState(null);
+  const [petModalVisible, setPetModalVisible] = useState(false);
+const [selectedFruits, setSelectedFruits] = useState([]); 
+const [device, setDevice] = useState(null)
+
+const [selectedEmoji, setSelectedEmoji] = useState(null);
 
 
   const flatListRef = useRef();
+
+  // console.log(selectedUser)
 
   useEffect(() => {
     if (isAtBottom && pendingMessages.length > 0) {
@@ -69,6 +80,26 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const PAGE_SIZE = 20;
 
   const navigation = useNavigation()
+// open with user data (from MessagesList)
+const openProfileDrawer = async (userData) => {
+  if (!userData) return;
+
+  setSelectedUser(userData);
+  setIsDrawerVisible(true);
+
+  try {
+    const online = await isUserOnline(userData.senderId);
+    setIsOnline(online);
+  } catch (error) {
+    console.error('🔥 Error checking online status:', error);
+    setIsOnline(false);
+  }
+};
+
+// close when tapping overlay / close button
+const closeProfileDrawer = () => {
+  setIsDrawerVisible(false);
+};
 
 
   const toggleDrawer = async (userData = null) => {
@@ -115,7 +146,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     return {
       ...message,
       sender: message.sender?.trim() || 'Anonymous',
-      text: hasText || '[No content]',
+      text: hasText || '',
       timestamp: hasText ? message.timestamp || Date.now() : Date.now() - 60 * 1000,
     };
   }, []);
@@ -210,9 +241,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   }, []);
   
   useEffect(() => {
+  const platform = Platform.OS; // "ios" or "android"
+  
     // console.log('Initial loading of messages.');
     loadMessages(true); // Reset and load the latest messages
     setChatFocused(false)
+    setDevice(platform)
   }, []);
 
   // const bannedUserIds = bannedUsers.map((user) => user.id); // Extract IDs from bannedUsers
@@ -343,103 +377,136 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     // fetchChats()
   };
 
-  const handleSendMessage = () => {
-    const MAX_CHARACTERS = 250;
-    const MESSAGE_COOLDOWN = 100;
-    const LINK_REGEX = /(https?:\/\/[^\s]+)/g;
-    if (!user?.id || !currentUserEmail) {
+  // expects to be called like:
+// await handleSendMessage(replyTo, trimmedInput, fruits);
+
+const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) => {
+  const hasEmoji  = !!emojiUrl;
+
+  // console.log(emojiUrl)
+  const hasFruits = Array.isArray(fruits) && fruits.length > 0;
+
+  const MAX_CHARACTERS = 250;
+  const MESSAGE_COOLDOWN = 100; // ms
+  const LINK_REGEX = /(https?:\/\/[^\s]+)/i; // no "g" flag
+
+  // Must be logged in
+  if (!user?.id || !currentUserEmail) {
+    showMessage({
+      message: 'You are not loggedin',
+      description: 'You must be logged in to send Messages',
+      type: 'danger',
+    });
+    return;
+  }
+
+  // ---- Strike / ban checks ----
+  if (strikeInfo) {
+    const { strikeCount, bannedUntil } = strikeInfo;
+    const now = Date.now();
+
+    // Permanent ban
+    if (bannedUntil === 'permanent') {
       showMessage({
-        message: 'You are not loggedin',
-        description: 'You must be logged in to send Messages',
+        message: '⛔ Permanently Banned',
+        description: 'You are permanently banned from sending messages.',
         type: 'danger',
       });
       return;
-
     }
 
-    if (strikeInfo) {
-      const { strikeCount, bannedUntil } = strikeInfo;
-      const now = Date.now();
+    // Temporary ban (timestamp in ms)
+    if (typeof bannedUntil === 'number' && now < bannedUntil) {
+      const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const timeLeftText =
+        hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 
-      if (bannedUntil === 'permanent') {
-        showMessage({
-          message: '⛔ Permanently Banned',
-          description: 'You are permanently banned from sending messages.',
-          type: 'danger',
-        });
-        return;
-      }
-
-      if (typeof bannedUntil === 'number' && now < bannedUntil) {
-        const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-        const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
-        showMessage({
-          message: `⚠️ Strike ${strikeCount}`,
-          description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
-          type: 'warning',
-          duration: 5000,
-
-        });
-        return;
-      }
-    }
-
-    const trimmedInput = input.trim();
-    if (!trimmedInput) {
-      Alert.alert(t('home.alert.error'), 'Message cannot be empty.');
-      return;
-    }
-
-    if (leoProfanity.check(trimmedInput)) {
-      Alert.alert(t('home.alert.error'), t('misc.inappropriateLanguage'));
-      return;
-    }
-
-    if (trimmedInput.length > MAX_CHARACTERS) {
-      Alert.alert(t('home.alert.error'), t('misc.messageTooLong'));
-      return;
-    }
-
-    if (isCooldown) {
-      Alert.alert(t('home.alert.error'), t('misc.sendingTooQuickly'));
-      return;
-    }
-
-    const containsLink = LINK_REGEX.test(trimmedInput);
-    if (containsLink && !localState?.isPro && !isAdmin) {
-      Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
-      return;
-    }
-
-    try {
-      ref(appdatabase, 'chat_new').push({
-        text: trimmedInput,
-        timestamp: database.ServerValue.TIMESTAMP,
-        sender: user.displayName || 'Anonymous',
-        senderId: user.id,
-        avatar: user.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-        replyTo: replyTo ? { id: replyTo.id, text: replyTo.text } : null,
-        reportCount: 0,
-        containsLink,
-        isPro: localState.isPro,
-        isAdmin: isAdmin,
-        strikeCount: strikeInfo?.strikeCount || null,
-        currentUserEmail: currentUserEmail
-
+      showMessage({
+        message: `⚠️ Strike ${strikeCount}`,
+        description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+        type: 'warning',
+        duration: 5000,
       });
-
-      setInput('');
-      setReplyTo(null);
-      setIsCooldown(true);
-      setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert(t('home.alert.error'), 'Could not send your message. Please try again.');
+      return;
     }
-  };
+  }
+
+  // Use the argument, not external state
+  const trimmedInput = (trimmedInputArg || '').trim();
+
+  // Disallow empty text + no fruits
+  if (!trimmedInput && !hasFruits && !emojiUrl) {
+    Alert.alert(t('home.alert.error'), 'Message cannot be empty.');
+    return;
+  }
+
+  // Profanity check
+  if (trimmedInput && leoProfanity.check(trimmedInput)) {
+    Alert.alert(t('home.alert.error'), t('misc.inappropriateLanguage'));
+    return;
+  }
+
+  // Length check
+  if (trimmedInput.length > MAX_CHARACTERS) {
+    Alert.alert(t('home.alert.error'), t('misc.messageTooLong'));
+    return;
+  }
+
+  // Cooldown check
+  if (isCooldown) {
+    Alert.alert(t('home.alert.error'), t('misc.sendingTooQuickly'));
+    return;
+  }
+
+  // Link check (only for non-pro & non-admin)
+  const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
+  if (containsLink && !localState?.isPro && !isAdmin) {
+    Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
+    return;
+  }
+
+  try {
+    // Push to Firebase Realtime Database
+    await ref(appdatabase, 'chat_new').push({
+      text: trimmedInput || null, // allow fruits-only messages
+      timestamp: database.ServerValue.TIMESTAMP,
+      sender: user.displayName || 'Anonymous',
+      senderId: user.id,
+      avatar:
+        user.avatar ||
+        'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+      replyTo: replyToArg
+        ? { id: replyToArg.id, text: replyToArg.text }
+        : null,
+      reportCount: 0,
+      containsLink,
+      isPro: !!localState?.isPro,
+      isAdmin: !!isAdmin,
+      strikeCount: strikeInfo?.strikeCount ?? null,
+      currentUserEmail,
+      fruits: hasFruits ? fruits : [],
+      gif: hasEmoji ? emojiUrl : null,
+      flage: user.flage ? user.flage : null,
+    });
+
+    // Reset local input state
+    setInput('');
+    setReplyTo(null);
+
+    // Start cooldown
+    setIsCooldown(true);
+    setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
+  } catch (error) {
+    console.error('Error sending message:', error);
+    Alert.alert(
+      t('home.alert.error'),
+      'Could not send your message. Please try again.',
+    );
+  }
+};
+
 
   // console.log(isPro)
   return (
@@ -490,9 +557,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 // isOwner={isOwner}
                 isAtBottom={isAtBottom}
                 setIsAtBottom={setIsAtBottom}
-                toggleDrawer={toggleDrawer}
+                // toggleDrawer={toggleDrawer}
                 setMessages={setMessages}
                 isAdmin={isAdmin}
+                toggleDrawer={openProfileDrawer}
+                device={device}
+                
               />
             )}
             {!localState.isPro && <BannerAdComponent />}
@@ -504,6 +574,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 selectedTheme={selectedTheme}
                 replyTo={replyTo} // Pass reply context to MessageInput
                 onCancelReply={() => setReplyTo(null)} // Clear reply context
+                petModalVisible={petModalVisible}
+                setPetModalVisible={setPetModalVisible}
+                selectedFruits={selectedFruits}
+                setSelectedFruits={setSelectedFruits}
+                selectedEmoji={selectedEmoji}
+                setSelectedEmoji={setSelectedEmoji}
               />
             ) : (
               <TouchableOpacity
@@ -514,7 +590,19 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
               >
                 <Text style={styles.loginText}>{t('misc.loginToStartChat')}</Text>
               </TouchableOpacity>
+              
             )}
+             <PetModal
+               fromChat={true}
+      visible={petModalVisible}
+      onClose={() => setPetModalVisible(false)}
+        selectedFruits={selectedFruits}
+        setSelectedFruits={setSelectedFruits}
+
+
+
+      
+    />
           </ConditionalKeyboardWrapper>
 
           <SignInDrawer
@@ -528,7 +616,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         </View>
         <ProfileBottomDrawer
           isVisible={isDrawerVisible}
-          toggleModal={toggleDrawer}
+          toggleModal={closeProfileDrawer}  
           startChat={startPrivateChat}
           selectedUser={selectedUser}
           isOnline={isOnline}

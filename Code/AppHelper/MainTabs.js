@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Image, TouchableOpacity } from 'react-native';
+import { Image, TouchableOpacity, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -13,6 +13,7 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useGlobalState } from '../GlobelStats';
 import DesignUploader from '../Design/DesignMainScreen';
 import DesignStack from '../Design/DesignNavigation';
+import CustomTopTabs from '../ValuesScreen/TopTabs';
 
 
 
@@ -32,7 +33,7 @@ const AnimatedTabIcon = React.memo(({ iconName, color, size, focused }) => {
 
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t } = useTranslation();
-  const {isAdmin, } = useGlobalState()
+  const {isAdmin, user} = useGlobalState()
 
   const getTabIcon = useCallback((routeName, focused) => {
     const isNoman = config.isNoman; // ✅ Extracted to avoid repeated checks
@@ -44,7 +45,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       Trade: ['handshake', 'handshake'],
       Chat: ['envelope', 'envelope'],
       Designs: ['house-chimney-crack', 'house-chimney-crack'],
-      Values: ['chart-simple', 'chart-simple'],
+      More: ['angles-right', 'angles-right'],
     };
 
     return icons[routeName] ? (focused ? icons[routeName][0] : icons[routeName][1]) : 'alert-circle-outline';
@@ -123,12 +124,25 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
                   style={{ width: 20, height: 20, marginRight: 16 }}
                 />
               </TouchableOpacity>}
+              
               <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
-                <Icon
-                  name="settings"
-                  size={24}
-                  color={selectedTheme.colors.text}
-                />
+              <View
+  style={{
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: config.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  <Image
+    source={{ uri: !user.id ? 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png': user.avatar }}
+    style={{ width: 28, height: 28, borderRadius: 12.5 }}
+  />
+</View>
+
               </TouchableOpacity>
             </>
 
@@ -202,12 +216,12 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
 
 
       <Tab.Screen
-        name="Values"
+        name="More"
         options={{
-          title: t('tabs.values'), // Translation applied here
+          title: 'More', // Translation applied here
         }}
       >
-        {() => <ValueScreen selectedTheme={selectedTheme} />}
+        {() => <CustomTopTabs selectedTheme={selectedTheme} />}
       </Tab.Screen>
 
     </Tab.Navigator>

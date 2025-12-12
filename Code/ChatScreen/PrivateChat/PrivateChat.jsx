@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   ActivityIndicator,
   Alert,
   Text,
   Image,
-  TouchableOpacity,
+  TouchableOpacity,  TextInput,  
+
 } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { getStyles } from '../Style';
@@ -13,28 +14,39 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { clearActiveChat, setActiveChat } from '../utils';
+import { clearActiveChat, isUserOnline, setActiveChat } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { get, ref, update } from '@react-native-firebase/database';
+import  { get, increment, ref, update } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import BannerAdComponent from '../../Ads/bannerAds';
 import config from '../../Helper/Environment';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
+import PetModal from './PetsModel';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
+import ProfileBottomDrawer from '../GroupChat/BottomDrawer';
 
 
-const PAGE_SIZE = 100;
 
-const PrivateChatScreen = () => {
-  const route = useRoute();
-  const { selectedUser, selectedTheme, bannedUsers, item } = route.params || {};
-  const { user, theme, appdatabase, updateLocalStateAndDatabase } = useGlobalState();
+
+const PAGE_SIZE = 15;
+
+const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
+  const { selectedUser, selectedTheme, item } = route.params || {};
+
+  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB } = useGlobalState();
   const [trade, setTrade] = useState(null)
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const lastLoadedKeyRef = useRef(null);
   const [lastLoadedKey, setLastLoadedKey] = useState(null);
-  const [replyTo, setReplyTo] = useState(null);
+    const [replyTo, setReplyTo] = useState(null);
   const [input, setInput] = useState('');
   const { localState } = useLocalState()
   const selectedUserId = selectedUser?.senderId;
@@ -44,12 +56,27 @@ const PrivateChatScreen = () => {
 const [hasRated, setHasRated] = useState(false);
 const [showRatingModal, setShowRatingModal] = useState(false);
 const [rating, setRating] = useState(0);
+const [petModalVisible, setPetModalVisible] = useState(false);
+const [selectedFruits, setSelectedFruits] = useState([]); 
+const [reviewText, setReviewText] = useState('');   // 👈 new
+const [startRating,setStartRating] = useState(false)
+const [isOnline, setIsOnline] = useState(false); 
 
+
+
+  const closeProfileDrawer = () => {
+    setIsDrawerVisible(false);
+  };
 
 
   // console.log(item)
   
   useEffect(()=>{setTrade(item)}, [])
+  useEffect(() => {
+    if (selectedUserId) {
+      isUserOnline(selectedUserId).then(setIsOnline).catch(() => setIsOnline(false));
+    }
+  }, [selectedUserId]);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -65,7 +92,7 @@ const [rating, setRating] = useState(0);
   useEffect(() => {
     if (!selectedUserId || !myUserId) return;
   
-    const ratingRef = database().ref(`ratings/${selectedUserId}/${myUserId}`);
+    const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
     ratingRef.once('value').then(snapshot => {
       if (snapshot.exists()) {
         setHasRated(true);
@@ -128,97 +155,187 @@ const [rating, setRating] = useState(0);
       };
     }, [user?.id])
   );
-
-const handleRating = async () => {
-  try {
-    const ratingRef = database().ref(`ratings/${selectedUserId}/${myUserId}`);
-    const avgRef = database().ref(`averageRatings/${selectedUserId}`);
-
-    const [oldRatingSnap, avgSnap] = await Promise.all([
-      ratingRef.once('value'),
-      avgRef.once('value'),
-    ]);
-
-    const oldRating = oldRatingSnap.val()?.rating;
-    const avgData = avgSnap.val();
-    const oldAverage = avgData?.value || 0;
-    const oldCount = avgData?.count || 0;
-
-    let newAverage = 0;
-    let newCount = oldCount;
-
-    if (oldRating !== undefined) {
-      // Updating existing rating
-      newAverage = ((oldAverage * oldCount) - oldRating + rating) / oldCount;
-    } else {
-      // New rating
-      newCount = oldCount + 1;
-      newAverage = ((oldAverage * oldCount) + rating) / newCount;
+  const handleRating = async () => {
+    if (!rating) {
+      showErrorMessage("Error", "Please select a rating first.");
+      return;
     }
+  
+    try {
+      // 🔹 Realtime Database part (same as before)
+      setStartRating(true)
+      const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
+      const avgRef = ref(appdatabase, `averageRatings/${selectedUserId}`);
+  
+      const [oldRatingSnap, avgSnap] = await Promise.all([
+        ratingRef.once('value'),
+        avgRef.once('value'),
+      ]);
+  
+      const oldRating = oldRatingSnap.val()?.rating;
+      const avgData = avgSnap.val();
+      const oldAverage = avgData?.value || 0;
+      const oldCount = avgData?.count || 0;
+  
+      let newAverage = 0;
+      let newCount = oldCount;
+  
+      if (oldRating !== undefined) {
+        // 🔁 Updating existing rating
+        newAverage = ((oldAverage * oldCount) - oldRating + rating) / oldCount;
+      } else {
+        // 🆕 New rating
+        newCount = oldCount + 1;
+        newAverage = ((oldAverage * oldCount) + rating) / newCount;
+      }
+  
+      // ✅ Save rating in Realtime Database
+      await ratingRef.set({
+        rating,
+        timestamp: Date.now(),
+      });
+  
+      // ✅ Update average in Realtime Database
+      await avgRef.set({
+        value: parseFloat(newAverage.toFixed(2)),
+        count: newCount,
+        updatedAt: Date.now(),
+      });
+  
+      // ✅ Optional review in Firestore (using app Firestore: firestoreDB)
+// ✅ Optional review in Firestore (using app Firestore: firestoreDB)
+const trimmedReview = (reviewText || "").trim();
 
-    // ✅ Save rating
-    await ratingRef.set({
+let reviewWasSaved = false;
+let reviewWasUpdated = false;
+
+if (trimmedReview) {
+  // one doc per (fromUser, toUser)
+  const reviewDocId = `${selectedUserId}_${myUserId}`; // toUser_fromUser
+  const reviewRef = doc(firestoreDB, "reviews", reviewDocId);
+
+  const now = serverTimestamp();
+
+  // 🔍 check if this user already reviewed this trader
+  const existingSnap = await getDoc(reviewRef);
+  const isUpdate = existingSnap.exists;
+
+  await setDoc(
+    reviewRef,
+    {
+      fromUserId: myUserId,
+      toUserId: selectedUserId,
       rating,
-      timestamp: Date.now(),
-    });
+      userName: user?.displayName || user?.displayname || null,
+      review: trimmedReview, // guaranteed non-empty here
+      createdAt: isUpdate ? existingSnap.data()?.createdAt ?? now : now,
+      updatedAt: now,
+      edited: isUpdate,
+    },
+    { merge: true }
+  );
 
-    // ✅ Update average
-    await avgRef.set({
-      value: parseFloat(newAverage.toFixed(2)),
-      count: newCount,
-      updatedAt: Date.now(),
-    });
-
-    setShowRatingModal(false);
-    await updateUserPoints(user?.id, 100)
-    setHasRated(true);
-    showSuccessMessage("Success", "Thanks for your feedback!");
-
-  } catch (error) {
-    console.error("Rating error:", error);
-    showErrorMessage("Error", "Error submitting rating. Try again!");
-  }
+  reviewWasSaved = true;
+  reviewWasUpdated = isUpdate;
 }
 
+// 🎉 feedback based on whether we actually saved a text review
+showSuccessMessage(
+  "Success",
+  reviewWasSaved
+    ? reviewWasUpdated
+      ? "Your review was updated."
+      : "Thanks for your review!"
+    : "Thanks for your rating!"
+);
+
+      setShowRatingModal(false);
+      setHasRated(true);
+      setReviewText('');
+      await updateUserPoints(user?.id, 100);
+      setStartRating(false)
+  
+    } catch (error) {
+      console.error("Rating error:", error);
+      showErrorMessage("Error", "Error submitting rating. Try again!");
+    }
+  };
+  
+  
 
 
 
-  const messagesRef = useMemo(() => database().ref(`private_messages/${chatKey}/messages`), [chatKey]);
-  // console.log(selecte÷dUser)
+
+  const messagesRef = useMemo(
+    () => (chatKey ? ref(appdatabase, `private_messages/${chatKey}/messages`) : null),
+    [chatKey, appdatabase],
+  );
+  
+    // console.log(selecte÷dUser)
 
   // Load messages with pagination
   const loadMessages = useCallback(
     async (reset = false) => {
-      setLoading(reset);
-
+      if (!messagesRef) return;
+  
+      if (reset) {
+        setLoading(true);
+        setMessages([]);
+        lastLoadedKeyRef.current = null;
+      }
+  
       try {
-        let query = messagesRef.orderByKey().limitToLast(PAGE_SIZE);
-        if (!reset && lastLoadedKey) {
-          query = query.endAt(lastLoadedKey);
+        let query = messagesRef.orderByKey();
+  
+        const lastKey = lastLoadedKeyRef.current;
+        if (!reset && lastKey) {
+          // get older messages including lastKey – we’ll filter overlap
+          query = query.endAt(lastKey);
         }
+  
+        // ✅ apply limit ONLY ONCE, at the end
+        query = query.limitToLast(PAGE_SIZE);
 
+  
         const snapshot = await query.once('value');
         const data = snapshot.val() || {};
-
-        const parsedMessages = Object.entries(data)
+  
+        let parsedMessages = Object.entries(data)
           .map(([key, value]) => ({ id: key, ...value }))
-          .sort((a, b) => b.timestamp - a.timestamp);
+          .sort((a, b) => b.timestamp - a.timestamp); // oldest -> newest
+  
+        if (parsedMessages.length === 0) return;
 
-        if (parsedMessages.length > 0) {
-          setMessages((prev) => (reset ? parsedMessages : [...parsedMessages, ...prev]));
-          setLastLoadedKey(Object.keys(data)[0]);
-        } else if (reset) {
-          setMessages([]); // Clear messages if reset and no data
-        }
-      } catch (error) {
-        console.error('Error loading messages:', error);
+        // console.log(parsedMessages.length)
+  
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => String(m.id)));
+          const onlyNew = parsedMessages.filter(m => !existingIds.has(String(m.id)));
+          return reset ? parsedMessages : [...onlyNew, ...prev];
+        });
+  
+        lastLoadedKeyRef.current = parsedMessages[0].id; // oldest in this batch
+      } catch (err) {
+        console.warn('Error loading messages:', err);
       } finally {
-        setLoading(false);
+        if (reset) setLoading(false);
       }
     },
-    [messagesRef, lastLoadedKey]
+    [messagesRef],
   );
+  
+  
+  
 
+  useEffect(() => {
+    if (!messagesRef) return;
+    loadMessages(true);
+  }, [messagesRef, loadMessages]);
+  
+  const handleLoadMore = useCallback(() => {
+    // explicitly say "this is NOT a reset"
+    loadMessages(false);
+  }, [loadMessages]);
   // console.log(selectedUser.sender)
   const groupItems = (items) => {
     const grouped = {};
@@ -243,7 +360,7 @@ const handleRating = async () => {
 
   useEffect(() => {
     const chatId = [myUserId, selectedUserId].sort().join('_');
-    const tradeRef = database().ref(`private_messages/${chatId}/trade`);
+    const tradeRef = ref(appdatabase, `private_messages/${chatId}/trade`);
   
     if (item) {
       // ✅ If trade comes from props, set it and update Firebase
@@ -269,71 +386,92 @@ const handleRating = async () => {
 
   // Send message
 
-  const sendMessage = async (text) => {
-    const trimmedText = text.trim();
-    if (!trimmedText) {
-      // Alert.alert("Error", "Message cannot be empty!");
+  const sendMessage = async (text, image, fruits) => {
+    const trimmedText = (text || '').trim(); // safe guard
+    const hasImage = !!image;
+    const hasFruits = Array.isArray(fruits) && fruits.length > 0;
+  
+    // Block only if there's no text, no image AND no fruits
+    if (!trimmedText && !hasImage && !hasFruits) {
       showErrorMessage(t("home.alert.error"), t("chat.cannot_empty"));
       return;
     }
-    setInput('');
-
+  
+    setInput(''); // clear input, image & fruits already cleared in PrivateMessageInput
+  
     const timestamp = Date.now();
     const chatId = [myUserId, selectedUserId].sort().join('_');
-    // const tradeRef = database().ref(`private_messages/${chatId}/trade`);
-
-
+  
     // References
-    const messageRef = database().ref(`private_messages/${chatId}/messages/${timestamp}`);
-    const senderChatRef = database().ref(`chat_meta_data/${myUserId}/${selectedUserId}`);
-    const receiverChatRef = database().ref(`chat_meta_data/${selectedUserId}/${myUserId}`);
-    const receiverStatusRef = database().ref(`users/${selectedUserId}/activeChat`);
-
+    const messageRef       = ref(appdatabase, `private_messages/${chatId}/messages/${timestamp}`);
+    const senderChatRef    = ref(appdatabase, `chat_meta_data/${myUserId}/${selectedUserId}`);
+    const receiverChatRef  = ref(appdatabase, `chat_meta_data/${selectedUserId}/${myUserId}`);
+    const receiverStatusRef = ref(appdatabase, `users/${selectedUserId}/activeChat`);
+  
+    // Build message payload
+    const messageData = {
+      text: trimmedText,
+      senderId: myUserId,
+      timestamp,
+    };
+  
+    if (hasImage) {
+      messageData.imageUrl = image;      // 👈 used in PrivateMessageList
+    }
+  
+    if (hasFruits) {
+      messageData.fruits = fruits;       // 👈 your array of selected fruits
+    }
+  
+    // What to show as last message in chat list
+    const lastMessagePreview =
+      trimmedText ||
+      (hasImage ? '📷 Photo' : hasFruits ? `🐾 ${fruits.length} pet(s)` : '');
+  
     try {
-      // Send the message
-      await messageRef.set({ text: trimmedText, senderId: myUserId, timestamp });
-
+      // Save the message
+      await messageRef.set(messageData);
+  
       // Check if receiver is currently in the chat
       const snapshot = await receiverStatusRef.once('value');
       const isReceiverInChat = snapshot.val() === chatId;
-      // console.log(selectedUser)
-
-
-      // Update sender's chat metadata (unread count always 0 for sender)
+  
+      // Update sender's chat metadata
       await senderChatRef.update({
         chatId,
         receiverId: selectedUserId,
         receiverName: selectedUser?.sender || "Anonymous",
         receiverAvatar: selectedUser?.avatar || "https://example.com/default-avatar.jpg",
-        lastMessage: trimmedText,
+        lastMessage: lastMessagePreview,
         timestamp,
-        unreadCount: 0
+        unreadCount: 0,
       });
-
-      // Update receiver's chat metadata (increase unread count if not in chat)
+  
+      // Update receiver's chat metadata
       await receiverChatRef.update({
         chatId,
         receiverId: myUserId,
         receiverName: user?.displayName || "Anonymous",
         receiverAvatar: user?.avatar || "https://example.com/default-avatar.jpg",
-        lastMessage: trimmedText,
+        lastMessage: lastMessagePreview,
         timestamp,
-        unreadCount: isReceiverInChat ? 0 : database.ServerValue.increment(1)
+        unreadCount: isReceiverInChat ? 0 : increment(1),
       });
-
-      // setInput('');
+  
       setReplyTo(null);
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert("Error", "Could not send your message. Please try again.");
     }
   };
+  
+  
 
   useFocusEffect(
     useCallback(() => {
       if (!user?.id || !selectedUserId) return;
 
-      const chatMetaRef = database().ref(`chat_meta_data/${user.id}/${selectedUserId}`);
+      const chatMetaRef = ref(appdatabase, `chat_meta_data/${user.id}/${selectedUserId}`);
 
       // ✅ Reset unreadCount when entering chat
       chatMetaRef.update({ unreadCount: 0 });
@@ -357,24 +495,31 @@ const handleRating = async () => {
   useEffect(() => {
     setActiveChat(user.id, chatKey)
   }, [user.id, chatKey]);
-  useEffect(() => {
-    const listener = messagesRef.on('child_added', (snapshot) => {
-      const newMessage = { id: snapshot.key, ...snapshot.val() };
-      // if (developmentMode) {
-      //   const privatechat_new_message = JSON.stringify(newMessage).length / 1024;
-      //   console.log(`🚀 Downloaded data: ${privatechat_new_message.toFixed(2)} KB from private chat new messages node`);
-      // }
-      setMessages((prevMessages) =>
-        prevMessages.some((msg) => msg.id === newMessage.id)
-          ? prevMessages
-          : [newMessage, ...prevMessages]
-      );
-    });
 
-    return () => {
-      messagesRef.off('child_added'); // ✅ Correct cleanup
-    };
-  }, [messagesRef]);
+
+
+useEffect(() => {
+  if (!messagesRef) return;
+
+  const handleChildAdded = snapshot => {
+    const newMessage = { id: snapshot.key, ...snapshot.val() };
+
+    setMessages(prev => {
+      const exists = prev.some(m => String(m.id) === String(newMessage.id));
+      if (exists) return prev; // don’t duplicate
+
+      // keep ASC order: add to the end
+      return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp);
+    });
+  };
+
+  messagesRef.on('child_added', handleChildAdded);
+
+  return () => {
+    messagesRef.off('child_added', handleChildAdded);
+  };
+}, [messagesRef]);
+
 
 
 
@@ -385,7 +530,7 @@ const handleRating = async () => {
       <GestureHandlerRootView>
 
 
-        <View style={styles.container}>
+        <View style={[styles.container,]}>
 
           <ConditionalKeyboardWrapper style={{ flex: 1 }} privatechatscreen={true}>
             {/* <View style={{ flex: 1 }}> */}
@@ -470,45 +615,43 @@ const handleRating = async () => {
                     ))}
                   </View>
                 </View>
-                {canRate && !hasRated && (
-                  <View style={{ alignItems: 'center', marginTop: 5 }}>
-                    <TouchableOpacity
-                      style={{
-                        backgroundColor: config.colors.primary,
-                        borderRadius: 10,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                      }}
-                      onPress={() => setShowRatingModal(true)}
-                    >
-                      <Text style={{ color: 'white', fontSize: 12 }}>
-                        Rate Trader and Get 100 points
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
                 </View>
               )}
+             
 
-              {!loading && messages.length === 0 ? (
-                <ActivityIndicator size="large" color="#1E88E5" style={{ flex: 1, justifyContent: 'center' }} />
-              ) : messages.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>{t("chat.no_messages_yet")}</Text>
-                </View>
-              ) : (
-                <PrivateMessageList
-                  messages={messages}
-                  userId={myUserId}
-                  handleLoadMore={loadMessages}
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  isBanned={isBanned}
-                  selectedUser={selectedUser}
-                  user={user}
-                  onReply={(message) => setReplyTo(message)}
-                />
-              )}
+             {messages.length === 0 ? (
+  // No messages yet
+  loading ? (
+    // Still checking / loading
+    <ActivityIndicator
+      size="large"
+      color="#1E88E5"
+      style={{ flex: 1, justifyContent: 'center' }}
+    />
+  ) : (
+    // Finished loading, still empty
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyText}>{t('chat.no_messages_yet')}</Text>
+    </View>
+  )
+) : (
+  // We have messages → always render the list, no matter what `loading` is
+  <PrivateMessageList
+    messages={messages}
+    userId={myUserId}
+    handleLoadMore={handleLoadMore}
+    refreshing={refreshing}
+    onRefresh={handleRefresh}
+    isBanned={isBanned}
+    selectedUser={selectedUser}
+    user={user}
+    onReply={(message) => setReplyTo(message)}
+    canRate={canRate}
+    hasRated={hasRated}
+    setShowRatingModal={setShowRatingModal}
+  />
+)}
+
       {!localState.isPro && <BannerAdComponent/>}
 
               <PrivateMessageInput
@@ -520,7 +663,22 @@ const handleRating = async () => {
                 input={input}
                 setInput={setInput}
                 selectedTheme={selectedTheme}
+                petModalVisible={petModalVisible}
+                setPetModalVisible={setPetModalVisible}
+                selectedFruits={selectedFruits}
+                setSelectedFruits={setSelectedFruits}
               />
+               <PetModal
+               fromChat={true}
+      visible={petModalVisible}
+      onClose={() => setPetModalVisible(false)}
+        selectedFruits={selectedFruits}
+        setSelectedFruits={setSelectedFruits}
+
+
+
+      
+    />
             {/* </View>  */}
             </ConditionalKeyboardWrapper>
         </View>
@@ -561,7 +719,7 @@ const handleRating = async () => {
       </TouchableOpacity>
 
       {/* Title */}
-      <Text style={{ fontSize: 18, marginBottom: 15, textAlign: 'center' }}>
+      <Text style={{ fontSize: 16, marginBottom: 10, textAlign: 'center', fontWeight:'600' }}>
         Rate this Trader
       </Text>
 
@@ -575,6 +733,27 @@ const handleRating = async () => {
           </TouchableOpacity>
         ))}
       </View>
+      {/* Review input (optional) */}
+<TextInput
+  style={{
+    width: '100%',
+    minHeight: 60,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+    textAlignVertical: 'top',
+    fontSize: 14,
+  }}
+  placeholder="Write an optional review..."
+  placeholderTextColor="#999"
+  multiline
+  value={reviewText}
+  onChangeText={setReviewText}
+/>
+
 
       {/* Submit Button */}
       <TouchableOpacity
@@ -588,7 +767,7 @@ const handleRating = async () => {
         onPress={handleRating}
       >
         <Text style={{ color: 'white', fontSize: 14, textAlign: 'center' }}>
-          Submit Rating
+       { !startRating ?'Submit Rating' : 'Submitting'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -609,6 +788,15 @@ const handleRating = async () => {
           />
         )}
       </View>} */}
+      <ProfileBottomDrawer
+          isVisible={isDrawerVisible}
+          toggleModal={closeProfileDrawer}  
+          startChat={()=>{}}
+          selectedUser={selectedUser}
+          isOnline={isOnline}
+          bannedUsers={bannedUsers}
+          fromPvtChat={true}
+        />
     </>
   );
 };

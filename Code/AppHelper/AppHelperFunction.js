@@ -57,13 +57,13 @@ export const loadAppOpenAd = async (
     });
 
     appOpenAd.addAdEventListener(AdEventType.ERROR, (error) => {
-      console.error('Ad Error:', error);
+      // console.error('Ad Error:', error);
       setIsAdLoaded(false);
     });
 
     await appOpenAd.load(); // Load the ad
   } catch (error) {
-    console.error('Error loading App Open Ad:', error);
+    // console.error('Error loading App Open Ad:', error);
     setIsAdLoaded(false);
   }
 };
@@ -94,7 +94,7 @@ export const handleUserConsent = async (setConsentStatus, setLoading) => {
       }
     }
   } catch (error) {
-    console.error('Error handling consent:', error);
+    // console.error('Error handling consent:', error);
   } finally {
     setLoading(false);
   }

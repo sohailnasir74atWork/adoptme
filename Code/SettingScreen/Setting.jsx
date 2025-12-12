@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Switch,
   Linking,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -34,6 +35,27 @@ import { useLanguage } from '../Translation/LanguageProvider';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { setAppLanguage } from '../../i18n';
+import { Image as CompressorImage } from 'react-native-compressor';
+import RNFS from 'react-native-fs';
+
+
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
+import PetModal from '../ChatScreen/PrivateChat/PetsModel';
+import { launchImageLibrary } from 'react-native-image-picker';
+// Bunny avatar upload (same zone/keys as your post uploader)
+const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
+const BUNNY_STORAGE_ZONE = 'post-gag';
+const BUNNY_ACCESS_KEY   = '1b7e1a85-dff7-4a98-ba701fc7f9b9-6542-46e2';
+const BUNNY_CDN_BASE     = 'https://pull-gag.b-cdn.net';
+
+// ~500 KB max for avatar (small, DP-friendly)
+const MAX_AVATAR_SIZE_BYTES = 500 * 1024;
 
 
 export default function SettingsScreen({ selectedTheme }) {
@@ -41,14 +63,197 @@ export default function SettingsScreen({ selectedTheme }) {
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [openSingnin, setOpenSignin] = useState(false);
-  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, reload } = useGlobalState()
+  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, firestoreDB } = useGlobalState()
   const { updateLocalState, localState, mySubscriptions } = useLocalState()
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [showOfferWall, setShowofferWall] = useState(false);
   const { language, changeLanguage } = useLanguage();
+  const [ownedPets, setOwnedPets] = useState([]);
+const [wishlistPets, setWishlistPets] = useState([]);
+const [petModalVisible, setPetModalVisible] = useState(false);
+const [owned, setOwned] = useState(false);
+const [avatarSearch, setAvatarSearch] = useState('');
+const [uploadingAvatar, setUploadingAvatar] = useState(false);
+const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
+
+
+
 
   const { t } = useTranslation();
-  // console.log(analytics)
+  const BASE_ADOPTME_URL = 'https://elvebredd.com';
+
+
+  const SettingsTabs = () => (
+    <View
+      style={{
+        flexDirection: "row",
+        // marginHorizontal: 12,
+        marginTop: 4,
+        marginBottom: 4,
+        backgroundColor: isDarkMode ? "#1b1b1b" : "#f2f2f2",
+        borderRadius: 6,
+        padding: 4,
+      }}
+    >
+      {[
+        { key: "profile", label: "Profile Settings" },
+        { key: "app", label: "App Settings" },
+      ].map((t) => {
+        const isActive = activeTab === t.key;
+        return (
+          <TouchableOpacity
+            key={t.key}
+            onPress={() => setActiveTab(t.key)}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              alignItems: "center",
+              backgroundColor: isActive ? config.colors.primary : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Lato-Bold",
+                color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
+              }}
+            >
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  const parsedValuesData = useMemo(() => {
+    try {
+      const raw = localState?.data;
+      if (!raw) return [];
+
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+      // Convert object map to array if needed
+      return Array.isArray(parsed) ? parsed : Object.values(parsed || {});
+    } catch (e) {
+      console.log('Error parsing localState.data', e);
+      return [];
+    }
+  }, [localState?.data]);
+
+  const petAvatarOptions = useMemo(() => {
+    if (!parsedValuesData?.length) return [];
+
+    return parsedValuesData
+      .filter(item => item?.image && item?.name)
+      .map(item => {
+        const path = item.image.startsWith('/') ? item.image : `/${item.image}`;
+        return {
+          url: `${BASE_ADOPTME_URL}${path}`,
+          name: item.name,
+          type: item.type || 'pet',
+        };
+      });
+  }, [parsedValuesData]);
+
+  const defaultAvatarOptions = useMemo(
+    () =>
+      imageOptions.map((url, index) => ({
+        url,
+        name: `Icon ${index + 1}`,
+        type: 'default',
+      })),
+    [imageOptions]
+  );
+
+  const avatarOptions = useMemo(
+    () => [...petAvatarOptions, ...defaultAvatarOptions],
+    [defaultAvatarOptions, petAvatarOptions]
+  );
+  
+
+
+  // Final list: existing `imageOptions` + options from values data
+  const filteredAvatarOptions = useMemo(() => {
+    const q = avatarSearch.trim().toLowerCase();
+    if (!q) return avatarOptions;
+
+    return avatarOptions.filter(opt => {
+      // Always keep default icons
+      if (opt.type === 'default') return true;
+      return opt.name?.toLowerCase().includes(q);
+    });
+  }, [avatarSearch, avatarOptions]);
+  const handlePickAndUploadAvatar = useCallback(async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+      });
+
+      if (!result.assets?.length) return;
+
+      const asset = result.assets[0];
+
+      setUploadingAvatar(true);
+
+      // 🔹 Compress to small DP-friendly size
+      const compressedUri = await CompressorImage.compress(asset.uri, {
+        maxWidth: 300,
+        quality: 0.7,
+      });
+
+      const filePath = compressedUri.replace('file://', '');
+      const stat = await RNFS.stat(filePath);
+
+      // 🔹 Reject heavy images
+      if (stat.size > MAX_AVATAR_SIZE_BYTES) {
+        Alert.alert(
+          'Image too large',
+          'Please choose a smaller image (max ~500 KB) or crop it before uploading.'
+        );
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const userId = user?.id ?? 'anon';
+      const filename = `${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
+      const remotePath = `avatars/${encodeURIComponent(userId)}/${encodeURIComponent(filename)}`;
+      const uploadUrl = `https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`;
+
+      const base64 = await RNFS.readFile(filePath, 'base64');
+      const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+      const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          AccessKey: BUNNY_ACCESS_KEY,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: binary,
+      });
+
+      const txt = await res.text().catch(() => '');
+
+      if (!res.ok) {
+        console.warn('[Bunny avatar ERROR]', res.status, txt?.slice(0, 200));
+        Alert.alert('Upload failed', 'Could not upload image. Please try again.');
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const publicUrl = `${BUNNY_CDN_BASE}/${decodeURIComponent(remotePath)}`;
+
+      // ✅ Set as current selected profile image
+      setSelectedImage(publicUrl);
+    } catch (e) {
+      console.warn('[Avatar upload]', e?.message || e);
+      Alert.alert('Upload failed', 'Something went wrong. Please try again.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }, [user?.id]);
 
 
 
@@ -139,6 +344,7 @@ export default function SettingsScreen({ selectedTheme }) {
       setIsPermissionGranted(false);
     }
   };
+  const USERNAME_REGEX = /^[A-Za-z0-9_-]+$/;
 
   const handleSaveChanges = async () => {
 
@@ -154,7 +360,13 @@ export default function SettingsScreen({ selectedTheme }) {
       );
       return;
     }
-
+    if (!USERNAME_REGEX.test(newDisplayName)) {
+      showErrorMessage(
+        t("home.alert.error"),
+        "Only letters, numbers, '-' and '_' are allowed in the username."
+      );
+      return;
+    }
     try {
       await updateLocalStateAndDatabase({
         displayName: newDisplayName.trim(),
@@ -178,7 +390,149 @@ export default function SettingsScreen({ selectedTheme }) {
     : 'Guest User';
 
 
+    const renderPetBubble = (pet, index) => {
+      const valueType = (pet.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+    
+      let rarityBg = '#FF6666'; // default D
+      if (valueType === 'n') rarityBg = '#2ecc71';
+      if (valueType === 'm') rarityBg = '#9b59b6';
+    
+      return (
+        <View key={`${pet.id || pet.name}-${index}`} style={styles.petBubble}>
+          <Image
+            source={{ uri: pet.imageUrl }}
+            style={styles.petImageSmall}
+          />
+    
+          {/* Badge stack on bottom-right of the bubble */}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              flexDirection: 'row',
+              alignItems: 'center',
+              padding: 2,
+            }}
+          >
+            {/* D / N / M badge */}
+            <View
+              style={{
+                paddingHorizontal: 2,
+                paddingVertical: 2,
+                borderRadius: 999,
+                backgroundColor: rarityBg,
+                marginLeft: 1,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 5,
+                  fontWeight: '500',
+                  color: '#fff',
+                }}
+              >
+                {valueType.toUpperCase()}
+              </Text>
+            </View>
+    
+            {/* Fly badge */}
+            {pet.isFly && (
+              <View
+                style={{
+                  paddingHorizontal: 2,
+                  paddingVertical: 2,
+                  borderRadius: 999,
+                  backgroundColor: '#3498db',
+                  marginLeft: 1,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 5, fontWeight: '500', color: '#fff' }}
+                >
+                  F
+                </Text>
+              </View>
+            )}
+    
+            {/* Ride badge */}
+            {pet.isRide && (
+              <View
+                style={{
+                  paddingHorizontal: 2,
+                  paddingVertical: 2,
+                  borderRadius: 999,
+                  backgroundColor: '#e74c3c',
+                  marginLeft: 1,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 5, fontWeight: '500', color: '#fff' }}
+                >
+                  R
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      );
+    };
+    
+    
+    // Later you’ll hook these into a modal / selector
+    const handleManagePets = (owned) => {
+      // e.g. open modal to pick owned pets
+      owned === 'owned' ?  setOwned(true) : setOwned(false)
+      setPetModalVisible(true)
+    };
+    
+ // Load owned / wishlist pets from Firestore on screen load
+ useEffect(() => {
+  if (!user?.id || !firestoreDB) {
+    setOwnedPets([]);
+    setWishlistPets([]);
+    return;
+  }
 
+  const userReviewRef = doc(firestoreDB, 'reviews', user.id);
+
+  const unsubscribe = onSnapshot(userReviewRef, (docSnap) => {
+    const data = docSnap.data();
+    if (!data) {
+      setOwnedPets([]);
+      setWishlistPets([]);
+      return;
+    }
+
+    setOwnedPets(Array.isArray(data.ownedPets) ? data.ownedPets : []);
+    setWishlistPets(Array.isArray(data.wishlistPets) ? data.wishlistPets : []);
+  });
+
+  return () => unsubscribe();
+}, [user?.id, firestoreDB]);
+
+
+    // Call this after user finishes editing selection
+    const savePetsToReviews = async (newOwned, newWishlist) => {
+      if (!user?.id || !firestoreDB) return;
+    
+      const userReviewRef = doc(firestoreDB, 'reviews', user.id);
+    
+      await setDoc(
+        userReviewRef,
+        {
+          ownedPets: newOwned,
+          wishlistPets: newWishlist,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    
+      setOwnedPets(newOwned);
+      setWishlistPets(newWishlist);
+    };
+    
+    
 
   const handleLogout = async () => {
     triggerHapticFeedback('impactLight');
@@ -333,9 +687,11 @@ const formatPlanName = (plan) => {
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   return (
     <View style={styles.container}>
+        <SettingsTabs />
+
       {/* User Profile Section */}
-      <View style={styles.cardContainer}>
-        <View style={styles.optionuserName}>
+      {activeTab === "profile" ?   <View style={styles.cardContainer}>
+        <View style={[styles.optionuserName, styles.option]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Image
               source={
@@ -363,11 +719,67 @@ const formatPlanName = (plan) => {
             {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
           </TouchableOpacity>
         </View>
+        <View style={styles.petsSection}>
+  {/* Owned Pets */}
+  <View style={[styles.petsColumn]}>
+    <View style={styles.petsHeaderRow}>
+      <Text style={styles.petsTitle}>
+       Owned Pets
+      </Text>
+      {user?.id && (
+        <TouchableOpacity onPress={()=>handleManagePets('owned')}>
+          {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {ownedPets.length === 0 ? (
+      <Text style={styles.petsEmptyText}>
+       {user?.id ? 'Select the pets you own' : 'Login to selected owned pets'}
+      </Text>
+    ) : (
+      <View style={styles.petsAvatarRow}>
+        {ownedPets.map((pet, index) => renderPetBubble(pet, index))}
+       
+         
+        
+      </View>
+    )}
+  </View>
+
+  {/* Wishlist */}
+  <View style={styles.petsColumn}>
+    <View style={styles.petsHeaderRow}>
+      <Text style={styles.petsTitle}>
+        Wishlist
+      </Text>
+      {user?.id && (
+        <TouchableOpacity onPress={()=>handleManagePets('wish')}>
+         {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {wishlistPets.length === 0 ? (
+      <Text style={styles.petsEmptyText}>
+     {user?.id ? 'Add pets you want' : 'Login & Add pets you want'}
+      </Text>
+    ) : (
+      <View style={styles.petsAvatarRow}>
+        {wishlistPets.map((pet, index)=>(renderPetBubble(pet, index)))}
+       
+        
+      
+      </View>
+    )}
+  </View>
+</View>
+
+
       </View>
 
-      {/* Options Section */}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>{t('settings.app_settings')}</Text>
+     : <ScrollView showsVerticalScrollIndicator={false}>
+        {/* <Text style={styles.subtitle}>{t('settings.app_settings')}</Text> */}
         <View style={styles.cardContainer}>
           <View style={styles.option} onPress={() => {
             handleToggle(); triggerHapticFeedback('impactLight');
@@ -375,7 +787,8 @@ const formatPlanName = (plan) => {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Icon name="radio-outline" size={18} color={'white'} style={{backgroundColor:'#B76E79', padding:5, borderRadius:5}} />
-                <Text style={styles.optionText}>{t('settings.haptic_feedback')}</Text></TouchableOpacity>
+                <Text style={styles.optionText}>{t('settings.haptic_feedback')}</Text>
+                </TouchableOpacity>
               <Switch value={localState.isHaptic} onValueChange={handleToggle} />
             </View>
 
@@ -395,7 +808,7 @@ const formatPlanName = (plan) => {
 
           </View>
 
-          <View style={styles.option} onPress={() => {
+          <View style={styles.optionLast} onPress={() => {
             handleShareApp(); triggerHapticFeedback('impactLight');
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
@@ -427,7 +840,7 @@ const formatPlanName = (plan) => {
             </View>
             
           </View>
-          <View style={styles.optionLast} onPress={() => {
+          {/* <View style={styles.optionLast} onPress={() => {
             HANDLEH(); triggerHapticFeedback('impactLight');
           }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
@@ -456,10 +869,10 @@ const formatPlanName = (plan) => {
               </View>
 
             </View>
-          </View>
+          </View> */}
         </View>
 
-        <Text style={styles.subtitle}>{t('settings.language_settings')}</Text>
+        {/* <Text style={styles.subtitle}>{t('settings.language_settings')}</Text>
         <View style={styles.cardContainer}>
           <View style={[styles.optionLast, { flexDirection: 'row', justifyContent: 'space-between' }]}>
             <View style={{ flexDirection: 'row', }}>
@@ -485,7 +898,7 @@ const formatPlanName = (plan) => {
               </MenuOptions>
             </Menu>
           </View>
-        </View>
+        </View> */}
 
 
         <Text style={styles.subtitle}>{t('settings.pro_subscription')}</Text>
@@ -645,62 +1058,145 @@ const formatPlanName = (plan) => {
   </Text> */}
 
 
-      </ScrollView>
+      </ScrollView>}
 
       {/* Bottom Drawer */}
-      <Modal
+         {/* Bottom Drawer */}
+         <Modal
         animationType="slide"
         transparent={true}
         visible={isDrawerVisible}
         onRequestClose={() => setDrawerVisible(false)}
       >
-
         <Pressable
           style={styles.overlay}
           onPress={() => setDrawerVisible(false)}
         />
         <ConditionalKeyboardWrapper>
-          <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', }}>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <View style={styles.drawer}>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                {/* <Image
+                  source={
+                    typeof selectedImage === 'string' && selectedImage.trim()
+                      ? { uri: selectedImage }
+                      : { uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }
+                  }
+                  style={[
+                    styles.profileImage,
+                    { marginRight: 10, width: 30, height: 30, borderRadius: 15 },
+                  ]}
+                /> */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.drawerSubtitle}>{t('settings.change_display_name')}</Text>
+                  <TextInput
+                    style={[styles.input, { marginTop: 4 }]}
+                    placeholder="Enter new display name"
+                    value={newDisplayName}
+                    onChangeText={setNewDisplayName}
+                  />
+                </View>
+              </View>
 
-              {/* Name Input */}
-              <Text style={styles.drawerSubtitle}>{t('settings.change_display_name')}</Text>
+              {/* Profile Image Selection title */}
+              <Text style={[styles.drawerSubtitle]}>
+                {t('settings.select_profile_icon')}
+              </Text>
+
+          
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  {
+                    backgroundColor: config.colors.secondary,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                  },
+                ]}
+                onPress={handlePickAndUploadAvatar}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Icon
+                      name="cloud-upload-outline"
+                      size={18}
+                      color="#fff"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.saveButtonText}>
+                      Upload from gallery
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
               <TextInput
-                style={styles.input}
-                placeholder="Enter new display name"
-                value={newDisplayName}
-                onChangeText={setNewDisplayName}
+                style={[
+                  styles.input,
+                  // { marginBottom: 8, fontSize: 12, paddingVertical: 6 },
+                ]}
+                placeholder="Search pets (e.g. Giraffe, Egg...)"
+                placeholderTextColor="#999"
+                value={avatarSearch}
+                onChangeText={setAvatarSearch}
               />
 
-              {/* Profile Image Selection */}
-              <Text style={styles.drawerSubtitle}>{t('settings.select_profile_icon')}</Text>
+              {/* Avatar list: defaults + pets (filtered) */}
               <FlatList
-                data={imageOptions}
-                keyExtractor={(item, index) => item.toString()}
+                data={filteredAvatarOptions}
+                keyExtractor={(item, index) => `${item.url}-${index}`}
                 horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingVertical: 4 }}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    onPress={() => {
-                      setSelectedImage(item);
-                    }}
+                    onPress={() => setSelectedImage(item.url)}
+                    style={[
+                      styles.imageOptionWrapper,
+                      selectedImage === item.url && styles.imageOptionSelected,
+                      { alignItems: 'center', marginRight: 10 },
+                    ]}
                   >
-                    <Image source={{
-                      uri: item,
-                    }} style={styles.imageOption} />
+                    <Image
+                      source={{ uri: item.url }}
+                      style={styles.imageOption}
+                    />
+                    {/* {item.type !== 'default' && (
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 10,
+                          marginTop: 4,
+                          maxWidth: 70,
+                          color: isDarkMode ? '#ddd' : '#333',
+                        }}
+                      >
+                        {item.name}
+                      </Text>
+                    )} */}
                   </TouchableOpacity>
                 )}
               />
 
+              {/* Save button */}
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveButton, { marginTop: 16 }]}
                 onPress={handleSaveChanges}
               >
-                <Text style={styles.saveButtonText}>{t('settings.save_changes')}</Text>
+                <Text style={styles.saveButtonText}>
+                  {t('settings.save_changes')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </ConditionalKeyboardWrapper>
       </Modal>
+
      
       <SubscriptionScreen visible={showOfferWall} onClose={() => setShowofferWall(false)} track='Setting'/>
       <SignInDrawer
@@ -710,6 +1206,9 @@ const formatPlanName = (plan) => {
         message='Signin to access all features'
          screen='Setting'
       />
+            <PetModal fromSetting={true} ownedPets={ownedPets} setOwnedPets={setOwnedPets} wishlistPets={wishlistPets} setWishlistPets={setWishlistPets} onClose={async ()=>{{ setPetModalVisible(false); await savePetsToReviews(ownedPets, wishlistPets)}}}       visible={petModalVisible} owned={owned}
+            />
+
 
     </View>
   );

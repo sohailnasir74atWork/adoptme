@@ -10,6 +10,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useGlobalState } from '../GlobelStats';
 
 export default function EditProfileModal({
   visible,
@@ -19,6 +20,8 @@ export default function EditProfileModal({
   selectedImage,
   setSelectedImage,
 }) {
+  // const {localeState} = useGlobalState();
+  // console.log(localeState.data, 'SDD')
   const imageOptions = [
     require('../Avtar/display-pic.png'),
     require('../Avtar/eagle.png'),

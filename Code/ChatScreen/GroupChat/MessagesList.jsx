@@ -9,6 +9,7 @@ import {
   Image,
   Alert,
   Keyboard,
+  StyleSheet,
 } from 'react-native';
 import { getStyles } from './../Style';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
@@ -27,6 +28,7 @@ import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { banUserwithEmail, unbanUserWithEmail } from '../utils';
+import { useEffect } from 'react';
 
 const MessagesList = ({
   messages,
@@ -56,6 +58,7 @@ const MessagesList = ({
   const styles = getStyles(isDarkMode);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReportPopup, setShowReportPopup] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null); // 👈 NEW
   const { triggerHapticFeedback } = useHaptic();
 
   const { t } = useTranslation();
@@ -69,9 +72,70 @@ const MessagesList = ({
     triggerHapticFeedback('impactLight');
     showSuccessMessage('Success', 'Message Copied');
   };
+  // useEffect(() => {
+  //   if (!messages || messages.length === 0) return;
+  //   if (!isAtBottom) return; // only when user is at bottom
+  
+  //   const newest = messages[0]; // because FlatList is inverted
+  //   if (!newest?.id) return;
+  
+  //   setHighlightedMessageId(newest.id);
+  
+  //   const timer = setTimeout(() => {
+  //     setHighlightedMessageId((current) =>
+  //       current === newest.id ? null : current,
+  //     );
+  //   }, 1500);
+  
+  //   return () => clearTimeout(timer);
+  // }, [messages, isAtBottom]);
+  
+  
 
-
-
+  const scrollToMessage = useCallback(
+    (targetId) => {
+      if (!flatListRef?.current || !targetId) return;
+  
+      const index = messages.findIndex((m) => m.id === targetId);
+      if (index === -1) return;
+  
+      try {
+        flatListRef.current.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.5,
+        });
+  
+        // highlight only the scrolled-to message
+        setHighlightedMessageId(targetId);
+  
+        setTimeout(() => {
+          setHighlightedMessageId((current) =>
+            current === targetId ? null : current,
+          );
+        }, 1500);
+      } catch (e) {
+        console.log('scrollToIndex error:', e);
+      }
+    },
+    [flatListRef, messages],
+  );
+  
+  
+  
+  
+  
+  const fruitColors = useMemo(
+    () => ({
+      wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
+      name:      isDarkMode ? '#f9fafb' : '#111827',
+      value:     isDarkMode ? '#e5e7eb' : '#4b5563',
+      divider:   isDarkMode ? '#ffffff22' : '#00000011',
+      totalLabel:isDarkMode ? '#e5e7eb' : '#4b5563',
+      totalValue:isDarkMode ? '#f97373' : '#b91c1c',
+    }),
+    [isDarkMode],
+  );
   const translateText = async (text, targetLang = deviceLanguage) => {
     const placeholders = {};
     let maskedText = text;
@@ -181,6 +245,32 @@ const MessagesList = ({
       ? new Date(previousMessage.timestamp).toDateString()
       : null;
     const shouldShowDateHeader = currentDate !== previousDate;
+
+    const fruits = Array.isArray(item.fruits) ? item.fruits : [];
+    const hasFruits = fruits.length > 0;
+    const totalFruitValue = hasFruits
+      ? fruits.reduce((sum, f) => sum + (Number(f.value) || 0), 0)
+      : 0;
+      const getReplyPreview = (replyTo) => {
+        if (!replyTo) return '[Deleted message]';
+      
+        if (replyTo.text && replyTo.text.trim().length > 0) {
+          return replyTo.text;
+        }
+      
+        if (replyTo.gif) {
+          return '[Emoji]';
+        }
+      
+        if (replyTo.hasFruits) {
+          const count = replyTo.fruitsCount || 0;
+          return count > 0
+            ? `[${count} pet(s) message]`
+            : '[Pets message]';
+        }
+      
+        return '[Deleted message]';
+      };
     // console.log(user.id)
 
     return (
@@ -197,6 +287,7 @@ const MessagesList = ({
           style={[
             item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
             item.senderId === user?.id ? styles.myMessage : styles.otherMessage, item.isReportedByUser && styles.reportedMessage,
+            item.id === highlightedMessageId && styles.highlightedMessage, // 👈 NEW
           ]}
         >
           <View
@@ -221,12 +312,18 @@ const MessagesList = ({
           <View style={styles.messageTextBox}>
             {/* Render reply context if present */}
             {item.replyTo && (
-              <View style={styles.replyContainer}>
-                <Text style={styles.replyText}>
-                  Replying to: {'\n'}{item.replyTo.text || '[Deleted message]'}
-                </Text>
-              </View>
-            )}
+  <TouchableOpacity
+    style={styles.replyContainer}
+    activeOpacity={0.7}
+    onPress={() => scrollToMessage(item.replyTo.id)}
+  >
+    <Text style={styles.replyText} numberOfLines={2}>
+      Replying to: {'\n'}
+      {getReplyPreview(item.replyTo)}
+    </Text>
+  </TouchableOpacity>
+)}
+
 
             {/* Render main message */}
 
@@ -235,12 +332,14 @@ const MessagesList = ({
                 onLongPress={() => handleLongPress(item)}
                 customStyles={{ triggerTouchable: { activeOpacity: 1 } }}
               >
+                
                 <View style={[
                   item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
                   item.senderId === user?.id ? styles.myMessage : styles.otherMessage,
                   item.isReportedByUser && styles.reportedMessage,
                 ]}>
-                  <Text style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdmin && item.strikeCount === 1
+
+                  <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdmin && item.strikeCount === 1
                     ? { backgroundColor: 'pink' }
                     : item.strikeCount >= 2
                       ? { backgroundColor: 'red' }
@@ -250,21 +349,113 @@ const MessagesList = ({
                       <Image
                       source={require('../../../assets/pro.png')} 
                       style={{ width: 14, height: 14 }} 
-                    />}{'    '}
-                    </Text>
-
-                    {(!!item.isAdmin) &&
+                    />} {(!!item.isAdmin) &&
                       <View style={styles.adminContainer}>
                         <Text style={styles.admin}>{t("chat.admin")}</Text>
-                      </View>}
-                    {'\n'}
-                    {parseMessageText(item?.text)}
+                      </View>}{'    '} {isAdmin && <Text style={{color:'red'}}>{item.OS?.toUpperCase()}</Text>}{''}
+                     
+                    </Text>
+
+                  
+                      {item.gif && <View><Image src={item.gif} style={{ height: 50, width: 50, resizeMode: 'contain' }} /></View>}
+                    {/* {'\n'} */}
+                    <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>{parseMessageText(item?.text)}</Text>
 
 
 
 
-                  </Text>
+                  </View>
                 </View>
+                {hasFruits && (
+  <View
+    style={[
+      fruitStyles.fruitsWrapper,
+      { backgroundColor: fruitColors.wrapperBg },
+    ]}
+  >
+    {fruits.map((fruit, index) => {
+      const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+
+      let valueBadgeStyle = fruitStyles.badgeDefault;
+      if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
+      if (valueType === 'm') valueBadgeStyle = fruitStyles.badgeMega;
+
+      return (
+        <View
+          key={`${fruit.id || fruit.name}-${index}`}
+          style={fruitStyles.fruitCard}
+        >
+          <Image
+            source={{ uri: fruit.imageUrl }}
+            style={fruitStyles.fruitImage}
+          />
+
+          <View style={fruitStyles.fruitInfo}>
+            <Text
+              style={[fruitStyles.fruitName, { color: fruitColors.name }]}
+              numberOfLines={1}
+            >
+              {`${fruit.name || fruit.Name}  `}
+            </Text>
+
+            <Text
+              style={[fruitStyles.fruitValue, { color: fruitColors.value }]}
+            >
+              · Value: {Number(fruit.value || 0).toLocaleString()}
+              {/* {fruit.category
+                ? `  ·  ${String(fruit.category).toUpperCase()}  `
+                : ''} */}{' '}
+            </Text>
+
+            <View style={fruitStyles.badgeRow}>
+              {/* D / N / M badge */}
+              <View style={[fruitStyles.badge, valueBadgeStyle]}>
+                <Text style={fruitStyles.badgeText}>
+                  {valueType.toUpperCase()}
+                </Text>
+              </View>
+
+              {/* Fly badge */}
+              {fruit.isFly && (
+                <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
+                  <Text style={fruitStyles.badgeText}>F</Text>
+                </View>
+              )}
+
+              {/* Ride badge */}
+              {fruit.isRide && (
+                <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
+                  <Text style={fruitStyles.badgeText}>R</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      );
+    })}
+
+    {/* ✅ Total row – only if more than one fruit */}
+    {fruits.length > 1 && (
+      <View
+        style={[
+          fruitStyles.totalRow,
+          { borderTopColor: fruitColors.divider },
+        ]}
+      >
+        <Text
+          style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
+        >
+          Total:
+        </Text>
+        <Text
+          style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
+        >
+          {totalFruitValue.toLocaleString()}
+        </Text>
+      </View>
+    )}
+  </View>
+)}
               </MenuTrigger>
               <MenuOptions customStyles={{
                 optionsContainer: styles.menuoptions,
@@ -308,6 +499,40 @@ const MessagesList = ({
             </Text>
 
           </View>
+          {(!isAdmin && item.senderId === user?.id) && (
+            <Menu>
+              <MenuTrigger>
+                <Icon
+                  name="ellipsis-vertical-outline"
+                  size={16}
+                  color={config.colors.hasBlockGreen}
+                />
+              </MenuTrigger>
+              <MenuOptions >
+                  {/* <MenuOption onSelect={() => onPinMessage(item)} style={styles.pinButton}>
+                    <Text style={styles.adminTextAction}>Pin</Text>
+                  </MenuOption> */}
+                  <MenuOption onSelect={() => onDeleteMessage(item.id)} >
+                    <Text style={[{backgroundColor:'red',padding:10, color:'white'}]}>Delete</Text>
+                  </MenuOption>
+               
+                
+                
+              
+                  
+                  {/* {isAdmin && (
+                    <MenuOption onSelect={() => makeadmin(item.senderId)} style={styles.deleteButton}>
+                      <Text style={styles.adminTextAction}>Make Admin</Text>
+                    </MenuOption>
+                  )}
+                  {isAdmin && (
+                    <MenuOption onSelect={() => removeAdmin(item.senderId)} style={styles.deleteButton}>
+                      <Text style={styles.adminTextAction}>Remove Admin</Text>
+                    </MenuOption>
+                  )} */}
+              </MenuOptions>
+            </Menu>
+          )}
           {(isAdmin) && (
             <Menu>
               <MenuTrigger>
@@ -358,7 +583,7 @@ const MessagesList = ({
 
       </View>
     );
-  }, [messages]);
+  }, [messages, highlightedMessageId, user?.id]);
 
   return (
     <>
@@ -368,6 +593,7 @@ const MessagesList = ({
         renderItem={({ item, index }) => renderMessage({ item, index })}
         contentContainerStyle={styles.chatList}
         inverted
+        extraData={highlightedMessageId}
         ref={flatListRef}
         scrollEventThrottle={16}
         removeClippedSubviews={false}
@@ -382,6 +608,7 @@ const MessagesList = ({
         initialNumToRender={20} // Render the first 20 messages upfront
         maxToRenderPerBatch={10} // Render 10 items per batch for smoother performance
         windowSize={5} // Adjust the window size for rendering nearby items
+        
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -407,5 +634,99 @@ const MessagesList = ({
     </>
   );
 };
+export const fruitStyles = StyleSheet.create({
+  fruitsWrapper: {
+    marginTop: 1,
+    // gap: 1,
+    backgroundColor: '#1E293B15', // subtle blue-ish bg
+    padding: 4,
+    borderRadius: 8,
 
+  },
+  fruitCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent:'flex-start',
+   
+    flex:1,
+
+  },
+  fruitImage: {
+    width: 20,
+    height: 20,
+    borderRadius: 2,
+    marginRight: 2,
+    backgroundColor: '#0002',
+  },
+  fruitInfo: {
+    // flex: 1,
+    flexDirection:'row',
+    justifyContent:'flex-start',
+    // backgroundColor:'red',
+    alignItems:'center'
+  },
+  fruitName: {
+    fontSize: 12,
+    fontWeight: '500',
+    // color: '#fff',
+  },
+  fruitValue: {
+    fontSize: 11,
+    // color: '#e5e5e5',
+    marginTop: 2,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    // marginTop: 4,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    // minWidth: 16,
+    // justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  badgeDefault: {
+    backgroundColor: '#FF6666', // D
+  },
+  badgeNeon: {
+    backgroundColor: '#2ecc71', // N
+  },
+  badgeMega: {
+    backgroundColor: '#9b59b6', // M
+  },
+  badgeFly: {
+    backgroundColor: '#3498db', // F
+  },
+  badgeRide: {
+    backgroundColor: '#e74c3c', // R
+  },
+  totalRow: {
+    flexDirection: 'row',
+    // justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#ffffff22',
+  },
+  totalLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#888',
+  },
+  totalValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF6666',
+  },
+});
 export default MessagesList;

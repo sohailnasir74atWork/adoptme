@@ -25,6 +25,7 @@ const TradeRulesModal = ({ visible, onClose }) => {
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
 
+
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <View style={styles.modalBackground}>
@@ -67,6 +68,7 @@ export const TradeStack = ({ selectedTheme }) => {
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
   // const navigation = useNavigation()
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
 
   const headerOptions = useMemo(
@@ -134,26 +136,28 @@ export const TradeStack = ({ selectedTheme }) => {
 
         {/* Private Chat Screen */}
         <Stack.Screen
-          name="PrivateChatTrade"
-          component={PrivateChatScreen}
-          initialParams={{ bannedUsers }}
-          options={({ route }) => {
-            const { selectedUser, isOnline } = route.params;
-            return {
-              headerTitle: () => (
-                <PrivateChatHeader
-                  selectedUser={selectedUser}
-                  isOnline={isOnline}
-                  selectedTheme={selectedTheme}
-                  bannedUsers={bannedUsers}
-                  setBannedUsers={setBannedUsers}
-                  triggerHapticFeedback={triggerHapticFeedback}
-                />
-              ),
-            };
-          }}
-        />
-
+  name="PrivateChatTrade"
+  options={({ route }) => ({
+    headerTitle: () => (
+      <PrivateChatHeader
+        selectedUser={route.params?.selectedUser}
+        selectedTheme={selectedTheme}
+        bannedUsers={bannedUsers}
+        isDrawerVisible={isDrawerVisible}
+        setIsDrawerVisible={setIsDrawerVisible}
+      />
+    ),
+  })}
+>
+  {(props) => (
+    <PrivateChatScreen
+      {...props}
+      bannedUsers={bannedUsers}
+      isDrawerVisible={isDrawerVisible}
+      setIsDrawerVisible={setIsDrawerVisible}
+    />
+  )}
+</Stack.Screen>
 <Stack.Screen
           name="Server"
           component={ServerScreen}

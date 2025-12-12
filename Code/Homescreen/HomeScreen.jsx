@@ -10,7 +10,6 @@ import { useHaptic } from '../Helper/HepticFeedBack';
 import { getDatabase, ref } from '@react-native-firebase/database';
 import { useLocalState } from '../LocalGlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
-import firestore from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../Translation/LanguageProvider';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
@@ -19,8 +18,12 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
+import { addDoc, collection, serverTimestamp } from '@react-native-firebase/firestore';
+import SubscriptionScreen from '../SettingScreen/OfferWall';
 
-const INITIAL_ITEMS = [null, null, null, null, null, null, null, null, null];
+const GRID_STEPS = [9, 12, 15, 18];
+
+const createEmptySlots = (count) => Array(count).fill(null);
 
 
 
@@ -78,12 +81,15 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user } = useGlobalState();
-  const tradesCollection = useMemo(() => firestore().collection('trades_new'), []);
-  const [hasItems, setHasItems] = useState(INITIAL_ITEMS);
+  const { theme, user, firestoreDB } = useGlobalState();
+  const tradesCollection = collection(firestoreDB, 'trades_new');
+  const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
+const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
+const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
+
   const [fruitRecords, setFruitRecords] = useState([]);
   const [selectedPetType, setSelectedPetType] = useState('ALL');
-  const [wantsItems, setWantsItems] = useState(INITIAL_ITEMS);
+  // const [wantsItems, setWantsItems] = useState(INITIAL_ITEMS);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedSection, setSelectedSection] = useState(null);
   const [searchText, setSearchText] = useState('');
@@ -112,6 +118,8 @@ const HomeScreen = ({ selectedTheme }) => {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
   const [factor, setFactor] = useState(null);
+  const [showofferwall, setShowofferwall] = useState(false);
+
 
 
   const CATEGORIES = useMemo(() => {
@@ -157,9 +165,11 @@ const HomeScreen = ({ selectedTheme }) => {
     setSelectedSection(null);
     setHasTotal(0);
     setWantsTotal(0);
-    setHasItems(INITIAL_ITEMS);
-    setWantsItems(INITIAL_ITEMS);
+    setGridStepIndex(0);
+    setHasItems(createEmptySlots(GRID_STEPS[0]));
+    setWantsItems(createEmptySlots(GRID_STEPS[0]));
   }, [triggerHapticFeedback]);
+  
 
   const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
     if (!item || !item.name) return '';
@@ -197,35 +207,107 @@ const HomeScreen = ({ selectedTheme }) => {
       setSelectedValueType(badge.toLowerCase());
     }
   }, []);
-
-  const selectItem = useCallback((item) => {
-    if (!item) return;
-console.log(item)
-    triggerHapticFeedback('impactLight');
-    const value = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor);
-    const selectedItem = {
-      ...item,
-      selectedValue: value,
-      valueType: selectedValueType,
-      isFly: isFlySelected,
-      isRide: isRideSelected
-    };
-
-    const updateItems = selectedSection === 'has' ? [...hasItems] : [...wantsItems];
-    const nextEmptyIndex = updateItems.indexOf(null);
-
-    if (nextEmptyIndex !== -1) {
-      updateItems[nextEmptyIndex] = selectedItem;
-      if (selectedSection === 'has') {
-        setHasItems(updateItems);
-        updateTotal(selectedItem, 'has', true, true);
-      } else {
-        setWantsItems(updateItems);
-        updateTotal(selectedItem, 'wants', true, true);
+  const maybeExpandGrid = useCallback(
+    (nextHasItems, nextWantsItems) => {
+      const currentSize = GRID_STEPS[gridStepIndex];
+      const maxStepIndex = GRID_STEPS.length - 1;
+  
+      const hasCount = nextHasItems.filter(Boolean).length;
+      const wantsCount = nextWantsItems.filter(Boolean).length;
+  
+      // Already at max (18 slots per side)
+      if (gridStepIndex === maxStepIndex) {
+        setHasItems(nextHasItems);
+        setWantsItems(nextWantsItems);
+        return;
       }
-    }
-    setIsDrawerVisible(false);
-  }, [hasItems, wantsItems, selectedSection, selectedValueType, isFlySelected, isRideSelected, isSharkMode, triggerHapticFeedback, updateTotal]);
+  
+      // If either side filled all current slots -> grow to next step
+      if (hasCount >= currentSize || wantsCount >= currentSize) {
+        const nextSize = GRID_STEPS[gridStepIndex + 1];
+        const diff = nextSize - currentSize;
+  
+        setGridStepIndex((prev) => prev + 1);
+        setHasItems([...nextHasItems, ...createEmptySlots(diff)]);
+        setWantsItems([...nextWantsItems, ...createEmptySlots(diff)]);
+      } else {
+        setHasItems(nextHasItems);
+        setWantsItems(nextWantsItems);
+      }
+    },
+    [gridStepIndex]
+  );
+  
+
+  const selectItem = useCallback(
+    (item) => {
+      if (!item || !selectedSection) return;
+  
+      triggerHapticFeedback('impactLight');
+  
+      const value = getItemValue(
+        item,
+        selectedValueType,
+        isFlySelected,
+        isRideSelected,
+        isSharkMode,
+        localState.isGG,
+        factor
+      );
+  
+      const selectedItem = {
+        ...item,
+        selectedValue: value,
+        valueType: selectedValueType,
+        isFly: isFlySelected,
+        isRide: isRideSelected,
+      };
+  
+      // Work on copies of both sides so we can decide expansion
+      const nextHasItems = [...hasItems];
+      const nextWantsItems = [...wantsItems];
+  
+      const targetArray =
+        selectedSection === 'has' ? nextHasItems : nextWantsItems;
+  
+      let nextEmptyIndex = targetArray.indexOf(null);
+  
+      // No empty slot left even at 18 → do nothing
+      if (nextEmptyIndex === -1) {
+        return;
+      }
+  
+      targetArray[nextEmptyIndex] = selectedItem;
+  
+      // Update totals for the side we modified
+      updateTotal(
+        selectedItem,
+        selectedSection === 'has' ? 'has' : 'wants',
+        true,
+        true
+      );
+  
+      // This will also expand 9→12→15→18 if needed
+      maybeExpandGrid(nextHasItems, nextWantsItems);
+  
+      setIsDrawerVisible(false);
+    },
+    [
+      hasItems,
+      wantsItems,
+      selectedSection,
+      selectedValueType,
+      isFlySelected,
+      isRideSelected,
+      isSharkMode,
+      localState.isGG,
+      factor,
+      triggerHapticFeedback,
+      updateTotal,
+      maybeExpandGrid,
+    ]
+  );
+  
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
@@ -261,7 +343,7 @@ console.log(item)
 
       if (isHas) {
         setHasItems(updatedItems);
-        console.log(item)
+        // console.log(item)
 
         updateTotal(item, 'has', false, true);
 
@@ -547,6 +629,8 @@ console.log(item)
 
       const userRating = avgRatingData?.value || null;
       const ratingCount = avgRatingData?.count || 0;
+      const now = serverTimestamp();
+// console.log(now)
 
       const mapTradeItem = item => ({
         name: item.name || item.Name,
@@ -568,20 +652,23 @@ console.log(item)
         hasTotal,
         wantsTotal,
         description: description || "",
-        timestamp: firestore.FieldValue.serverTimestamp(),
+        // timestamp: serverTimestamp(),
+        timestamp: now,
+
         rating: userRating,
         ratingCount,
         isSharkMode: localState.isGG ? 'GG' : isSharkMode
 
       };
-      const now = Date.now();
+      
       if (lastTradeTime && now - lastTradeTime < 60000) {
         showErrorMessage(t("home.alert.error"), "Please wait for 1 minute before creating new trade");
         setIsSubmitting(false);
         return;
       }
 
-      await tradesCollection.add(newTrade);
+
+await addDoc(tradesCollection, newTrade);
       // Step 1: Close modal first
       setModalVisible(false);
 
@@ -912,6 +999,33 @@ console.log(item)
                 <Text style={{ color: 'white' }}>{t('home.share_trade')}</Text>
               </TouchableOpacity>
             </View>
+          {!localState.isPro &&  <View style={styles.createtradeAds}>
+  <TouchableOpacity
+    style={styles.removeAdsButton}
+    activeOpacity={0.9}
+    onPress={()=>setShowofferwall(true)}
+  >
+    <View style={styles.removeAdsContent}>
+      {/* Crown icon / image */}
+      <View style={styles.crownWrapper}>
+        {/* <Icon name="trophy" size={18} color="#3b2500" /> */}
+       
+        <Image
+          source={require('../../assets/pro.png')}
+          style={{ width: 20, height: 20 }}
+          resizeMode="contain"
+        />
+        
+      </View>
+
+      <View style={styles.removeAdsTextWrapper}>
+        <Text style={styles.removeAdsTitle}>Remove Ads</Text>
+        {/* <Text style={styles.removeAdsSubtitle}>Unlock a clean experience</Text> */}
+      </View>
+    </View>
+  </TouchableOpacity>
+</View>}
+
           </ScrollView>
           <Modal
             visible={isDrawerVisible}
@@ -1075,6 +1189,7 @@ console.log(item)
             message={t("home.alert.sign_in_required")}
           />
         </View>
+        <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={false} showoffer={true}/>
       </GestureHandlerRootView>
       {!localState.isPro && <BannerAdComponent />}
       <ShareTradeModal
@@ -1626,6 +1741,62 @@ const getStyles = (isDarkMode,isGG) =>
       fontWeight: '600',
       color: isDarkMode ? '#fff' : '#333',
     },
+    createtradeAds: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flex:1,
+      justifyContent:'center',
+      alignItems:'center',
+    },
+    
+    removeAdsButton: {
+      borderRadius: 999,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      backgroundColor: '#fbbf24', // warm gold
+      shadowColor: '#000',
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 4,
+      // minWidth:244
+      marginTop:20
+
+    },
+    
+    removeAdsContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    
+    crownWrapper: {
+      width: 25,
+      height: 25,
+      borderRadius: 12,
+      backgroundColor: '#fde68a',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+    },
+    
+    removeAdsTextWrapper: {
+      flexDirection: 'column',
+    },
+    
+    removeAdsTitle: {
+      color: '#1f2933',
+      fontSize: 12,
+      fontFamily: 'Lato-Bold',
+    },
+    
+    removeAdsSubtitle: {
+      color: '#374151',
+      fontSize: 10,
+      fontFamily: 'Lato-Regular',
+      opacity: 0.9,
+    },
+    
   });
 
 export default HomeScreen;
