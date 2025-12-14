@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
@@ -16,28 +16,50 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
   const [isOnline, setIsOnline] = useState(false); // ✅ Add state to store online status
   const { triggerHapticFeedback } = useHaptic();
 
-  const copyToClipboard = (code) => {
+  // ✅ Memoize copyToClipboard
+  const copyToClipboard = useCallback((code) => {
+    if (!code || typeof code !== 'string') return;
     triggerHapticFeedback('impactLight');
-    Clipboard.setString(code); // Copies the code to the clipboard
+    Clipboard.setString(code);
     showSuccessMessage(t("value.copy"), "Copied to Clipboard");
-    mixpanel.track("Code UserName", {UserName:code});
-  };
+    mixpanel.track("Code UserName", { UserName: code });
+  }, [triggerHapticFeedback, t]);
 
-  const avatarUri = selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-  const userName = selectedUser?.sender || 'User';
-// console.log(bannedUsers)
+  // ✅ Memoize avatarUri and userName
+  const avatarUri = useMemo(() => 
+    selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+    [selectedUser?.avatar]
+  );
+  
+  const userName = useMemo(() => 
+    selectedUser?.sender || 'User',
+    [selectedUser?.sender]
+  );
 
-useEffect(() => {
-  if (selectedUser?.senderId) {
-    isUserOnline(selectedUser.senderId).then(setIsOnline).catch(() => setIsOnline(false));
-  }
-}, [selectedUser?.id]);
-  // ✅ Check if user is banned
+  useEffect(() => {
+    if (selectedUser?.senderId) {
+      isUserOnline(selectedUser.senderId)
+        .then(setIsOnline)
+        .catch(() => setIsOnline(false));
+    } else {
+      setIsOnline(false);
+    }
+  }, [selectedUser?.senderId]); // ✅ Fixed: use senderId instead of id
+
+  // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {
-    return bannedUsers.includes(selectedUser?.senderId);
+    if (!selectedUser?.senderId) return false;
+    const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+    return banned.includes(selectedUser.senderId);
   }, [bannedUsers, selectedUser?.senderId]);
 
-  const handleBanToggle = async () => {
+  // ✅ Memoize handleBanToggle
+  const handleBanToggle = useCallback(async () => {
+    if (!selectedUser?.senderId) {
+      console.warn('⚠️ Invalid user ID for ban toggle');
+      return;
+    }
+
     const action = !isBanned ? 'Block' : 'Unblock';
     Alert.alert(
       `${action}`,
@@ -49,17 +71,21 @@ useEffect(() => {
           style: 'destructive',
           onPress: async () => {
             try {
+              const currentBanned = Array.isArray(bannedUsers) ? bannedUsers : [];
               let updatedBannedUsers;
+              
               if (isBanned) {
                 // 🔹 Unban: Remove from bannedUsers
-                updatedBannedUsers = bannedUsers.filter(id => id !== selectedUser?.senderId);
+                updatedBannedUsers = currentBanned.filter(id => id !== selectedUser.senderId);
               } else {
                 // 🔹 Ban: Add to bannedUsers
-                updatedBannedUsers = [...bannedUsers, selectedUser?.senderId];
+                updatedBannedUsers = [...currentBanned, selectedUser.senderId];
               }
 
               // ✅ Update local storage & state
-              await updateLocalState('bannedUsers', updatedBannedUsers);
+              if (updateLocalState && typeof updateLocalState === 'function') {
+                await updateLocalState('bannedUsers', updatedBannedUsers);
+              }
             } catch (error) {
               console.error('❌ Error toggling ban status:', error);
             }
@@ -67,29 +93,41 @@ useEffect(() => {
         },
       ]
     );
-  };
+  }, [isBanned, bannedUsers, selectedUser?.senderId, userName, t, updateLocalState]);
+
+  // ✅ Memoize drawer open handler
+  const handleOpenDrawer = useCallback(() => {
+    if (setIsDrawerVisible && typeof setIsDrawerVisible === 'function') {
+      setIsDrawerVisible(true);
+    }
+  }, [setIsDrawerVisible]);
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => setIsDrawerVisible(true)}>
-  <Image source={{ uri: avatarUri }} style={styles.avatar} />
-</TouchableOpacity>
-      <TouchableOpacity style={styles.infoContainer} onPress={() => setIsDrawerVisible(true)}>
-        <Text style={[styles.userName, { color: selectedTheme.colors.text }]}>
+      <TouchableOpacity onPress={handleOpenDrawer}>
+        <Image source={{ uri: avatarUri }} style={styles.avatar} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer}>
+        <Text style={[styles.userName, { color: selectedTheme?.colors?.text || '#000' }]}>
           {userName} 
-          {selectedUser.isPro && (
-           <Image
-           source={require('../../../assets/pro.png')} 
-           style={{ width: 14, height: 14 }} 
-         />
+          {selectedUser?.isPro && (
+            <Image
+              source={require('../../../assets/pro.png')} 
+              style={{ width: 14, height: 14 }} 
+            />
           )}
-             {'  '}   <Icon name="copy-outline" size={16} color="#007BFF" onPress={()=>copyToClipboard(userName)}/>
-
+          {'  '}
+          <Icon 
+            name="copy-outline" 
+            size={16} 
+            color="#007BFF" 
+            onPress={() => copyToClipboard(userName)}
+          />
         </Text>
         <Text style={[
                     styles.drawerSubtitleUser,
                     {
-                      color: isOnline
+                      color: !isOnline
                         ? config.colors.hasBlockGreen
                         : config.colors.wantBlockRed,
                       fontSize: 10,

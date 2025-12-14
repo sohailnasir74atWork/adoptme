@@ -94,19 +94,25 @@ export const getStyles = (isDarkMode) =>
 
 
     },
+    myMessageTextOnly: {
+      fontSize: 12,
+      color: isDarkMode ? 'white' : 'black',
+      fontFamily: 'Lato-Regular',
+      lineHeight: 14,
+      textAlign: 'left',
+    },
+    otherMessageTextOnly: {
+      fontSize: 12,
+      color: isDarkMode ? 'white' : 'black',
+      fontFamily: 'Lato-Regular',
+      lineHeight: 14,
+      textAlign: 'left',
+    },
     timestamp: {
       fontSize: 5,
       color: '#bbb',
       textAlign: 'right',
       paddingHorizontal: 5
-    },
-    inputContainer: {
-      flexDirection: 'row', // Maintains horizontal alignment with the send button
-      alignItems: 'flex-start', // Align items at the top to allow wrapping
-      // padding: 10,
-      borderTopWidth: 1,
-      borderTopColor: '#333',
-
     },
     input: {
       flex: 1, // Ensures the input takes available space
@@ -114,7 +120,7 @@ export const getStyles = (isDarkMode) =>
       padding: 5,
       marginRight: 10,
       fontSize: 16,
-      heighteight: 30, // Minimum height for a single line
+      minHeight: 30, // ✅ Fixed typo: heighteight -> minHeight
       maxHeight: 120, // Limit input growth to a max height
       textAlignVertical: 'top', // Ensures text starts at the top
       backgroundColor: isDarkMode ? '#333' : '#fff', // Optional background for better visibility
@@ -145,6 +151,17 @@ export const getStyles = (isDarkMode) =>
       color: '#888',
       textAlign: 'center',
       marginVertical: 10,
+    },
+    platformBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 8,
+      marginLeft: 4,
+    },
+    platformText: {
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontWeight: '600',
     },
     adminContainer: {
       backgroundColor: config.colors.hasBlockGreen,
@@ -196,16 +213,6 @@ export const getStyles = (isDarkMode) =>
       backgroundColor: isDarkMode ? '#222' : '#fff',
       // backgroundColor:'red',
 
-    },
-    replyContainer: {
-      backgroundColor: isDarkMode ? '#333' : '#f0f0f0',
-      padding: 10,
-      borderRadius: 8,
-      marginBottom: 10,
-    },
-    replyText: {
-      color: isDarkMode ? '#fff' : '#333',
-      fontSize: 14,
     },
     cancelReplyButton: {
       alignSelf: 'flex-end',
@@ -355,8 +362,7 @@ export const getStyles = (isDarkMode) =>
     },
     emptyText:{
       color: isDarkMode ? 'white' : 'black',
-    }
-,
+    },
 tradeDetails: {
   flexDirection: 'row',
   justifyContent: 'space-between',
@@ -408,7 +414,7 @@ priceText: {
   // width: '40%',
   textAlign: 'center', // Centers text within its own width
   alignSelf: 'center', // Centers within the parent container
-  color: isDarkMode ? 'white' : "white",
+  color: 'white', // ✅ Removed redundant conditional
   marginHorizontal: 'auto',
   paddingHorizontal: 4,
   paddingVertical: 2,

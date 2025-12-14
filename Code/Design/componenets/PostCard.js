@@ -119,6 +119,8 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   senderId: item.userId,
   sender: item.displayName,
   avatar: item.avatar,
+  flage: item.flage ? item.flage : null,
+
 }
 
   const handleChatNavigation = useCallback(() => {

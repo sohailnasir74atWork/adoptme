@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Modal,
   Linking,
   Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -16,8 +17,9 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import ChatRulesModal from './ChatRuleModal';
+import OnlineUsersList from './OnlineUsersList';
 
-// Regular expression to detect URLs in the message
+// ✅ Pre-compile regex for better performance
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
 const AdminHeader = ({
@@ -28,27 +30,41 @@ const AdminHeader = ({
   unreadcount,
   setunreadcount,
   pinnedMessages,
-  onUnpinMessage
+  onUnpinMessage,
+  onlineMembersCount
 }) => {
   const { theme, user, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
   const { t } = useTranslation();
-  const [pinMessageOpen, setPinMessageOpen] = useState(false)
+  const [pinMessageOpen, setPinMessageOpen] = useState(false);
+  const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
 
-  const styles = getStyles(isDarkMode);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  // Function to detect and wrap URLs with clickable text
-  const renderMessageWithLinks = (message) => {
+  // ✅ Memoize function to detect and wrap URLs with clickable text
+  const renderMessageWithLinks = useCallback((message) => {
+    // ✅ Safety check
+    if (!message || typeof message !== 'string') {
+      return <Text style={styles.pinnedText}>Invalid message</Text>;
+    }
+
     const parts = message.split(URL_REGEX);
     return parts.map((part, index) => {
-      if (URL_REGEX.test(part)) {
+      // ✅ Check if part matches URL pattern (more efficient than testing regex again)
+      if (part && (part.startsWith('http://') || part.startsWith('https://'))) {
         // This part is a URL, make it clickable and underlined
         return (
           <Text
             key={index}
             style={[styles.pinnedText, { textDecorationLine: 'underline', color: 'blue' }]}
-            onPress={() => Linking.openURL(part)}
+            onPress={() => {
+              Linking.openURL(part).catch((error) => {
+                console.error('Failed to open URL:', error);
+                Alert.alert('Error', 'Could not open the link.');
+              });
+            }}
           >
             {part}
           </Text>
@@ -56,39 +72,71 @@ const AdminHeader = ({
       }
       return <Text key={index} style={styles.pinnedText}>{part}</Text>;
     });
-  };
+  }, [styles.pinnedText]);
 
-  // Filter out duplicate pinned messages based on firebaseKey
-  const uniquePinnedMessages = Array.from(
-    new Map(pinnedMessages.map((msg) => [msg.firebaseKey, msg])).values()
-  );
+  // ✅ Memoize unique pinned messages
+  const uniquePinnedMessages = useMemo(() => {
+    if (!Array.isArray(pinnedMessages) || pinnedMessages.length === 0) {
+      return [];
+    }
+    return Array.from(
+      new Map(pinnedMessages.map((msg) => [msg?.firebaseKey, msg]).filter(([key]) => key)).values()
+    );
+  }, [pinnedMessages]);
 
   return (
     <View>
       <View style={styles.stackContainer}>
         <View style={{ paddingVertical: 10 }}><Text style={styles.stackHeader}>Community Chat</Text></View>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {user?.id && (
-            <View style={styles.iconContainer}>
-              <Icon
-                name="chatbox-outline"
-                size={24}
-                color={selectedTheme.colors.text}
-                style={styles.icon2}
+            <>
+              {/* Online Users Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setOnlineUsersVisible(true);
+                  triggerHapticFeedback('impactLight');
+                }}
+                style={styles.iconContainer}
+              >
+                <Icon
+                  name="people-outline"
+                  size={24}
+                  color={config.colors.primary}
+                />
+                {onlineMembersCount > 0 && (
+                  <View style={[styles.badge, { backgroundColor: '#10B981' }]}>
+                    <Text style={styles.badgeText}>
+                      {onlineMembersCount > 99 ? '99+' : onlineMembersCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Inbox Button */}
+              <TouchableOpacity
                 onPress={() => {
                   navigation.navigate('Inbox');
                   triggerHapticFeedback('impactLight');
                   setunreadcount(0);
                 }}
-              />
-              {unreadcount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadcount > 9 ? '9+' : unreadcount}</Text>
-                </View>
-              )}
-            </View>
+                style={styles.iconContainer}
+              >
+                <Icon
+                  name="chatbox-outline"
+                  size={24}
+                  color={selectedTheme.colors.text}
+                  style={styles.icon2}
+                />
+                {unreadcount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadcount > 9 ? '9+' : unreadcount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </>
           )}
-          {user.id && (
+          {user?.id && (
             <Menu>
               <MenuTrigger>
                 <Icon name="ellipsis-vertical-outline" size={24} color={config.colors.primary} />
@@ -135,22 +183,26 @@ const AdminHeader = ({
       {/* Displaying truncated pinned messages */}
       {uniquePinnedMessages.length > 0 && (
         <View style={styles.pinnedContainer}>
-          {uniquePinnedMessages.slice(0, 1).map((msg) => (
-            <View key={msg.firebaseKey} style={styles.singlePinnedMessage}>
-              <View>
-                <Text style={styles.pinnedTextheader}>Pin Message</Text>
-                <Text style={styles.pinnedText}>
-                  {msg.text.replace(/\n/g, ' ').length > 40 ?
-                    msg.text.replace(/\n/g, ' ').substring(0, 40) + '...' :
-                    msg.text.replace(/\n/g, ' ')}
-                </Text>
+          {uniquePinnedMessages.slice(0, 1).map((msg) => {
+            // ✅ Safety check and optimize string operations
+            const msgText = msg?.text || '';
+            const normalizedText = msgText.replace(/\n/g, ' ');
+            const displayText = normalizedText.length > 40 
+              ? normalizedText.substring(0, 40) + '...' 
+              : normalizedText;
 
+            return (
+              <View key={msg?.firebaseKey || 'unknown'} style={styles.singlePinnedMessage}>
+                <View>
+                  <Text style={styles.pinnedTextheader}>Pin Message</Text>
+                  <Text style={styles.pinnedText}>{displayText}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setPinMessageOpen(true)} style={{ justifyContent: 'center' }}>
+                  <Icon name="chevron-forward-outline" size={20} color={config.colors.primary} style={styles.pinIcon} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => setPinMessageOpen(true)} style={{ justifyContent: 'center' }}>
-                <Icon name="chevron-forward-outline" size={20} color={config.colors.primary} style={styles.pinIcon} />
-              </TouchableOpacity>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -165,16 +217,28 @@ const AdminHeader = ({
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', minWidth: 320 }}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Pin Messages</Text>
-              {uniquePinnedMessages.map((msg) => (
-                <View key={msg.firebaseKey} style={styles.singlePinnedMessageModal}>
-                  {renderMessageWithLinks(msg.text)}
-                  {isAdmin && (
-                    <TouchableOpacity onPress={() => onUnpinMessage(msg.firebaseKey)} style={{ backgroundColor: config.colors.primary, marginVertical: 3 }}>
-                      <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>Delete</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
+              {uniquePinnedMessages.map((msg) => {
+                // ✅ Safety check
+                if (!msg || !msg.firebaseKey) return null;
+                
+                return (
+                  <View key={msg.firebaseKey} style={styles.singlePinnedMessageModal}>
+                    {renderMessageWithLinks(msg.text || '')}
+                    {isAdmin && (
+                      <TouchableOpacity 
+                        onPress={() => {
+                          if (onUnpinMessage && typeof onUnpinMessage === 'function') {
+                            onUnpinMessage(msg.firebaseKey);
+                          }
+                        }} 
+                        style={{ backgroundColor: config.colors.primary, marginVertical: 3 }}
+                      >
+                        <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>Delete</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setPinMessageOpen(false)}
@@ -189,6 +253,10 @@ const AdminHeader = ({
         visible={modalVisibleChatinfo}
         onClose={() => setModalVisibleChatinfo(false)}
         isDarkMode={isDarkMode}
+      />
+      <OnlineUsersList
+        visible={onlineUsersVisible}
+        onClose={() => setOnlineUsersVisible(false)}
       />
     </View>
   );
@@ -283,10 +351,17 @@ export const getStyles = (isDarkMode) =>
       fontSize: 16,
       fontFamily: 'Lato-Bold',
     },
+    iconContainer: {
+      position: 'relative',
+      padding: 4,
+    },
+    icon2: {
+      // Additional icon styling if needed
+    },
     badge: {
       position: 'absolute',
       top: -4,
-      left: -10,
+      right: -4,
       backgroundColor: 'red',
       borderRadius: 8,
       minWidth: 16,

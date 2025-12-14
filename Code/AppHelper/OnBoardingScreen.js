@@ -27,7 +27,7 @@ const icon = config.isNoman ? require('../../assets/splashscreen.webp') : requir
 const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const [screenIndex, setScreenIndex] = useState(0);
   const [openSignin, setOpenSignin] = useState(false);
-  const { theme, user, analytics } = useGlobalState();
+  const { theme, user, single_offer_wall } = useGlobalState();
   const isDarkMode = theme === 'dark' || selectedTheme === 'dark';
   const { t } = useTranslation();
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -165,7 +165,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
           //   }, []);
           //   return null;
           // }
-          return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" />;
+          return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" oneWallOnly={single_offer_wall} showoffer={!single_offer_wall}/>;
       default:
         return null;
     }

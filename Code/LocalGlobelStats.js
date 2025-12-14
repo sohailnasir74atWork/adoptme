@@ -55,6 +55,9 @@ export const LocalStateProvider = ({ children }) => {
     isGG: storage.getBoolean('isGG') ?? false,
     showAd1: storage.getBoolean('showAd1') ?? true,
     postsCache: safeParseJSON('postsCache', []),
+    tradingServerLink: storage.getString('tradingServerLink') || null,
+    lastServerFetch: storage.getString('lastServerFetch') || null,
+    showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
 
   }));
 

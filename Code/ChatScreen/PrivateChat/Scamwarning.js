@@ -1,29 +1,48 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
+import { useLocalState } from '../../LocalGlobelStats';
+import InterstitialAdManager from '../../Ads/IntAd';
 
 export default function ScamSafetyBox({
   setShowRatingModal,
   canRate,
   hasRated,
-  onOpenSafeServer, // optional handler for server button
 }) {
-  const { theme } = useGlobalState();
+  const { theme, tradingServerLink } = useGlobalState();
+  const { localState } = useLocalState();
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  const handleOpenServer = () => {
-    if (typeof onOpenSafeServer === 'function') {
-      onOpenSafeServer();
+  // ✅ Memoize handleOpenServer
+  const handleOpenServer = useCallback(() => {
+    if (!tradingServerLink || typeof tradingServerLink !== 'string' || tradingServerLink.trim().length === 0) {
+      Alert.alert('Error', 'Server link not available');
+      return;
     }
-  };
 
-  const handleOpenRating = () => {
-    if (typeof setShowRatingModal === 'function') {
+    const openLink = () => {
+      Linking.openURL(tradingServerLink).catch(err => {
+        console.warn('Failed to open server link:', err);
+        Alert.alert('Error', 'Failed to open server link');
+      });
+    };
+
+    // Show ad for non-pro users
+    if (!localState?.isPro) {
+      InterstitialAdManager.showAd(openLink);
+    } else {
+      openLink();
+    }
+  }, [tradingServerLink, localState?.isPro]);
+
+  // ✅ Memoize handleOpenRating
+  const handleOpenRating = useCallback(() => {
+    if (setShowRatingModal && typeof setShowRatingModal === 'function') {
       setShowRatingModal(true);
     }
-  };
+  }, [setShowRatingModal]);
 
   return (
     <View style={styles.box}>
@@ -31,9 +50,10 @@ export default function ScamSafetyBox({
       <View style={styles.leftColumn}>
         <View style={styles.warningBox}>
           <Text style={styles.title}>⚠️ Trade Safety</Text>
-          <Text style={styles.item}>• If it’s “too good”, it’s probably a scam.</Text>
-          <Text style={styles.item}>• Never share login or personal info.</Text>
-          <Text style={styles.item}>• Only trade on trusted Roblox servers.</Text>
+          <Text style={styles.item}>• Too good = scam.</Text>
+<Text style={styles.item}>• Don’t share login.</Text>
+<Text style={styles.item}>• Use trusted servers.</Text>
+
         </View>
       </View>
 

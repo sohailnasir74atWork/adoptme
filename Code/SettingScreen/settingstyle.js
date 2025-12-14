@@ -367,6 +367,91 @@ export const getStyles = (isDarkMode) =>
         height: 48,
         borderRadius: 24,
       },
+      reviewsSection: {
+        marginTop: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+      },
+      reviewsHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+      },
+      reviewsTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: isDarkMode ? '#F9FAFB' : '#111827',
+      },
+      reviewsList: {
+        maxHeight: 200,
+      },
+      reviewItem: {
+        backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 10,
+      },
+      reviewHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+      },
+      reviewHeaderLeft: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      },
+      reviewUserName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: isDarkMode ? '#fff' : '#000',
+        marginRight: 8,
+      },
+      reviewRating: {
+        flexDirection: 'row',
+        marginRight: 8,
+      },
+      editedBadge: {
+        fontSize: 10,
+        color: isDarkMode ? '#9CA3AF' : '#6B7280',
+        fontStyle: 'italic',
+      },
+      editButton: {
+        padding: 4,
+      },
+      reviewText: {
+        fontSize: 13,
+        color: isDarkMode ? '#E5E7EB' : '#374151',
+        marginBottom: 6,
+        lineHeight: 18,
+      },
+      reviewDate: {
+        fontSize: 11,
+        color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      },
+      reviewsEmptyText: {
+        fontSize: 11,
+        color: isDarkMode ? '#9CA3AF' : '#6B7280',
+        textAlign: 'center',
+        marginVertical: 20,
+      },
+      loadMoreButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        backgroundColor: config.colors.primary,
+        alignItems: 'center',
+        marginTop: 10,
+        marginBottom: 10,
+      },
+      loadMoreText: {
+        fontSize: 14,
+        fontFamily: 'Lato-Bold',
+        color: '#fff',
+      },
     
     });
   

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   FlatList,
   View,
@@ -28,7 +28,6 @@ import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { banUserwithEmail, unbanUserWithEmail } from '../utils';
-import { useEffect } from 'react';
 
 const MessagesList = ({
   messages,
@@ -55,23 +54,26 @@ const MessagesList = ({
   handlePinMessage,
 
 }) => {
-  const styles = getStyles(isDarkMode);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReportPopup, setShowReportPopup] = useState(false);
-  const [highlightedMessageId, setHighlightedMessageId] = useState(null); // 👈 NEW
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const { triggerHapticFeedback } = useHaptic();
 
   const { t } = useTranslation();
-  // const { language, changeLanguage } = useLanguage();
-  const { isAdmin, api, freeTranslation } = useGlobalState()
+  const { isAdmin, api, freeTranslation } = useGlobalState();
   const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
 
-  const handleCopy = (message) => {
+  // ✅ Memoize handleCopy
+  const handleCopy = useCallback((message) => {
+    if (!message || !message.text) return;
     Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
     showSuccessMessage('Success', 'Message Copied');
-  };
+  }, [triggerHapticFeedback]);
   // useEffect(() => {
   //   if (!messages || messages.length === 0) return;
   //   if (!isAtBottom) return; // only when user is at bottom
@@ -118,7 +120,7 @@ const MessagesList = ({
         console.log('scrollToIndex error:', e);
       }
     },
-    [flatListRef, messages],
+    [flatListRef, messages, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, styles, user, isAdmin, t, fruitColors, deviceLanguage],
   );
   
   
@@ -136,14 +138,24 @@ const MessagesList = ({
     }),
     [isDarkMode],
   );
-  const translateText = async (text, targetLang = deviceLanguage) => {
+  // ✅ Pre-compile regex patterns for FRUIT_KEYWORDS
+  const fruitRegexPatterns = useMemo(() => {
+    return FRUIT_KEYWORDS.map((word, index) => ({
+      regex: new RegExp(`\\b${word}\\b`, 'gi'),
+      placeholder: `__FRUIT_${index}__`,
+      word,
+    }));
+  }, []);
+
+  // ✅ Memoize translateText
+  const translateText = useCallback(async (text, targetLang = deviceLanguage) => {
+    if (!text || typeof text !== 'string') return null;
+
     const placeholders = {};
     let maskedText = text;
 
-    // Step 1: Replace fruit names with placeholders
-    FRUIT_KEYWORDS.forEach((word, index) => {
-      const placeholder = `__FRUIT_${index}__`;
-      const regex = new RegExp(`\\b${word}\\b`, 'gi'); // match full word, case-insensitive
+    // Step 1: Replace fruit names with placeholders using pre-compiled regex
+    fruitRegexPatterns.forEach(({ regex, placeholder, word }) => {
       maskedText = maskedText.replace(regex, placeholder);
       placeholders[placeholder] = word;
     });
@@ -176,9 +188,14 @@ const MessagesList = ({
       console.error('Translation Error:', err);
       return null;
     }
-  };
+  }, [fruitRegexPatterns, deviceLanguage, api]);
 
-  const handleTranslate = async (item) => {
+  // ✅ Memoize handleTranslate
+  const handleTranslate = useCallback(async (item) => {
+    if (!item || !item.text) {
+      Alert.alert('Error', 'Invalid message to translate.');
+      return;
+    }
     const isUnlimited = freeTranslation || localState.isPro;
 
     if (!isUnlimited && !canTranslate()) {
@@ -203,45 +220,76 @@ const MessagesList = ({
     } else {
       Alert.alert('Error', 'Translation failed. Please try again later.');
     }
-  };
+  }, [canTranslate, freeTranslation, localState?.isPro, incrementTranslationCount, getRemainingTranslationTries, translateText, deviceLanguage]);
 
-
-  const handleLongPress = (item) => {
-    if (!user?.id) return;
-    Vibration.vibrate(20); // Vibrate for feedback
+  // ✅ Memoize handleLongPress
+  const handleLongPress = useCallback((item) => {
+    if (!user?.id || !item) return;
+    Vibration.vibrate(20);
     setSelectedMessage(item);
-  };
+  }, [user?.id]);
 
-  const handleReport = (message) => {
+  // ✅ Memoize handleReport
+  const handleReport = useCallback((message) => {
+    if (!message) return;
     triggerHapticFeedback('impactLight');
     setSelectedMessage(message);
     setShowReportPopup(true);
-  };
+  }, [triggerHapticFeedback]);
 
-  const handleReportSuccess = (reportedMessageId) => {
+  // ✅ Memoize handleReportSuccess
+  const handleReportSuccess = useCallback((reportedMessageId) => {
+    if (!reportedMessageId) return;
     triggerHapticFeedback('impactLight');
-    setMessages(prevMessages => {
-      const updated = prevMessages.map(msg =>
-        msg?.id === reportedMessageId
-          ? { ...msg, isReportedByUser: true }
-          : msg
-      );
-      return updated;
-    });
+    if (setMessages && typeof setMessages === 'function') {
+      setMessages(prevMessages => {
+        if (!Array.isArray(prevMessages)) return prevMessages;
+        return prevMessages.map(msg =>
+          msg?.id === reportedMessageId
+            ? { ...msg, isReportedByUser: true }
+            : msg
+        );
+      });
+    }
+  }, [triggerHapticFeedback, setMessages]);
 
-  };
+  // ✅ Memoize handleProfileClick
+  const handleProfileClick = useCallback((item) => {
+    if (!item || !user?.id) return;
+    if (toggleDrawer && typeof toggleDrawer === 'function') {
+      toggleDrawer(item);
+      triggerHapticFeedback('impactLight');
+    }
+  }, [user?.id, toggleDrawer, triggerHapticFeedback]);
+  // ✅ Move getReplyPreview outside and memoize
+  const getReplyPreview = useCallback((replyTo) => {
+    if (!replyTo || typeof replyTo !== 'object') return '[Deleted message]';
+  
+    if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
+      return replyTo.text;
+    }
+  
+    if (replyTo.gif) {
+      return '[Emoji]';
+    }
+  
+    if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
+      const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
+      return count > 0
+        ? `[${count} pet(s) message]`
+        : '[Pets message]';
+    }
+  
+    return '[Deleted message]';
+  }, []);
 
-  const handleProfileClick = (item) => {
-    // console.log(item)
-    if (user.id) { toggleDrawer(item); triggerHapticFeedback('impactLight'); }
-    else return
-
-  };
-  // console.log(user)
   const renderMessage = useCallback(({ item, index }) => {
+    // ✅ Safety checks
+    if (!item || typeof item !== 'object') return null;
+
     const previousMessage = messages[index + 1];
-    const currentDate = new Date(item.timestamp).toDateString();
-    const previousDate = previousMessage
+    const currentDate = item.timestamp ? new Date(item.timestamp).toDateString() : null;
+    const previousDate = previousMessage?.timestamp
       ? new Date(previousMessage.timestamp).toDateString()
       : null;
     const shouldShowDateHeader = currentDate !== previousDate;
@@ -249,41 +297,22 @@ const MessagesList = ({
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
     const hasFruits = fruits.length > 0;
     const totalFruitValue = hasFruits
-      ? fruits.reduce((sum, f) => sum + (Number(f.value) || 0), 0)
+      ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
-      const getReplyPreview = (replyTo) => {
-        if (!replyTo) return '[Deleted message]';
-      
-        if (replyTo.text && replyTo.text.trim().length > 0) {
-          return replyTo.text;
-        }
-      
-        if (replyTo.gif) {
-          return '[Emoji]';
-        }
-      
-        if (replyTo.hasFruits) {
-          const count = replyTo.fruitsCount || 0;
-          return count > 0
-            ? `[${count} pet(s) message]`
-            : '[Pets message]';
-        }
-      
-        return '[Deleted message]';
-      };
     // console.log(user.id)
 
     return (
       <View>
         {/* Display the date header if it's a new day */}
-        {shouldShowDateHeader && (
+        {shouldShowDateHeader && currentDate && (
           <View>
             <Text style={styles.dateSeparator}>{currentDate}</Text>
           </View>
         )}
 
         {/* Render the message */}
-       { !item.isReportedByUser && <View
+        {!item.isReportedByUser && (
+          <View
           style={[
             item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
             item.senderId === user?.id ? styles.myMessage : styles.otherMessage, item.isReportedByUser && styles.reportedMessage,
@@ -352,14 +381,29 @@ const MessagesList = ({
                     />} {(!!item.isAdmin) &&
                       <View style={styles.adminContainer}>
                         <Text style={styles.admin}>{t("chat.admin")}</Text>
-                      </View>}{'    '} {isAdmin && <Text style={{color:'red'}}>{item.OS?.toUpperCase()}</Text>}{''}
+                      </View>}{'    '} {isAdmin && item.OS && (
+                        <View style={[styles.platformBadge, { backgroundColor: item.OS === 'ios' ? '#007AFF' : '#34C759' }]}>
+                          <Text style={styles.platformText}>{item.OS.toUpperCase()}</Text>
+                        </View>
+                      )}{''}
                      
                     </Text>
 
                   
-                      {item.gif && <View><Image src={item.gif} style={{ height: 50, width: 50, resizeMode: 'contain' }} /></View>}
+                      {item.gif && (
+                        <View>
+                          <Image 
+                            source={{ uri: item.gif }} 
+                            style={{ height: 50, width: 50, resizeMode: 'contain' }} 
+                          />
+                        </View>
+                      )}
                     {/* {'\n'} */}
-                    <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>{parseMessageText(item?.text)}</Text>
+                    {item?.text && (
+                      <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>
+                        {parseMessageText(item.text)}
+                      </Text>
+                    )}
 
 
 
@@ -457,7 +501,7 @@ const MessagesList = ({
   </View>
 )}
               </MenuTrigger>
-              <MenuOptions customStyles={{
+            <MenuOptions customStyles={{
                 optionsContainer: styles.menuoptions,
                 optionWrapper: styles.menuOption,
                 optionText: styles.menuOptionText,
@@ -577,13 +621,11 @@ const MessagesList = ({
               </MenuOptions>
             </Menu>
           )}
-
-
-        </View>}
-
+        </View>
+        )}
       </View>
     );
-  }, [messages, highlightedMessageId, user?.id]);
+  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onPinMessage, banUserwithEmail, unbanUserWithEmail]);
 
   return (
     <>

@@ -374,6 +374,8 @@ const TradeList = ({ route }) => {
     senderId: selectedTrade?.userId,
     sender: selectedTrade?.traderName,
     avatar: selectedTrade?.avatar,
+    flage: selectedTrade?.flage ? selectedTrade.flage : null,
+
   }
   const handleChatNavigation2 = async () => {
     

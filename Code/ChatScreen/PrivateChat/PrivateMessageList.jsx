@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useMemo, useState, useCallback } from 'react';
 import {
   FlatList,
   View,
@@ -50,7 +50,9 @@ const PrivateMessageList = ({
 }) => {
   const { theme, isAdmin, api, freeTranslation } = useGlobalState();
   const isDarkMode = theme === 'dark';
-  const styles = getStyles(isDarkMode);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  
   const fruitColors = useMemo(
     () => ({
       wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
@@ -65,6 +67,15 @@ const PrivateMessageList = ({
   const { t } = useTranslation();
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
 
+  // ✅ Pre-compile regex patterns for FRUIT_KEYWORDS
+  const fruitRegexPatterns = useMemo(() => {
+    return FRUIT_KEYWORDS.map((word, index) => ({
+      regex: new RegExp(`\\b${word}\\b`, 'gi'),
+      placeholder: `__FRUIT_${index}__`,
+      word,
+    }));
+  }, []);
+
 
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReportPopup, setShowReportPopup] = useState(false);
@@ -73,41 +84,50 @@ const PrivateMessageList = ({
   const navigation = useNavigation()
 
 
-  const handleCopy = (message) => {
-    Clipboard.setString(message?.text ?? '');
+  // ✅ Memoize handleCopy
+  const handleCopy = useCallback((message) => {
+    if (!message || !message.text) return;
+    Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
     showSuccessMessage('Success', 'Message Copied');
-  };
+  }, [triggerHapticFeedback]);
 
+  // ✅ Memoize filteredMessages
+  const filteredMessages = useMemo(() => {
+    if (!Array.isArray(messages)) return [];
+    if (isBanned && userId) {
+      return messages.filter((message) => message?.senderId === userId);
+    }
+    return messages;
+  }, [messages, isBanned, userId]);
 
-  // Filter messages: Keep only user's messages if `isBanned` is true
-  const filteredMessages = isBanned
-    ? messages.filter((message) => message.senderId === userId)
-    : messages;
-
-  // Open the report popup
-  const handleReport = (message) => {
+  // ✅ Memoize handleReport
+  const handleReport = useCallback((message) => {
+    if (!message) return;
     setSelectedMessage(message);
     setShowReportPopup(true);
-  };
-  // console.log(messages)
-  // Submit the report
-  const handleSubmitReport = (message, reason) => {
-    onReportSubmit(message, reason);
+  }, []);
+
+  // ✅ Memoize handleSubmitReport
+  const handleSubmitReport = useCallback((message, reason) => {
+    if (onReportSubmit && typeof onReportSubmit === 'function') {
+      onReportSubmit(message, reason);
+    }
     setShowReportPopup(false);
-  };
+  }, [onReportSubmit]);
   // console.log(selectedUserId === userId)
  
 
 
-  const translateText = async (text, targetLang = deviceLanguage) => {
+  // ✅ Memoize translateText
+  const translateText = useCallback(async (text, targetLang = deviceLanguage) => {
+    if (!text || typeof text !== 'string') return null;
+
     const placeholders = {};
     let maskedText = text;
 
-    // Step 1: Replace fruit names with placeholders
-    FRUIT_KEYWORDS.forEach((word, index) => {
-      const placeholder = `__FRUIT_${index}__`;
-      const regex = new RegExp(`\\b${word}\\b`, 'gi'); // match full word, case-insensitive
+    // Step 1: Replace fruit names with placeholders using pre-compiled regex
+    fruitRegexPatterns.forEach(({ regex, placeholder, word }) => {
       maskedText = maskedText.replace(regex, placeholder);
       placeholders[placeholder] = word;
     });
@@ -139,12 +159,18 @@ const PrivateMessageList = ({
       console.error('Translation Error:', err);
       return null;
     }
-  };
+  }, [fruitRegexPatterns, deviceLanguage, api]);
 
-  const handleTranslate = async (item) => {
-    const isUnlimited = freeTranslation || localState.isPro;
+  // ✅ Memoize handleTranslate
+  const handleTranslate = useCallback(async (item) => {
+    if (!item || !item.text) {
+      Alert.alert('Error', 'Invalid message to translate.');
+      return;
+    }
+
+    const isUnlimited = freeTranslation || localState?.isPro;
   
-    if (!isUnlimited && !canTranslate()) {
+    if (!isUnlimited && canTranslate && typeof canTranslate === 'function' && !canTranslate()) {
       Alert.alert('Limit Reached', 'You can only translate 20 messages per day.');
       return;
     }
@@ -152,9 +178,11 @@ const PrivateMessageList = ({
     const translated = await translateText(item.text, deviceLanguage);
   
     if (translated) {
-      if (!isUnlimited) incrementTranslationCount();
+      if (!isUnlimited && incrementTranslationCount && typeof incrementTranslationCount === 'function') {
+        incrementTranslationCount();
+      }
   
-      const remaining = isUnlimited ? 'Unlimited' : `${getRemainingTranslationTries()} remaining`;
+      const remaining = isUnlimited ? 'Unlimited' : `${getRemainingTranslationTries ? getRemainingTranslationTries() : 0} remaining`;
   
       Alert.alert(
         'Translated Message',
@@ -166,10 +194,13 @@ const PrivateMessageList = ({
     } else {
       Alert.alert('Error', 'Translation failed. Please try again later.');
     }
-  };
+  }, [freeTranslation, localState?.isPro, canTranslate, incrementTranslationCount, getRemainingTranslationTries, translateText, deviceLanguage]);
   
-  // Render a single message
-  const renderMessage = ({ item }) => {
+  // ✅ Memoize renderMessage
+  const renderMessage = useCallback(({ item }) => {
+    // ✅ Safety checks
+    if (!item || typeof item !== 'object') return null;
+
     const isMyMessage = item.senderId === userId;
   
     const avatarUri = item.senderId !== userId
@@ -180,7 +211,7 @@ const PrivateMessageList = ({
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
     const hasFruits = fruits.length > 0;
     const totalFruitValue = hasFruits
-      ? fruits.reduce((sum, f) => sum + (Number(f.value) || 0), 0)
+      ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
   
     return (
@@ -353,16 +384,19 @@ const PrivateMessageList = ({
         </Menu>
   
         <Text style={styles.timestamp}>
-          {new Date(item.timestamp).toLocaleTimeString([], {
+          {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
-          })}
+          }) : ''}
         </Text>
       </View>
     );
-  };
-  
-  
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t]);
+
+  // ✅ Memoize keyExtractor
+  const keyExtractor = useCallback((item, index) => {
+    return item?.id || `msg-${index}`;
+  }, []);
 
   return (
     <View style={[styles.container]}>
@@ -371,19 +405,22 @@ const PrivateMessageList = ({
       ) : (
         <View style={{paddingBottom:140}}>  
         <>   
-        <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated}/>
+        <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} />
      
         <FlatList
           data={filteredMessages}
-          removeClippedSubviews={false} 
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage} // Pass the render function directly
-          inverted // Ensure list starts from the bottom
+          removeClippedSubviews={true}
+          keyExtractor={keyExtractor}
+          renderItem={renderMessage}
+          inverted
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           onScroll={() => Keyboard.dismiss()}
           onTouchStart={() => Keyboard.dismiss()}
-          keyboardShouldPersistTaps="handled" // Ensures taps o
+          keyboardShouldPersistTaps="handled"
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={15}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }

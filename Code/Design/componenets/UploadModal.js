@@ -43,6 +43,9 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
   const { theme } = useGlobalState();
   const isDark = theme === 'dark';
   const {localState} = useLocalState()
+  
+  // ✅ Session-based last post time (resets on app close/reopen - simple state, no storage)
+  const [lastPostTime, setLastPostTime] = useState(null);
 
   const toggleTag = useCallback((tag) => {
     setSelectedTags([tag]);
@@ -183,6 +186,20 @@ if (!currentUserEmail) {
     if (!desc && imageUris.length === 0) {
       return Alert.alert('Missing Info', 'Please add a description or at least one image.');
     }
+    
+    // ✅ Check 1-minute cooldown (session-based, resets on app restart)
+    const now = Date.now();
+    if (lastPostTime && (now - lastPostTime) < 60000) {
+      const secondsLeft = Math.ceil((60000 - (now - lastPostTime)) / 1000);
+      showMessage({
+        message: '⏱️ Cooldown Active',
+        description: `Please wait ${secondsLeft} second${secondsLeft === 1 ? '' : 's'} before posting again.`,
+        type: 'warning',
+        duration: 3000,
+      });
+      return;
+    }
+    
     if (strikeInfo) {
       const { strikeCount, bannedUntil } = strikeInfo;
       // console.log('strick')
@@ -221,10 +238,17 @@ if (!currentUserEmail) {
         const uploadedUrls = await uploadToBunny();
         // console.log('[UploadModal] submitting with email:', currentUserEmail);
         await onUpload(desc, uploadedUrls, selectedTags, currentUserEmail);
+        
+        // ✅ Clear all inputs after successful upload
         setDesc('');
         setImageUris([]);
         setSelectedTags(['Discussion']);
         // setBudget('');
+        
+        // ✅ Update last post time (session-based, not persisted - resets on app restart)
+        const postTime = Date.now();
+        setLastPostTime(postTime);
+        
         onClose();
         showMessage({
           message: 'Success',
@@ -259,7 +283,7 @@ if (!currentUserEmail) {
       }, 500);
     });
   
-  }, [user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail]);
+  }, [user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime]);
   
 
   const themedStyles = getStyles(isDark);

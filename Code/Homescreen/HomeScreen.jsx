@@ -81,7 +81,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user, firestoreDB } = useGlobalState();
+  const { theme, user, firestoreDB, single_offer_wall } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
 const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -657,7 +657,9 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
         rating: userRating,
         ratingCount,
-        isSharkMode: localState.isGG ? 'GG' : isSharkMode
+        isSharkMode: localState.isGG ? 'GG' : isSharkMode,
+              flage: user.flage ? user.flage : null,
+
 
       };
       
@@ -1189,7 +1191,7 @@ await addDoc(tradesCollection, newTrade);
             message={t("home.alert.sign_in_required")}
           />
         </View>
-        <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={false} showoffer={true}/>
+        <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall}/>
       </GestureHandlerRootView>
       {!localState.isPro && <BannerAdComponent />}
       <ShareTradeModal

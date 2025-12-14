@@ -46,7 +46,8 @@ const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisi
   const [refreshing, setRefreshing] = useState(false);
   const lastLoadedKeyRef = useRef(null);
   const [lastLoadedKey, setLastLoadedKey] = useState(null);
-    const [replyTo, setReplyTo] = useState(null);
+  const previousChatKeyRef = useRef(null); // ✅ Track previous chatKey to prevent unnecessary resets
+  const [replyTo, setReplyTo] = useState(null);
   const [input, setInput] = useState('');
   const { localState } = useLocalState()
   const selectedUserId = selectedUser?.senderId;
@@ -69,9 +70,12 @@ const [isOnline, setIsOnline] = useState(false);
   };
 
 
-  // console.log(item)
-  
-  useEffect(()=>{setTrade(item)}, [])
+  // ✅ Fix useEffect dependency
+  useEffect(() => {
+    if (item) {
+      setTrade(item);
+    }
+  }, [item]);
   useEffect(() => {
     if (selectedUserId) {
       isUserOnline(selectedUserId).then(setIsOnline).catch(() => setIsOnline(false));
@@ -79,33 +83,43 @@ const [isOnline, setIsOnline] = useState(false);
   }, [selectedUserId]);
 
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    if (!myUserId || !selectedUserId) return;
   
-    const myMsgs = messages.filter(m => m.senderId === myUserId);
-    const theirMsgs = messages.filter(m => m.senderId === selectedUserId);
+    const myMsgs = messages.filter(m => m?.senderId === myUserId);
+    const theirMsgs = messages.filter(m => m?.senderId === selectedUserId);
   
     if (myMsgs.length > 1 && theirMsgs.length > 1) {
       setCanRate(true);
+    } else {
+      setCanRate(false);
     }
-  }, [messages]);
+  }, [messages, myUserId, selectedUserId]);
   
   useEffect(() => {
-    if (!selectedUserId || !myUserId) return;
+    if (!selectedUserId || !myUserId || !appdatabase) return;
   
     const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
-    ratingRef.once('value').then(snapshot => {
-      if (snapshot.exists()) {
-        setHasRated(true);
-      }
-    }).catch(error => {
-      console.error("Error checking existing rating:", error);
-    });
-  }, [selectedUserId, myUserId]);
+    ratingRef.once('value')
+      .then(snapshot => {
+        if (snapshot.exists()) {
+          setHasRated(true);
+        } else {
+          setHasRated(false);
+        }
+      })
+      .catch(error => {
+        console.error("Error checking existing rating:", error);
+        setHasRated(false);
+      });
+  }, [selectedUserId, myUserId, appdatabase]);
   
   
+  // ✅ Safety check for bannedUsers array
   const isBanned = useMemo(() => {
-    // const bannedUserIds = bannedUsers?.map((user) => user.id) || [];
-    return bannedUsers.includes(selectedUserId);
+    if (!selectedUserId) return false;
+    const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+    return banned.includes(selectedUserId);
   }, [bannedUsers, selectedUserId]);
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -119,27 +133,36 @@ const [isOnline, setIsOnline] = useState(false);
     [myUserId, selectedUserId]
   );
 
-  const getUserPoints = async (userId) => {
-    if (!userId) return 0;
+  // ✅ Memoize getUserPoints
+  const getUserPoints = useCallback(async (userId) => {
+    if (!userId || !appdatabase) return 0;
     try {
       const snapshot = await get(ref(appdatabase, `/users/${userId}/rewardPoints`));
-      return snapshot.exists() ? snapshot.val() : 0;
+      return snapshot.exists() ? Number(snapshot.val()) || 0 : 0;
     } catch (error) {
-      return error;
+      console.error('Error getting user points:', error);
+      return 0;
     }
-  };
+  }, [appdatabase]);
 
-  const updateUserPoints = async (userId, pointsToAdd) => {
-    if (!userId) return;
+  // ✅ Memoize updateUserPoints
+  const updateUserPoints = useCallback(async (userId, pointsToAdd) => {
+    if (!userId || !appdatabase) return;
+    if (typeof pointsToAdd !== 'number' || isNaN(pointsToAdd)) {
+      console.error('Invalid pointsToAdd value');
+      return;
+    }
     try {
       const latestPoints = await getUserPoints(userId);
-      // console.log(latestPoints)
-
-      const newPoints = latestPoints + pointsToAdd;
+      const newPoints = Number(latestPoints) + Number(pointsToAdd);
       await update(ref(appdatabase, `/users/${userId}`), { rewardPoints: newPoints });
-      updateLocalStateAndDatabase('rewardPoints', newPoints);
-    } catch (error) {}
-  };
+      if (updateLocalStateAndDatabase && typeof updateLocalStateAndDatabase === 'function') {
+        updateLocalStateAndDatabase('rewardPoints', newPoints);
+      }
+    } catch (error) {
+      console.error('Error updating user points:', error);
+    }
+  }, [getUserPoints, appdatabase, updateLocalStateAndDatabase]);
   // const navigation = useNavigation();
   useFocusEffect(
     useCallback(() => {
@@ -155,15 +178,21 @@ const [isOnline, setIsOnline] = useState(false);
       };
     }, [user?.id])
   );
-  const handleRating = async () => {
-    if (!rating) {
+  // ✅ Memoize handleRating
+  const handleRating = useCallback(async () => {
+    if (!rating || rating < 1 || rating > 5) {
       showErrorMessage("Error", "Please select a rating first.");
+      return;
+    }
+
+    // ✅ Safety checks
+    if (!selectedUserId || !myUserId || !appdatabase || !firestoreDB) {
+      showErrorMessage("Error", "Missing required data. Please try again.");
       return;
     }
   
     try {
-      // 🔹 Realtime Database part (same as before)
-      setStartRating(true)
+      setStartRating(true);
       const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
       const avgRef = ref(appdatabase, `averageRatings/${selectedUserId}`);
   
@@ -252,14 +281,17 @@ showSuccessMessage(
       setShowRatingModal(false);
       setHasRated(true);
       setReviewText('');
-      await updateUserPoints(user?.id, 100);
-      setStartRating(false)
+      if (user?.id) {
+        await updateUserPoints(user.id, 100);
+      }
+      setStartRating(false);
   
     } catch (error) {
       console.error("Rating error:", error);
       showErrorMessage("Error", "Error submitting rating. Try again!");
+      setStartRating(false);
     }
-  };
+  }, [rating, selectedUserId, myUserId, appdatabase, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints]);
   
   
 
@@ -280,6 +312,7 @@ showSuccessMessage(
   
       if (reset) {
         setLoading(true);
+        // ✅ Only clear messages if we're actually resetting (chat changed or manual refresh)
         setMessages([]);
         lastLoadedKeyRef.current = null;
       }
@@ -289,7 +322,7 @@ showSuccessMessage(
   
         const lastKey = lastLoadedKeyRef.current;
         if (!reset && lastKey) {
-          // get older messages including lastKey – we’ll filter overlap
+          // get older messages including lastKey – we'll filter overlap
           query = query.endAt(lastKey);
         }
   
@@ -302,19 +335,35 @@ showSuccessMessage(
   
         let parsedMessages = Object.entries(data)
           .map(([key, value]) => ({ id: key, ...value }))
-          .sort((a, b) => b.timestamp - a.timestamp); // oldest -> newest
-  
-        if (parsedMessages.length === 0) return;
+          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0)); // ✅ DESCENDING: newest -> oldest (for inverted FlatList to show newest at bottom)
+
+        // ✅ If reset and no messages found, keep loading state but don't clear existing messages unnecessarily
+        if (parsedMessages.length === 0) {
+          if (reset) {
+            // Only clear if we explicitly reset (manual refresh or chat change)
+            // This prevents accidental clearing
+          }
+          return;
+        }
 
         // console.log(parsedMessages.length)
   
         setMessages(prev => {
-          const existingIds = new Set(prev.map(m => String(m.id)));
-          const onlyNew = parsedMessages.filter(m => !existingIds.has(String(m.id)));
-          return reset ? parsedMessages : [...onlyNew, ...prev];
+          if (!Array.isArray(prev)) return parsedMessages;
+          const existingIds = new Set(prev.map(m => String(m?.id)));
+          const onlyNew = parsedMessages.filter(m => !existingIds.has(String(m?.id)));
+          
+          if (reset) {
+            // Initial load: use parsed messages as-is (already sorted descending)
+            return parsedMessages;
+          } else {
+            // Load more (older messages): append and maintain descending order
+            const combined = [...prev, ...onlyNew];
+            return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          }
         });
   
-        lastLoadedKeyRef.current = parsedMessages[0].id; // oldest in this batch
+        lastLoadedKeyRef.current = parsedMessages[parsedMessages.length - 1]?.id; // ✅ oldest in this batch (last item in descending array)
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
@@ -327,22 +376,39 @@ showSuccessMessage(
   
   
 
+  // ✅ Only load messages when chatKey actually changes (not when loadMessages reference changes)
   useEffect(() => {
     if (!messagesRef) return;
-    loadMessages(true);
-  }, [messagesRef, loadMessages]);
+    
+    // Only reset if chatKey actually changed
+    const currentChatKey = chatKey;
+    const previousChatKey = previousChatKeyRef.current;
+    
+    if (currentChatKey !== previousChatKey) {
+      // Chat changed - reset and load messages
+      previousChatKeyRef.current = currentChatKey;
+      loadMessages(true);
+    } else if (previousChatKey === null) {
+      // Initial load
+      previousChatKeyRef.current = currentChatKey;
+      loadMessages(true);
+    }
+    // If chatKey hasn't changed, don't reload (preserves existing messages)
+  }, [chatKey, messagesRef, loadMessages]);
   
   const handleLoadMore = useCallback(() => {
     // explicitly say "this is NOT a reset"
     loadMessages(false);
   }, [loadMessages]);
-  // console.log(selectedUser.sender)
-  const groupItems = (items) => {
+  // ✅ Memoize groupItems
+  const groupItems = useCallback((items) => {
+    if (!Array.isArray(items)) return [];
     const grouped = {};
     items.forEach((item) => {
-      const key = `${item.name}-${item.type}`;
+      if (!item || typeof item !== 'object') return;
+      const key = `${item.name || ''}-${item.type || ''}`;
       if (grouped[key]) {
-        grouped[key].count += 1;
+        grouped[key].count = (grouped[key].count || 0) + 1;
       } else {
         grouped[key] = { 
           ...item,
@@ -351,42 +417,59 @@ showSuccessMessage(
       }
     });
     return Object.values(grouped);
-  };
-  const formatName = (name) => {
+  }, []);
+
+  // ✅ Memoize formatName
+  const formatName = useCallback((name) => {
+    if (!name || typeof name !== 'string') return '';
     let formattedName = name.replace(/^\+/, '');
     formattedName = formattedName.replace(/\s+/g, '-');
     return formattedName;
-  };
+  }, []);
 
   useEffect(() => {
+    if (!myUserId || !selectedUserId || !appdatabase) return;
+
     const chatId = [myUserId, selectedUserId].sort().join('_');
     const tradeRef = ref(appdatabase, `private_messages/${chatId}/trade`);
   
-    if (item) {
+    if (item && typeof item === 'object') {
       // ✅ If trade comes from props, set it and update Firebase
       setTrade(item);
-      tradeRef.set(item).catch((error) => console.error("Error updating trade in Firebase:", error));
+      tradeRef.set(item).catch((error) => {
+        console.error("Error updating trade in Firebase:", error);
+      });
     } else {
       // ✅ If no trade in props, check Firebase
       tradeRef.once('value')
         .then((snapshot) => {
-          const tradeData = snapshot.val();
-          if (tradeData) {
-            setTrade(tradeData);
+          if (snapshot.exists()) {
+            const tradeData = snapshot.val();
+            if (tradeData && typeof tradeData === 'object') {
+              setTrade(tradeData);
+            }
           }
         })
-        .catch((error) => console.error("Error fetching trade from Firebase:", error));
+        .catch((error) => {
+          console.error("Error fetching trade from Firebase:", error);
+        });
     }
-  }, []);
+  }, [item, myUserId, selectedUserId, appdatabase]);
   
-// console.log(trade)
-  const groupedHasItems = groupItems(trade?.hasItems || []);
-  const groupedWantsItems = groupItems(trade?.wantsItems || []);
+  // ✅ Memoize grouped items
+  const groupedHasItems = useMemo(() => {
+    if (!trade || !trade.hasItems || !Array.isArray(trade.hasItems)) return [];
+    return groupItems(trade.hasItems);
+  }, [trade?.hasItems, groupItems]);
+
+  const groupedWantsItems = useMemo(() => {
+    if (!trade || !trade.wantsItems || !Array.isArray(trade.wantsItems)) return [];
+    return groupItems(trade.wantsItems);
+  }, [trade?.wantsItems, groupItems]);
 
 
-  // Send message
-
-  const sendMessage = async (text, image, fruits) => {
+  // ✅ Memoize sendMessage
+  const sendMessage = useCallback(async (text, image, fruits) => {
     const trimmedText = (text || '').trim(); // safe guard
     const hasImage = !!image;
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
@@ -397,15 +480,21 @@ showSuccessMessage(
       return;
     }
   
+    // ✅ Safety checks
+    if (!myUserId || !selectedUserId || !appdatabase) {
+      showErrorMessage(t("home.alert.error"), "Missing required data. Please try again.");
+      return;
+    }
+
     setInput(''); // clear input, image & fruits already cleared in PrivateMessageInput
   
     const timestamp = Date.now();
     const chatId = [myUserId, selectedUserId].sort().join('_');
   
     // References
-    const messageRef       = ref(appdatabase, `private_messages/${chatId}/messages/${timestamp}`);
-    const senderChatRef    = ref(appdatabase, `chat_meta_data/${myUserId}/${selectedUserId}`);
-    const receiverChatRef  = ref(appdatabase, `chat_meta_data/${selectedUserId}/${myUserId}`);
+    const messageRef = ref(appdatabase, `private_messages/${chatId}/messages/${timestamp}`);
+    const senderChatRef = ref(appdatabase, `chat_meta_data/${myUserId}/${selectedUserId}`);
+    const receiverChatRef = ref(appdatabase, `chat_meta_data/${selectedUserId}/${myUserId}`);
     const receiverStatusRef = ref(appdatabase, `users/${selectedUserId}/activeChat`);
   
     // Build message payload
@@ -413,6 +502,7 @@ showSuccessMessage(
       text: trimmedText,
       senderId: myUserId,
       timestamp,
+      // flage: user.flage ? user.flage : null,
     };
   
     if (hasImage) {
@@ -463,7 +553,7 @@ showSuccessMessage(
       console.error("Error sending message:", error);
       Alert.alert("Error", "Could not send your message. Please try again.");
     }
-  };
+  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t]);
   
   
 
@@ -493,8 +583,10 @@ showSuccessMessage(
   }, [loadMessages]);
 
   useEffect(() => {
-    setActiveChat(user.id, chatKey)
-  }, [user.id, chatKey]);
+    if (user?.id && chatKey) {
+      setActiveChat(user.id, chatKey);
+    }
+  }, [user?.id, chatKey]);
 
 
 
@@ -502,21 +594,31 @@ useEffect(() => {
   if (!messagesRef) return;
 
   const handleChildAdded = snapshot => {
-    const newMessage = { id: snapshot.key, ...snapshot.val() };
+    if (!snapshot || !snapshot.key) return;
+    const data = snapshot.val();
+    if (!data || typeof data !== 'object') return;
+
+    const newMessage = { id: snapshot.key, ...data };
+    if (!newMessage.timestamp) {
+      newMessage.timestamp = Date.now();
+    }
 
     setMessages(prev => {
-      const exists = prev.some(m => String(m.id) === String(newMessage.id));
-      if (exists) return prev; // don’t duplicate
+      if (!Array.isArray(prev)) return [newMessage];
+      const exists = prev.some(m => String(m?.id) === String(newMessage.id));
+      if (exists) return prev; // don't duplicate
 
-      // keep ASC order: add to the end
-      return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp);
+      // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
+      return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
     });
   };
 
   messagesRef.on('child_added', handleChildAdded);
 
   return () => {
-    messagesRef.off('child_added', handleChildAdded);
+    if (messagesRef) {
+      messagesRef.off('child_added', handleChildAdded);
+    }
   };
 }, [messagesRef]);
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -22,8 +22,12 @@ const BUNNY_STORAGE_ZONE = 'post-gag';
 const BUNNY_ACCESS_KEY   = '1b7e1a85-dff7-4a98-ba701fc7f9b9-6542-46e2';
 const BUNNY_CDN_BASE     = 'https://pull-gag.b-cdn.net';
 
-// 🔹 simple inline base64 → Uint8Array decoder (no atob / extra libs)
+// ✅ Move base64ToBytes outside component (pure function)
 const base64ToBytes = (base64) => {
+  if (!base64 || typeof base64 !== 'string') {
+    throw new Error('Invalid base64 input');
+  }
+
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   let str = base64.replace(/[\r\n]+/g, '');
   let output = [];
@@ -34,6 +38,11 @@ const base64ToBytes = (base64) => {
     const enc2 = chars.indexOf(str.charAt(i++));
     const enc3 = chars.indexOf(str.charAt(i++));
     const enc4 = chars.indexOf(str.charAt(i++));
+
+    // ✅ Safety check for invalid characters
+    if (enc1 === -1 || enc2 === -1 || enc3 === -1 || enc4 === -1) {
+      throw new Error('Invalid base64 character');
+    }
 
     const chr1 = (enc1 << 2) | (enc2 >> 4);
     const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
@@ -72,10 +81,11 @@ const PrivateMessageInput = ({
   const isDark = theme === 'dark';
   const { t } = useTranslation();
 
-  const styles = getStyles(isDark);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDark), [isDark]);
 
-  // 📷 Pick a single image from gallery
-  const handlePickImage = () => {
+  // ✅ Memoize handlePickImage
+  const handlePickImage = useCallback(() => {
     if (isBanned) return;
 
     launchImageLibrary(
@@ -84,8 +94,7 @@ const PrivateMessageInput = ({
         selectionLimit: 1,
       },
       response => {
-        if (!response) return;
-        if (response.didCancel) return;
+        if (!response || response.didCancel) return;
 
         if (response.errorCode) {
           console.warn(
@@ -100,13 +109,13 @@ const PrivateMessageInput = ({
           return;
         }
 
-        const asset = response.assets && response.assets[0];
-        if (asset?.uri) {
+        const asset = Array.isArray(response.assets) ? response.assets[0] : null;
+        if (asset?.uri && typeof asset.uri === 'string') {
           setImageUri(asset.uri);
         }
       },
     );
-  };
+  }, [isBanned]);
 
   // 🐰 Upload ONE image to Bunny (no atob)
   const uploadToBunny = useCallback(
@@ -124,7 +133,14 @@ const PrivateMessageInput = ({
         const base64 = await RNFS.readFile(uri.replace('file://', ''), 'base64');
 
         // convert to bytes without atob
-        const binary = base64ToBytes(base64);
+        let binary;
+        try {
+          binary = base64ToBytes(base64);
+        } catch (error) {
+          console.error('Error converting base64 to bytes:', error);
+          Alert.alert('Error', 'Image processing failed.');
+          return null;
+        }
 
         const res = await fetch(uploadUrl, {
           method: 'PUT',
@@ -152,30 +168,39 @@ const PrivateMessageInput = ({
     [user?.id],
   );
 
-  const handleSend = async () => {
+  // ✅ Memoize handleSend
+  const handleSend = useCallback(async () => {
     const trimmedInput = (input || '').trim();
-    const hasImage  = !!imageUri;
+    const hasImage = !!imageUri;
     const hasFruits = Array.isArray(selectedFruits) && selectedFruits.length > 0;
 
     // nothing to send
     if (!trimmedInput && !hasImage && !hasFruits) return;
     if (isSending) return;
 
+    // ✅ Validate onSend callback
+    if (!onSend || typeof onSend !== 'function') {
+      console.error('❌ onSend callback is not a function');
+      return;
+    }
+
     setIsSending(true);
 
     // snapshot current data
-    const textToSend   = trimmedInput;
-    const imageToSend  = imageUri;
+    const textToSend = trimmedInput;
+    const imageToSend = imageUri;
     const fruitsToSend = Array.isArray(selectedFruits) ? [...selectedFruits] : [];
 
     // clear UI
     setInput('');
     setImageUri(null);
-    setSelectedFruits([]);
+    if (setSelectedFruits && typeof setSelectedFruits === 'function') {
+      setSelectedFruits([]);
+    }
 
     setMessageCount(prevCount => {
       const newCount = prevCount + 1;
-      if (!localState.isPro && newCount % 5 === 0) {
+      if (!localState?.isPro && newCount % 5 === 0) {
         InterstitialAdManager.showAd(() => {});
       }
       return newCount;
@@ -191,29 +216,42 @@ const PrivateMessageInput = ({
       // 🔺 onSend: text, imageUrl, fruits
       await onSend(textToSend, imageUrl, fruitsToSend);
 
-      if (onCancelReply) onCancelReply();
+      if (onCancelReply && typeof onCancelReply === 'function') {
+        onCancelReply();
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message.');
     } finally {
       setIsSending(false); // ✅ always reset
     }
-  };
+  }, [input, imageUri, selectedFruits, isSending, onSend, onCancelReply, setSelectedFruits, localState?.isPro, uploadToBunny]);
 
-  const hasFruits =
-    Array.isArray(selectedFruits) && selectedFruits.length > 0;
+  // ✅ Memoize hasFruits and hasContent
+  const hasFruits = useMemo(() =>
+    Array.isArray(selectedFruits) && selectedFruits.length > 0,
+    [selectedFruits]
+  );
 
-  const hasContent =
-    (input || '').trim().length > 0 || !!imageUri || hasFruits;
+  const hasContent = useMemo(() =>
+    (input || '').trim().length > 0 || !!imageUri || hasFruits,
+    [input, imageUri, hasFruits]
+  );
 
   return (
     <View style={styles.inputWrapper}>
       {/* Reply Context */}
       {replyTo && (
         <View style={styles.replyContainer}>
-          <Text style={styles.replyText}>Replying to: {replyTo.text}</Text>
+          <Text style={styles.replyText}>
+            Replying to: {replyTo?.text || '[Message]'}
+          </Text>
           <TouchableOpacity
-            onPress={onCancelReply}
+            onPress={() => {
+              if (onCancelReply && typeof onCancelReply === 'function') {
+                onCancelReply();
+              }
+            }}
             style={styles.cancelReplyButton}
           >
             <Icon name="close-circle" size={24} color="#e74c3c" />
@@ -226,7 +264,11 @@ const PrivateMessageInput = ({
         {/* Pets drawer icon */}
         <TouchableOpacity
           style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
-          onPress={() => setPetModalVisible(true)}
+          onPress={() => {
+            if (setPetModalVisible && typeof setPetModalVisible === 'function') {
+              setPetModalVisible(true);
+            }
+          }}
           disabled={isSending || isBanned}
         >
           <Icon
@@ -319,7 +361,11 @@ const PrivateMessageInput = ({
           </Text>
 
           <TouchableOpacity
-            onPress={() => setSelectedFruits([])}
+            onPress={() => {
+              if (setSelectedFruits && typeof setSelectedFruits === 'function') {
+                setSelectedFruits([]);
+              }
+            }}
             style={{ marginLeft: 8 }}
           >
             <Icon

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -50,14 +50,15 @@ const ProfileBottomDrawer = ({
   const { triggerHapticFeedback } = useHaptic();
 
   const isDarkMode = theme === 'dark';
-  const styles = getStyles(isDarkMode);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
   const userName = selectedUser?.sender || null;
   const avatar = selectedUser?.avatar || null;
 
-  // 🔒 ban state
-  const isBlock = bannedUsers?.includes(selectedUserId);
+  // 🔒 ban state - ✅ Safety check for array
+  const isBlock = Array.isArray(bannedUsers) && bannedUsers.includes(selectedUserId);
 
   // ⭐ rating summary (from RTDB /averageRatings)
   const [ratingSummary, setRatingSummary] = useState(null);
@@ -89,7 +90,8 @@ const ProfileBottomDrawer = ({
     mixpanel.track('Code UserName', { UserName: code });
   };
 
-  const formatCreatedAt = (timestamp) => {
+  // ✅ Memoize formatCreatedAt
+  const formatCreatedAt = useCallback((timestamp) => {
     if (!timestamp) return null;
 
     const now = Date.now();
@@ -112,9 +114,10 @@ const ProfileBottomDrawer = ({
 
     const years = Math.floor(months / 12);
     return `${years} year${years === 1 ? '' : 's'} ago`;
-  };
+  }, []);
 
-  const getTimestampMs = (ts) => {
+  // ✅ Memoize getTimestampMs
+  const getTimestampMs = useCallback((ts) => {
     if (!ts) return null;
 
     // Firestore Timestamp instance
@@ -131,7 +134,7 @@ const ProfileBottomDrawer = ({
     if (typeof ts === 'number') return ts;
 
     return null;
-  };
+  }, []);
 
   // ─────────────────────────────────────────────
   // Ban / Unban
@@ -152,12 +155,14 @@ const ProfileBottomDrawer = ({
             try {
               let updatedBannedUsers;
 
+              // ✅ Safety check for array
+              const currentBanned = Array.isArray(bannedUsers) ? bannedUsers : [];
               if (isBlock) {
-                updatedBannedUsers = bannedUsers.filter(
+                updatedBannedUsers = currentBanned.filter(
                   (id) => id !== selectedUserId,
                 );
               } else {
-                updatedBannedUsers = [...bannedUsers, selectedUserId];
+                updatedBannedUsers = [...currentBanned, selectedUserId];
               }
 
               await updateLocalState('bannedUsers', updatedBannedUsers);
@@ -300,35 +305,46 @@ const ProfileBottomDrawer = ({
   }, [isVisible, selectedUserId, loadDetails, firestoreDB]);
 
   // ─────────────────────────────────────────────
-  // Load reviews (paged) — OUTSIDE useEffect so handleLoadMoreReviews can use it
-  const loadReviews = async (reset = false) => {
+  // Load reviews (paged) — ✅ Memoized with useCallback
+  const loadReviews = useCallback(async (reset = false) => {
     if (!firestoreDB || !selectedUserId) return;
 
     setLoadingReviews(true);
     try {
-      let q = query(
-        collection(firestoreDB, 'reviews'),
-        where('toUserId', '==', selectedUserId),
-        orderBy('updatedAt', 'desc'),
-        limit(REVIEWS_PAGE_SIZE),
-      );
+      // ✅ Get current lastReviewDoc from state using functional update
+      let currentLastDoc = null;
+      setLastReviewDoc((prev) => {
+        currentLastDoc = prev;
+        return prev;
+      });
 
-      if (!reset && lastReviewDoc) {
+      let q;
+      if (!reset && currentLastDoc) {
         q = query(
           collection(firestoreDB, 'reviews'),
           where('toUserId', '==', selectedUserId),
           orderBy('updatedAt', 'desc'),
-          startAfter(lastReviewDoc),
+          startAfter(currentLastDoc),
+          limit(REVIEWS_PAGE_SIZE),
+        );
+      } else {
+        q = query(
+          collection(firestoreDB, 'reviews'),
+          where('toUserId', '==', selectedUserId),
+          orderBy('updatedAt', 'desc'),
           limit(REVIEWS_PAGE_SIZE),
         );
       }
 
       const snap = await getDocs(q);
 
-      const batch = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const batch = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+        };
+      });
 
       setReviews((prev) => (reset ? batch : [...prev, ...batch]));
 
@@ -342,7 +358,7 @@ const ProfileBottomDrawer = ({
     } finally {
       setLoadingReviews(false);
     }
-  };
+  }, [firestoreDB, selectedUserId, lastReviewDoc]);
 
   // initial reviews load when opening details
   useEffect(() => {
@@ -350,17 +366,18 @@ const ProfileBottomDrawer = ({
     // reset pagination when details open
     setLastReviewDoc(null);
     loadReviews(true);
-  }, [isVisible, selectedUserId, loadDetails, firestoreDB]); // firestoreDB in deps is fine
+  }, [isVisible, selectedUserId, loadDetails, loadReviews]);
 
-  const handleLoadMoreReviews = () => {
+  // ✅ Memoize handleLoadMoreReviews
+  const handleLoadMoreReviews = useCallback(() => {
     if (!hasMoreReviews || loadingReviews) return;
     loadReviews(false);
-  };
+  }, [hasMoreReviews, loadingReviews, loadReviews]);
 
   // ─────────────────────────────────────────────
-  // Helpers for rendering
+  // Helpers for rendering - ✅ Memoized
 
-  const renderStars = (value) => {
+  const renderStars = useCallback((value) => {
     const rounded = Math.round(value || 0);
     const full = '★'.repeat(Math.min(rounded, 5));
     const empty = '☆'.repeat(Math.max(0, 5 - rounded));
@@ -370,9 +387,12 @@ const ProfileBottomDrawer = ({
         <Text style={{ color: '#999' }}>{empty}</Text>
       </Text>
     );
-  };
+  }, []);
 
-  const renderPetBubble = (pet, index) => {
+  const renderPetBubble = useCallback((pet, index) => {
+    // ✅ Safety checks
+    if (!pet || typeof pet !== 'object') return null;
+
     const valueType = (pet.valueType || 'd').toLowerCase();
     let rarityBg = '#FF6666';
     if (valueType === 'n') rarityBg = '#2ecc71';
@@ -380,7 +400,7 @@ const ProfileBottomDrawer = ({
 
     return (
       <View
-        key={`${pet.id || pet.name}-${index}`}
+        key={`${pet.id || pet.name || index}-${index}`}
         style={{
           width: 42,
           height: 42,
@@ -391,7 +411,7 @@ const ProfileBottomDrawer = ({
         }}
       >
         <Image
-          source={{ uri: pet.imageUrl }}
+          source={{ uri: pet.imageUrl || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
           style={{ width: '100%', height: '100%' }}
         />
         <View
@@ -464,7 +484,7 @@ const ProfileBottomDrawer = ({
         </View>
       </View>
     );
-  };
+  }, [isDarkMode]);
 
   // ─────────────────────────────────────────────
   return (
@@ -511,7 +531,7 @@ const ProfileBottomDrawer = ({
                         style={{ width: 14, height: 14 }}
                       />
                     )}{' '}
-                    {selectedUser?.flage}{'   '}
+                    {selectedUser?.flage ? selectedUser.flage : ''}{'   '}
                     <Icon
                       name="copy-outline"
                       size={16}
@@ -813,10 +833,10 @@ const ProfileBottomDrawer = ({
                               )}
                             </View>
 
-                            {renderStars(rev.rating || 0)}
+                            {renderStars(rev?.rating || 0)}
                           </View>
 
-                          {!!rev.review && (
+                          {!!rev?.review && (
                             <Text
                               style={{
                                 fontSize: 11,
@@ -827,7 +847,7 @@ const ProfileBottomDrawer = ({
                             </Text>
                           )}
 
-                          {rev.edited && (
+                          {rev?.edited && (
                             <Text
                               style={{
                                 fontSize: 10,

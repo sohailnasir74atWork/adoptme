@@ -29,10 +29,11 @@ import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
 import notifee from '@notifee/react-native';
 import SubscriptionScreen from './OfferWall';
-import { ref, remove } from '@react-native-firebase/database';
+import { ref, remove, get, update } from '@react-native-firebase/database';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import { useLanguage } from '../Translation/LanguageProvider';
 import { useTranslation } from 'react-i18next';
+import { getFlag } from '../Helper/CountryCheck';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { setAppLanguage } from '../../i18n';
 import { Image as CompressorImage } from 'react-native-compressor';
@@ -45,6 +46,12 @@ import {
   onSnapshot,
   setDoc,
   serverTimestamp,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  startAfter,
 } from '@react-native-firebase/firestore';
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -63,7 +70,7 @@ export default function SettingsScreen({ selectedTheme }) {
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [openSingnin, setOpenSignin] = useState(false);
-  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, firestoreDB } = useGlobalState()
+  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, firestoreDB , single_offer_wall} = useGlobalState()
   const { updateLocalState, localState, mySubscriptions } = useLocalState()
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [showOfferWall, setShowofferWall] = useState(false);
@@ -75,6 +82,20 @@ const [owned, setOwned] = useState(false);
 const [avatarSearch, setAvatarSearch] = useState('');
 const [uploadingAvatar, setUploadingAvatar] = useState(false);
 const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
+  const [activeReviewsTab, setActiveReviewsTab] = useState("gave"); // "gave" | "received"
+  const [userReviews, setUserReviews] = useState([]); // Reviews user gave to others
+  const [receivedReviews, setReceivedReviews] = useState([]); // Reviews others gave to user
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [loadingReceivedReviews, setLoadingReceivedReviews] = useState(false);
+  const [editingReview, setEditingReview] = useState(null);
+  const [editReviewText, setEditReviewText] = useState('');
+  const [editReviewRating, setEditReviewRating] = useState(0);
+  const [displayedGaveCount, setDisplayedGaveCount] = useState(2); // How many "gave" reviews to show
+  const [displayedReceivedCount, setDisplayedReceivedCount] = useState(2); // How many "received" reviews to show
+  const [lastGaveDoc, setLastGaveDoc] = useState(null); // Last document for pagination (gave)
+  const [lastReceivedDoc, setLastReceivedDoc] = useState(null); // Last document for pagination (received)
+  const [hasMoreGave, setHasMoreGave] = useState(false); // Whether there are more "gave" reviews
+  const [hasMoreReceived, setHasMoreReceived] = useState(false); // Whether there are more "received" reviews
 
 
 
@@ -104,6 +125,49 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
           <TouchableOpacity
             key={t.key}
             onPress={() => setActiveTab(t.key)}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 10,
+              alignItems: "center",
+              backgroundColor: isActive ? config.colors.primary : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Lato-Bold",
+                color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
+              }}
+            >
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  const ReviewsTabs = () => (
+    <View
+      style={{
+        flexDirection: "row",
+        marginTop: 4,
+        marginBottom: 4,
+        backgroundColor: isDarkMode ? "#1b1b1b" : "#f2f2f2",
+        borderRadius: 6,
+        padding: 4,
+      }}
+    >
+      {[
+        { key: "gave", label: "Reviews I Gave" },
+        { key: "received", label: "Reviews I Received" },
+      ].map((t) => {
+        const isActive = activeReviewsTab === t.key;
+        return (
+          <TouchableOpacity
+            key={t.key}
+            onPress={() => setActiveReviewsTab(t.key)}
             style={{
               flex: 1,
               paddingVertical: 10,
@@ -265,6 +329,31 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
     updateLocalState('isHaptic', value); // Update isHaptic state globally
   };
 
+  // ✅ Handle flag visibility toggle
+  const handleToggleFlag = async (value) => {
+    updateLocalState('showFlag', value);
+    
+    if (user?.id && appdatabase) {
+      try {
+        const userRef = ref(appdatabase, `users/${user.id}`);
+        if (value) {
+          // ✅ Show flag - store it
+          const flagValue = getFlag();
+          await update(userRef, { flage: flagValue });
+          // Update local user state
+          setUser((prev) => ({ ...prev, flage: flagValue }));
+        } else {
+          // ✅ Hide flag - remove it from Firebase to save data
+          await update(userRef, { flage: null });
+          // Update local user state
+          setUser((prev) => ({ ...prev, flage: null }));
+        }
+      } catch (error) {
+        console.error('Error updating flag visibility:', error);
+      }
+    }
+  };
+
 
 
   const languageOptions = [
@@ -390,45 +479,55 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
     : 'Guest User';
 
 
+    // ✅ Updated to match BottomDrawer square pet UI style
     const renderPetBubble = (pet, index) => {
-      const valueType = (pet.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+      // ✅ Safety checks
+      if (!pet || typeof pet !== 'object') return null;
     
-      let rarityBg = '#FF6666'; // default D
+      const valueType = (pet.valueType || 'd').toLowerCase();
+      let rarityBg = '#FF6666';
       if (valueType === 'n') rarityBg = '#2ecc71';
       if (valueType === 'm') rarityBg = '#9b59b6';
     
       return (
-        <View key={`${pet.id || pet.name}-${index}`} style={styles.petBubble}>
+        <View
+          key={`${pet.id || pet.name || index}-${index}`}
+          style={{
+            width: 42,
+            height: 42,
+            marginRight: 6,
+            borderRadius: 10,
+            overflow: 'hidden',
+            backgroundColor: isDarkMode ? '#0f172a' : '#e5e7eb',
+          }}
+        >
           <Image
-            source={{ uri: pet.imageUrl }}
-            style={styles.petImageSmall}
+            source={{ uri: pet.imageUrl || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+            style={{ width: '100%', height: '100%' }}
           />
-    
-          {/* Badge stack on bottom-right of the bubble */}
           <View
             style={{
               position: 'absolute',
-              bottom: 0,
-              right: 0,
+              right: 2,
+              bottom: 2,
               flexDirection: 'row',
               alignItems: 'center',
-              padding: 2,
             }}
           >
-            {/* D / N / M badge */}
+            {/* Rarity badge */}
             <View
               style={{
-                paddingHorizontal: 2,
-                paddingVertical: 2,
+                paddingHorizontal: 3,
+                paddingVertical: 1,
                 borderRadius: 999,
                 backgroundColor: rarityBg,
-                marginLeft: 1,
+                marginLeft: 2,
               }}
             >
               <Text
                 style={{
-                  fontSize: 5,
-                  fontWeight: '500',
+                  fontSize: 8,
+                  fontWeight: '700',
                   color: '#fff',
                 }}
               >
@@ -440,15 +539,15 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
             {pet.isFly && (
               <View
                 style={{
-                  paddingHorizontal: 2,
-                  paddingVertical: 2,
+                  paddingHorizontal: 3,
+                  paddingVertical: 1,
                   borderRadius: 999,
                   backgroundColor: '#3498db',
-                  marginLeft: 1,
+                  marginLeft: 2,
                 }}
               >
                 <Text
-                  style={{ fontSize: 5, fontWeight: '500', color: '#fff' }}
+                  style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
                 >
                   F
                 </Text>
@@ -459,15 +558,15 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
             {pet.isRide && (
               <View
                 style={{
-                  paddingHorizontal: 2,
-                  paddingVertical: 2,
+                  paddingHorizontal: 3,
+                  paddingVertical: 1,
                   borderRadius: 999,
                   backgroundColor: '#e74c3c',
-                  marginLeft: 1,
+                  marginLeft: 2,
                 }}
               >
                 <Text
-                  style={{ fontSize: 5, fontWeight: '500', color: '#fff' }}
+                  style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
                 >
                   R
                 </Text>
@@ -511,6 +610,362 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
   return () => unsubscribe();
 }, [user?.id, firestoreDB]);
 
+// Fetch reviews made by the current user (OPTIMIZED: only fetch what's needed)
+useEffect(() => {
+  if (!user?.id || !firestoreDB || !appdatabase) {
+    setUserReviews([]);
+    setLastGaveDoc(null);
+    setHasMoreGave(false);
+    return;
+  }
+
+  const fetchUserReviews = async () => {
+    setLoadingReviews(true);
+    try {
+      // Only fetch 2 reviews initially + 1 extra to check if there are more
+      const q = query(
+        collection(firestoreDB, 'reviews'),
+        where('fromUserId', '==', user.id),
+        orderBy('updatedAt', 'desc'),
+        limit(3) // Fetch 3 to check if more exist (we'll only use 2)
+      );
+
+      const snapshot = await getDocs(q);
+      const docs = snapshot.docs;
+      
+      // Check if there are more reviews
+      setHasMoreGave(docs.length > 2);
+      
+      // Only process the first 2 reviews
+      const reviewsToProcess = docs.slice(0, 2);
+      const reviewsData = reviewsToProcess.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Fetch user names ONLY for the 2 reviews we're displaying
+      const reviewsWithNames = await Promise.all(
+        reviewsData.map(async (review) => {
+          try {
+            const userRef = ref(appdatabase, `users/${review.toUserId}`);
+            const userSnapshot = await get(userRef);
+            const userData = userSnapshot.val();
+            
+            return {
+              ...review,
+              reviewedUserName: userData?.displayName || 'Unknown User',
+              reviewedUserAvatar: userData?.avatar || null,
+            };
+          } catch (error) {
+            console.error(`Error fetching user ${review.toUserId}:`, error);
+            return {
+              ...review,
+              reviewedUserName: 'Unknown User',
+              reviewedUserAvatar: null,
+            };
+          }
+        })
+      );
+
+      setUserReviews(reviewsWithNames);
+      
+      // Store last document for pagination
+      if (reviewsToProcess.length > 0) {
+        setLastGaveDoc(reviewsToProcess[reviewsToProcess.length - 1]);
+      }
+    } catch (error) {
+      console.error('Error fetching user reviews:', error);
+      showErrorMessage('Error', 'Failed to load your reviews');
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  fetchUserReviews();
+}, [user?.id, firestoreDB, appdatabase]);
+
+// Fetch reviews received by the current user (OPTIMIZED: only fetch what's needed)
+useEffect(() => {
+  if (!user?.id || !firestoreDB || !appdatabase) {
+    setReceivedReviews([]);
+    setLastReceivedDoc(null);
+    setHasMoreReceived(false);
+    return;
+  }
+
+  const fetchReceivedReviews = async () => {
+    setLoadingReceivedReviews(true);
+    try {
+      // Only fetch 2 reviews initially + 1 extra to check if there are more
+      const q = query(
+        collection(firestoreDB, 'reviews'),
+        where('toUserId', '==', user.id),
+        orderBy('updatedAt', 'desc'),
+        limit(3) // Fetch 3 to check if more exist (we'll only use 2)
+      );
+
+      const snapshot = await getDocs(q);
+      const docs = snapshot.docs;
+      
+      // Check if there are more reviews
+      setHasMoreReceived(docs.length > 2);
+      
+      // Only process the first 2 reviews
+      const reviewsToProcess = docs.slice(0, 2);
+      const reviewsData = reviewsToProcess.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Fetch user names ONLY for the 2 reviews we're displaying
+      const reviewsWithNames = await Promise.all(
+        reviewsData.map(async (review) => {
+          try {
+            const userRef = ref(appdatabase, `users/${review.fromUserId}`);
+            const userSnapshot = await get(userRef);
+            const userData = userSnapshot.val();
+            
+            return {
+              ...review,
+              reviewerName: userData?.displayName || 'Unknown User',
+              reviewerAvatar: userData?.avatar || null,
+            };
+          } catch (error) {
+            console.error(`Error fetching reviewer ${review.fromUserId}:`, error);
+            return {
+              ...review,
+              reviewerName: 'Unknown User',
+              reviewerAvatar: null,
+            };
+          }
+        })
+      );
+
+      setReceivedReviews(reviewsWithNames);
+      
+      // Store last document for pagination
+      if (reviewsToProcess.length > 0) {
+        setLastReceivedDoc(reviewsToProcess[reviewsToProcess.length - 1]);
+      }
+    } catch (error) {
+      console.error('Error fetching received reviews:', error);
+      showErrorMessage('Error', 'Failed to load received reviews');
+    } finally {
+      setLoadingReceivedReviews(false);
+    }
+  };
+
+  fetchReceivedReviews();
+}, [user?.id, firestoreDB, appdatabase]);
+
+// Reset pagination when switching tabs (optional - can be removed if you want to keep state)
+useEffect(() => {
+  // Reset counts but keep loaded data to avoid unnecessary refetches
+  setDisplayedGaveCount(userReviews.length || 2);
+  setDisplayedReceivedCount(receivedReviews.length || 2);
+}, [activeReviewsTab]);
+
+// Load more "gave" reviews with pagination
+const loadMoreGaveReviews = useCallback(async () => {
+  if (!user?.id || !firestoreDB || !appdatabase || !lastGaveDoc || !hasMoreGave) {
+    return;
+  }
+
+  setLoadingReviews(true);
+  try {
+    // Fetch next 2 reviews + 1 extra to check if more exist
+    const q = query(
+      collection(firestoreDB, 'reviews'),
+      where('fromUserId', '==', user.id),
+      orderBy('updatedAt', 'desc'),
+      startAfter(lastGaveDoc),
+      limit(3) // Fetch 3 to check if more exist (we'll only use 2)
+    );
+
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs;
+    
+    // Check if there are more reviews
+    setHasMoreGave(docs.length > 2);
+    
+    // Only process the first 2 reviews
+    const reviewsToProcess = docs.slice(0, 2);
+    const reviewsData = reviewsToProcess.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    // Fetch user names ONLY for the 2 new reviews
+    const reviewsWithNames = await Promise.all(
+      reviewsData.map(async (review) => {
+        try {
+          const userRef = ref(appdatabase, `users/${review.toUserId}`);
+          const userSnapshot = await get(userRef);
+          const userData = userSnapshot.val();
+          
+          return {
+            ...review,
+            reviewedUserName: userData?.displayName || 'Unknown User',
+            reviewedUserAvatar: userData?.avatar || null,
+          };
+        } catch (error) {
+          console.error(`Error fetching user ${review.toUserId}:`, error);
+          return {
+            ...review,
+            reviewedUserName: 'Unknown User',
+            reviewedUserAvatar: null,
+          };
+        }
+      })
+    );
+
+    // Append new reviews
+    setUserReviews((prev) => [...prev, ...reviewsWithNames]);
+    setDisplayedGaveCount((prev) => prev + 2);
+    
+    // Update last document for pagination
+    if (reviewsToProcess.length > 0) {
+      setLastGaveDoc(reviewsToProcess[reviewsToProcess.length - 1]);
+    }
+  } catch (error) {
+    console.error('Error loading more reviews:', error);
+    showErrorMessage('Error', 'Failed to load more reviews');
+  } finally {
+    setLoadingReviews(false);
+  }
+}, [user?.id, firestoreDB, appdatabase, lastGaveDoc, hasMoreGave]);
+
+// Load more "received" reviews with pagination
+const loadMoreReceivedReviews = useCallback(async () => {
+  if (!user?.id || !firestoreDB || !appdatabase || !lastReceivedDoc || !hasMoreReceived) {
+    return;
+  }
+
+  setLoadingReceivedReviews(true);
+  try {
+    // Fetch next 2 reviews + 1 extra to check if more exist
+    const q = query(
+      collection(firestoreDB, 'reviews'),
+      where('toUserId', '==', user.id),
+      orderBy('updatedAt', 'desc'),
+      startAfter(lastReceivedDoc),
+      limit(3) // Fetch 3 to check if more exist (we'll only use 2)
+    );
+
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs;
+    
+    // Check if there are more reviews
+    setHasMoreReceived(docs.length > 2);
+    
+    // Only process the first 2 reviews
+    const reviewsToProcess = docs.slice(0, 2);
+    const reviewsData = reviewsToProcess.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    // Fetch user names ONLY for the 2 new reviews
+    const reviewsWithNames = await Promise.all(
+      reviewsData.map(async (review) => {
+        try {
+          const userRef = ref(appdatabase, `users/${review.fromUserId}`);
+          const userSnapshot = await get(userRef);
+          const userData = userSnapshot.val();
+          
+          return {
+            ...review,
+            reviewerName: userData?.displayName || 'Unknown User',
+            reviewerAvatar: userData?.avatar || null,
+          };
+        } catch (error) {
+          console.error(`Error fetching reviewer ${review.fromUserId}:`, error);
+          return {
+            ...review,
+            reviewerName: 'Unknown User',
+            reviewerAvatar: null,
+          };
+        }
+      })
+    );
+
+    // Append new reviews
+    setReceivedReviews((prev) => [...prev, ...reviewsWithNames]);
+    setDisplayedReceivedCount((prev) => prev + 2);
+    
+    // Update last document for pagination
+    if (reviewsToProcess.length > 0) {
+      setLastReceivedDoc(reviewsToProcess[reviewsToProcess.length - 1]);
+    }
+  } catch (error) {
+    console.error('Error loading more reviews:', error);
+    showErrorMessage('Error', 'Failed to load more reviews');
+  } finally {
+    setLoadingReceivedReviews(false);
+  }
+}, [user?.id, firestoreDB, appdatabase, lastReceivedDoc, hasMoreReceived]);
+
+    // Handle editing a review
+    const handleEditReview = (review) => {
+      setEditingReview(review);
+      setEditReviewText(review.review || '');
+      setEditReviewRating(review.rating || 0);
+    };
+
+    // Save edited review
+    const handleSaveEditedReview = async () => {
+      if (!editingReview || !firestoreDB || !user?.id) return;
+
+      const trimmedReview = (editReviewText || '').trim();
+      if (!trimmedReview) {
+        showErrorMessage('Error', 'Review text cannot be empty');
+        return;
+      }
+
+      try {
+        // Document ID format: toUserId_fromUserId
+        const reviewDocId = `${editingReview.toUserId}_${user.id}`;
+        const reviewRef = doc(firestoreDB, 'reviews', reviewDocId);
+
+        await setDoc(
+          reviewRef,
+          {
+            fromUserId: user.id,
+            toUserId: editingReview.toUserId,
+            rating: editReviewRating,
+            userName: user?.displayName || user?.displayname || null,
+            review: trimmedReview,
+            createdAt: editingReview.createdAt, // Preserve original
+            updatedAt: serverTimestamp(),
+            edited: true,
+          },
+          { merge: true }
+        );
+
+        // Update local state
+        setUserReviews((prev) =>
+          prev.map((r) =>
+            r.id === editingReview.id
+              ? {
+                  ...r,
+                  review: trimmedReview,
+                  rating: editReviewRating,
+                  updatedAt: new Date(),
+                  edited: true,
+                }
+              : r
+          )
+        );
+
+        showSuccessMessage('Success', 'Review updated successfully!');
+        setEditingReview(null);
+        setEditReviewText('');
+        setEditReviewRating(0);
+      } catch (error) {
+        console.error('Error updating review:', error);
+        showErrorMessage('Error', 'Failed to update review');
+      }
+    };
 
     // Call this after user finishes editing selection
     const savePetsToReviews = async (newOwned, newWishlist) => {
@@ -719,6 +1174,26 @@ const formatPlanName = (plan) => {
             {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
           </TouchableOpacity>
         </View>
+        
+        {/* Flag Visibility Toggle */}
+        {user?.id && (
+          <View style={styles.option}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => handleToggleFlag(!localState.showFlag)}
+              >
+                <Icon name="flag-outline" size={18} color={'white'} style={{backgroundColor:'#FF6B6B', padding:5, borderRadius:5}} />
+                <Text style={styles.optionText}>Show Country Flag</Text>
+              </TouchableOpacity>
+              <Switch
+                value={localState.showFlag ?? true}
+                onValueChange={handleToggleFlag}
+              />
+            </View>
+          </View>
+        )}
+        
         <View style={styles.petsSection}>
   {/* Owned Pets */}
   <View style={[styles.petsColumn]}>
@@ -738,12 +1213,15 @@ const formatPlanName = (plan) => {
        {user?.id ? 'Select the pets you own' : 'Login to selected owned pets'}
       </Text>
     ) : (
-      <View style={styles.petsAvatarRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingRight: 6 }}
+      >
+        <View style={{ flexDirection: 'row' }}>
         {ownedPets.map((pet, index) => renderPetBubble(pet, index))}
-       
-         
-        
       </View>
+      </ScrollView>
     )}
   </View>
 
@@ -765,16 +1243,159 @@ const formatPlanName = (plan) => {
      {user?.id ? 'Add pets you want' : 'Login & Add pets you want'}
       </Text>
     ) : (
-      <View style={styles.petsAvatarRow}>
-        {wishlistPets.map((pet, index)=>(renderPetBubble(pet, index)))}
-       
-        
-      
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingRight: 6 }}
+      >
+        <View style={{ flexDirection: 'row' }}>
+          {wishlistPets.map((pet, index) => renderPetBubble(pet, index))}
+        </View>
+      </ScrollView>
     )}
   </View>
 </View>
 
+        {/* Reviews Section with Tabs */}
+        <View style={styles.reviewsSection}>
+          <ReviewsTabs />
+          
+          {/* Reviews I Gave Tab */}
+          {activeReviewsTab === "gave" && (
+            <>
+              {!user?.id ? (
+                <Text style={styles.reviewsEmptyText}>
+                  Login to see your reviews
+                </Text>
+              ) : loadingReviews ? (
+                <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
+              ) : userReviews.length === 0 ? (
+                <Text style={styles.reviewsEmptyText}>
+                  You haven't reviewed anyone yet
+                </Text>
+              ) : (
+                <>
+                  <ScrollView style={styles.reviewsList} showsVerticalScrollIndicator={false}>
+                    {userReviews.map((review) => (
+                      <View key={review.id} style={styles.reviewItem}>
+                        <View style={styles.reviewHeader}>
+                          <View style={styles.reviewHeaderLeft}>
+                            <Text style={styles.reviewUserName}>
+                              {review.reviewedUserName || review.toUserId || 'Unknown User'}
+                            </Text>
+                            <View style={styles.reviewRating}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Icon
+                                  key={star}
+                                  name={star <= review.rating ? 'star' : 'star-outline'}
+                                  size={14}
+                                  color={star <= review.rating ? '#FFD700' : '#ccc'}
+                                />
+                              ))}
+                            </View>
+                            {review.edited && (
+                              <Text style={styles.editedBadge}>(Edited)</Text>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => handleEditReview(review)}
+                            style={styles.editButton}
+                          >
+                            <Icon name="create-outline" size={18} color={config.colors.primary} />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.reviewText}>{review.review}</Text>
+                        {review.updatedAt && (
+                          <Text style={styles.reviewDate}>
+                            {review.updatedAt.toDate ? 
+                              new Date(review.updatedAt.toDate()).toLocaleDateString() :
+                              new Date(review.updatedAt).toLocaleDateString()}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {hasMoreGave && (
+                    <TouchableOpacity
+                      style={styles.loadMoreButton}
+                      onPress={loadMoreGaveReviews}
+                      disabled={loadingReviews}
+                    >
+                      <Text style={styles.loadMoreText}>
+                        {loadingReviews ? 'Loading...' : 'Load More'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* Reviews I Received Tab */}
+          {activeReviewsTab === "received" && (
+            <>
+              {!user?.id ? (
+                <Text style={styles.reviewsEmptyText}>
+                  Login to see reviews you received
+                </Text>
+              ) : loadingReceivedReviews ? (
+                <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
+              ) : receivedReviews.length === 0 ? (
+                <Text style={styles.reviewsEmptyText}>
+                  No one has reviewed you yet
+                </Text>
+              ) : (
+                <>
+                  <ScrollView style={styles.reviewsList} showsVerticalScrollIndicator={false}>
+                    {receivedReviews.map((review) => (
+                      <View key={review.id} style={styles.reviewItem}>
+                        <View style={styles.reviewHeader}>
+                          <View style={styles.reviewHeaderLeft}>
+                            <Text style={styles.reviewUserName}>
+                              {review.reviewerName || review.fromUserId || 'Unknown User'}
+                            </Text>
+                            <View style={styles.reviewRating}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Icon
+                                  key={star}
+                                  name={star <= review.rating ? 'star' : 'star-outline'}
+                                  size={14}
+                                  color={star <= review.rating ? '#FFD700' : '#ccc'}
+                                />
+                              ))}
+                            </View>
+                            {review.edited && (
+                              <Text style={styles.editedBadge}>(Edited)</Text>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={styles.reviewText}>{review.review}</Text>
+                        {review.updatedAt && (
+                          <Text style={styles.reviewDate}>
+                            {review.updatedAt.toDate ? 
+                              new Date(review.updatedAt.toDate()).toLocaleDateString() :
+                              new Date(review.updatedAt).toLocaleDateString()}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {hasMoreReceived && (
+                    <TouchableOpacity
+                      style={styles.loadMoreButton}
+                      onPress={loadMoreReceivedReviews}
+                      disabled={loadingReceivedReviews}
+                    >
+                      <Text style={styles.loadMoreText}>
+                        {loadingReceivedReviews ? 'Loading...' : 'Load More'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </View>
 
       </View>
 
@@ -1198,7 +1819,7 @@ const formatPlanName = (plan) => {
       </Modal>
 
      
-      <SubscriptionScreen visible={showOfferWall} onClose={() => setShowofferWall(false)} track='Setting'/>
+      <SubscriptionScreen visible={showOfferWall} onClose={() => setShowofferWall(false)} track='Setting' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall}/>
       <SignInDrawer
         visible={openSingnin}
         onClose={() => setOpenSignin(false)}
@@ -1209,6 +1830,79 @@ const formatPlanName = (plan) => {
             <PetModal fromSetting={true} ownedPets={ownedPets} setOwnedPets={setOwnedPets} wishlistPets={wishlistPets} setWishlistPets={setWishlistPets} onClose={async ()=>{{ setPetModalVisible(false); await savePetsToReviews(ownedPets, wishlistPets)}}}       visible={petModalVisible} owned={owned}
             />
 
+      {/* Edit Review Modal */}
+      <Modal
+        visible={!!editingReview}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setEditingReview(null);
+          setEditReviewText('');
+          setEditReviewRating(0);
+        }}
+      >
+        <Pressable
+          style={styles.overlay}
+          onPress={() => {
+            setEditingReview(null);
+            setEditReviewText('');
+            setEditReviewRating(0);
+          }}
+        />
+        <ConditionalKeyboardWrapper>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <View style={styles.drawer}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={styles.drawerSubtitle}>Edit Review</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditingReview(null);
+                    setEditReviewText('');
+                    setEditReviewRating(0);
+                  }}
+                >
+                  <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>Rating</Text>
+              <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => setEditReviewRating(star)}
+                    style={{ marginRight: 8 }}
+                  >
+                    <Icon
+                      name={star <= editReviewRating ? 'star' : 'star-outline'}
+                      size={32}
+                      color={star <= editReviewRating ? '#FFD700' : '#ccc'}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>Review</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
+                placeholder="Write your review..."
+                placeholderTextColor="#999"
+                value={editReviewText}
+                onChangeText={setEditReviewText}
+                multiline
+                numberOfLines={4}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveButton, { marginTop: 16 }]}
+                onPress={handleSaveEditedReview}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ConditionalKeyboardWrapper>
+      </Modal>
 
     </View>
   );

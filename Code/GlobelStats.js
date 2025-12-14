@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
 import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
-import { ref, set, update, get, onDisconnect, getDatabase } from '@react-native-firebase/database';
+import { ref, set, update, get, onDisconnect, getDatabase, onValue } from '@react-native-firebase/database';
 import { getFirestore } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
-import { useColorScheme, InteractionManager } from 'react-native';
+import { useColorScheme, InteractionManager, AppState } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 
 
@@ -33,6 +33,7 @@ export const GlobalStateProvider = ({ children }) => {
   const [freeTranslation, setFreeTranslation] = useState(null);
   const [currentUserEmail, setCurrentuserEmail] = useState('')
   const [single_offer_wall, setSingle_offer_wall] = useState(false)
+  const [tradingServerLink, setTradingServerLink] = useState(null); // Trading server link from admin servers
 
 
 
@@ -68,43 +69,89 @@ export const GlobalStateProvider = ({ children }) => {
 
   // const isAdmin = user?.id  ? user?.id == '3CAAolfaX3UE3BLTZ7ghFbNnY513' : false
 
-  const updateLocalStateAndDatabase = async (keyOrUpdates, value) => {
+  // ✅ Store updateLocalState in ref to avoid dependency issues
+  const updateLocalStateRef = useRef(updateLocalState);
+  useEffect(() => {
+    updateLocalStateRef.current = updateLocalState;
+  }, [updateLocalState]);
+
+  // ✅ Memoize updateLocalStateAndDatabase to prevent infinite loops
+  const updateLocalStateAndDatabase = useCallback(async (keyOrUpdates, value) => {
     try {
       let updates = {};
 
       if (typeof keyOrUpdates === 'string') {
         updates = { [keyOrUpdates]: value };
-        await updateLocalState(keyOrUpdates, value); // ✅ update local storage (AsyncStorage)
+        await updateLocalStateRef.current(keyOrUpdates, value); // ✅ Use ref to avoid dependency
       } else if (typeof keyOrUpdates === 'object') {
         updates = keyOrUpdates;
         for (const [key, val] of Object.entries(updates)) {
-          await updateLocalState(key, val); // ✅ update local storage key by key
+          await updateLocalStateRef.current(key, val); // ✅ Use ref to avoid dependency
         }
       } else {
         throw new Error('Invalid arguments for update.');
       }
 
-      // ✅ Update in-memory user state
-      setUser((prev) => ({ ...prev, ...updates }));
-
-      // ✅ Update Firebase only if user is logged in
-      if (user?.id) {
-        const userRef = ref(appdatabase, `users/${user.id}`);
-        await update(userRef, updates);
-      }
+      // ✅ Update in-memory user state and Firebase in one functional update
+      setUser((prev) => {
+        const updatedUser = { ...prev, ...updates };
+        
+        // ✅ Update Firebase only if user is logged in (use prev.id to avoid dependency)
+        if (prev?.id && appdatabase) {
+          const userRef = ref(appdatabase, `users/${prev.id}`);
+          update(userRef, updates).catch((error) => {
+            // Silently handle Firebase errors
+          });
+        }
+        
+        return updatedUser;
+      });
     } catch (error) {
       // console.error('❌ Error updating user state or database:', error);
     }
-  };
+  }, [appdatabase]); // ✅ Removed updateLocalState from deps, using ref instead
 
 
 
+  // ✅ Use ref to track if flag has been set for current user (prevents infinite loop)
+  const flagSetForUserRef = useRef(null);
+  const updateLocalStateAndDatabaseRef = useRef(updateLocalStateAndDatabase);
+  
+  // ✅ Keep ref updated with latest function
   useEffect(() => {
-    // console.log(user)
-    if (!isAdmin)
-      updateLocalStateAndDatabase({ flage: getFlag() })
-    // getFlag()
-  }, [user.id])
+    updateLocalStateAndDatabaseRef.current = updateLocalStateAndDatabase;
+  }, [updateLocalStateAndDatabase]);
+  
+  // ✅ Handle flag setting based on user preference (saves Firebase data costs)
+  useEffect(() => {
+    if (!isAdmin && user?.id && appdatabase) {
+      // ✅ Only set flag once per user.id to prevent infinite loop
+      if (flagSetForUserRef.current !== user.id) {
+        flagSetForUserRef.current = user.id;
+        
+        // ✅ Only store flag if user wants to show it (saves Firebase data costs)
+        if (localState?.showFlag !== false) {
+          // User wants to show flag - store it
+          updateLocalStateAndDatabaseRef.current({ flage: getFlag() });
+        }
+        // If showFlag is false, don't store flag (saves data)
+      } else {
+        // ✅ Handle flag toggle changes after initial setup
+        if (localState?.showFlag === false && user?.flage) {
+          // ✅ User toggled flag off - remove it from Firebase to save data
+          const userRef = ref(appdatabase, `users/${user.id}`);
+          update(userRef, { flage: null }).catch(() => {});
+          setUser((prev) => ({ ...prev, flage: null }));
+        } else if (localState?.showFlag !== false && !user?.flage) {
+          // ✅ User toggled flag on - add it
+          const flagValue = getFlag();
+          const userRef = ref(appdatabase, `users/${user.id}`);
+          update(userRef, { flage: flagValue }).catch(() => {});
+          setUser((prev) => ({ ...prev, flage: flagValue }));
+        }
+      }
+    }
+  }, [user?.id, isAdmin, localState?.showFlag, appdatabase, user?.flage]) // ✅ Check showFlag preference
 
   // ✅ Memoize resetUserState to prevent unnecessary re-renders
   const resetUserState = useCallback(() => {
@@ -257,8 +304,54 @@ export const GlobalStateProvider = ({ children }) => {
     fetchAPIKeys();
   }, []);
 
+  // Fetch trading server link with 3 hour caching
+  useEffect(() => {
+    const fetchTradingServerLink = async () => {
+      try {
+        const lastServerFetch = localState.lastServerFetch ? new Date(localState.lastServerFetch).getTime() : 0;
+        const now = Date.now();
+        const timeElapsed = now - lastServerFetch;
+        const EXPIRY_LIMIT = 3 * 60 * 60 * 1000; // 3 hours
 
+        // Only fetch if expired or not cached
+        if (timeElapsed > EXPIRY_LIMIT || !localState.tradingServerLink) {
+          const serverRef = ref(appdatabase, 'server');
+          const snapshot = await get(serverRef);
 
+          if (snapshot.exists()) {
+            const serverData = snapshot.val();
+            // Convert to array and get first server link
+            const serverList = Object.entries(serverData).map(([id, value]) => ({ id, ...value }));
+            
+            // Get the first server link (or you can filter by name if needed)
+            const firstServer = serverList.length > 0 ? serverList[0] : null;
+            const serverLink = firstServer?.link || null;
+
+            if (serverLink) {
+              setTradingServerLink(serverLink);
+              await updateLocalState('tradingServerLink', serverLink);
+              await updateLocalState('lastServerFetch', new Date().toISOString());
+            }
+          }
+        } else {
+          // Use cached link
+          if (localState.tradingServerLink) {
+            setTradingServerLink(localState.tradingServerLink);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching trading server link:', error);
+        // Fallback to cached link if available
+        if (localState.tradingServerLink) {
+          setTradingServerLink(localState.tradingServerLink);
+        }
+      }
+    };
+
+    if (appdatabase) {
+      fetchTradingServerLink();
+    }
+  }, [appdatabase, localState.lastServerFetch, localState.tradingServerLink]);
 
   const updateUserProStatus = () => {
     if (!user?.id) {
@@ -450,25 +543,115 @@ export const GlobalStateProvider = ({ children }) => {
   const reload = () => {
     fetchStockData(true);
   };
-  // console.log(localState.ggData[0])
-  useEffect(() => {
-    if (!user?.id) return;
+  // ✅ Helper function to set user online
+  const setUserOnline = useCallback(async () => {
+    if (!user?.id || !appdatabase) return;
 
     // ✅ Mark user as online in local state & database
-    updateLocalStateAndDatabase('online', true);
+    await updateLocalStateAndDatabase('online', true);
 
-    // ✅ Ensure user is marked offline upon disconnection (only applies to Firebase)
+    // ✅ Add user to online_users node (cost-effective: only stores online users)
     const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
+    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+    
+    // Set online status in users node
+    await set(userOnlineRef, true).catch((error) => 
+      console.error("🔥 Error setting online status:", error)
+    );
+    
+    // ✅ Add to online_users list (minimal data: just true, userId is the key)
+    await set(onlineUsersRef, true).catch((error) => 
+      console.error("🔥 Error adding to online_users:", error)
+    );
+  }, [user?.id, appdatabase, updateLocalStateAndDatabase]);
 
+  // ✅ Helper function to set user offline
+  const setUserOffline = useCallback(async () => {
+    if (!user?.id || !appdatabase) return;
+
+    // ✅ Mark user as offline in local state
+    updateLocalStateAndDatabase('online', false);
+
+    // ✅ Remove from online_users
+    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+    await onlineUsersRef.remove().catch((error) => 
+      console.error("🔥 Error removing from online_users:", error)
+    );
+  }, [user?.id, appdatabase, updateLocalStateAndDatabase]);
+
+  // console.log(localState.ggData[0])
+  useEffect(() => {
+    if (!user?.id || !appdatabase) return;
+
+    // ✅ Mark user as online when component mounts or user changes
+    setUserOnline();
+
+    // ✅ Add user to online_users node (cost-effective: only stores online users)
+    const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
+    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+
+    // ✅ Ensure user is marked offline upon disconnection
     onDisconnect(userOnlineRef)
       .set(false)
       .catch((error) => console.error("🔥 Error setting onDisconnect:", error));
 
+    // ✅ Remove from online_users on disconnect
+    onDisconnect(onlineUsersRef)
+      .remove()
+      .catch((error) => console.error("🔥 Error removing from online_users on disconnect:", error));
+
     return () => {
       // ✅ Cleanup: Mark user offline when the app is closed
-      updateLocalStateAndDatabase('online', false);
+      setUserOffline();
     };
-  }, [user?.id]);
+  }, [user?.id, appdatabase, setUserOnline, setUserOffline]);
+
+  // ✅ Handle app state changes (background/foreground)
+  useEffect(() => {
+    if (!user?.id || !appdatabase) return;
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        // ✅ App came to foreground - mark user online
+        setUserOnline();
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // ✅ App went to background - mark user offline
+        setUserOffline();
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [user?.id, appdatabase, setUserOnline, setUserOffline]);
+
+  // ✅ Listen to online users count (COST-EFFECTIVE: only listens to /online_users, not all users)
+  useEffect(() => {
+    if (!appdatabase) return;
+
+    // ✅ Only listen to /online_users node (much cheaper - only contains online users)
+    const onlineUsersRef = ref(appdatabase, 'online_users');
+    
+    const unsubscribe = onValue(onlineUsersRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        setOnlineMembersCount(0);
+        return;
+      }
+
+      // Count children in online_users node (only online users, not all 100k users)
+      const onlineUsers = snapshot.val();
+      const onlineCount = onlineUsers ? Object.keys(onlineUsers).length : 0;
+
+      setOnlineMembersCount(onlineCount);
+    }, (error) => {
+      console.error('Error listening to online members count:', error);
+      setOnlineMembersCount(0);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [appdatabase]);
 
   // console.log(user)
 
@@ -487,9 +670,9 @@ export const GlobalStateProvider = ({ children }) => {
       freeTranslation,
       isAdmin,
       reload,
-      robloxUsernameRef, api, currentUserEmail, single_offer_wall
+      robloxUsernameRef, api, currentUserEmail, single_offer_wall, tradingServerLink
     }),
-    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth]
+    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink]
   );
 
   return (

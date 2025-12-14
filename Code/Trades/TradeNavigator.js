@@ -92,7 +92,7 @@ export const TradeStack = ({ selectedTheme }) => {
             title: t("tabs.trade"),
             headerRight: () => (
               <View style={{ flexDirection: 'row', }}>
-                <TouchableOpacity onPress={() => navigation.navigate('Server')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
+                {/* <TouchableOpacity onPress={() => navigation.navigate('Server')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
                   <Image
                     source={
                       isDarkMode
@@ -110,7 +110,7 @@ export const TradeStack = ({ selectedTheme }) => {
                     resizeMode="contain"
                   />
                   <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Pvt Servers</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
                 <Icon

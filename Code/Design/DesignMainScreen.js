@@ -307,7 +307,9 @@ const DesignFeedScreen = ({ route }) => {
       likes: {},
       selectedTags,
       email: currentUserEmail,
-      report: false
+      report: false,
+      flage: user.flage ? user.flage : null,
+
     };
     await addDoc(collection(firestoreDB, 'designPosts'), post);
   };

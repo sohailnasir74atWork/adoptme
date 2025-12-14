@@ -28,8 +28,9 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
   useEffect(() => {
     if (!user?.id) return;
-    setBannedUsers(localState.bannedUsers)
-
+    // ✅ Safety check: ensure bannedUsers is an array
+    const banned = Array.isArray(localState.bannedUsers) ? localState.bannedUsers : [];
+    setBannedUsers(banned);
   }, [user?.id, localState.bannedUsers]);
 
 
@@ -40,8 +41,13 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   }), [selectedTheme]);
 
 
-  const fetchChats = useCallback(() => {
-    if (!user?.id) return;
+  // ✅ Move listener setup directly into useEffect for proper cleanup
+  useEffect(() => {
+    if (!user?.id || !appdatabase) {
+      setChats([]);
+      setunreadcount(0);
+      return;
+    }
   
     setLoading(true);
     const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
@@ -51,58 +57,67 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         if (!snapshot.exists()) {
           setChats([]); 
           setunreadcount(0);
+          setLoading(false);
           return;
         }
   
-        let updatedChats = [];
-        // let totalUnread = 0;
         const fetchedData = snapshot.val();
+        if (!fetchedData || typeof fetchedData !== 'object') {
+          setChats([]);
+          setunreadcount(0);
+          setLoading(false);
+          return;
+        }
   
-        updatedChats = Object.entries(fetchedData).map(([chatPartnerId, chatData]) => {
-          const isBlocked = bannedUsers?.includes(chatPartnerId);
+        const updatedChats = Object.entries(fetchedData).map(([chatPartnerId, chatData]) => {
+          // ✅ Safety check for chatData
+          if (!chatData || typeof chatData !== 'object') {
+            return null;
+          }
+
+          const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
           const rawUnread = chatData?.unreadCount || 0;
   
+          // ✅ Reset unread count for blocked users with error handling
           if (isBlocked && rawUnread > 0) {
-            // 🚫 Reset unread count in Firebase for blocked user
             update(
               ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
               { unreadCount: 0 }
-            );
+            ).catch((error) => {
+              console.error("Error resetting unread count:", error);
+            });
           }
-            return {
-              chatId: chatData.chatId,
-              otherUserId: chatPartnerId,
-              lastMessage: chatData.lastMessage || 'No messages yet',
-              lastMessageTimestamp: chatData.timestamp || 0,
-              unreadCount: isBlocked ? 0 : rawUnread,
-              otherUserAvatar: chatData.receiverAvatar || 'https://example.com/default-avatar.jpg',
-              otherUserName: chatData.receiverName || 'Anonymous',
-            };
-          });
+          
+          return {
+            chatId: chatData.chatId,
+            otherUserId: chatPartnerId,
+            lastMessage: chatData.lastMessage || 'No messages yet',
+            lastMessageTimestamp: chatData.timestamp || 0,
+            unreadCount: isBlocked ? 0 : rawUnread,
+            otherUserAvatar: chatData.receiverAvatar || 'https://example.com/default-avatar.jpg',
+            otherUserName: chatData.receiverName || 'Anonymous',
+          };
+        }).filter(Boolean); // ✅ Remove null entries
   
-        // ✅ Sort by latest message
+        // ✅ Sort by latest message (newest first)
         const sortedChats = updatedChats.sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
         setChats(sortedChats);
   
-        // ✅ Only count unblocked users
-        const totalUnread = sortedChats.reduce((sum, chat) => sum + chat.unreadCount, 0);
+        // ✅ Calculate total unread count
+        const totalUnread = sortedChats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
         setunreadcount(totalUnread);
+        setLoading(false);
       } catch (error) {
         console.error("❌ Error fetching chats:", error);
-      } finally {
         setLoading(false);
       }
     });
   
-    return () => userChatsRef.off('value', onValueChange); // ✅ Ensures cleanup
-  }, [user]); // ✅ Added `bannedUsers` as a dependency
-  
-  
-  
-
-  useEffect(() => {
-    fetchChats();
-  }, [fetchChats]);
+    // ✅ Proper cleanup
+    return () => {
+      userChatsRef.off('value', onValueChange);
+    };
+  }, [user?.id, appdatabase, bannedUsers]);
 
 
   return (
@@ -113,7 +128,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       >
         {() => (
           <ChatScreen
-            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadMessagesCount, fetchChats, unreadcount, setunreadcount }}
+            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadMessagesCount, unreadcount, setunreadcount }}
           />
         )}
       </Stack.Screen>

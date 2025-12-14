@@ -14,7 +14,8 @@ import AdminHeader from './AdminHeader';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import { banUser, handleDeleteLast300Messages, isUserOnline, unbanUser } from '../utils'; import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { banUser, handleDeleteLast300Messages, isUserOnline, unbanUser } from '../utils';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
 import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -80,9 +81,9 @@ const [selectedEmoji, setSelectedEmoji] = useState(null);
   const PAGE_SIZE = 20;
 
   const navigation = useNavigation()
-// open with user data (from MessagesList)
-const openProfileDrawer = async (userData) => {
-  if (!userData) return;
+// ✅ Memoize openProfileDrawer
+const openProfileDrawer = useCallback(async (userData) => {
+  if (!userData || !userData.senderId) return;
 
   setSelectedUser(userData);
   setIsDrawerVisible(true);
@@ -94,42 +95,46 @@ const openProfileDrawer = async (userData) => {
     console.error('🔥 Error checking online status:', error);
     setIsOnline(false);
   }
-};
+}, []);
 
-// close when tapping overlay / close button
-const closeProfileDrawer = () => {
+// ✅ Memoize closeProfileDrawer
+const closeProfileDrawer = useCallback(() => {
   setIsDrawerVisible(false);
-};
+}, []);
 
+// ✅ Memoize toggleDrawer
+const toggleDrawer = useCallback(async (userData = null) => {
+  setSelectedUser(userData);
+  setIsDrawerVisible((prev) => !prev);
 
-  const toggleDrawer = async (userData = null) => {
-    setSelectedUser(userData);
-    setIsDrawerVisible(!isDrawerVisible);
-
-    if (userData?.id) {  // ✅ Ensure userData exists before checking
-      try {
-        const online = await isUserOnline(userData.senderId); // ✅ Await the async function
-        // console.log('isUserOnline', online)
-        setIsOnline(online);
-      } catch (error) {
-        console.error("🔥 Error checking online status:", error);
-      }
-    } else {
-      setIsOnline(false); // ✅ Default to offline if no user data
+  if (userData?.senderId) {
+    try {
+      const online = await isUserOnline(userData.senderId);
+      setIsOnline(online);
+    } catch (error) {
+      console.error("🔥 Error checking online status:", error);
+      setIsOnline(false);
     }
-  };
+  } else {
+    setIsOnline(false);
+  }
+}, []);
 
-  const startPrivateChat = () => {
-    // console.log('clikcked')
-
-    const callbackfunction = () => {
-      toggleDrawer();
+// ✅ Memoize startPrivateChat
+const startPrivateChat = useCallback(() => {
+  const callbackfunction = () => {
+    closeProfileDrawer();
+    if (navigation && typeof navigation.navigate === 'function') {
       navigation.navigate('PrivateChat', { selectedUser, selectedTheme });
-      mixpanel.track("Inbox Chat");
-    };
-    if (!localState.isPro) { InterstitialAdManager.showAd(callbackfunction); }
-    else { callbackfunction() }
+    }
+    mixpanel.track("Inbox Chat");
   };
+  if (!localState?.isPro) {
+    InterstitialAdManager.showAd(callbackfunction);
+  } else {
+    callbackfunction();
+  }
+}, [selectedUser, selectedTheme,  closeProfileDrawer]);
 
   const chatRef = useMemo(() => ref(appdatabase, 'chat_new'), []);
   const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);
@@ -179,8 +184,16 @@ const closeProfileDrawer = () => {
         // const bannedUserIds = bannedUsers?.map((user) => user.id) || [];
         // console.log('Banned User IDs:', bannedUserIds);
 
+        // ✅ Safety check for bannedUsers array
+        const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
         const parsedMessages = Object.entries(data)
-        .map(([key, value]) => validateMessage({ id: key, ...value })).filter(Boolean).filter((msg) => !bannedUsers.includes(msg.senderId)).sort((a, b) => b.timestamp - a.timestamp);
+          .map(([key, value]) => {
+            if (!key || !value || typeof value !== 'object') return null;
+            return validateMessage({ id: key, ...value });
+          })
+          .filter(Boolean)
+          .filter((msg) => msg?.senderId && !banned.includes(msg.senderId))
+          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
   
         // console.log('Parsed Messages:', parsedMessages);
 
@@ -209,19 +222,26 @@ const closeProfileDrawer = () => {
         if (reset) setLoading(false);
       }
     },
-    [chatRef, lastLoadedKey, validateMessage, bannedUsers]
+    [chatRef, lastLoadedKey, validateMessage, bannedUsers, appdatabase]
   );
   useEffect(() => {
+    if (!pinnedMessagesRef) return;
+
     const fetchPinnedMessages = async () => {
       try {
         const snapshot = await pinnedMessagesRef.once('value');
         const pinnedMessagesData = snapshot.val() || {};
   
-        // Transform data into an array and update pinned messages state
-        const pinnedMessagesArray = Object.entries(pinnedMessagesData).map(([key, value]) => ({
-          firebaseKey: key,
-          ...value,
-        }));
+        // ✅ Safety check and transform data into an array
+        const pinnedMessagesArray = Object.entries(pinnedMessagesData)
+          .map(([key, value]) => {
+            if (!key || !value || typeof value !== 'object') return null;
+            return {
+              firebaseKey: key,
+              ...value,
+            };
+          })
+          .filter(Boolean);
   
         setPinnedMessages(pinnedMessagesArray);
       } catch (error) {
@@ -233,31 +253,55 @@ const closeProfileDrawer = () => {
   
     // Listen to real-time updates on pinned messages
     const listener = pinnedMessagesRef.on('child_added', (snapshot) => {
-      const newPinnedMessage = { firebaseKey: snapshot.key, ...snapshot.val() };
-      setPinnedMessages((prev) => [...prev, newPinnedMessage]);
+      if (!snapshot || !snapshot.key) return;
+      const data = snapshot.val();
+      if (!data || typeof data !== 'object') return;
+      const newPinnedMessage = { firebaseKey: snapshot.key, ...data };
+      setPinnedMessages((prev) => {
+        // ✅ Prevent duplicates
+        const exists = prev.some(msg => msg.firebaseKey === snapshot.key);
+        return exists ? prev : [...prev, newPinnedMessage];
+      });
     });
   
-    return () => pinnedMessagesRef.off('child_added', listener); // Cleanup listener
+    return () => {
+      if (pinnedMessagesRef) {
+        pinnedMessagesRef.off('child_added', listener);
+      }
+    };
   }, []);
   
   useEffect(() => {
-  const platform = Platform.OS; // "ios" or "android"
+    const platform = Platform.OS; // "ios" or "android"
   
     // console.log('Initial loading of messages.');
     loadMessages(true); // Reset and load the latest messages
-    setChatFocused(false)
-    setDevice(platform)
-  }, []);
+    if (setChatFocused && typeof setChatFocused === 'function') {
+      setChatFocused(false);
+    }
+    setDevice(platform);
+  }, [ setChatFocused]);
 
   // const bannedUserIds = bannedUsers.map((user) => user.id); // Extract IDs from bannedUsers
 
   useEffect(() => {
-    if (!isFocused) return
+    if (!isFocused || !chatRef) return;
+
     const listener = chatRef.limitToLast(1).on('child_added', (snapshot) => {
-      const newMessage = validateMessage({ id: snapshot.key, ...snapshot.val() });
+      if (!snapshot || !snapshot.key) return;
+      const data = snapshot.val();
+      if (!data || typeof data !== 'object') return;
+
+      const newMessage = validateMessage({ id: snapshot.key, ...data });
+      if (!newMessage || !newMessage.id) return;
+
+      // ✅ Check if message is from banned user
+      const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+      if (banned.includes(newMessage.senderId)) return;
 
       setMessages((prev) => {
-        const seenKeys = new Set(prev.map((msg) => msg.id));
+        if (!Array.isArray(prev)) return [newMessage];
+        const seenKeys = new Set(prev.map((msg) => msg?.id).filter(Boolean));
         if (seenKeys.has(newMessage.id)) return prev;
 
         if (isAtBottom) {
@@ -267,27 +311,36 @@ const closeProfileDrawer = () => {
         } else {
           // Hold in pending
           // console.log("⏳ Holding new message, user not at bottom");
-          setPendingMessages((prevPending) => [newMessage, ...prevPending]);
+          setPendingMessages((prevPending) => {
+            const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
+            if (pendingIds.has(newMessage.id)) return prevPending;
+            return [newMessage, ...prevPending];
+          });
           return prev;
         }
       });
     });
 
-    return () => chatRef.off('child_added', listener);
-  }, [chatRef, validateMessage, isAtBottom, isFocused]);
+    return () => {
+      if (chatRef) {
+        chatRef.off('child_added', listener);
+      }
+    };
+  }, [chatRef, validateMessage, isAtBottom, isFocused, bannedUsers]);
 
 
 
 
 
-  const handleLoadMore = async () => {
-    if (!user.id & !signinMessage) {
+  const handleLoadMore = useCallback(async () => {
+    // ✅ Fixed: use && instead of &
+    if (!user?.id && !signinMessage) {
       Alert.alert(
         t('misc.loginToStartChat'),
         t('misc.loginRequired'),
         [{ text: 'OK', onPress: () => setIsSigninDrawerVisible(true) }]
       );
-      setSigninMessage(true)
+      setSigninMessage(true);
       return;
     }
 
@@ -296,7 +349,7 @@ const closeProfileDrawer = () => {
     } else {
       // console.log('No more messages to load or currently loading.');
     }
-  };
+  }, [user?.id, signinMessage, loading, lastLoadedKey, loadMessages, t]);
 
 
 
@@ -356,18 +409,18 @@ const closeProfileDrawer = () => {
 
 
   useEffect(() => {
-    if (!currentUserEmail) return;
+    if (!currentUserEmail || !appdatabase) return;
 
     const encodedEmail = currentUserEmail.replace(/\./g, '(dot)');
     const banRef = ref(appdatabase, `banned_users_by_email/${encodedEmail}`);
 
     const unsubscribe = onValue(banRef, (snapshot) => {
       const banData = snapshot.val();
-      setStrikeInfo(banData || null);
+      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
     });
 
     return () => unsubscribe();
-  }, [currentUserEmail]);
+  }, [currentUserEmail, appdatabase]);
 
 
   const handleRefresh = async () => {
@@ -468,8 +521,14 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
   }
 
   try {
+    // ✅ Use chatRef instead of creating new ref
+    if (!chatRef) {
+      console.error('❌ Chat ref not available');
+      return;
+    }
+
     // Push to Firebase Realtime Database
-    await ref(appdatabase, 'chat_new').push({
+    await chatRef.push({
       text: trimmedInput || null, // allow fruits-only messages
       timestamp: database.ServerValue.TIMESTAMP,
       sender: user.displayName || 'Anonymous',
@@ -489,6 +548,7 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
       fruits: hasFruits ? fruits : [],
       gif: hasEmoji ? emojiUrl : null,
       flage: user.flage ? user.flage : null,
+      OS: Platform.OS, // ✅ Store platform (Android/iOS) - only visible to admins
     });
 
     // Reset local input state
@@ -561,7 +621,6 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
                 setMessages={setMessages}
                 isAdmin={isAdmin}
                 toggleDrawer={openProfileDrawer}
-                device={device}
                 
               />
             )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Modal, StyleSheet, Image, ScrollView } from 'react-native';
 import { getStyles } from './../Style';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useGlobalState } from '../../GlobelStats';
+
+// ✅ Move Emojies array outside component to prevent recreation
 const Emojies = [
   'pic_1.png',
   'pic_2.png',
@@ -55,7 +57,10 @@ const MessageInput = ({
   setSelectedFruits,
   setSelectedEmoji
 }) => {
-  const styles = getStyles(selectedTheme?.colors?.text === 'white');
+  // ✅ Memoize styles
+  const isDarkMode = selectedTheme?.colors?.text === 'white';
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
 
@@ -64,13 +69,16 @@ const MessageInput = ({
   const { localState } = useLocalState();
   const { theme } = useGlobalState();
   const isDark = theme === 'dark';
-  const [showEmojiPopup, setShowEmojiPopup] = useState(false); // To show the emoji selection popup
+  const [showEmojiPopup, setShowEmojiPopup] = useState(false);
 
+  // ✅ Memoize computed values
+  const hasFruits = useMemo(() => Array.isArray(selectedFruits) && selectedFruits.length > 0, [selectedFruits]);
+  const hasContent = useMemo(() => {
+    return (input || '').trim().length > 0 || hasFruits || !!selectedEmoji;
+  }, [input, hasFruits, selectedEmoji]);
 
-  const hasFruits = Array.isArray(selectedFruits) && selectedFruits.length > 0;
-  const hasContent = (input || '').trim().length > 0 || hasFruits || selectedEmoji;
-
-  const handleSend = async (emojiArg) => {
+  // ✅ Memoize handleSend
+  const handleSend = useCallback(async (emojiArg) => {
     triggerHapticFeedback('impactLight');
 
     const trimmedInput = (input || '').trim();
@@ -94,6 +102,7 @@ const MessageInput = ({
       // Clear input + reply UI
       setInput('');
       setSelectedFruits([]);
+      setSelectedEmoji(null)
       if (onCancelReply) onCancelReply();
 
       // Increment message count then maybe show ad
@@ -110,13 +119,15 @@ const MessageInput = ({
       console.error('Error sending message:', error);
       setIsSending(false);
     }
-  };
-  const selectEmoji = (emojiUrl) => {
-    // if (gifAllowed) {
-      setSelectedEmoji(emojiUrl);
-      handleSend(emojiUrl);
-       setShowEmojiPopup(false);   // close picker
-  };
+  }, [input, hasFruits, selectedEmoji, replyTo, handleSendMessage, onCancelReply, setInput, setSelectedFruits, setSelectedEmoji, localState?.isPro, messageCount, triggerHapticFeedback]);
+
+  // ✅ Memoize selectEmoji
+  const selectEmoji = useCallback((emojiUrl) => {
+    if (!emojiUrl || typeof emojiUrl !== 'string') return;
+    setSelectedEmoji(emojiUrl);
+    handleSend(emojiUrl);
+    setShowEmojiPopup(false);
+  }, [handleSend]);
   
 
   // console.log(selectedFruits);
@@ -207,29 +218,38 @@ const MessageInput = ({
         </View>
       )}
       <Modal visible={showEmojiPopup} transparent animationType="slide">
-  <TouchableOpacity style={modalStyles.backdrop} onPress={() => setShowEmojiPopup(false)}>
-    <View style={modalStyles.sheet} onPress={(e) => e.stopPropagation()}>
-      <ScrollView 
-        style={modalStyles.emojiScrollContainer}
-        contentContainerStyle={modalStyles.emojiListContainer}
-        showsVerticalScrollIndicator={true}
-      >
-        {Emojies.map((item) => (
-          <TouchableOpacity
-            key={item}
-            onPress={() => selectEmoji(`https://bloxfruitscalc.com/wp-content/uploads/2025/Emojies/${item}`)}
-            style={modalStyles.emojiContainer}
-          >
-            <Image
-              source={{ uri: `https://bloxfruitscalc.com/wp-content/uploads/2025/Emojies/${item}` }}
-              style={modalStyles.emojiImage}
-            />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  </TouchableOpacity>
-</Modal>
+        <TouchableOpacity 
+          style={modalStyles.backdrop} 
+          onPress={() => setShowEmojiPopup(false)}
+          activeOpacity={1}
+        >
+          <View style={modalStyles.sheet} onStartShouldSetResponder={() => true}>
+            <ScrollView 
+              style={modalStyles.emojiScrollContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={modalStyles.emojiListContainer}>
+                {Emojies.map((item) => {
+                  if (!item || typeof item !== 'string') return null;
+                  const emojiUrl = `https://bloxfruitscalc.com/wp-content/uploads/2025/Emojies/${item}`;
+                  return (
+                    <TouchableOpacity
+                      key={item}
+                      onPress={() => selectEmoji(emojiUrl)}
+                      style={modalStyles.emojiContainer}
+                    >
+                      <Image
+                        source={{ uri: emojiUrl }}
+                        style={modalStyles.emojiImage}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -244,26 +264,27 @@ const modalStyles = StyleSheet.create({
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    maxHeight: '50%',
   },
   emojiScrollContainer: {
-    height: 200,
+    maxHeight: 200,
   },
   emojiListContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap', // Allows emojis to wrap when they overflow
-    justifyContent: 'space-between', // Aligns items to the start
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginTop: 10,
   },
   emojiContainer: {
-    margin: 15,
-    width: 30, // emoji width
-    height: 30, // emoji height
+    margin: 10,
+    width: 25,
+    height: 25,
     justifyContent: 'center',
     alignItems: 'center',
   },
   emojiImage: {
-    width: 50,
-    height: 50,
+    width: 25,
+    height: 25,
     borderRadius: 8,
   },
 });
