@@ -153,14 +153,14 @@ export const getStyles = (isDarkMode) =>
       marginVertical: 10,
     },
     platformBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 8,
-      marginLeft: 4,
+      paddingHorizontal: 3,
+      paddingVertical: 1,
+      borderRadius: 3,
+      marginLeft: 2,
     },
     platformText: {
       color: '#FFFFFF',
-      fontSize: 10,
+      fontSize: 7,
       fontWeight: '600',
     },
     adminContainer: {

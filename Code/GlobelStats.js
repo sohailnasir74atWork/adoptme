@@ -552,18 +552,27 @@ export const GlobalStateProvider = ({ children }) => {
 
     // ✅ Add user to online_users node (cost-effective: only stores online users)
     const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
     
     // Set online status in users node
     await set(userOnlineRef, true).catch((error) => 
       console.error("🔥 Error setting online status:", error)
     );
     
-    // ✅ Add to online_users list (minimal data: just true, userId is the key)
-    await set(onlineUsersRef, true).catch((error) => 
-      console.error("🔥 Error adding to online_users:", error)
-    );
-  }, [user?.id, appdatabase, updateLocalStateAndDatabase]);
+    // ✅ Only add to online_users if user wants to show online status (optimized for Firebase costs)
+    if (localState?.showOnlineStatus !== false) {
+      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+      // ✅ Add to online_users list (minimal data: just true, userId is the key)
+      await set(onlineUsersRef, true).catch((error) => 
+        console.error("🔥 Error adding to online_users:", error)
+      );
+    } else {
+      // ✅ User has disabled online status - ensure they're not in online_users
+      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+      await onlineUsersRef.remove().catch((error) => 
+        console.error("🔥 Error removing from online_users:", error)
+      );
+    }
+  }, [user?.id, appdatabase, updateLocalStateAndDatabase, localState?.showOnlineStatus]);
 
   // ✅ Helper function to set user offline
   const setUserOffline = useCallback(async () => {
@@ -588,23 +597,26 @@ export const GlobalStateProvider = ({ children }) => {
 
     // ✅ Add user to online_users node (cost-effective: only stores online users)
     const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+    
+    // ✅ Only set up online_users disconnect if user wants to show online status
+    if (localState?.showOnlineStatus !== false) {
+      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+      // ✅ Remove from online_users on disconnect
+      onDisconnect(onlineUsersRef)
+        .remove()
+        .catch((error) => console.error("🔥 Error removing from online_users on disconnect:", error));
+    }
 
     // ✅ Ensure user is marked offline upon disconnection
     onDisconnect(userOnlineRef)
       .set(false)
       .catch((error) => console.error("🔥 Error setting onDisconnect:", error));
 
-    // ✅ Remove from online_users on disconnect
-    onDisconnect(onlineUsersRef)
-      .remove()
-      .catch((error) => console.error("🔥 Error removing from online_users on disconnect:", error));
-
     return () => {
       // ✅ Cleanup: Mark user offline when the app is closed
       setUserOffline();
     };
-  }, [user?.id, appdatabase, setUserOnline, setUserOffline]);
+  }, [user?.id, appdatabase, setUserOnline, setUserOffline, localState?.showOnlineStatus]);
 
   // ✅ Handle app state changes (background/foreground)
   useEffect(() => {

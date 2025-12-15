@@ -29,7 +29,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
 import notifee from '@notifee/react-native';
 import SubscriptionScreen from './OfferWall';
-import { ref, remove, get, update } from '@react-native-firebase/database';
+import { ref, remove, get, update, set } from '@react-native-firebase/database';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import { useLanguage } from '../Translation/LanguageProvider';
 import { useTranslation } from 'react-i18next';
@@ -350,6 +350,30 @@ const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
         }
       } catch (error) {
         console.error('Error updating flag visibility:', error);
+      }
+    }
+  };
+
+  // ✅ Handle online status visibility toggle
+  const handleToggleOnlineStatus = async (value) => {
+    updateLocalState('showOnlineStatus', value);
+    
+    if (user?.id && appdatabase) {
+      try {
+        const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+        if (value) {
+          // ✅ Show online status - add to online_users
+          await set(onlineUsersRef, true).catch((error) => 
+            console.error("🔥 Error adding to online_users:", error)
+          );
+        } else {
+          // ✅ Hide online status - remove from online_users to save Firebase costs
+          await remove(onlineUsersRef).catch((error) => 
+            console.error("🔥 Error removing from online_users:", error)
+          );
+        }
+      } catch (error) {
+        console.error('Error updating online status visibility:', error);
       }
     }
   };
@@ -1194,6 +1218,23 @@ const formatPlanName = (plan) => {
           </View>
         )}
         
+        {/* ✅ Show Online Status Toggle */}
+        <View style={styles.option}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+              onPress={() => handleToggleOnlineStatus(!localState.showOnlineStatus)}
+            >
+              <Icon name="radio-button-on-outline" size={18} color={'white'} style={{backgroundColor:'#4CAF50', padding:5, borderRadius:5}} />
+              <Text style={styles.optionText}>Show Online Status</Text>
+            </TouchableOpacity>
+            <Switch
+              value={localState.showOnlineStatus ?? true}
+              onValueChange={handleToggleOnlineStatus}
+            />
+          </View>
+        </View>
+        
         <View style={styles.petsSection}>
   {/* Owned Pets */}
   <View style={[styles.petsColumn]}>
@@ -1363,11 +1404,11 @@ const formatPlanName = (plan) => {
                                   color={star <= review.rating ? '#FFD700' : '#ccc'}
                                 />
                               ))}
-                            </View>
+      </View>
                             {review.edited && (
                               <Text style={styles.editedBadge}>(Edited)</Text>
-                            )}
-                          </View>
+    )}
+  </View>
                         </View>
                         <Text style={styles.reviewText}>{review.review}</Text>
                         {review.updatedAt && (
@@ -1395,7 +1436,7 @@ const formatPlanName = (plan) => {
               )}
             </>
           )}
-        </View>
+</View>
 
       </View>
 

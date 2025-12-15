@@ -58,6 +58,7 @@ export const LocalStateProvider = ({ children }) => {
     tradingServerLink: storage.getString('tradingServerLink') || null,
     lastServerFetch: storage.getString('lastServerFetch') || null,
     showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
+    showOnlineStatus: storage.getBoolean('showOnlineStatus') ?? true, // ✅ Default true (show online), user can hide to save Firebase costs
 
   }));
 
