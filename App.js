@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   StatusBar,
@@ -52,17 +52,17 @@ const setNavigationBarAppearance = (theme) => {
 function App() {
   const { theme, single_offer_wall } = useGlobalState();
   const { t } = useTranslation();
+  const { localState, updateLocalState } = useLocalState();
 
+  // ✅ Fixed: Use ref to prevent infinite loop when updating warnedAboutTheme
+  const warnedAboutThemeRef = React.useRef(false);
   const selectedTheme = useMemo(() => {
-    if (!theme && !localState.warnedAboutTheme) {
-      // console.warn("⚠️ Theme not found! Falling back to Light Theme.");
-      updateLocalState('warnedAboutTheme', true); // Prevent future warnings
+    if (!theme && !warnedAboutThemeRef.current && !localState?.warnedAboutTheme) {
+      warnedAboutThemeRef.current = true;
+      updateLocalState('warnedAboutTheme', true);
     }
     return theme === 'dark' ? MyDarkTheme : MyLightTheme;
-  }, [theme]);
-
-
-  const { localState, updateLocalState } = useLocalState();
+  }, [theme, localState?.warnedAboutTheme]); // ✅ Removed updateLocalState from deps
   const [chatFocused, setChatFocused] = useState(true);
   const [modalVisibleChatinfo, setModalVisibleChatinfo] = useState(false)
   const [loading, setLoading] = useState(false);
@@ -146,24 +146,14 @@ function App() {
 
 
 
-  useEffect(() => {
 
-    const { reviewCount } = localState;
-    if (reviewCount % 6 === 0 && reviewCount > 0) {
-      requestReview();
-    }
-    // if (reviewCount % 7 === 0 && reviewCount > 0 && !localState.isPro){
-    //   setShowofferwall(true)
-    // }
-
-    updateLocalState('reviewCount', Number(reviewCount) + 1);
-  }, []);
-
-  const saveConsentStatus = (status) => {
+  // ✅ Memoize saveConsentStatus to prevent recreation
+  const saveConsentStatus = useCallback((status) => {
     updateLocalState('consentStatus', status);
-  };
+  }, [updateLocalState]);
 
-  const handleUserConsent = async () => {
+  // ✅ Memoize handleUserConsent to prevent recreation
+  const handleUserConsent = useCallback(async () => {
     try {
       const consentInfo = await AdsConsent.requestInfoUpdate();
       await MobileAds().initialize();  
@@ -182,17 +172,39 @@ function App() {
         saveConsentStatus(formResult.status);
       }
     } catch (error) {
-      // console.warn("Consent error:", error);
+      // Silently handle consent errors
     }
-  };
-  
+  }, [saveConsentStatus]);
 
+  // ✅ Fixed: Use ref to track if reviewCount was updated to prevent infinite loop
+  const reviewCountUpdatedRef = React.useRef(false);
+  useEffect(() => {
+    // ✅ Only update reviewCount once on mount, not on every reviewCount change
+    if (!reviewCountUpdatedRef.current) {
+      const { reviewCount } = localState || {};
+      if (reviewCount !== undefined) {
+        reviewCountUpdatedRef.current = true;
+        updateLocalState('reviewCount', Number(reviewCount) + 1);
+      }
+    }
+  }, []); // ✅ Empty deps - only run once on mount
+
+  // ✅ Separate useEffect for review request - only runs when reviewCount changes
+  useEffect(() => {
+    const { reviewCount } = localState || {};
+    if (reviewCount && reviewCount % 6 === 0 && reviewCount > 0) {
+      try {
+        requestReview();
+      } catch (error) {
+        // ✅ Silently handle errors to prevent crashes
+      }
+    }
+  }, [localState?.reviewCount]); // ✅ Only depend on reviewCount, not updateLocalState
 
   // Handle Consent
   useEffect(() => {
     handleUserConsent();
-  }, []);
-  const navRef = useRef();
+  }, [handleUserConsent]);
 
 
 
@@ -241,9 +253,10 @@ function App() {
           </Stack.Navigator>
           
         </NavigationContainer>
-        {modalVisible && (
+        {/* RewardRulesModal commented out - uncomment if needed */}
+        {/* {modalVisible && (
           <RewardRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} selectedTheme={selectedTheme} />
-        )}
+        )} */}
           <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall}   oneWallOnly={single_offer_wall}/>
       </Animated.View>
     </SafeAreaView>
@@ -272,9 +285,10 @@ export default function AppWrapper() {
     return theme === 'dark' ? MyDarkTheme : MyLightTheme;
   }, [theme]);
 
-  const handleSplashFinish = () => {
-    updateLocalState('showOnBoardingScreen', false); // ✅ Set onboarding as finished
-  };
+  // ✅ Memoize handleSplashFinish to prevent recreation
+  const handleSplashFinish = useCallback(() => {
+    updateLocalState('showOnBoardingScreen', false);
+  }, [updateLocalState]);
 
   if (localState.showOnBoardingScreen) {
     return <OnboardingScreen onFinish={handleSplashFinish} selectedTheme={selectedTheme} />;

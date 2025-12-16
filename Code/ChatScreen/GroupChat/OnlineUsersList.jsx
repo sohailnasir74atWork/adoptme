@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
-import { ref, onValue, get } from '@react-native-firebase/database';
+import { ref, onChildAdded, onChildRemoved, get } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { isUserOnline } from '../utils';
@@ -82,7 +82,7 @@ const OnlineUsersList = ({ visible, onClose }) => {
     return defaultUser;
   }, [appdatabase]);
 
-  // ✅ Listen to online users
+  // ✅ Listen to online users - OPTIMIZED: Incremental updates (Solution 1)
   useEffect(() => {
     if (!visible || !appdatabase) {
       // Reset when modal closes
@@ -94,68 +94,111 @@ const OnlineUsersList = ({ visible, onClose }) => {
 
     let isMounted = true;
     let isInitialLoad = true;
+    let initialLoadTimeout;
     setLoading(true);
     const onlineUsersRef = ref(appdatabase, 'online_users');
     
-    const unsubscribe = onValue(onlineUsersRef, async (snapshot) => {
-      if (!isMounted) return;
-
-      if (!snapshot.exists()) {
-        setOnlineUsers([]);
-        if (isInitialLoad) {
-          setLoading(false);
-          isInitialLoad = false;
-        }
-        return;
-      }
-
-      const onlineUsersData = snapshot.val();
-      const userIds = Object.keys(onlineUsersData || {});
+    // ✅ Helper: Update user in list (add or update)
+    // ✅ OPTIMIZED: New users added to bottom, no sorting = stable list
+    const addOrUpdateUser = async (userId) => {
+      if (!isMounted || !userId) return;
       
-      if (userIds.length === 0) {
-        setOnlineUsers([]);
-        if (isInitialLoad) {
-          setLoading(false);
-          isInitialLoad = false;
-        }
-        return;
-      }
-      
-      // ✅ Keep current user for testing
-      // const otherUserIds = userIds.filter(id => id !== user?.id);
-      
-      // Fetch user details for all online users (including current user)
       try {
-        const usersWithDetails = await Promise.all(
-          userIds.map(userId => fetchUserDetails(userId))
-        );
+        const userInfo = await fetchUserDetails(userId);
+        if (!userInfo || !isMounted) return;
         
-        if (isMounted) {
-          setOnlineUsers(usersWithDetails.filter(Boolean)); // Filter out any null/undefined
-          if (isInitialLoad) {
+        // ✅ Add timestamp for tracking (optional, for future features)
+        const userInfoWithTime = {
+          ...userInfo,
+          joinedAt: Date.now(), // Track when user was added to list
+        };
+        
+        setOnlineUsers(prev => {
+          // Check if user already exists
+          const existingIndex = prev.findIndex(u => u?.id === userId);
+          if (existingIndex >= 0) {
+            // ✅ Update existing user in place (maintains position)
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              ...userInfoWithTime,
+              // Preserve original position and joinedAt
+              joinedAt: updated[existingIndex].joinedAt || userInfoWithTime.joinedAt,
+            };
+            return updated;
+          } else {
+            // ✅ Add new user to BOTTOM (no sorting = stable list)
+            // This keeps the list stable - existing users stay in place
+            return [...prev, userInfoWithTime];
+          }
+        });
+      } catch (error) {
+        console.error(`Error adding/updating user ${userId}:`, error);
+      }
+    };
+
+    // ✅ Helper: Remove user from list
+    const removeUser = (userId) => {
+      if (!isMounted || !userId) return;
+      
+      setOnlineUsers(prev => prev.filter(u => u?.id !== userId));
+    };
+
+    // ✅ Listen for new users joining (child_added)
+    const unsubscribeAdded = onChildAdded(onlineUsersRef, async (snapshot) => {
+      if (!isMounted) return;
+      
+      const userId = snapshot.key;
+      if (!userId) return;
+
+      // Fetch user details only for the NEW user (cost-optimized!)
+      await addOrUpdateUser(userId);
+      
+      // Mark initial load as complete after first user or timeout
+      if (isInitialLoad) {
+        clearTimeout(initialLoadTimeout);
+        initialLoadTimeout = setTimeout(() => {
+          if (isMounted && isInitialLoad) {
             setLoading(false);
             isInitialLoad = false;
           }
-        }
-      } catch (error) {
-        console.error('Error fetching user details:', error);
-        if (isMounted && isInitialLoad) {
-          setLoading(false);
-          isInitialLoad = false;
-        }
+        }, 1000); // Wait 1 second for initial users to load
       }
     }, (error) => {
-      console.error('Error listening to online users:', error);
-      if (isMounted) {
+      console.error('Error listening to child_added:', error);
+      if (isMounted && isInitialLoad) {
         setLoading(false);
+        isInitialLoad = false;
       }
     });
 
+    // ✅ Listen for users leaving (child_removed)
+    const unsubscribeRemoved = onChildRemoved(onlineUsersRef, (snapshot) => {
+      if (!isMounted) return;
+      
+      const userId = snapshot.key;
+      if (userId) {
+        removeUser(userId);
+      }
+    }, (error) => {
+      console.error('Error listening to child_removed:', error);
+    });
+
+    // ✅ Initial load timeout (in case no users are online)
+    initialLoadTimeout = setTimeout(() => {
+      if (isMounted && isInitialLoad) {
+        setLoading(false);
+        isInitialLoad = false;
+      }
+    }, 2000);
+
     return () => {
       isMounted = false;
-      unsubscribe();
+      clearTimeout(initialLoadTimeout);
+      unsubscribeAdded();
+      unsubscribeRemoved();
     };
-  }, [visible, appdatabase, user?.id, fetchUserDetails]);
+  }, [visible, appdatabase, fetchUserDetails]);
 
   // ✅ Filter users based on search query
   const filteredUsers = useMemo(() => {
@@ -290,6 +333,10 @@ const OnlineUsersList = ({ visible, onClose }) => {
               maxToRenderPerBatch={10}
               windowSize={10}
               initialNumToRender={15}
+              // ✅ Maintain scroll position when items are added/removed (keeps list stable)
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+              }}
             />
           )}
 

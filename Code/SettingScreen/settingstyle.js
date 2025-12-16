@@ -288,7 +288,7 @@ export const getStyles = (isDarkMode) =>
       
       petsColumn: {
         // flex: 1,
-        paddingHorizontal:20,
+        paddingHorizontal:10,
         paddingVertical:10
       },
       
@@ -301,9 +301,9 @@ export const getStyles = (isDarkMode) =>
       },
       
       petsTitle: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: isDarkMode ? '#F9FAFB' : '#111827',
+        fontSize: 14,
+        fontFamily: 'Lato-Bold',
+        color: isDarkMode ? '#e5e7eb' : '#111827',
       },
       
       petsActionText: {
@@ -369,7 +369,7 @@ export const getStyles = (isDarkMode) =>
       },
       reviewsSection: {
         marginTop: 12,
-        paddingHorizontal: 20,
+        paddingHorizontal: 10,
         paddingVertical: 10,
       },
       reviewsHeaderRow: {
@@ -452,6 +452,5 @@ export const getStyles = (isDarkMode) =>
         fontFamily: 'Lato-Bold',
         color: '#fff',
       },
-    
     });
   

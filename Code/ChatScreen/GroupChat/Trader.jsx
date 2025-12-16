@@ -64,6 +64,8 @@ const [device, setDevice] = useState(null)
 
 const [selectedEmoji, setSelectedEmoji] = useState(null);
 
+  // ✅ Track last sent message to prevent duplicates (session-based, no Firebase cost)
+  const lastSentMessageRef = useRef(null);
 
   const flatListRef = useRef();
 
@@ -513,6 +515,29 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
     return;
   }
 
+  // ✅ Duplicate message check - prevent copy-paste spam (no Firebase cost, client-side only)
+  const currentMessage = {
+    text: trimmedInput,
+    fruits: hasFruits ? JSON.stringify(fruits.sort((a, b) => (a?.id || '').localeCompare(b?.id || ''))) : null,
+    emoji: emojiUrl || null,
+  };
+  
+  if (lastSentMessageRef.current) {
+    const lastMessage = lastSentMessageRef.current;
+    const isDuplicate = 
+      lastMessage.text === currentMessage.text &&
+      lastMessage.fruits === currentMessage.fruits &&
+      lastMessage.emoji === currentMessage.emoji;
+    
+    if (isDuplicate) {
+      Alert.alert(
+        t('home.alert.error'),
+        'You cannot send the same message twice. Please modify your message.',
+      );
+      return;
+    }
+  }
+
   // Link check (only for non-pro & non-admin)
   const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
   if (containsLink && !localState?.isPro && !isAdmin) {
@@ -549,7 +574,13 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
       gif: hasEmoji ? emojiUrl : null,
       flage: user.flage ? user.flage : null,
       OS: Platform.OS, // ✅ Store platform (Android/iOS) - only visible to admins
+      robloxUsername: user?.robloxUsername || null,
+      robloxUsernameVerified: user?.robloxUsernameVerified || false,
+      robloxUserId: user?.robloxUserId || null, // ✅ Store userId for profile link
     });
+
+    // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
+    lastSentMessageRef.current = currentMessage;
 
     // Reset local input state
     setInput('');

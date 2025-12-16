@@ -629,8 +629,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
       const userRating = avgRatingData?.value || null;
       const ratingCount = avgRatingData?.count || 0;
-      const now = serverTimestamp();
-// console.log(now)
+      const now = Date.now(); // ✅ Use Date.now() for cooldown comparison
+      const timestamp = serverTimestamp(); // ✅ Use serverTimestamp() for Firestore
 
       const mapTradeItem = item => ({
         name: item.name || item.Name,
@@ -652,19 +652,22 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         hasTotal,
         wantsTotal,
         description: description || "",
-        // timestamp: serverTimestamp(),
-        timestamp: now,
+        timestamp: timestamp, // ✅ Use serverTimestamp for Firestore
 
         rating: userRating,
         ratingCount,
         isSharkMode: localState.isGG ? 'GG' : isSharkMode,
-              flage: user.flage ? user.flage : null,
+        flage: user.flage ? user.flage : null,
+        robloxUsername: user?.robloxUsername || null,
+        robloxUsernameVerified: user?.robloxUsernameVerified || false,
 
 
       };
       
-      if (lastTradeTime && now - lastTradeTime < 60000) {
-        showErrorMessage(t("home.alert.error"), "Please wait for 1 minute before creating new trade");
+      // ✅ 1-minute cooldown check (using Date.now() for accurate comparison)
+      if (lastTradeTime && (now - lastTradeTime) < 60000) {
+        const secondsLeft = Math.ceil((60000 - (now - lastTradeTime)) / 1000);
+        showErrorMessage(t("home.alert.error"), `Please wait ${secondsLeft} second${secondsLeft === 1 ? '' : 's'} before creating a new trade.`);
         setIsSubmitting(false);
         return;
       }
@@ -674,18 +677,22 @@ await addDoc(tradesCollection, newTrade);
       // Step 1: Close modal first
       setModalVisible(false);
 
-      // Step 2: Define the success callback
+      // Step 2: Reset calculator (both sides) after successful trade creation
+      resetState();
+      setDescription(''); // ✅ Clear description input
+
+      // Step 3: Define the success callback
       const callbackfunction = () => {
         showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
       };
 
-      // Step 3: Update timestamp and analytics
-      setLastTradeTime(now);
+      // Step 4: Update timestamp and analytics
+      setLastTradeTime(now); // ✅ Use Date.now() for cooldown tracking
       mixpanel.track("Trade Created", { user: user?.id });
 
-      // Step 4: Wait for next frame (modal animation finish) then delay for iOS
+      // Step 5: Wait for next frame (modal animation finish) then delay for iOS
       requestAnimationFrame(() => {
-        // Step 4: Wait for modal animation to finish before showing ad
+        // Wait for modal animation to finish before showing ad
         setTimeout(() => {
           if (!localState.isPro) {
             requestAnimationFrame(() => {
@@ -711,7 +718,7 @@ await addDoc(tradesCollection, newTrade);
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t]);
+  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t, resetState]);
 
   const handleShareTrade = useCallback(() => {
     const hasItemsCount = hasItems.filter(Boolean).length;

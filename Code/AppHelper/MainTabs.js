@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Image, TouchableOpacity, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -33,23 +33,72 @@ const AnimatedTabIcon = React.memo(({ iconName, color, size, focused }) => {
 
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t } = useTranslation();
-  const {isAdmin, user} = useGlobalState()
+  const { isAdmin, user, theme } = useGlobalState();
+
+  // ✅ Memoize icons object to avoid recreation
+  const icons = useMemo(() => ({
+    Calculator: ['calculator', 'calculator'],
+    Stock: ['cart-shopping', 'cart-shopping'],
+    Trade: ['handshake', 'handshake'],
+    Chat: ['envelope', 'envelope'],
+    Designs: ['house-chimney-crack', 'house-chimney-crack'],
+    More: ['angles-right', 'angles-right'],
+  }), []);
 
   const getTabIcon = useCallback((routeName, focused) => {
-    const isNoman = config.isNoman; // ✅ Extracted to avoid repeated checks
-
-// console.log(focused, routeName)
-    const icons = {
-      Calculator: ['calculator', 'calculator'], // Solid icons look same for focused/unfocused
-      Stock: ['cart-shopping', 'cart-shopping'],
-      Trade: ['handshake', 'handshake'],
-      Chat: ['envelope', 'envelope'],
-      Designs: ['house-chimney-crack', 'house-chimney-crack'],
-      More: ['angles-right', 'angles-right'],
-    };
-
     return icons[routeName] ? (focused ? icons[routeName][0] : icons[routeName][1]) : 'alert-circle-outline';
-  }, []);
+  }, [icons]);
+
+  // ✅ Memoize headerRight component to prevent re-renders
+  const headerRight = useCallback((navigation) => (
+    <>
+      {isAdmin && (
+        <TouchableOpacity onPress={() => navigation.navigate('Admin')}>
+          <Image
+            source={require('../../assets/trophy.webp')}
+            style={{ width: 20, height: 20, marginRight: 16 }}
+          />
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            borderWidth: 2,
+            borderColor: config.colors.primary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Image
+            source={{ uri: !user?.id ? 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png' : user.avatar }}
+            style={{ width: 28, height: 28, borderRadius: 12.5 }}
+          />
+        </View>
+      </TouchableOpacity>
+    </>
+  ), [isAdmin, user?.id, user?.avatar]);
+
+  // ✅ Memoize isDarkMode to avoid recalculation
+  const isDarkMode = useMemo(() => theme === 'dark', [theme]);
+
+  // ✅ Memoize tabBarButton styles
+  const tabBarButtonStyles = useMemo(() => ({
+    selected: {
+      dark: '#5c4c49',
+      light: '#f3d0c7',
+    },
+    base: {
+      flex: 1,
+      borderRadius: 12,
+      marginHorizontal: 4,
+      marginVertical: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  }), []);
 
 
   return (
@@ -59,33 +108,23 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           <AnimatedTabIcon
             focused={focused}
             iconName={getTabIcon(route.name, focused)}
-            color={focused ? config.colors.primary : config.colors.primary}
+            color={config.colors.primary}
             size={18}
           />
         ),
         tabBarButton: (props) => {
           const { onPress, children } = props;
           const isSelected = props?.['aria-selected'];
-          // console.log(props)
-          const { theme } = useGlobalState();
-          const isDarkMode = theme === 'dark';
         
           return (
             <TouchableOpacity
               onPress={onPress}
               activeOpacity={0.9}
               style={{
-                flex: 1,
+                ...tabBarButtonStyles.base,
                 backgroundColor: isSelected
-                  ? isDarkMode
-                    ? '#5c4c49'
-                    : '#f3d0c7'
+                  ? (isDarkMode ? tabBarButtonStyles.selected.dark : tabBarButtonStyles.selected.light)
                   : 'transparent',
-                borderRadius: 12,
-                marginHorizontal: 4,
-                marginVertical: 2,
-                justifyContent: 'center',
-                alignItems: 'center',
               }}
             >
               {children}
@@ -115,39 +154,8 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       <Tab.Screen
         name="Calculator"
         options={({ navigation }) => ({
-          title: t('tabs.calculator'), // Translation applied here
-          headerRight: () => (
-            <>
-             {isAdmin && <TouchableOpacity onPress={() => navigation.navigate('Admin')}>
-                <Image
-                  source={require('../../assets/trophy.webp')} // ✅ Ensure the correct path
-                  style={{ width: 20, height: 20, marginRight: 16 }}
-                />
-              </TouchableOpacity>}
-              
-              <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
-              <View
-  style={{
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: config.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  }}
->
-  <Image
-    source={{ uri: !user.id ? 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png': user.avatar }}
-    style={{ width: 28, height: 28, borderRadius: 12.5 }}
-  />
-</View>
-
-              </TouchableOpacity>
-            </>
-
-
-          ),
+          title: t('tabs.calculator'),
+          headerRight: () => headerRight(navigation),
         })}
       >
         {() => <HomeScreen selectedTheme={selectedTheme} />}

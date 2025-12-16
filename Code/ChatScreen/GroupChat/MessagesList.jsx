@@ -383,7 +383,7 @@ const MessagesList = ({
                         <Text style={styles.admin}>{t("chat.admin")}</Text>
                       </View>}{'    '} {isAdmin && item.OS && (
                         <View style={[styles.platformBadge, { backgroundColor: item.OS === 'ios' ? '#007AFF' : '#34C759' }]}>
-                          <Text style={styles.platformText}>{item.OS.toUpperCase()}</Text>
+                          <Text style={styles.platformText}>{item.OS.toUpperCase().slice(0, 1)}</Text>
                         </View>
                       )}{''}
                      

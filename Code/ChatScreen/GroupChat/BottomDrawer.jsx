@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  Linking,
+  Platform,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
@@ -33,7 +35,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { ref, get } from '@react-native-firebase/database';
 
-const REVIEWS_PAGE_SIZE = 5; // how many reviews per page
+const REVIEWS_PAGE_SIZE = 3; // how many reviews per page
 
 const ProfileBottomDrawer = ({
   isVisible,
@@ -63,6 +65,7 @@ const ProfileBottomDrawer = ({
   // ⭐ rating summary (from RTDB /averageRatings)
   const [ratingSummary, setRatingSummary] = useState(null);
   const [loadingRating, setLoadingRating] = useState(false);
+  const [userBio, setUserBio] = useState(null);
 
   // joined text
   const [createdAtText, setCreatedAtText] = useState(null);
@@ -89,6 +92,61 @@ const ProfileBottomDrawer = ({
     showSuccessMessage(t('value.copy'), 'Copied to Clipboard');
     mixpanel.track('Code UserName', { UserName: code });
   };
+
+  // ─────────────────────────────────────────────
+  // Open Roblox Profile
+  const handleOpenRobloxProfile = useCallback(async () => {
+    if (!selectedUser?.robloxUsername && !selectedUser?.robloxUserId) {
+      return;
+    }
+
+    triggerHapticFeedback('impactLight');
+
+    const robloxUserId = selectedUser?.robloxUserId;
+    const robloxUsername = selectedUser?.robloxUsername;
+
+    try {
+      // Construct URLs
+      let robloxAppUrl = null;
+      let robloxWebUrl = null;
+
+      if (robloxUserId) {
+        // Use userId for app deep link (most reliable)
+        robloxAppUrl = `roblox://users/${robloxUserId}`;
+        // Use search URL format for web (works with username)
+        robloxWebUrl = robloxUsername 
+          ? `https://www.roblox.com/search/users?keyword=${encodeURIComponent(robloxUsername)}`
+          : `https://www.roblox.com/users/${robloxUserId}`;
+      } else if (robloxUsername) {
+        // Use search URL format with username
+        robloxWebUrl = `https://www.roblox.com/search/users?keyword=${encodeURIComponent(robloxUsername)}`;
+      }
+
+      if (!robloxWebUrl) {
+        Alert.alert('Error', 'Could not open Roblox profile. Missing username or user ID.');
+        return;
+      }
+
+      // Try to open in Roblox app first (only if we have userId)
+      if (robloxAppUrl) {
+        try {
+          const canOpenApp = await Linking.canOpenURL(robloxAppUrl);
+          if (canOpenApp) {
+            await Linking.openURL(robloxAppUrl);
+            return; // Successfully opened in app
+          }
+        } catch (appError) {
+          console.log('Could not open in Roblox app, falling back to browser:', appError);
+        }
+      }
+
+      // Fallback to browser with search URL
+      await Linking.openURL(robloxWebUrl);
+    } catch (error) {
+      console.error('Error opening Roblox profile:', error);
+      Alert.alert('Error', 'Could not open Roblox profile. Please try again.');
+    }
+  }, [selectedUser?.robloxUsername, selectedUser?.robloxUserId, triggerHapticFeedback]);
 
   // ✅ Memoize formatCreatedAt
   const formatCreatedAt = useCallback((timestamp) => {
@@ -195,9 +253,12 @@ const ProfileBottomDrawer = ({
     if (!isVisible) {
       setLoadDetails(false);
       setRatingSummary(null);
+      setUserBio(null);
       setOwnedPets([]);
       setWishlistPets([]);
       setReviews([]);
+      lastReviewDocRef.current = null;
+      isLoadingRef.current = false;
       setLastReviewDoc(null);
       setHasMoreReviews(false);
       setCreatedAtText(null);
@@ -227,8 +288,11 @@ const ProfileBottomDrawer = ({
             value: Number(val.value || 0),
             count: Number(val.count || 0),
           });
+          // ✅ Load bio from rating doc
+          setUserBio(val.bio || null);
         } else {
           setRatingSummary(null);
+          setUserBio(null);
         }
 
         if (createdSnap.exists()) {
@@ -306,39 +370,51 @@ const ProfileBottomDrawer = ({
 
   // ─────────────────────────────────────────────
   // Load reviews (paged) — ✅ Memoized with useCallback
+  // ✅ Use refs to track state and avoid dependency issues
+  const lastReviewDocRef = useRef(null);
+  const isLoadingRef = useRef(false);
+  
   const loadReviews = useCallback(async (reset = false) => {
     if (!firestoreDB || !selectedUserId) return;
+    
+    // ✅ Prevent duplicate calls using ref (avoids dependency issues)
+    if (isLoadingRef.current) {
+      console.log('🔄 [BottomDrawer] Already loading reviews, skipping...');
+      return;
+    }
 
+    isLoadingRef.current = true;
     setLoadingReviews(true);
     try {
-      // ✅ Get current lastReviewDoc from state using functional update
-      let currentLastDoc = null;
-      setLastReviewDoc((prev) => {
-        currentLastDoc = prev;
-        return prev;
-      });
-
+      // ✅ Fetch one extra document to check if there are more reviews
+      // This prevents showing "load more" when there's exactly REVIEWS_PAGE_SIZE reviews
       let q;
-      if (!reset && currentLastDoc) {
+      if (!reset && lastReviewDocRef.current) {
         q = query(
           collection(firestoreDB, 'reviews'),
           where('toUserId', '==', selectedUserId),
           orderBy('updatedAt', 'desc'),
-          startAfter(currentLastDoc),
-          limit(REVIEWS_PAGE_SIZE),
+          startAfter(lastReviewDocRef.current),
+          limit(REVIEWS_PAGE_SIZE + 1), // ✅ Fetch one extra to check if more exist
         );
       } else {
         q = query(
           collection(firestoreDB, 'reviews'),
           where('toUserId', '==', selectedUserId),
           orderBy('updatedAt', 'desc'),
-          limit(REVIEWS_PAGE_SIZE),
+          limit(REVIEWS_PAGE_SIZE + 1), // ✅ Fetch one extra to check if more exist
         );
       }
 
       const snap = await getDocs(q);
 
-      const batch = snap.docs.map((d) => {
+      // ✅ Check if we got more than page size (means there are more reviews)
+      const hasMoreResults = snap.docs.length > REVIEWS_PAGE_SIZE;
+      
+      // ✅ Only take REVIEWS_PAGE_SIZE documents (discard the extra one)
+      const docsToUse = snap.docs.slice(0, REVIEWS_PAGE_SIZE);
+      
+      const batch = docsToUse.map((d) => {
         const data = d.data();
         return {
           id: d.id,
@@ -348,25 +424,34 @@ const ProfileBottomDrawer = ({
 
       setReviews((prev) => (reset ? batch : [...prev, ...batch]));
 
-      const newLastDoc = snap.docs[snap.docs.length - 1] || null;
+      // ✅ Use the last document from the actual batch (not the extra one)
+      const newLastDoc = docsToUse[docsToUse.length - 1] || null;
+      lastReviewDocRef.current = newLastDoc;
       setLastReviewDoc(newLastDoc);
-      setHasMoreReviews(snap.size === REVIEWS_PAGE_SIZE);
+      
+      // ✅ Fix: hasMoreReviews is true only if we got more results than page size
+      // This accurately detects if there are more reviews without false positives
+      setHasMoreReviews(hasMoreResults);
     } catch (err) {
       console.log('Reviews load error:', err);
       if (reset) setReviews([]);
       setHasMoreReviews(false);
     } finally {
+      isLoadingRef.current = false;
       setLoadingReviews(false);
     }
-  }, [firestoreDB, selectedUserId, lastReviewDoc]);
+  }, [firestoreDB, selectedUserId]); // ✅ Removed loadingReviews from deps to prevent re-renders
 
   // initial reviews load when opening details
   useEffect(() => {
     if (!isVisible || !selectedUserId || !loadDetails) return;
     // reset pagination when details open
+    lastReviewDocRef.current = null;
     setLastReviewDoc(null);
+    setHasMoreReviews(false);
     loadReviews(true);
-  }, [isVisible, selectedUserId, loadDetails, loadReviews]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, selectedUserId, loadDetails]); // ✅ Removed loadReviews from deps to prevent re-renders
 
   // ✅ Memoize handleLoadMoreReviews
   const handleLoadMoreReviews = useCallback(() => {
@@ -523,22 +608,72 @@ const ProfileBottomDrawer = ({
                   style={styles.profileImage2}
                 />
                 <View style={{ justifyContent: 'center' }}>
-                  <Text style={styles.drawerSubtitleUser}>
-                    {userName}{' '}
-                    {selectedUser?.isPro && (
-                      <Image
-                        source={require('../../../assets/pro.png')}
-                        style={{ width: 14, height: 14 }}
-                      />
-                    )}{' '}
-                    {selectedUser?.flage ? selectedUser.flage : ''}{'   '}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Text style={styles.drawerSubtitleUser}>
+                      {userName}{' '}
+                      {selectedUser?.isPro && (
+                        <Image
+                          source={require('../../../assets/pro.png')}
+                          style={{ width: 14, height: 14 }}
+                        />
+                      )}{' '}
+                      {selectedUser?.flage ? selectedUser.flage : ''}{'   '}
+                    </Text>
+                    {selectedUser?.robloxUsername ? (
+                      <View style={{ 
+                        marginLeft: 6, 
+                        backgroundColor: selectedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
+                        paddingHorizontal: 6, 
+                        paddingVertical: 2, 
+                        borderRadius: 4,
+                      }}>
+                        <Text style={{ 
+                          color: '#FFFFFF', 
+                          fontSize: 9, 
+                          fontWeight: '600' 
+                        }}>
+                          {selectedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{ 
+                        marginLeft: 6, 
+                        backgroundColor: '#9CA3AF', 
+                        paddingHorizontal: 6, 
+                        paddingVertical: 2, 
+                        borderRadius: 4,
+                      }}>
+                        <Text style={{ 
+                          color: '#FFFFFF', 
+                          fontSize: 9, 
+                          fontWeight: '600' 
+                        }}>
+                          Roblox Not Linked
+                        </Text>
+                      </View>
+                    )}
                     <Icon
                       name="copy-outline"
                       size={16}
                       color="#007BFF"
+                      style={{ marginLeft: 8 }}
                       onPress={() => copyToClipboard(userName)}
                     />
-                  </Text>
+                  </View>
+
+                  {/* Roblox Username Display */}
+                  {selectedUser?.robloxUsername && (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: '#00A8FF', // Nice blue color for Roblox
+                        marginTop: 4,
+                        fontWeight: '500',
+                      }}
+                    >
+                      @{selectedUser.robloxUsername}
+                    </Text>
+                  )}
 
                   <Text
                     style={{
@@ -568,13 +703,14 @@ const ProfileBottomDrawer = ({
               </TouchableOpacity>
             </View>
 
-            {/* ⭐ Rating summary */}
+            {/* ⭐ Rating summary - Below profile picture section */}
             {loadDetails && (
               <View
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   marginBottom: 12,
+                  marginTop: 8,
                 }}
               >
                 {loadingRating ? (
@@ -625,7 +761,37 @@ const ProfileBottomDrawer = ({
                 )}
               </View>
             )}
-
+     {/* 📝 Bio Section */}
+     {loadDetails && userBio && (
+              <View
+                style={{
+                  borderRadius: 12,
+                  padding: 12,
+                  backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
+                  marginBottom: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '500',
+                    marginBottom: 6,
+                    color: isDarkMode ? '#9ca3af' : '#6b7280',
+                  }}
+                >
+                  Bio
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                    lineHeight: 18,
+                  }}
+                >
+                  {userBio}
+                </Text>
+              </View>
+            )}
             {/* 🐾 Pets section */}
             {loadDetails && (
               <View
@@ -911,6 +1077,30 @@ const ProfileBottomDrawer = ({
                   ]}
                 >
                   View Detail Profile
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Roblox Profile Button */}
+            {selectedUser?.robloxUsername && (
+              <TouchableOpacity 
+                style={[styles.saveButton, { 
+                  backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',
+                  marginBottom: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }]} 
+                onPress={handleOpenRobloxProfile}
+              >
+                <Icon 
+                  name="game-controller-outline" 
+                  size={16} 
+                  color="#FFFFFF" 
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
+                  View Roblox Profile
                 </Text>
               </TouchableOpacity>
             )}

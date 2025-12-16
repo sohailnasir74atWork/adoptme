@@ -155,7 +155,7 @@ export const getStyles = (isDarkMode) =>
     platformBadge: {
       paddingHorizontal: 3,
       paddingVertical: 1,
-      borderRadius: 3,
+      borderRadius: '50%',
       marginLeft: 2,
     },
     platformText: {
@@ -477,7 +477,6 @@ chatImage: {
 },
 saveButtonTextProfile:{
   color: isDarkMode ? 'white' : "black",
-
 },
 highlightedMessage: {
   backgroundColor: '#fef3c7',      // soft yellow

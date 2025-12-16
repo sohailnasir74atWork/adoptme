@@ -71,11 +71,48 @@ export const loadAppOpenAd = async (
 
 // reviewHelper.js
 
+// ✅ Rate limiting: Track last review request time
+let lastReviewRequestTime = 0;
+const REVIEW_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+let isReviewInProgress = false;
+
 export const requestReview = () => {
-  if (InAppReview.isAvailable()) {
+  // ✅ Prevent multiple simultaneous calls
+  if (isReviewInProgress) {
+    return;
+  }
+
+  // ✅ Rate limiting: Don't request review more than once per 24 hours
+  const now = Date.now();
+  if (now - lastReviewRequestTime < REVIEW_COOLDOWN) {
+    return;
+  }
+
+  // ✅ Check availability and handle errors properly
+  try {
+    if (!InAppReview.isAvailable()) {
+      return;
+    }
+
+    isReviewInProgress = true;
+    lastReviewRequestTime = now;
+
     InAppReview.RequestInAppReview()
-      .then(() => console.log('In-App review flow completed'))
-      .catch((error) => console.error('In-App review error:', error));
+      .then(() => {
+        // Success - review flow completed
+        isReviewInProgress = false;
+      })
+      .catch((error) => {
+        // ✅ Silently handle errors to prevent crashes
+        // Don't log errors that might spam the console
+        isReviewInProgress = false;
+        // Reset lastReviewRequestTime on error so user can try again later
+        lastReviewRequestTime = 0;
+      });
+  } catch (error) {
+    // ✅ Catch any synchronous errors
+    isReviewInProgress = false;
+    lastReviewRequestTime = 0;
   }
 };
 

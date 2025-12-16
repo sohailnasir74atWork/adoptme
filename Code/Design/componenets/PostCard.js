@@ -120,7 +120,8 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   sender: item.displayName,
   avatar: item.avatar,
   flage: item.flage ? item.flage : null,
-
+  robloxUsername: item?.robloxUsername || null,
+  robloxUsernameVerified: item?.robloxUsernameVerified || false,
 }
 
   const handleChatNavigation = useCallback(() => {

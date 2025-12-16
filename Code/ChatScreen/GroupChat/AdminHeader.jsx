@@ -372,7 +372,7 @@ export const getStyles = (isDarkMode) =>
     },
     badgeText: {
       color: '#fff',
-      fontSize: 10,
+      fontSize: 8,
       fontFamily: 'Lato-Bold',
     },
   });

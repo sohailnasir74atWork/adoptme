@@ -375,7 +375,8 @@ const TradeList = ({ route }) => {
     sender: selectedTrade?.traderName,
     avatar: selectedTrade?.avatar,
     flage: selectedTrade?.flage ? selectedTrade.flage : null,
-
+    robloxUsername: selectedTrade?.robloxUsername || null,
+    robloxUsernameVerified: selectedTrade?.robloxUsernameVerified || false,
   }
   const handleChatNavigation2 = async () => {
     
@@ -714,6 +715,9 @@ const TradeList = ({ route }) => {
       senderId: item.userId,
       sender: item.traderName,
       avatar: item.avatar,
+      flage: item.flage ? item.flage : null,
+      robloxUsername: item?.robloxUsername || null,
+      robloxUsernameVerified: item?.robloxUsernameVerified || false,
     }
     const handleChatNavigation = async () => {
 

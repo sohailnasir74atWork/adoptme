@@ -309,6 +309,8 @@ const DesignFeedScreen = ({ route }) => {
       email: currentUserEmail,
       report: false,
       flage: user.flage ? user.flage : null,
+      robloxUsername: user?.robloxUsername || null,
+      robloxUsernameVerified: user?.robloxUsernameVerified || false,
 
     };
     await addDoc(collection(firestoreDB, 'designPosts'), post);
