@@ -52,9 +52,9 @@ export const getStyles = (isDarkMode) =>
       marginHorizontal: 5,
     },
     senderNameText: {
-      fontSize: 10,
+      fontSize: 11,
       fontFamily: 'Lato-Bold',
-      color: '#fff',
+      color: 'grey',
     },
     messageTextBox: {
       // flex: 1,
@@ -90,7 +90,7 @@ export const getStyles = (isDarkMode) =>
       fontFamily: 'Lato-Regular',
       paddingRight:20,
       lineHeight:14,
-      // backgroundColor:'red'
+   
 
 
     },
@@ -110,7 +110,7 @@ export const getStyles = (isDarkMode) =>
     },
     timestamp: {
       fontSize: 5,
-      color: '#bbb',
+      color: isDarkMode ? 'lightfrey' : 'grey',
       textAlign: 'right',
       paddingHorizontal: 5
     },
@@ -159,17 +159,11 @@ export const getStyles = (isDarkMode) =>
       marginLeft: 2,
     },
     platformText: {
-      color: '#FFFFFF',
-      fontSize: 7,
-      fontWeight: '600',
+      color: 'white',
+      fontSize: 6,
+      fontFamily: 'Lato-Bold',
     },
-    adminContainer: {
-      backgroundColor: config.colors.hasBlockGreen,
-      paddingHorizontal: 5,
-      paddingVertical: 1,
-      borderRadius: 3,
-      // marginHorizontal:5
-    },
+   
     admin: {
       // alignSelf: 'flex-start',
       color: 'white',
@@ -177,6 +171,18 @@ export const getStyles = (isDarkMode) =>
       fontFamily: 'Lato-Bold',
       // color: config.colors.primary,
       fontSize: 9,
+    },
+    verifiedContainer: {
+      backgroundColor: '#4CAF50',
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 3,
+      marginLeft: 4,
+    },
+    verified: {
+      color: 'white',
+      fontSize: 9,
+      fontFamily: 'Lato-Bold',
       // lineHeight:10,
 
       
@@ -278,8 +284,12 @@ export const getStyles = (isDarkMode) =>
     },
 
     userName: {
-      color: '#bbb',
-      fontSize: 8,
+      color: isDarkMode ? 'lightfrey' : 'grey',
+      fontSize: 10,
+      justifyContent:'center',
+      // backgroundColor:'red',
+      backgroundColor:'red',
+      lineHeight:14
 
     },
     adminActions: {
@@ -482,6 +492,44 @@ highlightedMessage: {
   backgroundColor: '#fef3c7',      // soft yellow
   borderColor: '#f59e0b',
   borderWidth: 1,
+},
+nameRow: {
+  flexDirection: 'row',
+  alignItems: 'center',      // vertical alignment (text + images)
+  // justifyContent: 'center',  // center the whole row horizontally
+},
+
+userNameText: {
+  color: isDarkMode ? 'lightgrey' : 'grey',
+  fontSize: 9,
+  lineHeight: 14,
+  paddingTop:2
+},
+
+icon: {
+  width: 14,
+  height: 14,
+  marginLeft: 4,
+  // paddingBottom:5
+},
+
+adminContainer: {
+  marginLeft: 4,
+  paddingHorizontal: 4,
+  paddingVertical: 1,
+  borderRadius: 4,
+  backgroundColor: config.colors.primary, // your choice
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+platformBadge: {
+  marginLeft: 6,
+  paddingHorizontal: 3,
+  // paddingVertical: 1,
+  borderRadius: '50%',
+  alignItems: 'center',
+  justifyContent: 'center',
 },
 
 

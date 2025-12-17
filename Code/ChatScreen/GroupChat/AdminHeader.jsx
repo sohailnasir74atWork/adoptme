@@ -107,7 +107,7 @@ const AdminHeader = ({
                 {onlineMembersCount > 0 && (
                   <View style={[styles.badge, { backgroundColor: '#10B981' }]}>
                     <Text style={styles.badgeText}>
-                      {onlineMembersCount > 99 ? '99+' : onlineMembersCount}
+                      {onlineMembersCount > 999 ? '1k+' : onlineMembersCount}
                     </Text>
                   </View>
                 )}

@@ -648,7 +648,7 @@ const ProfileBottomDrawer = ({
                           fontSize: 9, 
                           fontWeight: '600' 
                         }}>
-                          Roblox Not Linked
+                          No Roblox ID
                         </Text>
                       </View>
                     )}
@@ -959,7 +959,8 @@ const ProfileBottomDrawer = ({
                         <View
                           key={rev.id}
                           style={{
-                            paddingVertical: 6,
+                            paddingVertical: 4,
+                            paddingHorizontal: 4,
                             borderBottomWidth: 1,
                             borderBottomColor: isDarkMode
                               ? '#1f2937'
@@ -970,60 +971,59 @@ const ProfileBottomDrawer = ({
                             style={{
                               flexDirection: 'row',
                               justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: 2,
+                              alignItems: 'flex-start',
+                              marginBottom: 4,
                             }}
                           >
-                            <View>
+                            <View style={{ flex: 1 }}>
                               <Text
                                 style={{
                                   fontSize: 12,
                                   fontWeight: '600',
                                   color: isDarkMode ? '#e5e7eb' : '#111827',
+                                  marginBottom: 2,
                                 }}
                               >
                                 {rev.userName || 'Anonymous'}
                               </Text>
+                              {!!rev?.review && (
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: isDarkMode ? '#d1d5db' : '#4b5563',
+                                    lineHeight: 16,
+                                  }}
+                                >
+                                  {rev.review}
+                                </Text>
+                              )}
+                              {rev?.edited && (
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    color: isDarkMode ? '#9ca3af' : '#9ca3af',
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  Edited
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                               {timeLabel && (
                                 <Text
                                   style={{
                                     fontSize: 10,
-                                    color: isDarkMode
-                                      ? '#9ca3af'
-                                      : '#9ca3af',
-                                    marginTop: 1,
+                                    color: isDarkMode ? '#9ca3af' : '#9ca3af',
                                   }}
                                 >
                                   {timeLabel}
                                 </Text>
                               )}
+                              {renderStars(rev?.rating || 0)}
                             </View>
-
-                            {renderStars(rev?.rating || 0)}
                           </View>
-
-                          {!!rev?.review && (
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                color: isDarkMode ? '#d1d5db' : '#4b5563',
-                              }}
-                            >
-                              {rev.review}
-                            </Text>
-                          )}
-
-                          {rev?.edited && (
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                color: isDarkMode ? '#9ca3af' : '#9ca3af',
-                                marginTop: 2,
-                              }}
-                            >
-                              Edited
-                            </Text>
-                          )}
                         </View>
                       );
                     })}

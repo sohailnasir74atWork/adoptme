@@ -373,21 +373,43 @@ const MessagesList = ({
                     : item.strikeCount >= 2
                       ? { backgroundColor: 'red' }
                       : null,]}>
-                    <Text style={styles.userName}>{item.sender}
-                      {item?.isPro && 
-                      <Image
-                      source={require('../../../assets/pro.png')} 
-                      style={{ width: 14, height: 14 }} 
-                    />} {(!!item.isAdmin) &&
-                      <View style={styles.adminContainer}>
-                        <Text style={styles.admin}>{t("chat.admin")}</Text>
-                      </View>}{'    '} {isAdmin && item.OS && (
-                        <View style={[styles.platformBadge, { backgroundColor: item.OS === 'ios' ? '#007AFF' : '#34C759' }]}>
-                          <Text style={styles.platformText}>{item.OS.toUpperCase().slice(0, 1)}</Text>
-                        </View>
-                      )}{''}
-                     
-                    </Text>
+                   <View style={styles.nameRow}>
+  <Text style={styles.userNameText}>{item.sender}</Text>
+
+  {item?.isPro && (
+    <Image
+      source={require('../../../assets/pro.png')}
+      style={styles.icon}
+    />
+  )}
+
+  {!!item.isAdmin && (
+    <View style={styles.adminContainer}>
+      <Text style={styles.userNameText}>{t("chat.admin")}</Text>
+    </View>
+  )}
+
+  {item?.robloxUsernameVerified && (
+    <Image
+      source={require('../../../assets/verification.png')}
+      style={styles.icon}
+    />
+  )}
+
+  {isAdmin && item.OS && (
+    <View
+      style={[
+        styles.platformBadge,
+        { backgroundColor: item.OS === 'ios' ? '#007AFF' : '#34C759' },
+      ]}
+    >
+      <Text style={[ {color:'white', fontFamily: 'Lato-Bold', fontSize:9}]}>
+        {item.OS.toUpperCase().slice(0, 1)}
+      </Text>
+    </View>
+  )}
+</View>
+
 
                   
                       {item.gif && (
@@ -597,10 +619,10 @@ const MessagesList = ({
                   <MenuOption onSelect={() => onDeleteAllMessage(item?.senderId)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Delete All</Text>
                   </MenuOption>
-                 <MenuOption onSelect={() => banUserwithEmail(item.currentUserEmail, item.isAdmin)} style={styles.deleteButton}>
+                 <MenuOption onSelect={() => banUserwithEmail(item.currentUserEmail, isAdmin, item.senderId)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Block</Text>
                   </MenuOption>
-                  <MenuOption onSelect={() => unbanUserWithEmail(item.currentUserEmail)} style={styles.deleteButton}>
+                  <MenuOption onSelect={() => unbanUserWithEmail(item.currentUserEmail, isAdmin)} style={styles.deleteButton}>
                     <Text style={styles.adminTextAction}>Unblock</Text>
                   </MenuOption>
                   <MenuOption onSelect={() => onPinMessage(item)} style={styles.deleteButton}>

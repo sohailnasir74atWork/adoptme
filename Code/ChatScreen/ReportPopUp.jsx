@@ -72,10 +72,10 @@ const ReportPopup = ({ visible, message, onClose }) => {
         const reportCount = Number(data?.reportCount || 0);
   
         if (reportCount >= 1) {
-          // ✅ Second report: delete the message
-          // ✅ Await banUserwithEmail to ensure it completes
+          // ✅ Second report: delete message & ban user (silent - no alert to reporter)
           if (message.currentUserEmail) {
-            banUserwithEmail(message.currentUserEmail).catch((error) => {
+            // isAdmin=false, senderId for message deletion
+            banUserwithEmail(message.currentUserEmail, false, message.senderId).catch((error) => {
               console.error("Error banning user:", error);
             });
           }

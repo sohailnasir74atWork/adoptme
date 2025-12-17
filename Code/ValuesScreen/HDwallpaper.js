@@ -17,7 +17,7 @@ import {
   
 import Icon from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
-import { ref, onValue, update } from "@react-native-firebase/database";
+import { ref, onValue, update, increment } from "@react-native-firebase/database";
 import { useGlobalState } from "../GlobelStats";
 import InterstitialAdManager from "../Ads/IntAd";
 import { useLocalState } from "../LocalGlobelStats";
@@ -111,12 +111,19 @@ const HDWallpaperScreen = () => {
         });
       }
 
-      // keep any existing likedState from previous state
+      // ✅ Preserve existing state (likedState AND downloads) to prevent overwriting local increments
       return baseItems.map((base) => {
         const existing = prev.find((p) => p.id === base.id);
-        return existing
-          ? { ...base, likedState: existing.likedState || "none" }
-          : base;
+        if (existing) {
+          // ✅ Keep existing downloads if it's higher (local increment might not be synced yet)
+          // ✅ Also preserve likedState
+          return {
+            ...base,
+            likedState: existing.likedState || "none",
+            downloads: Math.max(base.downloads, existing.downloads || 0),
+          };
+        }
+        return base;
       });
     });
   }, [totalPics, visibleCount, likeData]);
@@ -147,6 +154,8 @@ const HDWallpaperScreen = () => {
     (id, partial) => {
       if (!appdatabase) return;
       const nodeRef = ref(appdatabase, `like_counter/${id}`);
+      // ✅ Note: downloads are handled separately with increment() for atomic updates
+      // This function is used for likes/dislikes updates
       update(nodeRef, partial).catch((e) =>
         console.log("Firebase like_counter update error:", e),
       );
@@ -267,18 +276,28 @@ const HDWallpaperScreen = () => {
             Platform.OS === 'android' ? `file://${destPath}` : destPath;
   
           await CameraRoll.save(localPath, { type: 'photo' });
-  
-          // update counters as you already do...
-          let nextDownloads = 0;
+
+          // ✅ Update local state first for immediate UI feedback
           setItems((prev) =>
             prev.map((w) => {
               if (w.id !== item.id) return w;
-              const updated = { ...w, downloads: w.downloads + 1 };
-              nextDownloads = updated.downloads;
-              return updated;
+              return { ...w, downloads: (w.downloads || 0) + 1 };
             }),
           );
-          pushCounters(item.id, { downloads: nextDownloads });
+
+          // ✅ Update selected item in modal if it's the same
+          setSelected((prevSelected) => {
+            if (!prevSelected || prevSelected.id !== item.id) return prevSelected;
+            return { ...prevSelected, downloads: (prevSelected.downloads || 0) + 1 };
+          });
+
+          // ✅ Use increment for atomic Firebase update
+          if (appdatabase) {
+            const nodeRef = ref(appdatabase, `like_counter/${item.id}`);
+            update(nodeRef, { downloads: increment(1) }).catch((e) =>
+              console.log("Firebase download increment error:", e),
+            );
+          }
   
           Alert.alert('Downloaded', 'Wallpaper saved to your gallery.');
         } else {

@@ -637,7 +637,7 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
                 // isAdmin={isAdmin}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId)}
+                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId, true)}
                 handleLoadMore={handleLoadMore}
                 onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
                 banUser={banUser}

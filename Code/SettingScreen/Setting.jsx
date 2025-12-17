@@ -512,29 +512,33 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
             setIsVerifyingRoblox(true);
             const result = await checkVerificationCode(trimmedUsername, code);
             
-            if (result.verified) {
-              // ✅ Save verified username to Firebase user node
-              await updateLocalStateAndDatabase({
-                robloxUsername: trimmedUsername,
-                robloxUsernameVerified: true,
-                robloxUserId: result.userId,
-              });
+            // ✅ Save username to database regardless of verification status
+            const isVerified = result.verified;
+            // Use userId from verification result if verified, otherwise from initial username check
+            const userIdToSave = result.verified ? result.userId : (verifyResult.userId || null);
+            
+            await updateLocalStateAndDatabase({
+              robloxUsername: trimmedUsername,
+              robloxUsernameVerified: isVerified,
+              robloxUserId: userIdToSave,
+            });
 
-              // ✅ Update local state
-              setRobloxUsername(trimmedUsername);
-              setRobloxUsernameVerified(true);
-              
-              // ✅ Update user state immediately for UI
-              setUser((prev) => ({
-                ...prev,
-                robloxUsername: trimmedUsername,
-                robloxUsernameVerified: true,
-                robloxUserId: result.userId,
-              }));
-              
+            // ✅ Update local state
+            setRobloxUsername(trimmedUsername);
+            setRobloxUsernameVerified(isVerified);
+            
+            // ✅ Update user state immediately for UI
+            setUser((prev) => ({
+              ...prev,
+              robloxUsername: trimmedUsername,
+              robloxUsernameVerified: isVerified,
+              robloxUserId: userIdToSave,
+            }));
+            
+            if (isVerified) {
               showSuccessMessage('Success', 'Roblox username verified and saved!');
             } else {
-              showErrorMessage('Verification Failed', result.error || 'Could not verify username');
+              showSuccessMessage('Username Saved', 'Username saved but not verified. You can verify it later by clicking "Re-verify".');
             }
             setIsVerifyingRoblox(false);
           },
@@ -1583,7 +1587,7 @@ const formatPlanName = (plan) => {
         )}
         
         {/* ✅ Show Online Status Toggle */}
-        <View style={styles.option}>
+        {user?.id && ( <View style={styles.option}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
             <TouchableOpacity 
               style={{ flexDirection: 'row', alignItems: 'center' }}
@@ -1597,7 +1601,7 @@ const formatPlanName = (plan) => {
               onValueChange={handleToggleOnlineStatus}
             />
           </View>
-        </View>
+        </View>)}
 
         {/* ✅ Roblox Username Section */}
         {user?.id && (
@@ -2349,18 +2353,18 @@ const formatPlanName = (plan) => {
                       style={{
                         backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
                         borderRadius: 12,
-                        padding: 12,
-                        marginBottom: 12,
+                        padding: 8,
+                        marginBottom: 8,
                         borderWidth: 1,
                         borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
                       }}
                     >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 4 }}>
                             {review.reviewedUserName || 'Unknown User'}
                           </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             {[1, 2, 3, 4, 5].map((star) => (
                               <Icon
                                 key={star}
@@ -2377,26 +2381,28 @@ const formatPlanName = (plan) => {
                             )}
                           </View>
                         </View>
-                        <TouchableOpacity
-                          onPress={() => {
-                            setShowGaveReviewsModal(false);
-                            handleEditReview(review);
-                          }}
-                          style={{ padding: 4 }}
-                        >
-                          <Icon name="create-outline" size={18} color={config.colors.primary} />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          {review.updatedAt && (
+                            <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#9ca3af' }}>
+                              {review.updatedAt.toDate ? 
+                                new Date(review.updatedAt.toDate()).toLocaleDateString() :
+                                new Date(review.updatedAt).toLocaleDateString()}
+                            </Text>
+                          )}
+                          <TouchableOpacity
+                            onPress={() => {
+                              setShowGaveReviewsModal(false);
+                              handleEditReview(review);
+                            }}
+                            style={{ padding: 4 }}
+                          >
+                            <Icon name="create-outline" size={18} color={config.colors.primary} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18, marginBottom: 6 }}>
+                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18 }}>
                         {review.review}
                       </Text>
-                      {review.updatedAt && (
-                        <Text style={{ fontSize: 11, color: isDarkMode ? '#9ca3af' : '#9ca3af' }}>
-                          {review.updatedAt.toDate ? 
-                            new Date(review.updatedAt.toDate()).toLocaleDateString() :
-                            new Date(review.updatedAt).toLocaleDateString()}
-                        </Text>
-                      )}
                     </View>
                   ))}
 
@@ -2484,18 +2490,18 @@ const formatPlanName = (plan) => {
                       style={{
                         backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
                         borderRadius: 12,
-                        padding: 12,
-                        marginBottom: 12,
+                        padding: 8,
+                        marginBottom: 8,
                         borderWidth: 1,
                         borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
                       }}
                     >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 4 }}>
                             {review.reviewerName || 'Unknown User'}
                           </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             {[1, 2, 3, 4, 5].map((star) => (
                               <Icon
                                 key={star}
@@ -2512,17 +2518,17 @@ const formatPlanName = (plan) => {
                             )}
                           </View>
                         </View>
+                        {review.updatedAt && (
+                          <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#9ca3af' }}>
+                            {review.updatedAt.toDate ? 
+                              new Date(review.updatedAt.toDate()).toLocaleDateString() :
+                              new Date(review.updatedAt).toLocaleDateString()}
+                          </Text>
+                        )}
                       </View>
-                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18, marginBottom: 6 }}>
+                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18 }}>
                         {review.review}
                       </Text>
-                      {review.updatedAt && (
-                        <Text style={{ fontSize: 11, color: isDarkMode ? '#9ca3af' : '#9ca3af' }}>
-                          {review.updatedAt.toDate ? 
-                            new Date(review.updatedAt.toDate()).toLocaleDateString() :
-                            new Date(review.updatedAt).toLocaleDateString()}
-                        </Text>
-                      )}
                     </View>
                   ))}
 
