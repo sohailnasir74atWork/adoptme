@@ -110,7 +110,7 @@ export const getStyles = (isDarkMode) =>
     },
     timestamp: {
       fontSize: 5,
-      color: isDarkMode ? 'lightfrey' : 'grey',
+      color: isDarkMode ? 'lightgrey' : 'grey',
       textAlign: 'right',
       paddingHorizontal: 5
     },
@@ -504,6 +504,12 @@ userNameText: {
   fontSize: 9,
   lineHeight: 14,
   paddingTop:2
+},
+userNameAdmin: {
+  color: isDarkMode ? 'lightgrey' : 'grey',
+  fontSize: 9,
+  lineHeight: 11,
+  // paddingTop:2
 },
 
 icon: {

@@ -121,11 +121,11 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const BASE_ADOPTME_URL = 'https://elvebredd.com';
 
 
+  // ✅ Fixed: 't' → 'tab', added Pressable + haptic for smooth switching
   const SettingsTabs = () => (
     <View
       style={{
         flexDirection: "row",
-        // marginHorizontal: 12,
         marginTop: 4,
         marginBottom: 4,
         backgroundColor: isDarkMode ? "#1b1b1b" : "#f2f2f2",
@@ -136,12 +136,16 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
       {[
         { key: "profile", label: "Profile Settings" },
         { key: "app", label: "App Settings" },
-      ].map((t) => {
-        const isActive = activeTab === t.key;
+      ].map((tab) => {
+        const isActive = activeTab === tab.key;
         return (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => setActiveTab(t.key)}
+          <Pressable
+            key={tab.key}
+            onPress={() => {
+              triggerHapticFeedback('impactLight');
+              setActiveTab(tab.key);
+            }}
+            android_ripple={{ color: 'rgba(255,255,255,0.2)', borderless: true }}
             style={{
               flex: 1,
               paddingVertical: 10,
@@ -157,9 +161,9 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
                 color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
               }}
             >
-              {t.label}
+              {tab.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -1576,7 +1580,7 @@ const formatPlanName = (plan) => {
                 onPress={() => handleToggleFlag(!localState.showFlag)}
               >
                 <Icon name="flag-outline" size={18} color={'white'} style={{backgroundColor:'#FF6B6B', padding:5, borderRadius:5}} />
-                <Text style={styles.optionText}>Hide Country Flag</Text>
+                <Text style={styles.optionText}>Country Flag</Text>
               </TouchableOpacity>
               <Switch
                 value={localState.showFlag ?? true}
@@ -1594,7 +1598,7 @@ const formatPlanName = (plan) => {
               onPress={() => handleToggleOnlineStatus(!localState.showOnlineStatus)}
             >
               <Icon name="radio-button-on-outline" size={18} color={'white'} style={{backgroundColor:'#4CAF50', padding:5, borderRadius:5}} />
-              <Text style={styles.optionText}>Hide Online Status</Text>
+              <Text style={styles.optionText}>Online Status</Text>
             </TouchableOpacity>
             <Switch
               value={localState.showOnlineStatus ?? true}

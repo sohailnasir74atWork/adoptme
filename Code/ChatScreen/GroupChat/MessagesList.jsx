@@ -385,7 +385,7 @@ const MessagesList = ({
 
   {!!item.isAdmin && (
     <View style={styles.adminContainer}>
-      <Text style={styles.userNameText}>{t("chat.admin")}</Text>
+      <Text style={[styles.userNameAdmin, {color:'white'}]}>{t("chat.admin")}</Text>
     </View>
   )}
 

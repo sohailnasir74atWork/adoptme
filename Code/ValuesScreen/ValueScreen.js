@@ -7,8 +7,8 @@ import {
   TextInput,
   Image,
   FlatList,
-  Pressable,
-  Platform,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { debounce } from '../Helper/debounce';
@@ -19,130 +19,61 @@ import CodesDrawer from './Code';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
+import { ref, update } from '@react-native-firebase/database';
 import { mixpanel } from '../AppHelper/MixPenel';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 
+
 const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
 
-// ✅ Move getImageUrl OUTSIDE component
-const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
-  if (!item || !item.name) return '';
-  if (isGG) {
-    const encoded = encodeURIComponent(item.name);
-    return `${baseImgUrlGG?.replace(/"/g, '')}/items/${encoded}.webp`;
-  }
-  if (!item.image || !baseImgUrl) return '';
-  return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-};
 
-// ✅ Move getItemValue OUTSIDE component  
-const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected) => {
-  if (!item) return 0;
-  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
-  if (simpleValueCategories.includes(item.type)) {
-    return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
-  }
-  if (!selectedValueType) return 0;
-  const valueKey = selectedValueType === 'n' ? 'nvalue' : selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-  const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-    isFlySelected ? ' - fly' : isRideSelected ? ' - ride' : ' - nopotion';
-  return Number((item[valueKey + modifierSuffix] || 0)).toFixed(2);
-};
+// const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
-// ✅ Simple badge component
 const ItemBadge = React.memo(({ type, style, styles }) => (
   <Text style={[styles.itemBadge, style]}>{type}</Text>
 ));
 
-// ✅ Badge button - use Pressable for better Android performance
 const BadgeButton = React.memo(({ badge, isActive, onPress, styles }) => {
-  const activeColor = badge === 'M' ? '#9b59b6' : badge === 'N' ? '#2ecc71' : 
-    badge === 'D' ? '#FF6666' : badge === 'F' ? '#3498db' : '#e74c3c';
+  let activeColor;
+  if (badge === 'M') {
+    activeColor = '#9b59b6'; // Purple for Mega
+  } else if (badge === 'N') {
+    activeColor = '#2ecc71'; // Green for Neon
+  } else if (badge === 'D') {
+    activeColor = '#FF6666'; // Default red
+  } else if (badge === 'F') {
+    activeColor = '#3498db'; // Blue for Fly
+  } else if (badge === 'R') {
+    activeColor = '#e74c3c'; // Red for Ride
+  }
 
   return (
-    <Pressable
+    <TouchableOpacity
       onPress={() => onPress(badge)}
       style={[
         styles.badgeButton,
         isActive && [styles.badgeButtonActive, { backgroundColor: activeColor }]
       ]}
-      android_ripple={{ color: 'rgba(255,255,255,0.2)', borderless: false }}
     >
       <Text style={[styles.badgeButtonText, isActive && styles.badgeButtonTextActive]}>
         {badge}
       </Text>
-    </Pressable>
+    </TouchableOpacity>
   );
 });
 
-// ✅ Simplified image component
 const ItemImage = React.memo(({ uri, badges, styles }) => (
   <View style={styles.imageWrapper}>
     <Image source={{ uri }} style={styles.icon} resizeMode="cover" />
-    <View style={styles.itemBadgesContainer}>{badges}</View>
+    <View style={styles.itemBadgesContainer}>
+      {badges}
+    </View>
   </View>
 ));
-
-// ✅ CRITICAL: Move ListItem OUTSIDE ValueScreen
-const ListItem = React.memo(({ 
-  item, 
-  itemSelection, 
-  onBadgePress, 
-  styles, 
-  onPress, 
-  isSelectable,
-  imageUrl,
-  currentValue,
-  hideBadge 
-}) => {
-  const badges = useMemo(() => {
-    if (hideBadge.includes(item.type?.toUpperCase())) return [];
-    const b = [];
-    if (itemSelection.isFly) b.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
-    if (itemSelection.isRide) b.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
-    if (itemSelection.valueType !== 'd') {
-      b.push(<ItemBadge key="value" type={itemSelection.valueType.toUpperCase()} 
-        style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon} styles={styles} />);
-    }
-    return b;
-  }, [item.type, itemSelection, styles, hideBadge]);
-
-  const handleBadgePress = useCallback((badge) => {
-    onBadgePress(item.id, badge);
-  }, [item.id, onBadgePress]);
-
-  return (
-    <Pressable 
-      style={styles.itemContainer} 
-      onPress={onPress} 
-      disabled={!isSelectable}
-      android_ripple={isSelectable ? { color: 'rgba(0,0,0,0.1)' } : null}
-    >
-      <View style={styles.imageContainer}>
-        <ItemImage uri={imageUrl} badges={badges} styles={styles} />
-        <View style={styles.itemInfo}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.value}>Value: {Number(currentValue).toLocaleString()}</Text>
-          <Text style={styles.rarity}>{item.rarity}</Text>
-        </View>
-      </View>
-      <View style={styles.badgesContainer}>
-        {VALUE_TYPES.map((badge) => (
-          <BadgeButton key={badge} badge={badge} isActive={itemSelection.valueType === badge.toLowerCase()} 
-            onPress={handleBadgePress} styles={styles} />
-        ))}
-        {MODIFIERS.map((badge) => (
-          <BadgeButton key={badge} badge={badge} isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide} 
-            onPress={handleBadgePress} styles={styles} />
-        ))}
-      </View>
-    </Pressable>
-  );
-});
 
 
 
@@ -152,46 +83,99 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const [selectedValueType, setSelectedValueType] = useState('d');
   const [isFlySelected, setIsFlySelected] = useState(false);
   const [isRideSelected, setIsRideSelected] = useState(false);
-  const { reload, theme } = useGlobalState();
-  const isDarkMode = theme === 'dark';
+  const [filterDropdownVisible, setFilterDropdownVisible] = useState(false);
+  const { analytics, appdatabase, isAdmin, reload, theme } = useGlobalState()
+  const isDarkMode = theme === 'dark'
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  const { localState, toggleAd } = useLocalState();
+  const { localState, toggleAd } = useLocalState()
+  const [valuesData, setValuesData] = useState([]);
   const [codesData, setCodesData] = useState([]);
   const { t } = useTranslation();
   const [filters, setFilters] = useState(['All']);
   const displayedFilter = selectedFilter === 'PREMIUM' ? 'GAME PASS' : selectedFilter;
+  const formatName = (name) => name.replace(/^\+/, '').replace(/\s+/g, '-');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [hasAdBeenShown, setHasAdBeenShown] = useState(false);
+  const [isAdLoaded, setIsAdLoaded] = useState(false);
+  const [isShowingAd, setIsShowingAd] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
+
+  const [isModalVisible, setIsModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [itemSelections, setItemSelections] = useState({});
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [showAd1, setShowAd1] = useState(localState?.showAd1);
-  const [sortOrder, setSortOrder] = useState('none');
+  const [sortOrder, setSortOrder] = useState('none'); // 'asc', 'desc', or 'none'
 
-  // ✅ Memoize these arrays
-  const hideBadge = useMemo(() => 
-    !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
-    [localState.isGG]
-  );
-  
-  const CATEGORIES = useMemo(() => 
-    !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
-    [localState.isGG]
-  );
 
-  // ✅ Stable reference for isSelectable
-  const isSelectable = fromChat || fromSetting;
+  const hideBadge = !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', , 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
 
-  // ✅ Stable keyExtractor for FlatList
-  const keyExtractor = useCallback((item) => item.id || item.name, []);
-  
-  // ✅ getItemLayout for faster scrolling (approximate item height)
-  const ITEM_HEIGHT = 140;
-  const getItemLayout = useCallback((data, index) => ({
-    length: ITEM_HEIGHT,
-    offset: ITEM_HEIGHT * Math.floor(index / 2),
-    index,
-  }), []);
+  // console.log(selectedFruits)
+
+  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress }) => {
+    const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
+    const { localState } = useLocalState()
+    const badges = [];
+
+    // Only show badges if the item type is not in hideBadge
+    if (!hideBadge.includes(item.type?.toUpperCase())) {
+      if (itemSelection.isFly) {
+        badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
+      }
+      if (itemSelection.isRide) {
+        badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
+      }
+      if (itemSelection.valueType !== 'd') {
+        badges.push(
+          <ItemBadge
+            key="value"
+            type={itemSelection.valueType.toUpperCase()}
+            style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
+            styles={styles}
+          />
+        );
+      }
+    }
+
+    return (
+      <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
+        <View style={styles.imageContainer}>
+          <ItemImage
+            uri={getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG)}
+            badges={badges}
+            styles={styles}
+          />
+          <View style={styles.itemInfo}>
+            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.value}>Value: {Number(currentValue).toLocaleString()}</Text>
+            <Text style={styles.rarity}>{item.rarity}</Text>
+          </View>
+        </View>
+
+        <View style={styles.badgesContainer}>
+          {VALUE_TYPES.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={itemSelection.valueType === badge.toLowerCase()}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+          {MODIFIERS.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+        </View>
+      </TouchableOpacity>
+    );
+  });
 
   const editValuesRef = useRef({
     Value: '',
@@ -259,6 +243,18 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     }
   }, [localState.isGG, localState.data, localState.ggData]);
 
+  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+    if (!item || !item.name) return '';
+
+    if (isGG) {
+      const encoded = encodeURIComponent(item.name);
+      // console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
+      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
+    }
+
+    if (!item.image || !baseImgUrl) return '';
+    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+  };
   // Memoize the parsed codes data
   const parsedCodesData = useMemo(() => {
     if (!localState.codes) return [];
@@ -289,6 +285,26 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   // }, [parsedValuesData]);
 
 
+  // Optimize the getItemValue function
+  const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
+    if (!item) return 0;
+
+    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
+    if (simpleValueCategories.includes(item.type)) {
+      return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
+    }
+
+    if (!selectedValueType) return 0;
+
+    const valueKey = selectedValueType === 'n' ? 'nvalue' :
+      selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+
+    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
+      isFlySelected ? ' - fly' :
+        isRideSelected ? ' - ride' : ' - nopotion';
+
+    return Number((item[valueKey + modifierSuffix] || 0)).toFixed(2);
+  }, []);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
 
@@ -364,60 +380,93 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   );
 
 
-  // ✅ Stable handler for item press - moved outside renderItem
-  const handleItemPress = useCallback((item, itemSelection, imageUrl, currentValue) => {
-    const fruitObj = {
-      Name: item.Name ?? item.name,
-      name: item.name,
-      value: Number(currentValue),
-      valueType: itemSelection.valueType,
-      isFly: itemSelection.isFly,
-      isRide: itemSelection.isRide,
-      imageUrl,
-      category: item.type,
-      id: item.id,
-    };
+  // Optimize the renderItem function
+  const renderItem = useCallback(
+    ({ item }) => {
+      // current selection for this item
+      const itemSelection =
+        itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
 
-    if (fromChat) {
-      setSelectedFruits(prev => [...(prev || []), fruitObj]);
-    }
-    if (fromSetting) {
-      if (owned) {
-        setOwnedPets(prev => [...(prev || []), fruitObj]);
-      } else {
-        setWishlistPets(prev => [...(prev || []), fruitObj]);
-      }
-    }
-  }, [fromChat, fromSetting, owned, setSelectedFruits, setOwnedPets, setWishlistPets]);
+      // value based on current badges
+      const currentValue = getItemValue(
+        item,
+        itemSelection.valueType,
+        itemSelection.isFly,
+        itemSelection.isRide
+      );
 
-  // ✅ Optimized renderItem - minimal work, stable references
-  const renderItem = useCallback(({ item }) => {
-    const itemSelection = itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
-    const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
-    const imageUrl = getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG);
+      // image url for this item
+      const imageUrl = getImageUrl(
+        item,
+        localState.isGG,
+        localState.imgurl,
+        localState.imgurlGG
+      );
 
-    return (
-      <ListItem
-        item={item}
-        itemSelection={itemSelection}
-        onBadgePress={handleItemBadgePress}
-        styles={styles}
-        onPress={() => handleItemPress(item, itemSelection, imageUrl, currentValue)}
-        isSelectable={isSelectable}
-        imageUrl={imageUrl}
-        currentValue={currentValue}
-        hideBadge={hideBadge}
-      />
-    );
-  }, [itemSelections, handleItemBadgePress, styles, localState.isGG, localState.imgurl, localState.imgurlGG, handleItemPress, isSelectable, hideBadge]);
+      const handlePress = () => {
+        const fruitObj = {
+          Name: item.Name ?? item.name,
+          name: item.name,
+          value: Number(currentValue),
+          valueType: itemSelection.valueType,
+          isFly: itemSelection.isFly,
+          isRide: itemSelection.isRide,
+          imageUrl,
+          category: item.type,
+          id: item.id,
+        };
+
+        // 👉 From chat: always add another copy
+        if (fromChat) {
+          setSelectedFruits(prev => [...(prev || []), fruitObj]);
+        }
+
+        // 👉 From settings: always add another copy
+        if (fromSetting) {
+          if (owned) {
+            setOwnedPets(prev => [...(prev || []), fruitObj]);
+          } else {
+            setWishlistPets(prev => [...(prev || []), fruitObj]);
+          }
+        }
+      };
+
+      // const isSelected = selectedFruits ? selectedFruits?.some(f => f.id === item.id): owned ? ownedPets?.some(f => f.id === item.id) : wishlistPets?.some(f => f.id === item.id) ;
 
 
-  // Update filters when data changes
+      return (
+        <ListItem
+          item={item}
+          itemSelection={itemSelection}
+          onBadgePress={handleItemBadgePress}
+          getItemValue={getItemValue}
+          styles={styles}
+          onPress={handlePress}  // ✅ pass handler
+        // isSelected={isSelected}
+        />
+      );
+    },
+    [
+      itemSelections,
+      handleItemBadgePress,
+      getItemValue,
+      styles,
+      localState.isGG,
+      localState.imgurl,
+      localState.imgurlGG,
+      selectedFruits,
+      ownedPets, wishlistPets
+    ]
+  );
+
+
+  // Update the useEffect for values data
   useEffect(() => {
+    setValuesData(parsedValuesData);
     setFilters(availableFilters);
-  }, [availableFilters]);
+  }, [parsedValuesData, availableFilters]);
 
-  // Update codes data
+  // Update the useEffect for codes data
   useEffect(() => {
     setCodesData(parsedCodesData);
   }, [parsedCodesData]);
@@ -501,19 +550,26 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 keyExtractor={(item, index) => `${item.id || item.name}-${index}`}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.selectedPetsList}
-                removeClippedSubviews={Platform.OS === 'android'}
                 renderItem={({ item, index }) => (
-                  <Pressable 
-                    style={styles.selectedPetCard} 
-                    onPress={() => handleRemoveSelected(index)}
-                    android_ripple={{ color: 'rgba(0,0,0,0.1)' }}
-                  >
-                    <Image source={{ uri: item.imageUrl }} style={styles.selectedPetImage} />
-                    <Text style={styles.selectedPetName} numberOfLines={1}>{item.name}</Text>
-                    <View style={styles.removePetButton}>
+                  <TouchableOpacity style={styles.selectedPetCard} onPress={() => handleRemoveSelected(index)}>
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.selectedPetImage}
+                    />
+                    <Text
+                      style={styles.selectedPetName}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+
+                    <View
+                      style={styles.removePetButton}
+
+                    >
                       <Icon name="close" size={8} color="#fff" />
                     </View>
-                  </Pressable>
+                  </TouchableOpacity>
                 )}
               />
             </View>
@@ -579,19 +635,17 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           {filteredData.length > 0 ? (
             <FlatList
               data={filteredData}
-              keyExtractor={keyExtractor}
+              keyExtractor={(item) => item.id || item.name}
               renderItem={renderItem}
               showsVerticalScrollIndicator={false}
-              removeClippedSubviews={Platform.OS === 'android'}
+              removeClippedSubviews={true}
               numColumns={2}
               columnWrapperStyle={styles.columnWrapper}
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              maxToRenderPerBatch={6}
-              windowSize={3}
-              initialNumToRender={6}
-              updateCellsBatchingPeriod={50}
-              getItemLayout={getItemLayout}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              initialNumToRender={10}
             />
           ) : (
             <Text style={[styles.description, { textAlign: 'center', marginTop: 20, color: 'gray' }]}>
