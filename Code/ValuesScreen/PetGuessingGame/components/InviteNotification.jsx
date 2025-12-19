@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Image,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
@@ -18,6 +19,8 @@ const InviteNotification = ({ currentUser, onAccept }) => {
   const isDarkMode = theme === 'dark';
   const [pendingInvites, setPendingInvites] = useState([]);
   const [currentInvite, setCurrentInvite] = useState(null);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isDeclining, setIsDeclining] = useState(false);
   const slideY = useRef(new Animated.Value(200)).current;
 
   useEffect(() => {
@@ -57,36 +60,52 @@ const InviteNotification = ({ currentUser, onAccept }) => {
   }, [currentInvite]);
 
   const handleAccept = async () => {
-    if (!currentInvite) return;
+    if (!currentInvite || isAccepting) return;
 
-    const success = await acceptGameInvite(
-      firestoreDB,
-      currentInvite.roomId,
-      currentUser.id,
-      {
-        displayName: currentUser.displayName,
-        avatar: currentUser.avatar,
-      }
-    );
+    setIsAccepting(true);
+    
+    try {
+      const success = await acceptGameInvite(
+        firestoreDB,
+        currentInvite.roomId,
+        currentUser.id,
+        {
+          displayName: currentUser.displayName,
+          avatar: currentUser.avatar,
+        }
+      );
 
-    if (success) {
-      showSuccessMessage('Joined!', 'You joined the game room!');
-      setCurrentInvite(null);
-      if (onAccept) {
-        onAccept(currentInvite.roomId);
+      if (success) {
+        showSuccessMessage('Joined!', 'You joined the game room!');
+        setCurrentInvite(null);
+        if (onAccept) {
+          onAccept(currentInvite.roomId);
+        }
       }
+    } catch (error) {
+      console.error('Error accepting invite:', error);
+    } finally {
+      setIsAccepting(false);
     }
   };
 
   const handleDecline = async () => {
-    if (!currentInvite) return;
+    if (!currentInvite || isDeclining) return;
 
-    await declineGameInvite(firestoreDB, currentInvite.roomId, currentUser.id);
-    setCurrentInvite(null);
+    setIsDeclining(true);
+    
+    try {
+      await declineGameInvite(firestoreDB, currentInvite.roomId, currentUser.id);
+      setCurrentInvite(null);
 
-    // Show next invite if available
-    if (pendingInvites.length > 1) {
-      setCurrentInvite(pendingInvites[1]);
+      // Show next invite if available
+      if (pendingInvites.length > 1) {
+        setCurrentInvite(pendingInvites[1]);
+      }
+    } catch (error) {
+      console.error('Error declining invite:', error);
+    } finally {
+      setIsDeclining(false);
     }
   };
 
@@ -129,16 +148,34 @@ const InviteNotification = ({ currentUser, onAccept }) => {
         </View>
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.acceptButton, { backgroundColor: '#10B981' }]}
+            style={[
+              styles.acceptButton,
+              { backgroundColor: '#10B981' },
+              isAccepting && styles.buttonDisabled,
+            ]}
             onPress={handleAccept}
+            disabled={isAccepting}
           >
-            <Icon name="checkmark" size={20} color="#fff" />
+            {isAccepting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Icon name="checkmark" size={20} color="#fff" />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.declineButton, { backgroundColor: '#EF4444' }]}
+            style={[
+              styles.declineButton,
+              { backgroundColor: '#EF4444' },
+              (isAccepting || isDeclining) && styles.buttonDisabled,
+            ]}
             onPress={handleDecline}
+            disabled={isAccepting || isDeclining}
           >
-            <Icon name="close" size={20} color="#fff" />
+            {isDeclining ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Icon name="close" size={20} color="#fff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -203,6 +240,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
 

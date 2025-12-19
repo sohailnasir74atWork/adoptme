@@ -70,6 +70,10 @@ const ProfileBottomDrawer = ({
   // joined text
   const [createdAtText, setCreatedAtText] = useState(null);
 
+  // 💰 user points and game wins
+  const [userPoints, setUserPoints] = useState(null);
+  const [gameWins, setGameWins] = useState(null);
+
   // 📝 reviews list (from Firestore /reviews where toUserId == selectedUserId)
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
@@ -262,6 +266,8 @@ const ProfileBottomDrawer = ({
       setLastReviewDoc(null);
       setHasMoreReviews(false);
       setCreatedAtText(null);
+      setUserPoints(null);
+      setGameWins(null);
     }
   }, [isVisible]);
 
@@ -275,9 +281,10 @@ const ProfileBottomDrawer = ({
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
-        const [avgSnap, createdSnap] = await Promise.all([
+        const [avgSnap, createdSnap, userSnap] = await Promise.all([
           get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
+          get(ref(appdatabase, `users/${selectedUserId}`)),
         ]);
 
         if (!isMounted) return;
@@ -306,11 +313,23 @@ const ProfileBottomDrawer = ({
         } else {
           setCreatedAtText(null);
         }
+
+        // ✅ Load user points and game wins
+        if (userSnap.exists()) {
+          const userData = userSnap.val();
+          setUserPoints(userData.rewardPoints || 0);
+          setGameWins(userData.petGameWins || 0);
+        } else {
+          setUserPoints(0);
+          setGameWins(0);
+        }
       } catch (err) {
         console.log('Rating load error:', err);
         if (isMounted) {
           setRatingSummary(null);
           setCreatedAtText(null);
+          setUserPoints(null);
+          setGameWins(null);
         }
       } finally {
         if (isMounted) setLoadingRating(false);
@@ -705,59 +724,125 @@ const ProfileBottomDrawer = ({
 
             {/* ⭐ Rating summary - Below profile picture section */}
             {loadDetails && (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  marginBottom: 12,
-                  marginTop: 8,
-                }}
-              >
-                {loadingRating ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={config.colors.primary}
-                  />
-                ) : ratingSummary ? (
-                  <>
-                    {renderStars(ratingSummary.value)}
+              <View style={{ marginBottom: 12, marginTop: 8 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  {loadingRating ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={config.colors.primary}
+                    />
+                  ) : ratingSummary ? (
+                    <>
+                      {renderStars(ratingSummary.value)}
+                      <Text
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 12,
+                          color: isDarkMode ? '#e5e7eb' : '#4b5563',
+                        }}
+                      >
+                        {ratingSummary.value.toFixed(1)} / 5 ·{' '}
+                        {ratingSummary.count} rating
+                        {ratingSummary.count === 1 ? '' : 's'}
+                      </Text>
+                    </>
+                  ) : (
                     <Text
                       style={{
-                        marginLeft: 6,
                         fontSize: 12,
-                        color: isDarkMode ? '#e5e7eb' : '#4b5563',
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
                       }}
                     >
-                      {ratingSummary.value.toFixed(1)} / 5 ·{' '}
-                      {ratingSummary.count} rating
-                      {ratingSummary.count === 1 ? '' : 's'}
+                      Not rated yet
                     </Text>
-                  </>
-                ) : (
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    }}
-                  >
-                    Not rated yet
-                  </Text>
-                )}
+                  )}
 
-                {!loadingRating && createdAtText && (
-                  <Text
+                  {!loadingRating && createdAtText && (
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        backgroundColor: isDarkMode ? '#FACC15' : '#16A34A',
+                        paddingHorizontal: 5,
+                        borderRadius: 4,
+                        paddingVertical: 1,
+                        color: 'white',
+                        marginLeft: 5,
+                      }}
+                    >
+                      Joined {createdAtText}
+                    </Text>
+                  )}
+                </View>
+
+                {/* 💰 Points and Game Wins */}
+                {!loadingRating && (userPoints !== null || gameWins !== null) && (
+                  <View
                     style={{
-                      fontSize: 10,
-                      backgroundColor: isDarkMode ? '#FACC15' : '#16A34A',
-                      paddingHorizontal: 5,
-                      borderRadius: 4,
-                      paddingVertical: 1,
-                      color: 'white',
-                      marginLeft: 5,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginTop: 4,
                     }}
                   >
-                    Joined {createdAtText}
-                  </Text>
+                    {userPoints !== null && userPoints > 0 && (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: isDarkMode ? '#1e293b' : '#f0f9ff',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#334155' : '#bae6fd',
+                        }}
+                      >
+                        <Icon name="diamond" size={14} color="#10B981" />
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontFamily: 'Lato-Bold',
+                            color: isDarkMode ? '#10B981' : '#059669',
+                            marginLeft: 4,
+                          }}
+                        >
+                          {Number(userPoints).toLocaleString()} pts
+                        </Text>
+                      </View>
+                    )}
+                    {gameWins !== null && gameWins > 0 && (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: isDarkMode ? '#1e293b' : '#fef3c7',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#334155' : '#fde68a',
+                        }}
+                      >
+                        <Icon name="trophy" size={14} color="#F59E0B" />
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontFamily: 'Lato-Bold',
+                            color: isDarkMode ? '#F59E0B' : '#D97706',
+                            marginLeft: 4,
+                          }}
+                        >
+                          {gameWins}x win
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 )}
               </View>
             )}

@@ -24,6 +24,11 @@ const NotificationHandler = lazy(() =>
   import('./Code/Firebase/FrontendNotificationHandling'),
 );
 
+// 🎮 Lazy load Global Invite Toast for game invites
+const GlobalInviteToast = lazy(() =>
+  import('./Code/ValuesScreen/PetGuessingGame/components/GlobalInviteToast'),
+);
+
 // ✅ Create a messaging instance (default Firebase app)
 const messaging = getMessaging();
 
@@ -78,6 +83,11 @@ const App = React.memo(() => (
           {/* Lazy loaded Notification Handler */}
           <Suspense fallback={null}>
             <NotificationHandler />
+          </Suspense>
+
+          {/* 🎮 Global Invite Toast - Shows on any screen */}
+          <Suspense fallback={null}>
+            <GlobalInviteToast />
           </Suspense>
         </GlobalStateProvider>
       </LocalStateProvider>

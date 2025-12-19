@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@fidme/react-native-wheel-of-fortune": "^2.1.4",
     "@invertase/react-native-apple-authentication": "^2.4.0",
     "@notifee/react-native": "^9.1.8",
     "@react-native-camera-roll/camera-roll": "^7.10.2",
@@ -51,6 +52,7 @@
     "react-native-safe-area-context": "^5.2.0",
     "react-native-screens": "^4.6.0",
     "react-native-share": "^12.0.3",
+    "react-native-svg": "^15.15.1",
     "react-native-system-navigation-bar": "^2.6.4",
     "react-native-vector-icons": "^10.2.0",
     "react-native-view-shot": "^4.0.3",

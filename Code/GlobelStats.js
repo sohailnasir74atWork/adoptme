@@ -619,23 +619,41 @@ export const GlobalStateProvider = ({ children }) => {
   }, [user?.id, appdatabase, setUserOnline, setUserOffline, localState?.showOnlineStatus]);
 
   // ✅ Handle app state changes (background/foreground)
+  // When app goes to background: Remove from online_users list immediately
+  // When app comes to foreground: Add back to online_users list (only if showOnlineStatus is enabled and user is actively watching)
   useEffect(() => {
     if (!user?.id || !appdatabase) return;
-
+    
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // ✅ App came to foreground - mark user online
-        setUserOnline();
+        // ✅ App came to foreground - user is actively watching/using the app
+        // Only add to online_users if user has showOnlineStatus enabled
+        if (localState?.showOnlineStatus !== false) {
+          setUserOnline();
+        }
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // ✅ App went to background - mark user offline
-        setUserOffline();
+        // ✅ App went to background - immediately remove from online_users
+        // This ensures user is NOT shown as online when app is in background
+        const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
+        onlineUsersRef.remove().catch((error) => 
+          console.error("🔥 Error removing from online_users on background:", error)
+        );
+        
+        // Also mark as offline in users node
+        const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
+        set(userOnlineRef, false).catch((error) => 
+          console.error("🔥 Error setting offline status on background:", error)
+        );
+        
+        // Update local state to reflect offline status
+        updateLocalStateAndDatabase('online', false);
       }
     });
 
     return () => {
       subscription?.remove();
     };
-  }, [user?.id, appdatabase, setUserOnline, setUserOffline]);
+  }, [user?.id, appdatabase, setUserOnline, localState?.showOnlineStatus, updateLocalStateAndDatabase]);
 
   // ✅ Listen to online users count (COST-EFFECTIVE: only listens to /online_users, not all users)
   useEffect(() => {

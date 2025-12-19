@@ -1,188 +1,161 @@
-// PlayerCards.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
-  Animated,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
 
-const PlayerCards = ({ roomData, currentUser }) => {
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 60) / 2;
+
+const PlayerCards = ({ roomData, currentUserId }) => {
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
 
-  const [timeLeft, setTimeLeft] = useState(60);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  const picks = roomData?.gameData?.picks || {};
-  const countdownEnd = roomData?.gameData?.countdownEnd || null;
-  const allPicked = roomData?.gameData?.allPicked || false;
-  const players = roomData?.players || {};
-
-  // Countdown timer
-  useEffect(() => {
-    if (!countdownEnd || allPicked) {
-      setTimeLeft(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((countdownEnd - Date.now()) / 1000));
-      setTimeLeft(remaining);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [countdownEnd, allPicked]);
-
-  // Pulse animation for urgent countdown
-  useEffect(() => {
-    if (timeLeft <= 10 && timeLeft > 0 && !allPicked) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [timeLeft, allPicked, pulseAnim]);
-
-  // Get player cards data
-  const playerCards = useMemo(() => {
-    return Object.entries(players).map(([playerId, playerData]) => {
-      const pick = picks[playerId];
-      const hasPicked = !!pick;
-      const isCurrentUser = playerId === currentUser?.id;
-      const isHost = playerId === roomData?.hostId;
-
+  const players = useMemo(() => {
+    if (!roomData?.players) return [];
+    
+    const playerOrder = roomData.gameData?.playerOrder || Object.keys(roomData.players);
+    const scores = roomData.gameData?.scores || {};
+    const spinHistory = roomData.gameData?.spinHistory || [];
+    
+    return playerOrder.map(playerId => {
+      // Get winning pets for this player from spin history
+      const winningPets = spinHistory
+        .filter(spin => spin.playerId === playerId && spin.petImage)
+        .map(spin => ({
+          name: spin.petName,
+          image: spin.petImage,
+          value: spin.petValue,
+        }));
+      
       return {
-        playerId,
-        playerName: playerData.displayName || 'Anonymous',
-        avatar: playerData.avatar,
-        hasPicked,
-        pick,
-        isCurrentUser,
-        isHost,
+        id: playerId,
+        ...roomData.players[playerId],
+        score: scores[playerId] || 0,
+        isHost: playerId === roomData.hostId,
+        winningPets,
       };
     });
-  }, [players, picks, currentUser?.id, roomData?.hostId]);
+  }, [roomData]);
 
-  if (playerCards.length === 0) return null;
+  const currentTurnPlayerId = useMemo(() => {
+    const playerOrder = roomData?.gameData?.playerOrder || [];
+    const currentTurnIndex = roomData?.gameData?.currentTurnIndex || 0;
+    return playerOrder[currentTurnIndex];
+  }, [roomData]);
+
+  const currentRound = roomData?.gameData?.currentRound || 1;
+  const totalRounds = roomData?.gameData?.totalRounds || 3;
+
+  // Determine winner if game is finished
+  const winner = useMemo(() => {
+    if (roomData?.status !== 'finished') return null;
+    
+    let maxScore = -1;
+    let winnerId = null;
+    
+    players.forEach(player => {
+      if (player.score > maxScore) {
+        maxScore = player.score;
+        winnerId = player.id;
+      }
+    });
+    
+    return winnerId;
+  }, [roomData?.status, players]);
 
   return (
     <View style={styles.container}>
-      {/* Timer Display */}
-      {!allPicked && countdownEnd && (
-        <View style={styles.timerContainer}>
-          <Animated.View
-            style={[
-              styles.timerCircle,
-              {
-                transform: [{ scale: pulseAnim }],
-                backgroundColor: timeLeft <= 10 ? '#EF4444' : timeLeft <= 30 ? '#F59E0B' : '#10B981',
-              },
-            ]}
-          >
-            <Text style={styles.timerText}>{timeLeft}</Text>
-          </Animated.View>
-          <Text style={[styles.timerLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-            {allPicked ? 'All Locked!' : 'Time Remaining'}
-          </Text>
-        </View>
-      )}
+      {/* Round indicator */}
+      <View style={[styles.roundIndicator, { backgroundColor: isDarkMode ? '#2a2a2a' : '#f3f4f6' }]}>
+        <Text style={[styles.roundText, { color: isDarkMode ? '#fff' : '#000' }]}>
+          Round {currentRound} of {totalRounds}
+        </Text>
+      </View>
 
-      {allPicked && (
-        <View style={styles.allLockedBanner}>
-          <Icon name="lock-closed" size={20} color="#10B981" />
-          <Text style={styles.allLockedText}>All Players Locked! 🎉</Text>
-        </View>
-      )}
+      {/* Player cards */}
+      <View style={styles.cardsContainer}>
+        {players.map((player, index) => {
+          const isCurrentTurn = player.id === currentTurnPlayerId && roomData?.status === 'playing';
+          const isWinner = player.id === winner;
+          const isMe = player.id === currentUserId;
 
-      {/* Player Cards Grid */}
-      <View style={styles.cardsGrid}>
-        {playerCards.map((card) => (
-          <View
-            key={card.playerId}
-            style={[
-              styles.playerCard,
-              {
-                backgroundColor: card.hasPicked
-                  ? isDarkMode ? '#1e3a1e' : '#d1fae5'
-                  : isDarkMode ? '#1e1e1e' : '#ffffff',
-                borderColor: card.hasPicked ? '#10B981' : isDarkMode ? '#333333' : '#e5e7eb',
-                borderWidth: card.isCurrentUser ? 2 : 1,
-              },
-            ]}
-          >
-            {/* Player Avatar & Name */}
-            <View style={styles.cardHeader}>
-              <Image
-                source={{
-                  uri:
-                    card.avatar ||
-                    'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                }}
-                style={styles.cardAvatar}
-              />
-              <View style={styles.cardNameContainer}>
-                <Text style={[styles.cardPlayerName, { color: isDarkMode ? '#fff' : '#000' }]} numberOfLines={1}>
-                  {card.playerName}
-                  {card.isHost && ' 👑'}
-                </Text>
-                {card.isCurrentUser && (
-                  <Text style={[styles.youLabel, { color: '#8B5CF6' }]}>You</Text>
-                )}
-              </View>
-            </View>
-
-            {/* Status */}
-            {card.hasPicked ? (
-              <View style={styles.lockedContainer}>
-                <Icon name="checkmark-circle" size={24} color="#10B981" />
-                <Text style={[styles.lockedText, { color: '#10B981' }]}>Locked</Text>
-                {card.pick.petImage && (
-                  <Image
-                    source={{ uri: card.pick.petImage }}
-                    style={styles.lockedPetImage}
-                    resizeMode="contain"
-                  />
-                )}
-                <Text style={[styles.lockedPetName, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]} numberOfLines={1}>
-                  {card.pick.petName}
-                  {card.pick.isRandom && ' (Random)'}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.selectingContainer}>
-                <View style={styles.selectingIndicator}>
-                  <View style={[styles.selectingDot, { backgroundColor: '#8B5CF6' }]} />
-                  <View style={[styles.selectingDot, { backgroundColor: '#8B5CF6' }]} />
-                  <View style={[styles.selectingDot, { backgroundColor: '#8B5CF6' }]} />
+          return (
+            <View
+              key={player.id}
+              style={[
+                styles.card,
+                { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' },
+                isCurrentTurn && styles.cardActive,
+                isWinner && styles.cardWinner,
+              ]}
+            >
+              {/* Turn/Winner indicator */}
+              {isCurrentTurn && (
+                <View style={styles.turnBadge}>
+                  <Icon name="arrow-forward-circle" size={10} color="#fff" />
+                  <Text style={styles.turnBadgeText}>Turn</Text>
                 </View>
-                <Text style={[styles.selectingText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-                  Selecting...
-                </Text>
-                {!allPicked && countdownEnd && (
-                  <Text style={[styles.timeRemaining, { color: timeLeft <= 10 ? '#EF4444' : '#F59E0B' }]}>
-                    {timeLeft}s left
-                  </Text>
+              )}
+              {isWinner && (
+                <View style={[styles.turnBadge, styles.winnerBadge]}>
+                  <Icon name="trophy" size={10} color="#fff" />
+                  <Text style={styles.turnBadgeText}>Winner!</Text>
+                </View>
+              )}
+
+              {/* Top: Avatar with Host Badge */}
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={{
+                    uri: player.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                  }}
+                  style={styles.avatar}
+                />
+                {player.isHost && (
+                  <View style={styles.hostBadge}>
+                    <Text style={styles.hostBadgeText}>👑</Text>
+                  </View>
                 )}
               </View>
-            )}
-          </View>
-        ))}
+
+              {/* Center: Player Name */}
+              <Text 
+                style={[styles.playerName, { color: isDarkMode ? '#fff' : '#000' }]}
+                numberOfLines={1}
+              >
+                {player.displayName || 'Anonymous'}
+              </Text>
+
+              {/* Center: Score */}
+              <View style={styles.scoreContainer}>
+                <Text style={[styles.score, isWinner && styles.scoreWinner]}>
+                  {Number(player.score || 0).toLocaleString()}
+                </Text>
+              </View>
+
+              {/* Bottom: Winning Pet Images */}
+              {player.winningPets && player.winningPets.length > 0 && (
+                <View style={styles.petsContainer}>
+                  {player.winningPets.map((pet, petIndex) => (
+                    <View key={petIndex} style={styles.petImageWrapper}>
+                      <Image
+                        source={{ uri: pet.image }}
+                        style={styles.petImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -190,123 +163,143 @@ const PlayerCards = ({ roomData, currentUser }) => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 12,
+    paddingVertical: 4,
   },
-  timerContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  timerCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+  roundIndicator: {
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
     marginBottom: 8,
   },
-  timerText: {
-    fontSize: 24,
-    fontFamily: 'Lato-Bold',
-    color: '#fff',
-  },
-  timerLabel: {
+  roundText: {
     fontSize: 12,
-    fontFamily: 'Lato-Regular',
+    fontFamily: 'Lato-Bold',
   },
-  allLockedBanner: {
+  cardsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#d1fae5',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
     gap: 8,
   },
-  allLockedText: {
-    fontSize: 14,
-    fontFamily: 'Lato-Bold',
-    color: '#065f46',
+  card: {
+    width: CARD_WIDTH,
+    minHeight: 80,
+    padding: 10,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardsGrid: {
+  cardActive: {
+    borderWidth: 1.5,
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOpacity: 0.25,
+  },
+  cardWinner: {
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOpacity: 0.25,
+  },
+  turnBadge: {
+    position: 'absolute',
+    top: -6,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 10,
+  },
+  winnerBadge: {
+    backgroundColor: '#F59E0B',
+  },
+  turnBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontFamily: 'Lato-Bold',
+    marginLeft: 2,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+  },
+  hostBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  hostBadgeText: {
+    fontSize: 9,
+  },
+  playerName: {
+    fontSize: 10,
+    fontFamily: 'Lato-Bold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  scoreContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  score: {
+    fontSize: 18,
+    fontFamily: 'Lato-Bold',
+    color: '#10B981',
+  },
+  scoreWinner: {
+    color: '#F59E0B',
+  },
+  petsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
     justifyContent: 'center',
-  },
-  playerCard: {
-    width: '48%',
-    minWidth: 140,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cardAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  cardNameContainer: {
-    flex: 1,
-  },
-  cardPlayerName: {
-    fontSize: 12,
-    fontFamily: 'Lato-Bold',
-  },
-  youLabel: {
-    fontSize: 10,
-    fontFamily: 'Lato-Regular',
-  },
-  lockedContainer: {
-    alignItems: 'center',
-    paddingTop: 4,
-  },
-  lockedText: {
-    fontSize: 12,
-    fontFamily: 'Lato-Bold',
     marginTop: 4,
-    marginBottom: 6,
-  },
-  lockedPetImage: {
-    width: 50,
-    height: 50,
-    marginBottom: 4,
-  },
-  lockedPetName: {
-    fontSize: 10,
-    fontFamily: 'Lato-Regular',
-    textAlign: 'center',
-  },
-  selectingContainer: {
-    alignItems: 'center',
-    paddingTop: 8,
-  },
-  selectingIndicator: {
-    flexDirection: 'row',
     gap: 4,
-    marginBottom: 6,
   },
-  selectingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  petImageWrapper: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 0.5,
+    borderColor: '#e5e7eb',
   },
-  selectingText: {
-    fontSize: 11,
-    fontFamily: 'Lato-Regular',
-  },
-  timeRemaining: {
-    fontSize: 10,
-    fontFamily: 'Lato-Bold',
-    marginTop: 4,
+  petImage: {
+    width: '100%',
+    height: '100%',
   },
 });
 
 export default PlayerCards;
-

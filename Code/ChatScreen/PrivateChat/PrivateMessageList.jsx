@@ -251,7 +251,7 @@ const PrivateMessageList = ({
   </View>
 )}
           <MenuTrigger
-            onLongPress={() => Vibration.vibrate(50)}
+            onLongPress={() => triggerHapticFeedback('impactMedium')}
             customStyles={{ triggerTouchable: { activeOpacity: 1 } }}
           >
             {/* Optional image message */}

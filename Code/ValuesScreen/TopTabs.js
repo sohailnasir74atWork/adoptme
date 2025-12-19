@@ -51,12 +51,12 @@ const CustomTopTabs = ({ selectedTheme }) => {
         icon: "newspaper-outline",
         iconActive: "newspaper",
       },
-      // {
-      //   label: "Pet Game",
-      //   key: "petGame",
-      //   icon: "game-controller-outline",
-      //   iconActive: "game-controller",
-      // },
+      {
+        label: "Pet Game",
+        key: "petGame",
+        icon: "game-controller-outline",
+        iconActive: "game-controller",
+      },
     ];
 
     if (isAdmin) {

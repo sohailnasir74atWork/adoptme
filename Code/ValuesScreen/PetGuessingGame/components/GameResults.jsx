@@ -1,19 +1,58 @@
-// GameResults.jsx
-import React, { useMemo } from 'react';
+// GameResults.jsx - Final scores and spin history
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
+  TouchableOpacity,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
+import { ref, get, onValue } from '@react-native-firebase/database';
 
 const GameResults = ({ roomData, currentUser }) => {
-  const { theme } = useGlobalState();
+  const { theme, appdatabase } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [userPoints, setUserPoints] = useState(null);
+  const [userWins, setUserWins] = useState(null);
 
-  // Calculate leaderboard
+  // Fetch and listen to user points and wins
+  useEffect(() => {
+    if (!appdatabase || !currentUser?.id) return;
+
+    const userRef = ref(appdatabase, `users/${currentUser.id}`);
+    
+    // Initial fetch
+    const fetchUserStats = async () => {
+      try {
+        const snapshot = await get(userRef);
+        if (snapshot.exists()) {
+          const userData = snapshot.val();
+          setUserPoints(userData.rewardPoints || 0);
+          setUserWins(userData.petGameWins || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching user stats:', error);
+      }
+    };
+
+    fetchUserStats();
+
+    // Listen for real-time updates
+    const unsubscribe = onValue(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        setUserPoints(userData.rewardPoints || 0);
+        setUserWins(userData.petGameWins || 0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [appdatabase, currentUser?.id]);
+
+  // Calculate leaderboard from scores
   const leaderboard = useMemo(() => {
     if (!roomData?.gameData?.scores || !roomData?.players) return [];
 
@@ -32,143 +71,171 @@ const GameResults = ({ roomData, currentUser }) => {
       .sort((a, b) => b.score - a.score);
   }, [roomData?.gameData?.scores, roomData?.players, currentUser?.id, roomData?.hostId]);
 
-  const currentRound = roomData?.gameData?.currentRound || 0;
-  const totalRounds = roomData?.gameData?.totalRounds || 5;
   const isGameFinished = roomData?.status === 'finished';
+  const spinHistory = roomData?.gameData?.spinHistory || [];
+  const timeoutReason = roomData?.gameData?.timeoutReason;
 
-  // Get round results
-  const roundResults = useMemo(() => {
-    if (!roomData?.gameData?.answers || !roomData?.gameData?.challenges) return null;
-    
-    const round = currentRound;
-    const answers = roomData.gameData.answers[round] || {};
-    const challenge = roomData.gameData.challenges[round];
-
-    if (!challenge) return null;
-
-    return {
-      round,
-      challenge,
-      answers: Object.entries(answers).map(([playerId, answerData]) => ({
-        playerId,
-        playerName: roomData.players?.[playerId]?.displayName || 'Anonymous',
-        selectedAnswer: answerData.selectedAnswer,
-        isCorrect: answerData.isCorrect,
-        timestamp: answerData.timestamp,
-      })),
-    };
-  }, [roomData?.gameData?.answers, roomData?.gameData?.challenges, currentRound, roomData?.players]);
+  // Get winner
+  const winner = useMemo(() => {
+    if (!isGameFinished || leaderboard.length === 0 || timeoutReason) return null;
+    return leaderboard[0];
+  }, [isGameFinished, leaderboard, timeoutReason]);
 
   return (
     <View style={styles.container}>
-      {/* Compact Leaderboard */}
-      <View style={styles.compactHeader}>
-        <Icon name="trophy" size={18} color="#F59E0B" />
-        <Text style={[styles.compactTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
-          {isGameFinished ? 'Final Results' : 'Scores'}
-        </Text>
-      </View>
-
-      <View style={styles.compactLeaderboard}>
-        {leaderboard.map((player, index) => {
-          const isTopThree = index < 3;
-          const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32']; // Gold, Silver, Bronze
-
-          return (
-            <View
-              key={player.id}
-              style={[
-                styles.compactLeaderboardItem,
-                {
-                  backgroundColor: player.isCurrentUser
-                    ? isDarkMode ? '#2a2a2a' : '#f3f4f6'
-                    : 'transparent',
-                },
-              ]}
-            >
-              {isTopThree ? (
-                <View
-                  style={[
-                    styles.compactMedal,
-                    { backgroundColor: medalColors[index] },
-                  ]}
-                >
-                  <Text style={styles.compactMedalText}>{index + 1}</Text>
-                </View>
-              ) : (
-                <Text style={[styles.compactRank, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-                  {index + 1}
-                </Text>
-              )}
-
-              <Image
-                source={{
-                  uri:
-                    player.avatar ||
-                    'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                }}
-                style={styles.compactAvatar}
-              />
-
-              <Text style={[styles.compactPlayerName, { color: isDarkMode ? '#fff' : '#000' }]} numberOfLines={1}>
-                {player.name}
-                {player.isHost && ' 👑'}
-                {player.isCurrentUser && ' (You)'}
-              </Text>
-
-              <View style={styles.compactScoreContainer}>
-                <Icon name="star" size={14} color="#F59E0B" />
-                <Text style={[styles.compactScore, { color: isDarkMode ? '#fff' : '#000' }]}>
-                  {player.score}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Compact Round Results */}
-      {roundResults && (
-        <View style={styles.compactRoundResults}>
-          <Text style={[styles.compactRoundTitle, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-            Round {roundResults.round}: {roundResults.challenge.correctAnswer}
+      {/* Timeout Message */}
+      {timeoutReason && (
+        <View style={[styles.timeoutSection, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fef2f2' }]}>
+          <Text style={styles.timeoutEmoji}>⏱️</Text>
+          <Text style={[styles.timeoutText, { color: isDarkMode ? '#fff' : '#000' }]}>
+            Game Ended
           </Text>
-          <View style={styles.compactAnswersList}>
-            {roundResults.answers.map((answer) => (
-              <View
-                key={answer.playerId}
-                style={styles.compactAnswerItem}
-              >
-                <Text style={[styles.compactAnswerName, { color: isDarkMode ? '#fff' : '#000' }]} numberOfLines={1}>
-                  {answer.playerName}
-                </Text>
-                {answer.isCorrect ? (
-                  <Icon name="checkmark-circle" size={16} color="#10B981" />
-                ) : (
-                  <Icon name="close-circle" size={16} color="#EF4444" />
-                )}
-              </View>
-            ))}
-          </View>
+          <Text style={[styles.timeoutReason, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+            {timeoutReason}
+          </Text>
         </View>
       )}
 
-      {/* Compact Progress */}
-      {!isGameFinished && (
-        <View style={styles.compactProgress}>
-          <View style={styles.compactProgressBar}>
-            <View
-              style={[
-                styles.compactProgressFill,
-                {
-                  width: `${(currentRound / totalRounds) * 100}%`,
-                },
-              ]}
-            />
-          </View>
-          <Text style={[styles.compactProgressText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-            {currentRound}/{totalRounds}
+      {/* Winner Announcement */}
+      {winner && !timeoutReason && (
+        <View style={styles.winnerSection}>
+          <Text style={styles.winnerEmoji}>🏆</Text>
+          <Text style={[styles.winnerText, { color: isDarkMode ? '#fff' : '#000' }]}>
+            {winner.isCurrentUser ? 'You Win!' : `${winner.name} Wins!`}
           </Text>
+          <Text style={styles.winnerScore}>
+            {Number(winner.score).toLocaleString()} points
+          </Text>
+          {winner.isCurrentUser && userPoints !== null && (
+            <View style={styles.pointsSection}>
+              <Text style={[styles.pointsLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                Your Points: <Text style={styles.pointsValue}>{Number(userPoints).toLocaleString()}</Text>
+              </Text>
+              {userWins !== null && (
+                <Text style={[styles.pointsLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                  Total Wins: <Text style={styles.pointsValue}>{userWins}</Text>
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Leaderboard */}
+      <View style={styles.leaderboardSection}>
+        <View style={styles.sectionHeader}>
+          <Icon name="podium-outline" size={18} color="#8B5CF6" />
+          <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+            Final Standings
+          </Text>
+        </View>
+
+        <View style={styles.leaderboard}>
+          {leaderboard.map((player, index) => {
+            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+            const isWinner = index === 0 && isGameFinished;
+
+            return (
+              <View
+                key={player.id}
+                style={[
+                  styles.leaderboardItem,
+                  {
+                    backgroundColor: isWinner
+                      ? isDarkMode ? '#3a2a10' : '#fef3c7'
+                      : player.isCurrentUser
+                        ? isDarkMode ? '#2a2a2a' : '#f3f4f6'
+                        : 'transparent',
+                  },
+                  isWinner && styles.winnerItem,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.medal,
+                    { backgroundColor: medalColors[index] || '#6b7280' },
+                  ]}
+                >
+                  <Text style={styles.medalText}>{index + 1}</Text>
+                </View>
+
+                <Image
+                  source={{
+                    uri:
+                      player.avatar ||
+                      'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                  }}
+                  style={styles.avatar}
+                />
+
+                <Text 
+                  style={[styles.playerName, { color: isDarkMode ? '#fff' : '#000' }]} 
+                  numberOfLines={1}
+                >
+                  {player.name}
+                  {player.isCurrentUser && ' (You)'}
+                </Text>
+
+                <View style={styles.scoreContainer}>
+                  <Text style={[styles.score, isWinner && styles.winnerScoreText]}>
+                    {Number(player.score).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Spin History */}
+      {spinHistory.length > 0 && (
+        <View style={styles.historySection}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setIsHistoryExpanded(!isHistoryExpanded)}
+            activeOpacity={0.7}
+          >
+            <Icon name="time-outline" size={18} color="#8B5CF6" />
+            <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+              Spin History
+            </Text>
+            <Icon
+              name={isHistoryExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+              size={20}
+              color={isDarkMode ? '#fff' : '#000'}
+              style={styles.chevronIcon}
+            />
+          </TouchableOpacity>
+
+          {isHistoryExpanded && (
+            <View style={styles.historyList}>
+              {spinHistory.map((spin, index) => {
+                const playerName = roomData?.players?.[spin.playerId]?.displayName || 'Player';
+                
+                return (
+                  <View key={index} style={styles.historyItem}>
+                    <View style={styles.historyRound}>
+                      <Text style={[styles.historyRoundText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                        R{spin.round}
+                      </Text>
+                    </View>
+                    <Text 
+                      style={[styles.historyPlayer, { color: isDarkMode ? '#fff' : '#000' }]}
+                      numberOfLines={1}
+                    >
+                      {playerName}
+                    </Text>
+                    <Text style={[styles.historyPet, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]} numberOfLines={1}>
+                      {spin.petName}
+                    </Text>
+                    <Text style={styles.historyValue}>
+                      +{Number(spin.petValue).toLocaleString()}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -177,123 +244,173 @@ const GameResults = ({ roomData, currentUser }) => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    width: '100%',
   },
-  compactHeader: {
+  winnerSection: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  winnerEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  winnerText: {
+    fontSize: 20,
+    fontFamily: 'Lato-Bold',
+    marginBottom: 4,
+  },
+  winnerScore: {
+    fontSize: 16,
+    fontFamily: 'Lato-Bold',
+    color: '#F59E0B',
+    marginBottom: 8,
+  },
+  pointsSection: {
+    marginTop: 8,
+    alignItems: 'center',
+    gap: 4,
+  },
+  pointsLabel: {
+    fontSize: 13,
+    fontFamily: 'Lato-Regular',
+  },
+  pointsValue: {
+    fontFamily: 'Lato-Bold',
+    color: '#10B981',
+  },
+  leaderboardSection: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 6,
+    marginBottom: 12,
+    gap: 8,
+    justifyContent: 'space-between',
+    paddingRight: 4,
   },
-  compactTitle: {
+  chevronIcon: {
+    marginLeft: 'auto',
+  },
+  sectionTitle: {
     fontSize: 14,
     fontFamily: 'Lato-Bold',
   },
-  compactLeaderboard: {
-    gap: 4,
-  },
-  compactLeaderboardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 2,
+  leaderboard: {
     gap: 8,
   },
-  compactRank: {
-    fontSize: 12,
-    fontFamily: 'Lato-Bold',
-    width: 20,
-    textAlign: 'center',
-  },
-  compactMedal: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
+  leaderboardItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    gap: 10,
   },
-  compactMedalText: {
-    color: '#fff',
-    fontSize: 11,
-    fontFamily: 'Lato-Bold',
+  winnerItem: {
+    borderWidth: 1,
+    borderColor: '#F59E0B',
   },
-  compactAvatar: {
+  medal: {
     width: 28,
     height: 28,
     borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  compactPlayerName: {
+  medalText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'Lato-Bold',
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  playerName: {
+    fontSize: 14,
+    fontFamily: 'Lato-Regular',
+    flex: 1,
+  },
+  scoreContainer: {
+    alignItems: 'flex-end',
+  },
+  score: {
+    fontSize: 16,
+    fontFamily: 'Lato-Bold',
+    color: '#10B981',
+  },
+  winnerScoreText: {
+    color: '#F59E0B',
+  },
+  historySection: {
+    marginTop: 8,
+  },
+  historyList: {
+    gap: 6,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderRadius: 8,
+    gap: 8,
+  },
+  historyRound: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyRoundText: {
+    fontSize: 11,
+    fontFamily: 'Lato-Bold',
+    color: '#fff',
+  },
+  historyPlayer: {
     fontSize: 12,
     fontFamily: 'Lato-Regular',
     flex: 1,
   },
-  compactScoreContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  compactScore: {
-    fontSize: 14,
-    fontFamily: 'Lato-Bold',
-  },
-  compactRoundResults: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  compactRoundTitle: {
+  historyPet: {
     fontSize: 11,
     fontFamily: 'Lato-Regular',
-    marginBottom: 6,
-  },
-  compactAnswersList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  compactAnswerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-    gap: 4,
-  },
-  compactAnswerName: {
-    fontSize: 11,
-    fontFamily: 'Lato-Regular',
-    maxWidth: 80,
-  },
-  compactProgress: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  compactProgressBar: {
     flex: 1,
-    height: 6,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 3,
-    overflow: 'hidden',
+    textAlign: 'right',
   },
-  compactProgressFill: {
-    height: '100%',
-    borderRadius: 3,
-    backgroundColor: '#8B5CF6',
-  },
-  compactProgressText: {
-    fontSize: 11,
+  historyValue: {
+    fontSize: 13,
     fontFamily: 'Lato-Bold',
-    minWidth: 30,
+    color: '#10B981',
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  timeoutSection: {
+    alignItems: 'center',
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+  },
+  timeoutEmoji: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  timeoutText: {
+    fontSize: 20,
+    fontFamily: 'Lato-Bold',
+    marginBottom: 4,
+  },
+  timeoutReason: {
+    fontSize: 14,
+    fontFamily: 'Lato-Regular',
+    textAlign: 'center',
   },
 });
 
 export default GameResults;
-

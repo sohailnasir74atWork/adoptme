@@ -39,7 +39,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
   const loadOnlineUsers = async () => {
     setLoading(true);
     try {
-      const users = await getOnlineUsersForInvite(appdatabase, currentUser.id);
+      const users = await getOnlineUsersForInvite(appdatabase, firestoreDB, currentUser.id);
       setOnlineUsers(users);
     } catch (error) {
       console.error('Error loading online users:', error);
@@ -49,7 +49,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
   };
 
   const handleInvite = async (user) => {
-    if (!roomId || invitingIds.has(user.id) || invitedIds.has(user.id)) return;
+    if (!roomId || invitingIds.has(user.id) || invitedIds.has(user.id) || user.isPlaying) return;
 
     setInvitingIds((prev) => new Set([...prev, user.id]));
 
@@ -132,6 +132,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
               renderItem={({ item }) => {
                 const isInviting = invitingIds.has(item.id);
                 const isInvited = invitedIds.has(item.id);
+                const isPlaying = item.isPlaying;
 
                 return (
                   <TouchableOpacity
@@ -139,8 +140,8 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
                       styles.userItem,
                       { backgroundColor: isDarkMode ? '#2a2a2a' : '#f9f9f9' },
                     ]}
-                    onPress={() => !isInvited && handleInvite(item)}
-                    disabled={isInviting || isInvited}
+                    onPress={() => !isInvited && !isPlaying && handleInvite(item)}
+                    disabled={isInviting || isInvited || isPlaying}
                   >
                     <Image
                       source={{
@@ -159,7 +160,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
                       <View style={styles.onlineIndicator}>
                         <View style={styles.onlineDot} />
                         <Text style={[styles.onlineText, { color: isDarkMode ? '#999' : '#666' }]}>
-                          Online
+                          {isPlaying ? 'Currently Playing' : 'Online'}
                         </Text>
                       </View>
                     </View>
@@ -168,6 +169,10 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
                     ) : isInvited ? (
                       <View style={styles.invitedBadge}>
                         <Icon name="checkmark-circle" size={24} color="#10B981" />
+                      </View>
+                    ) : isPlaying ? (
+                      <View style={styles.playingBadge}>
+                        <Icon name="game-controller-outline" size={20} color="#F59E0B" />
                       </View>
                     ) : (
                       <TouchableOpacity
@@ -284,7 +289,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  playingBadge: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 20,
+  },
 });
 
 export default InviteUsersModal;
-

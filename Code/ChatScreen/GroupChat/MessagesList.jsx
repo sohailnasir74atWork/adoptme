@@ -225,9 +225,9 @@ const MessagesList = ({
   // ✅ Memoize handleLongPress
   const handleLongPress = useCallback((item) => {
     if (!user?.id || !item) return;
-    Vibration.vibrate(20);
+    triggerHapticFeedback('impactMedium');
     setSelectedMessage(item);
-  }, [user?.id]);
+  }, [user?.id, triggerHapticFeedback]);
 
   // ✅ Memoize handleReport
   const handleReport = useCallback((message) => {

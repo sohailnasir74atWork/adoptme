@@ -5,6 +5,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -16,14 +17,75 @@ import {
 } from '@react-native-firebase/firestore';
 
 /**
- * Create a new game room
+ * Award points and track win for game winner
  */
-export const createGameRoom = async (firestoreDB, hostUser, maxPlayers = 10) => {
+export const awardGameWin = async (appdatabase, userId) => {
+  if (!appdatabase || !userId) return false;
+
+  try {
+    const userRef = ref(appdatabase, `users/${userId}`);
+    
+    // Get current points and wins
+    const userSnap = await get(userRef);
+    const currentPoints = userSnap.exists() && userSnap.val().rewardPoints 
+      ? Number(userSnap.val().rewardPoints) 
+      : 0;
+    const currentWins = userSnap.exists() && userSnap.val().petGameWins 
+      ? Number(userSnap.val().petGameWins) 
+      : 0;
+
+    // Award 100 points and increment wins
+    const newPoints = currentPoints + 100;
+    const newWins = currentWins + 1;
+
+    await update(userRef, {
+      rewardPoints: newPoints,
+      petGameWins: newWins,
+    });
+
+    return { points: newPoints, wins: newWins };
+  } catch (error) {
+    console.error('Error awarding game win:', error);
+    return false;
+  }
+};
+
+/**
+ * Select 8 random pets from pet data
+ */
+export const selectRandomPets = (petData, count = 8) => {
+  if (!petData || petData.length === 0) return [];
+  
+  // Filter only PETS type (not eggs, vehicles, etc.)
+  const petsOnly = petData.filter(item => 
+    item?.type?.toLowerCase() === 'pets' || item?.type?.toLowerCase() === 'pet'
+  );
+  
+  if (petsOnly.length === 0) return [];
+  
+  // Shuffle and pick random pets
+  const shuffled = [...petsOnly].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length)).map(pet => ({
+    id: pet.id || pet.name,
+    name: pet.name,
+    image: pet.image || null,
+    value: Number(pet.rvalue || pet.value || 0),
+    rarity: pet.rarity || 'Common',
+  }));
+};
+
+/**
+ * Create a new game room with 8 random pets
+ */
+export const createGameRoom = async (firestoreDB, hostUser, selectedPets = [], maxPlayers = 2) => {
   if (!firestoreDB || !hostUser?.id) return null;
 
   try {
     const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+
+    // Get player order (host is first)
+    const playerOrder = [hostUser.id];
 
     const roomData = {
       hostId: hostUser.id,
@@ -38,15 +100,24 @@ export const createGameRoom = async (firestoreDB, hostUser, maxPlayers = 10) => 
           displayName: hostUser.displayName || 'Anonymous',
           avatar: hostUser.avatar || null,
           joinedAt: serverTimestamp(),
-          ready: false,
+          score: 0,
         },
       },
       invites: {},
+      // Store the 8 random pets for the wheel
+      wheelPets: selectedPets,
       gameData: {
-        currentRound: 0,
-        totalRounds: 5,
-        scores: {},
+        currentRound: 1,
+        totalRounds: 3,
+        scores: {
+          [hostUser.id]: 0,
+        },
+        currentTurnIndex: 0, // Index in playerOrder
+        playerOrder: playerOrder,
+        roundScores: {}, // { round1: { odyer3gj: 500, user2: 300 }, ... }
+        spinHistory: [], // Track all spins
         startedAt: null,
+        isSpinning: false,
       },
     };
 
@@ -149,13 +220,23 @@ export const acceptGameInvite = async (
     // Add player to room
     const players = roomData.players || {};
     const invites = roomData.invites || {};
+    const playerOrder = roomData.gameData?.playerOrder || [roomData.hostId];
+    const scores = roomData.gameData?.scores || {};
     
     players[userId] = {
       displayName: userData?.displayName || 'Anonymous',
       avatar: userData?.avatar || null,
       joinedAt: serverTimestamp(),
-      ready: false,
+      score: 0,
     };
+
+    // Add to player order
+    if (!playerOrder.includes(userId)) {
+      playerOrder.push(userId);
+    }
+
+    // Initialize score
+    scores[userId] = 0;
 
     if (invites[userId]) {
       invites[userId].status = 'accepted';
@@ -165,6 +246,8 @@ export const acceptGameInvite = async (
       players,
       invites,
       currentPlayers: increment(1),
+      'gameData.playerOrder': playerOrder,
+      'gameData.scores': scores,
     });
 
     // Update user invite status in Firestore
@@ -266,9 +349,41 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
 };
 
 /**
- * Get online users for inviting
+ * Check if a user is currently in an active game (status 'playing')
  */
-export const getOnlineUsersForInvite = async (appdatabase, currentUserId) => {
+export const isUserInActiveGame = async (firestoreDB, userId) => {
+  if (!firestoreDB || !userId) return false;
+
+  try {
+    const roomsRef = collection(firestoreDB, 'petGuessingGame_rooms');
+    const q = query(
+      roomsRef,
+      where('status', '==', 'playing')
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      // Check if user is in any of these active rooms
+      for (const docSnap of snapshot.docs) {
+        const roomData = docSnap.data();
+        if (roomData.players && roomData.players[userId]) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking user game status:', error);
+    return false;
+  }
+};
+
+/**
+ * Get online users for inviting with their game status
+ */
+export const getOnlineUsersForInvite = async (appdatabase, firestoreDB, currentUserId) => {
   if (!appdatabase || !currentUserId) return [];
 
   try {
@@ -281,7 +396,7 @@ export const getOnlineUsersForInvite = async (appdatabase, currentUserId) => {
       (id) => id !== currentUserId
     );
 
-    // Fetch user details
+    // Fetch user details and check game status
     const userPromises = onlineUserIds.map(async (userId) => {
       try {
         const userRef = ref(appdatabase, `users/${userId}`);
@@ -289,10 +404,13 @@ export const getOnlineUsersForInvite = async (appdatabase, currentUserId) => {
         
         if (userSnap.exists()) {
           const userData = userSnap.val();
+          const isPlaying =  false;
+          
           return {
             id: userId,
             displayName: userData?.displayName || 'Anonymous',
             avatar: userData?.avatar || null,
+            isPlaying,
           };
         }
         return null;
@@ -430,20 +548,27 @@ export const startGame = async (firestoreDB, roomId, hostId) => {
       return false; // Game already started
     }
 
-    // Start the game - single round
-    const countdownDuration = 60; // seconds (1 minute)
-    const countdownEnd = Date.now() + countdownDuration * 1000;
-    const wheelEvents = ['doubleSpin', 'reverse', 'slowMo', 'confetti'];
-    const randomEvent = wheelEvents[Math.floor(Math.random() * wheelEvents.length)];
+    // Initialize scores for all players
+    const scores = {};
+    const playerOrder = roomData.gameData?.playerOrder || Object.keys(roomData.players);
+    playerOrder.forEach(playerId => {
+      scores[playerId] = 0;
+    });
 
+    // Start the game - turn based, 3 rounds
     await updateDoc(roomRef, {
       status: 'playing',
       'gameData.startedAt': serverTimestamp(),
-      'gameData.countdownEnd': countdownEnd,
-      'gameData.picks': {},
-      'gameData.allPicked': false,
-      'gameData.wheelEvent': randomEvent,
-      'gameData.winner': null,
+      'gameData.currentRound': 1,
+      'gameData.totalRounds': 3,
+      'gameData.currentTurnIndex': 0, // First player's turn
+      'gameData.playerOrder': playerOrder,
+      'gameData.scores': scores,
+      'gameData.roundScores': {},
+      'gameData.spinHistory': [],
+      'gameData.isSpinning': false,
+      'gameData.lastSpinResult': null,
+      'gameData.turnStartTime': serverTimestamp(), // Set initial turn start time
     });
 
     return true;
@@ -676,6 +801,214 @@ export const setGameWinner = async (firestoreDB, roomId, winnerData) => {
     return true;
   } catch (error) {
     console.error('Error setting game winner:', error);
+    return false;
+  }
+};
+
+/**
+ * Record a wheel spin result and advance to next turn
+ */
+export const recordSpinResult = async (firestoreDB, roomId, userId, spinResult) => {
+  if (!firestoreDB || !roomId || !userId || !spinResult) return false;
+
+  try {
+    const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists) return false;
+
+    const roomData = roomSnap.data();
+    const gameData = roomData.gameData || {};
+    const playerOrder = gameData.playerOrder || [];
+    const currentTurnIndex = gameData.currentTurnIndex || 0;
+    const currentRound = gameData.currentRound || 1;
+    const totalRounds = gameData.totalRounds || 3;
+    const scores = gameData.scores || {};
+    const spinHistory = gameData.spinHistory || [];
+
+    // Verify it's this user's turn
+    if (playerOrder[currentTurnIndex] !== userId) {
+      return false; // Not your turn
+    }
+
+    // Add spin to history
+    const spinRecord = {
+      playerId: userId,
+      round: currentRound,
+      petName: spinResult.petName,
+      petValue: spinResult.petValue,
+      petImage: spinResult.petImage || null,
+      timestamp: Date.now(),
+    };
+    spinHistory.push(spinRecord);
+
+    // Update score
+    scores[userId] = (scores[userId] || 0) + spinResult.petValue;
+
+    // Calculate next turn
+    let nextTurnIndex = currentTurnIndex + 1;
+    let nextRound = currentRound;
+    let isGameFinished = false;
+
+    // If we've gone through all players, advance to next round
+    if (nextTurnIndex >= playerOrder.length) {
+      nextTurnIndex = 0;
+      nextRound = currentRound + 1;
+
+      // Check if game is finished
+      if (nextRound > totalRounds) {
+        isGameFinished = true;
+      }
+    }
+
+    const updateData = {
+      'gameData.scores': scores,
+      'gameData.spinHistory': spinHistory,
+      'gameData.isSpinning': false,
+      'gameData.lastSpinResult': spinResult,
+    };
+
+    if (isGameFinished) {
+      // Game is finished - determine winner
+      let winnerId = null;
+      let maxScore = -1;
+      Object.entries(scores).forEach(([playerId, score]) => {
+        if (score > maxScore) {
+          maxScore = score;
+          winnerId = playerId;
+        }
+      });
+
+      updateData['status'] = 'finished';
+      updateData['gameData.endedAt'] = serverTimestamp();
+      updateData['gameData.winner'] = {
+        playerId: winnerId,
+        score: maxScore,
+      };
+      
+      // Note: Points and wins will be awarded by the client when they see the game finished
+      // This prevents duplicate awards if multiple clients process the finish event
+    } else {
+      // Advance to next turn
+      updateData['gameData.currentTurnIndex'] = nextTurnIndex;
+      updateData['gameData.currentRound'] = nextRound;
+      updateData['gameData.turnStartTime'] = serverTimestamp(); // Set new turn start time
+    }
+
+    await updateDoc(roomRef, updateData);
+    return true;
+  } catch (error) {
+    console.error('Error recording spin result:', error);
+    return false;
+  }
+};
+
+/**
+ * Set spinning state
+ */
+export const setSpinningState = async (firestoreDB, roomId, isSpinning) => {
+  if (!firestoreDB || !roomId) return false;
+
+  try {
+    const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+    await updateDoc(roomRef, {
+      'gameData.isSpinning': isSpinning,
+    });
+    return true;
+  } catch (error) {
+    console.error('Error setting spinning state:', error);
+    return false;
+  }
+};
+
+/**
+ * End game due to timeout or player leaving
+ * This ends the game immediately and determines winner based on current scores
+ */
+export const endGameDueToTimeout = async (firestoreDB, roomId, timeoutUserId, reason = 'timeout') => {
+  if (!firestoreDB || !roomId || !timeoutUserId) return false;
+
+  try {
+    const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists) return false;
+
+    const roomData = roomSnap.data();
+    const gameData = roomData.gameData || {};
+    const scores = gameData.scores || {};
+    const spinHistory = gameData.spinHistory || [];
+
+    // Get player name for the message
+    const timeoutPlayerName = roomData.players?.[timeoutUserId]?.displayName || 'Player';
+
+    // Add timeout record to history
+    const timeoutRecord = {
+      playerId: timeoutUserId,
+      round: gameData.currentRound || 1,
+      petName: reason === 'timeout' ? 'Game Ended (Timeout)' : 'Game Ended (Player Left)',
+      petValue: 0,
+      petImage: null,
+      timestamp: Date.now(),
+      timeout: true,
+      reason: reason,
+    };
+    spinHistory.push(timeoutRecord);
+
+    // Determine winner based on current scores
+    let winnerId = null;
+    let maxScore = -1;
+    Object.entries(scores).forEach(([playerId, score]) => {
+      if (score > maxScore) {
+        maxScore = score;
+        winnerId = playerId;
+      }
+    });
+
+    // If scores are equal or no winner, set to null
+    if (maxScore === 0 || !winnerId) {
+      winnerId = null;
+    }
+
+    // End the game
+    const updateData = {
+      status: 'finished',
+      'gameData.endedAt': serverTimestamp(),
+      'gameData.scores': scores,
+      'gameData.spinHistory': spinHistory,
+      'gameData.isSpinning': false,
+      'gameData.turnStartTime': null,
+      'gameData.timeoutReason': reason === 'timeout' 
+        ? `${timeoutPlayerName} timed out` 
+        : `${timeoutPlayerName} left the game`,
+      'gameData.winner': winnerId ? {
+        playerId: winnerId,
+        score: maxScore,
+      } : null,
+    };
+
+    await updateDoc(roomRef, updateData);
+    return true;
+  } catch (error) {
+    console.error('Error ending game due to timeout:', error);
+    return false;
+  }
+};
+
+/**
+ * Set turn start time when a turn begins
+ */
+export const setTurnStartTime = async (firestoreDB, roomId) => {
+  if (!firestoreDB || !roomId) return false;
+
+  try {
+    const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+    await updateDoc(roomRef, {
+      'gameData.turnStartTime': serverTimestamp(),
+    });
+    return true;
+  } catch (error) {
+    console.error('Error setting turn start time:', error);
     return false;
   }
 };
