@@ -1,5 +1,5 @@
 // gameInviteSystem.js
-import { ref, set, update, remove, get, onValue, push } from '@react-native-firebase/database';
+import { ref, set, update, remove, get, onValue, push, query as dbQuery, orderByKey, limitToFirst } from '@react-native-firebase/database';
 import {
   collection,
   doc,
@@ -18,32 +18,44 @@ import {
 
 /**
  * Award points and track win for game winner
+ *
+ * - Points are still stored in RTDB under `users/{uid}/rewardPoints`
+ *   (to keep existing reward system working)
+ * - Win count is stored only in Firestore (not RTDB) under `game_stats/{uid}`
+ * - Last win timestamp is stored in RTDB (`lastGameWinAt`) for chat badge
  */
-export const awardGameWin = async (appdatabase, userId) => {
-  if (!appdatabase || !userId) return false;
+export const awardGameWin = async (appdatabase, firestoreDB, userId) => {
+  if (!appdatabase || !firestoreDB || !userId) return false;
 
   try {
+    // ✅ Update reward points in RTDB (existing behaviour)
     const userRef = ref(appdatabase, `users/${userId}`);
-    
-    // Get current points and wins
     const userSnap = await get(userRef);
-    const currentPoints = userSnap.exists() && userSnap.val().rewardPoints 
-      ? Number(userSnap.val().rewardPoints) 
-      : 0;
-    const currentWins = userSnap.exists() && userSnap.val().petGameWins 
-      ? Number(userSnap.val().petGameWins) 
-      : 0;
+    const existing = userSnap.exists() ? userSnap.val() || {} : {};
+    const currentPoints = existing.rewardPoints ? Number(existing.rewardPoints) : 0;
 
-    // Award 100 points and increment wins
     const newPoints = currentPoints + 100;
-    const newWins = currentWins + 1;
+    const now = Date.now();
 
     await update(userRef, {
       rewardPoints: newPoints,
-      petGameWins: newWins,
+      lastGameWinAt: now, // ✅ store last win timestamp in RTDB for chat badge
     });
 
-    return { points: newPoints, wins: newWins };
+    // ✅ Track total wins only in Firestore (not RTDB)
+    const statsRef = doc(firestoreDB, 'game_stats', userId);
+    const statsSnap = await getDoc(statsRef);
+    const statsData = statsSnap.exists ? statsSnap.data() || {} : {};
+    const currentWins = statsData.petGameWins ? Number(statsData.petGameWins) : 0;
+    const newWins = currentWins + 1;
+
+    await setDoc(
+      statsRef,
+      { petGameWins: newWins },
+      { merge: true },
+    );
+
+    return { points: newPoints, wins: newWins, lastGameWinAt: now };
   } catch (error) {
     console.error('Error awarding game win:', error);
     return false;
@@ -51,7 +63,8 @@ export const awardGameWin = async (appdatabase, userId) => {
 };
 
 /**
- * Select 8 random pets from pet data
+ * Select 8 random pets from pet data within the same value slab
+ * Value slabs: 0-1, 1-20, 20-50, 50-100, 100+
  */
 export const selectRandomPets = (petData, count = 8) => {
   if (!petData || petData.length === 0) return [];
@@ -63,15 +76,76 @@ export const selectRandomPets = (petData, count = 8) => {
   
   if (petsOnly.length === 0) return [];
   
-  // Shuffle and pick random pets
-  const shuffled = [...petsOnly].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, shuffled.length)).map(pet => ({
-    id: pet.id || pet.name,
-    name: pet.name,
-    image: pet.image || null,
-    value: Number(pet.rvalue || pet.value || 0),
-    rarity: pet.rarity || 'Common',
-  }));
+  // Define value slabs
+  const valueSlabs = [
+    { min: 0, max: 1, name: '0-1' },
+    { min: 1, max: 20, name: '1-20' },
+    { min: 20, max: 50, name: '20-50' },
+    { min: 50, max: 100, name: '50-100' },
+    { min: 100, max: Infinity, name: '100+' },
+  ];
+  
+  // Group pets by value slabs
+  const petsBySlab = {};
+  petsOnly.forEach(pet => {
+    const value = Number(pet.rvalue || pet.value || 0);
+    
+    // Find which slab this pet belongs to
+    // Slabs: 0-1, 1-20, 20-50, 50-100, 100+
+    // Handle boundaries: 0-1 includes [0, 1], others use (min, max] to avoid overlap
+    for (const slab of valueSlabs) {
+      let belongsToSlab = false;
+      
+      if (slab.max === Infinity) {
+        // For 100+ slab, include values > 100 (exclude exactly 100, it's in 50-100)
+        belongsToSlab = value > 100;
+      } else if (slab.min === 0 && slab.max === 1) {
+        // For 0-1 slab, include values >= 0 and <= 1
+        belongsToSlab = value >= 0 && value <= 1;
+      } else {
+        // For other slabs (1-20, 20-50, 50-100), use > min and <= max
+        // 1-20: (1, 20], 20-50: (20, 50], 50-100: (50, 100]
+        belongsToSlab = value > slab.min && value <= slab.max;
+      }
+      
+      if (belongsToSlab) {
+        if (!petsBySlab[slab.name]) {
+          petsBySlab[slab.name] = [];
+        }
+        petsBySlab[slab.name].push({
+          id: pet.id || pet.name,
+          name: pet.name,
+          image: pet.image || null,
+          value: value,
+          rarity: pet.rarity || 'Common',
+        });
+        break;
+      }
+    }
+  });
+  
+  // Find slabs that have at least 'count' pets
+  const validSlabs = Object.keys(petsBySlab).filter(
+    slabName => petsBySlab[slabName].length >= count
+  );
+  
+  if (validSlabs.length === 0) {
+    // If no slab has enough pets, use the slab with the most pets
+    const slabWithMostPets = Object.keys(petsBySlab).reduce((a, b) => 
+      petsBySlab[a].length > petsBySlab[b].length ? a : b
+    );
+    const selectedSlab = petsBySlab[slabWithMostPets] || [];
+    const shuffled = [...selectedSlab].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(count, shuffled.length));
+  }
+  
+  // Randomly select one slab that has enough pets
+  const randomSlabName = validSlabs[Math.floor(Math.random() * validSlabs.length)];
+  const selectedSlab = petsBySlab[randomSlabName];
+  
+  // Shuffle and pick 'count' pets from the selected slab
+  const shuffled = [...selectedSlab].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length));
 };
 
 /**
@@ -141,6 +215,16 @@ export const sendGameInvite = async (
   if (!firestoreDB || !roomId || !fromUser?.id || !invitedUserId) return false;
 
   try {
+    // ✅ Check if invited user is in an active game
+    const isInActiveGame = await isUserInActiveGame(firestoreDB, invitedUserId);
+    if (isInActiveGame) {
+      return false; // User is already playing, don't send invite
+    }
+
+    // ✅ Invitation expires after 1 minute if not received (for testing)
+    const INVITE_EXPIRY_MS = 60000; // 1 minute (for testing)
+    const expiresAt = Date.now() + INVITE_EXPIRY_MS;
+
     // Add to room invites in Firestore
     const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
     const roomSnap = await getDoc(roomRef);
@@ -158,6 +242,7 @@ export const sendGameInvite = async (
       fromUserAvatar: fromUser.avatar || null,
       status: 'pending',
       timestamp: serverTimestamp(),
+      expiresAt: expiresAt, // ✅ Expiration timestamp
     };
 
     await updateDoc(roomRef, {
@@ -179,7 +264,43 @@ export const sendGameInvite = async (
       fromUserAvatar: fromUser.avatar || null,
       status: 'pending',
       timestamp: serverTimestamp(),
+      expiresAt: expiresAt, // ✅ Expiration timestamp
     });
+
+    // ✅ Schedule cleanup of expired invite after expiry time
+    setTimeout(async () => {
+      try {
+        // Check if invite is still pending (not accepted/declined)
+        const checkRoomSnap = await getDoc(roomRef);
+        if (checkRoomSnap.exists) {
+          const checkRoomData = checkRoomSnap.data();
+          const checkInvites = checkRoomData.invites || {};
+          if (checkInvites[invitedUserId]?.status === 'pending') {
+            // Invite expired and not received - delete it
+            delete checkInvites[invitedUserId];
+            await updateDoc(roomRef, { invites: checkInvites });
+          }
+        }
+
+        // Also delete from user's invite list
+        const checkUserInviteRef = doc(
+          firestoreDB,
+          'petGuessingGame_userInvites',
+          invitedUserId,
+          'invites',
+          roomId
+        );
+        const checkUserInviteSnap = await getDoc(checkUserInviteRef);
+        if (checkUserInviteSnap.exists) {
+          const checkUserInviteData = checkUserInviteSnap.data();
+          if (checkUserInviteData.status === 'pending') {
+            await deleteDoc(checkUserInviteRef);
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up expired invite:', error);
+      }
+    }, INVITE_EXPIRY_MS);
 
     return true;
   } catch (error) {
@@ -197,29 +318,65 @@ export const acceptGameInvite = async (
   userId,
   userData
 ) => {
-  if (!firestoreDB || !roomId || !userId) return false;
+  if (!firestoreDB || !roomId || !userId) {
+    return { success: false, error: 'Invalid parameters' };
+  }
 
   try {
     const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
     const roomSnap = await getDoc(roomRef);
 
     if (!roomSnap.exists) {
-      return false; // Room doesn't exist
+      return { success: false, error: 'Room does not exist' };
     }
 
     const roomData = roomSnap.data();
 
+    // Check if user is already in the room
+    if (roomData.players && roomData.players[userId]) {
+      return { success: false, error: 'You are already in this game' };
+    }
+
     if (roomData.status !== 'waiting') {
-      return false; // Room already started
+      return { success: false, error: 'This game has already started or finished' };
     }
 
     if (roomData.currentPlayers >= roomData.maxPlayers) {
-      return false; // Room is full
+      return { success: false, error: 'This game is full. Another player already joined and the game is starting.' };
+    }
+
+    // ✅ Check if invite exists and is not expired
+    const invites = roomData.invites || {};
+    const invite = invites[userId];
+    if (invite) {
+      const now = Date.now();
+      const inviteTimestamp = invite.timestamp?.toMillis?.() || invite.timestamp || Date.now();
+      const expiresAt = invite.expiresAt || (inviteTimestamp + 60000); // 1 minute default (for testing)
+      
+      if (now > expiresAt && invite.status === 'pending') {
+        // Invite expired - remove it
+        delete invites[userId];
+        await updateDoc(roomRef, { invites });
+        
+        // Also delete from user's invite list
+        const userInviteRef = doc(
+          firestoreDB,
+          'petGuessingGame_userInvites',
+          userId,
+          'invites',
+          roomId
+        );
+        await deleteDoc(userInviteRef).catch(err => 
+          console.error('Error deleting expired user invite:', err)
+        );
+        
+        return { success: false, error: 'This invitation has expired. Please ask for a new invite.' };
+      }
     }
 
     // Add player to room
     const players = roomData.players || {};
-    const invites = roomData.invites || {};
+    // invites already declared above
     const playerOrder = roomData.gameData?.playerOrder || [roomData.hostId];
     const scores = roomData.gameData?.scores || {};
     
@@ -260,10 +417,17 @@ export const acceptGameInvite = async (
     );
     await updateDoc(userInviteRef, { status: 'accepted' });
 
-    return true;
+    // Auto-start game if 2 players have joined
+    const newPlayerCount = roomData.currentPlayers + 1;
+    if (newPlayerCount >= roomData.maxPlayers && roomData.hostId) {
+      // Auto-start the game
+      await startGame(firestoreDB, roomId, roomData.hostId);
+    }
+
+    return { success: true };
   } catch (error) {
     console.error('Error accepting invite:', error);
-    return false;
+    return { success: false, error: 'Failed to join game. Please try again.' };
   }
 };
 
@@ -326,16 +490,48 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
   
   const unsubscribe = onSnapshot(
     q,
-    (snapshot) => {
+    async (snapshot) => {
       const invites = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
+      const now = Date.now();
+      const expiredInviteIds = [];
+      
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const timestamp = data.timestamp?.toMillis?.() || data.timestamp || Date.now();
+        const expiresAt = data.expiresAt || (timestamp + 60000); // Default 1 minute if not set (for testing)
+        
+        // ✅ Filter out expired invites (not received within time limit)
+        if (now > expiresAt && data.status === 'pending') {
+          // Mark for deletion
+          expiredInviteIds.push(docSnap.id);
+          return; // Skip this invite
+        }
+        
         invites.push({
-          roomId: doc.id,
+          roomId: docSnap.id,
           ...data,
-          timestamp: data.timestamp?.toMillis?.() || data.timestamp || Date.now(),
+          timestamp: timestamp,
+          expiresAt: expiresAt,
         });
       });
+
+      // ✅ Delete expired invites
+      if (expiredInviteIds.length > 0) {
+        expiredInviteIds.forEach(async (inviteId) => {
+          try {
+            const inviteRef = doc(
+              firestoreDB,
+              'petGuessingGame_userInvites',
+              userId,
+              'invites',
+              inviteId
+            );
+            await deleteDoc(inviteRef);
+          } catch (error) {
+            console.error('Error deleting expired invite:', error);
+          }
+        });
+      }
 
       callback(invites);
     },
@@ -346,6 +542,60 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
   );
 
   return unsubscribe;
+};
+
+/**
+ * Clean up expired invites from a room
+ */
+export const cleanupExpiredInvites = async (firestoreDB, roomId) => {
+  if (!firestoreDB || !roomId) return false;
+
+  try {
+    const roomRef = doc(firestoreDB, 'petGuessingGame_rooms', roomId);
+    const roomSnap = await getDoc(roomRef);
+    
+    if (!roomSnap.exists) return false;
+
+    const roomData = roomSnap.data();
+    const invites = roomData.invites || {};
+    const now = Date.now();
+    let hasExpired = false;
+
+    // Check each invite for expiration
+    Object.keys(invites).forEach((userId) => {
+      const invite = invites[userId];
+      if (invite.status === 'pending') {
+        const expiresAt = invite.expiresAt || (invite.timestamp?.toMillis?.() || Date.now()) + 60000; // 1 minute (for testing)
+        if (now > expiresAt) {
+          // Invite expired - remove it
+          delete invites[userId];
+          hasExpired = true;
+          
+          // Also delete from user's invite list
+          const userInviteRef = doc(
+            firestoreDB,
+            'petGuessingGame_userInvites',
+            userId,
+            'invites',
+            roomId
+          );
+          deleteDoc(userInviteRef).catch(err => 
+            console.error('Error deleting expired user invite:', err)
+          );
+        }
+      }
+    });
+
+    // Update room if any invites expired
+    if (hasExpired) {
+      await updateDoc(roomRef, { invites });
+    }
+
+    return hasExpired;
+  } catch (error) {
+    console.error('Error cleaning up expired invites:', error);
+    return false;
+  }
 };
 
 /**
@@ -381,46 +631,126 @@ export const isUserInActiveGame = async (firestoreDB, userId) => {
 };
 
 /**
- * Get online users for inviting with their game status
+ * Get ALL online user IDs from Firestore (optimized - only IDs, no details)
+ * Returns all user IDs (filtered to exclude current user)
+ * Same pattern as OnlineUsersList.jsx - fetch all IDs once, then batch load details
  */
-export const getOnlineUsersForInvite = async (appdatabase, firestoreDB, currentUserId) => {
-  if (!appdatabase || !currentUserId) return [];
+export const getOnlineUserIdsForInvite = async (firestoreDB, currentUserId) => {
+  if (!firestoreDB || !currentUserId) return [];
 
   try {
-    const onlineUsersRef = ref(appdatabase, 'online_users');
-    const snapshot = await get(onlineUsersRef);
+    // ✅ One-time fetch from Firestore (same pattern as OnlineUsersList.jsx)
+    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+    const docSnapshot = await getDoc(onlineUsersDocRef);
 
-    if (!snapshot.exists()) return [];
+    if (!docSnapshot.exists) return [];
 
-    const onlineUserIds = Object.keys(snapshot.val()).filter(
-      (id) => id !== currentUserId
-    );
+    const data = docSnapshot.data();
+    const allUserIds = Array.isArray(data?.userIds) ? data.userIds : [];
 
-    // Fetch user details and check game status
-    const userPromises = onlineUserIds.map(async (userId) => {
-      try {
-        const userRef = ref(appdatabase, `users/${userId}`);
-        const userSnap = await get(userRef);
-        
-        if (userSnap.exists()) {
-          const userData = userSnap.val();
-          const isPlaying =  false;
-          
-          return {
-            id: userId,
-            displayName: userData?.displayName || 'Anonymous',
-            avatar: userData?.avatar || null,
-            isPlaying,
-          };
-        }
-        return null;
-      } catch (error) {
-        return null;
-      }
+    // Filter out current user and return ALL IDs (not just first N)
+    const filteredIds = allUserIds.filter((id) => id !== currentUserId);
+    return filteredIds;
+  } catch (error) {
+    console.error('Error getting online user IDs from Firestore:', error);
+    return [];
+  }
+};
+
+/**
+ * Get more online user IDs from Firestore (for pagination - load next batch)
+ * @deprecated Use getOnlineUserIdsForInvite to get all IDs, then slice client-side
+ */
+export const getMoreOnlineUserIds = async (firestoreDB, currentUserId, currentCount, batchSize = 6) => {
+  if (!firestoreDB || !currentUserId) return [];
+
+  try {
+    // ✅ Fetch from Firestore online_users/list document
+    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+    const docSnapshot = await getDoc(onlineUsersDocRef);
+
+    if (!docSnapshot.exists) return [];
+
+    const data = docSnapshot.data();
+    const allUserIds = Array.isArray(data?.userIds) ? data.userIds : [];
+
+    // Filter out current user
+    const filteredIds = allUserIds.filter((id) => id !== currentUserId);
+
+    // Return only the new IDs (those beyond currentCount)
+    if (filteredIds.length > currentCount) {
+      return filteredIds.slice(currentCount, currentCount + batchSize);
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error getting more online user IDs from Firestore:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch user details for specific user IDs (from Firestore only)
+ * Same pattern as OnlineUsersList.jsx – read from `online_users/list.users`
+ *
+ * NOTE:
+ * - RTDB is no longer used here (keeps this fast and cheap)
+ * - `isPlaying` comes from Firestore if you later add it to `online_users/list.users[id]`
+ */
+export const fetchUserDetailsForInvite = async (appdatabase, firestoreDB, userIds) => {
+  if (!firestoreDB || !userIds || !Array.isArray(userIds) || userIds.length === 0) return {};
+
+  try {
+    // ✅ Read once from Firestore `online_users/list` (same as OnlineUsersList.jsx)
+    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+    const docSnapshot = await getDoc(onlineUsersDocRef);
+
+    if (!docSnapshot.exists) return {};
+
+    const data = docSnapshot.data() || {};
+    const usersMap =
+      typeof data.users === 'object' && data.users !== null ? data.users : {};
+
+    const userDetails = {};
+
+    userIds.forEach((userId) => {
+      const u = usersMap[userId] || {};
+      userDetails[userId] = {
+        id: userId,
+        displayName: u.displayName || 'Anonymous',
+        avatar:
+          u.avatar ||
+          'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+        // If you later store isPlaying in Firestore, we can read it here:
+        isPlaying: !!u.isPlaying,
+      };
     });
 
-    const users = await Promise.all(userPromises);
-    return users.filter(Boolean);
+    return userDetails;
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    return {};
+  }
+};
+
+/**
+ * Get online users for inviting with their game status (optimized version)
+ * Fetches ALL user IDs from Firestore, then fetches details for initial batch
+ * Same pattern as OnlineUsersList.jsx - fetch all IDs once, batch load details
+ * @deprecated Use getOnlineUserIdsForInvite + fetchUserDetailsForInvite for better performance
+ */
+export const getOnlineUsersForInvite = async (appdatabase, firestoreDB, currentUserId) => {
+  if (!appdatabase || !firestoreDB || !currentUserId) return [];
+
+  try {
+    // ✅ Get ALL user IDs from Firestore (same pattern as OnlineUsersList.jsx)
+    const allUserIds = await getOnlineUserIdsForInvite(firestoreDB, currentUserId);
+    
+    // ✅ Fetch details only for first 6 users from RTDB (initial batch)
+    const initialBatch = allUserIds.slice(0, 6);
+    const userDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, initialBatch);
+    
+    return Object.values(userDetails);
   } catch (error) {
     console.error('Error getting online users:', error);
     return [];
@@ -489,17 +819,29 @@ export const leaveGameRoom = async (firestoreDB, roomId, userId) => {
     if (!roomSnap.exists) return false;
 
     const roomData = roomSnap.data();
+    
+    // If game has started or finished, preserve player data (don't delete from players object)
+    // Only remove player if game is still waiting
     const players = { ...roomData.players };
-    delete players[userId];
+    if (roomData.status === 'waiting') {
+      delete players[userId];
+    }
+    // If game is playing or finished, keep player data for display
 
     // If host leaves and room is empty, delete room
     if (roomData.hostId === userId && roomData.currentPlayers <= 1) {
       await deleteDoc(roomRef);
     } else {
-      await updateDoc(roomRef, {
-        players,
+      const updateData = {
         currentPlayers: Math.max(0, roomData.currentPlayers - 1),
-      });
+      };
+      
+      // Only update players object if game is waiting (we removed the player)
+      if (roomData.status === 'waiting') {
+        updateData.players = players;
+      }
+      
+      await updateDoc(roomRef, updateData);
     }
 
     // Remove user invite from Firestore
@@ -533,9 +875,14 @@ export const startGame = async (firestoreDB, roomId, hostId) => {
 
     const roomData = roomSnap.data();
 
-    // Verify host
+    // Verify host (allow auto-start when 2 players join)
     if (roomData.hostId !== hostId) {
-      return false; // Only host can start
+      // Allow auto-start if 2 players have joined
+      if (roomData.currentPlayers >= 2 && roomData.status === 'waiting') {
+        // Continue with auto-start
+      } else {
+        return false; // Only host can start manually
+      }
     }
 
     // Check minimum players (2)

@@ -760,11 +760,17 @@ const GG = item.isSharkMode === 'GG'
               <Text style={styles.traderName}>
                 {item.traderName}{' '}
                 {item.isPro && (
-  <Image
-    source={require('../../assets/pro.png')} 
-    style={{ width: 14, height: 14 }} 
-  />
-)}
+                  <Image
+                    source={require('../../assets/pro.png')} 
+                    style={{ width: 14, height: 14 }} 
+                  />
+                )}
+                {item.robloxUsernameVerified && (
+                  <Image
+                    source={require('../../assets/verification.png')} 
+                    style={{ width: 14, height: 14 }} 
+                  />
+                )}
                 {item.rating ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#FFD700', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
                     <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />

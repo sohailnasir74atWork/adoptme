@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import ChatRulesModal from './ChatRuleModal';
 import OnlineUsersList from './OnlineUsersList';
+import PetGuessingGameScreen from '../../ValuesScreen/PetGuessingGame/PetGuessingGameScreen';
 
 // ✅ Pre-compile regex for better performance
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
@@ -31,14 +32,14 @@ const AdminHeader = ({
   setunreadcount,
   pinnedMessages,
   onUnpinMessage,
-  onlineMembersCount
 }) => {
-  const { theme, user, isAdmin } = useGlobalState();
+  const { theme, user, isAdmin, onlineMembersCount } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
   const { t } = useTranslation();
   const [pinMessageOpen, setPinMessageOpen] = useState(false);
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
+  const [gameModalVisible, setGameModalVisible] = useState(false);
 
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -87,7 +88,9 @@ const AdminHeader = ({
   return (
     <View>
       <View style={styles.stackContainer}>
-        <View style={{ paddingVertical: 10 }}><Text style={styles.stackHeader}>Community Chat</Text></View>
+        <View style={{ paddingVertical: 10 }}>
+          <Text style={styles.stackHeader}>Chat</Text>
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {user?.id && (
             <>
@@ -111,6 +114,21 @@ const AdminHeader = ({
                     </Text>
                   </View>
                 )}
+              </TouchableOpacity>
+
+              {/* Pet Guessing Game Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setGameModalVisible(true);
+                  triggerHapticFeedback?.('impactLight');
+                }}
+                style={styles.iconContainer}
+              >
+                <Icon
+                  name="game-controller-outline"
+                  size={24}
+                  color={config.colors.primary}
+                />
               </TouchableOpacity>
 
               {/* Inbox Button */}
@@ -258,6 +276,9 @@ const AdminHeader = ({
         visible={onlineUsersVisible}
         onClose={() => setOnlineUsersVisible(false)}
       />
+
+      {/* Full-screen Pet Guessing Game Modal */}
+     
     </View>
   );
 };
@@ -269,7 +290,7 @@ export const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
-      paddingTop: Platform.OS === 'android' ? 60 : 0,
+      paddingTop: Platform.OS === 'android' ? 60 : 60,
 
 
       // paddingVertical: 10,

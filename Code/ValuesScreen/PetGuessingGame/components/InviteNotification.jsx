@@ -12,9 +12,9 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
 import { acceptGameInvite, declineGameInvite, listenToUserInvites } from '../utils/gameInviteSystem';
-import { showSuccessMessage } from '../../../Helper/MessageHelper';
+import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
 
-const InviteNotification = ({ currentUser, onAccept }) => {
+const InviteNotification = ({ currentUser, onAccept, isInActiveGame = false }) => {
   const { appdatabase, firestoreDB, theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const [pendingInvites, setPendingInvites] = useState([]);
@@ -24,40 +24,119 @@ const InviteNotification = ({ currentUser, onAccept }) => {
   const slideY = useRef(new Animated.Value(200)).current;
 
   useEffect(() => {
-    if (!firestoreDB || !currentUser?.id) return;
+    // ✅ Don't listen to Firebase if user is in active game (saves Firebase reads)
+    if (!firestoreDB || !currentUser?.id || isInActiveGame) {
+      // Clear current invite if game becomes active
+      if (isInActiveGame && currentInvite) {
+        setCurrentInvite(null);
+      }
+      return;
+    }
 
+    // Only listen to invites when NOT in active game
     const unsubscribe = listenToUserInvites(firestoreDB, currentUser.id, (invites) => {
       setPendingInvites(invites);
-      if (invites.length > 0 && !currentInvite) {
-        setCurrentInvite(invites[0]);
+      
+      // ✅ Hide notification if no invites (all expired or declined)
+      if (invites.length === 0) {
+        setCurrentInvite(null);
+        Animated.timing(slideY, {
+          toValue: 200,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
+
+      // ✅ Check if current invite has expired
+      const latestInvite = invites[0];
+      const now = Date.now();
+      const expiresAt = latestInvite.expiresAt || (latestInvite.timestamp + 60000);
+      if (now > expiresAt) {
+        // Invite expired - hide notification
+        setCurrentInvite(null);
+        Animated.timing(slideY, {
+          toValue: 200,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
+
+      // Show invite if available
+      if (!currentInvite) {
+        setCurrentInvite(latestInvite);
         Animated.spring(slideY, {
           toValue: 0,
           useNativeDriver: true,
           tension: 50,
           friction: 7,
         }).start();
+      } else if (currentInvite.roomId !== latestInvite.roomId) {
+        // New invite received - update current invite
+        setCurrentInvite(latestInvite);
       }
     });
 
     return () => unsubscribe();
-  }, [firestoreDB, currentUser?.id]);
+  }, [firestoreDB, currentUser?.id, isInActiveGame]);
+
+  // ✅ Single timeout to hide notification exactly when invite expires (efficient - no periodic checks)
+  useEffect(() => {
+    if (!currentInvite || isInActiveGame) return;
+
+    const now = Date.now();
+    const expiresAt = currentInvite.expiresAt || (currentInvite.timestamp + 60000);
+    const timeUntilExpiry = expiresAt - now;
+
+    // If already expired, hide immediately
+    if (timeUntilExpiry <= 0) {
+      setCurrentInvite(null);
+      Animated.timing(slideY, {
+        toValue: 200,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    // Set a single timeout to hide notification exactly when it expires (much more efficient than interval)
+    const timeout = setTimeout(() => {
+      setCurrentInvite(null);
+      Animated.timing(slideY, {
+        toValue: 200,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }, timeUntilExpiry);
+
+    return () => clearTimeout(timeout);
+  }, [currentInvite, isInActiveGame]);
 
   useEffect(() => {
-    if (currentInvite) {
+    // ✅ Hide notification if user enters active game
+    if (isInActiveGame && currentInvite) {
+      setCurrentInvite(null);
+      Animated.timing(slideY, {
+        toValue: 200,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else if (currentInvite && !isInActiveGame) {
       Animated.spring(slideY, {
         toValue: 0,
         useNativeDriver: true,
         tension: 50,
         friction: 7,
       }).start();
-    } else {
+    } else if (!currentInvite) {
       Animated.timing(slideY, {
         toValue: 200,
         duration: 200,
         useNativeDriver: true,
       }).start();
     }
-  }, [currentInvite]);
+  }, [currentInvite, isInActiveGame]);
 
   const handleAccept = async () => {
     if (!currentInvite || isAccepting) return;
@@ -65,7 +144,7 @@ const InviteNotification = ({ currentUser, onAccept }) => {
     setIsAccepting(true);
     
     try {
-      const success = await acceptGameInvite(
+      const result = await acceptGameInvite(
         firestoreDB,
         currentInvite.roomId,
         currentUser.id,
@@ -75,15 +154,21 @@ const InviteNotification = ({ currentUser, onAccept }) => {
         }
       );
 
-      if (success) {
+      if (result.success) {
         showSuccessMessage('Joined!', 'You joined the game room!');
         setCurrentInvite(null);
         if (onAccept) {
           onAccept(currentInvite.roomId);
         }
+      } else {
+        // Show error message
+        const errorMsg = result.error || 'Failed to join game';
+        showErrorMessage('Cannot Join', errorMsg);
+        setCurrentInvite(null);
       }
     } catch (error) {
       console.error('Error accepting invite:', error);
+      showErrorMessage('Error', 'Failed to join game. Please try again.');
     } finally {
       setIsAccepting(false);
     }
@@ -109,7 +194,8 @@ const InviteNotification = ({ currentUser, onAccept }) => {
     }
   };
 
-  if (!currentInvite) return null;
+  // ✅ Don't show notification if in active game (invites still received, just not displayed)
+  if (!currentInvite || isInActiveGame) return null;
 
   return (
     <Animated.View

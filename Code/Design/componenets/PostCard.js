@@ -166,7 +166,21 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
       <TouchableOpacity  onPress={openProfileDrawer}>
   <Image source={{ uri: item.avatar }} style={themedStyles.avatar}/></TouchableOpacity>
   <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer}>
-    <Text style={themedStyles.name}>{item.displayName}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Text style={themedStyles.name}>{item.displayName}</Text>
+      {item.isPro && (
+        <Image
+          source={require('../../../assets/pro.png')}
+          style={{ width: 14, height: 14, marginLeft: 4 }}
+        />
+      )}
+      {item.robloxUsernameVerified && (
+        <Image
+          source={require('../../../assets/verification.png')}
+          style={{ width: 14, height: 14, marginLeft: 4 }}
+        />
+      )}
+    </View>
     <Text style={themedStyles.time}>
       {formattedTime}
     </Text>

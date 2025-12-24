@@ -11,11 +11,12 @@ import { useLocalState } from '../LocalGlobelStats';
 // import database from '@react-native-firebase/database';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
 import { ref, update } from '@react-native-firebase/database';
+import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 
 const Stack = createNativeStackNavigator();
 
 export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
-  const { user, unreadMessagesCount, appdatabase } = useGlobalState();
+  const { user, unreadMessagesCount, appdatabase, onlineMembersCount } = useGlobalState();
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
   const [chats, setChats] = useState([]);
@@ -23,6 +24,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const [unreadcount, setunreadcount] = useState(0);
   const { localState, updateLocalState } = useLocalState()
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
 
 
 
@@ -38,6 +40,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     headerStyle: { backgroundColor: selectedTheme.colors.background },
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontFamily: 'Lato-Bold', fontSize: 24 },
+    headerBackTitleVisible: false,
   }), [selectedTheme]);
 
 
@@ -120,15 +123,44 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   }, [user?.id, appdatabase, bannedUsers]);
 
 
+  const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
+
+  const getGroupChatOptions = useCallback(() => ({
+    title: 'Chat',
+    headerTitleAlign: 'left',
+    headerTitleStyle: { 
+      fontFamily: 'Lato-Bold', 
+      fontSize: 24,
+    },
+    headerTitleContainerStyle: {
+      left: 0,
+      paddingLeft: 0,
+    },
+    headerRight: () => (
+      <CommunityChatHeader
+        selectedTheme={selectedTheme}
+        onlineMembersCount={onlineMembersCount}
+        unreadcount={unreadcount}
+        setunreadcount={setunreadcount}
+        triggerHapticFeedback={triggerHapticFeedback}
+        onOnlineUsersPress={() => setOnlineUsersVisible(true)}
+      />
+    ),
+    headerRightContainerStyle: {
+      paddingRight: 0,
+      marginRight: 0,
+    },
+  }), [selectedTheme, onlineMembersCount, unreadcount, setunreadcount, triggerHapticFeedback]);
+
   return (
     <Stack.Navigator screenOptions={headerOptions}>
       <Stack.Screen
         name="GroupChat"
-        options={{ headerTitleAlign: 'left', headerShown: false }}
+        options={getGroupChatOptions}
       >
         {() => (
           <ChatScreen
-            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadMessagesCount, unreadcount, setunreadcount }}
+            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadMessagesCount, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }}
           />
         )}
       </Stack.Screen>

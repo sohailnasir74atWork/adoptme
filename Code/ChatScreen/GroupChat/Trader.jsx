@@ -10,7 +10,7 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useGlobalState } from '../../GlobelStats';
 import SignInDrawer from '../../Firebase/SigninDrawer';
-import AdminHeader from './AdminHeader';
+import ChatHeaderContent from './ChatHeaderContent';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
@@ -36,7 +36,7 @@ leoProfanity.loadDictionary('en');
 
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
-  setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount }) => {
+  setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
   const { user, theme, onlineMembersCount, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -553,6 +553,11 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
     }
 
     // Push to Firebase Realtime Database
+    const now = Date.now();
+    const hasRecentWin =
+      typeof user?.lastGameWinAt === 'number' &&
+      now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+
     await chatRef.push({
       text: trimmedInput || null, // allow fruits-only messages
       timestamp: database.ServerValue.TIMESTAMP,
@@ -577,6 +582,8 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
       robloxUsername: user?.robloxUsername || null,
       robloxUsernameVerified: user?.robloxUsernameVerified || false,
       robloxUserId: user?.robloxUserId || null, // ✅ Store userId for profile link
+      hasRecentGameWin: hasRecentWin,
+      lastGameWinAt: user?.lastGameWinAt || null,
     });
 
     // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
@@ -605,22 +612,16 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
       <GestureHandlerRootView>
 
         <View style={styles.container}>
-          <AdminHeader
+          <ChatHeaderContent
             pinnedMessages={pinnedMessages}
-            onClearPin={clearAllPinnedMessages}
             onUnpinMessage={unpinSingleMessage}
-            // isAdmin={isAdmin}
             selectedTheme={selectedTheme}
             onlineMembersCount={onlineMembersCount}
-            // isOwner={isOwner}
             modalVisibleChatinfo={modalVisibleChatinfo}
             setModalVisibleChatinfo={setModalVisibleChatinfo}
             triggerHapticFeedback={triggerHapticFeedback}
-            unreadMessagesCount={unreadMessagesCount}
-            unreadcount={unreadcount}
-            setunreadcount={setunreadcount}
-            pinnedMessage={pinnedMessages}
-            // unpinSingleMessage={unpinSingleMessage}
+            onlineUsersVisible={onlineUsersVisible}
+            setOnlineUsersVisible={setOnlineUsersVisible}
           />
 
           <ConditionalKeyboardWrapper style={{ flex: 1 }} chatscreen={true}>

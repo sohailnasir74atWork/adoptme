@@ -88,6 +88,65 @@ const ProfileBottomDrawer = ({
   // toggle details
   const [loadDetails, setLoadDetails] = useState(false);
 
+  // ✅ State for fetched user data (roblox username, verified status, etc.)
+  const [userData, setUserData] = useState(null);
+
+  // ✅ Fetch user data from Firebase if roblox data is missing
+  useEffect(() => {
+    if (!selectedUserId || !appdatabase) return;
+    
+    // Only fetch if robloxUsername is not already in selectedUser
+    if (selectedUser?.robloxUsername || selectedUser?.robloxUserId) {
+      setUserData(null); // Clear fetched data if already in selectedUser
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchUserData = async () => {
+      try {
+        const userSnap = await get(ref(appdatabase, `users/${selectedUserId}`));
+        
+        if (!isMounted) return;
+        
+        if (userSnap.exists()) {
+          const data = userSnap.val();
+          setUserData({
+            robloxUsername: data.robloxUsername || null,
+            robloxUserId: data.robloxUserId || null,
+            robloxUsernameVerified: data.robloxUsernameVerified || false,
+            isPro: data.isPro || false,
+          });
+        } else {
+          setUserData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching user data in BottomDrawer:', error);
+        if (isMounted) setUserData(null);
+      }
+    };
+
+    fetchUserData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedUserId, selectedUser?.robloxUsername, selectedUser?.robloxUserId, appdatabase]);
+
+  // ✅ Merge selectedUser with fetched userData
+  const mergedUser = useMemo(() => {
+    if (!userData) return selectedUser;
+    return {
+      ...selectedUser,
+      robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
+      robloxUserId: selectedUser?.robloxUserId || userData.robloxUserId,
+      robloxUsernameVerified: selectedUser?.robloxUsernameVerified !== undefined 
+        ? selectedUser.robloxUsernameVerified 
+        : userData.robloxUsernameVerified,
+      isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
+    };
+  }, [selectedUser, userData]);
+
   // ─────────────────────────────────────────────
   // Clipboard
   const copyToClipboard = (code) => {
@@ -100,14 +159,14 @@ const ProfileBottomDrawer = ({
   // ─────────────────────────────────────────────
   // Open Roblox Profile
   const handleOpenRobloxProfile = useCallback(async () => {
-    if (!selectedUser?.robloxUsername && !selectedUser?.robloxUserId) {
+    const robloxUsername = mergedUser?.robloxUsername;
+    const robloxUserId = mergedUser?.robloxUserId;
+    
+    if (!robloxUsername && !robloxUserId) {
       return;
     }
 
     triggerHapticFeedback('impactLight');
-
-    const robloxUserId = selectedUser?.robloxUserId;
-    const robloxUsername = selectedUser?.robloxUsername;
 
     try {
       // Construct URLs
@@ -150,7 +209,7 @@ const ProfileBottomDrawer = ({
       console.error('Error opening Roblox profile:', error);
       Alert.alert('Error', 'Could not open Roblox profile. Please try again.');
     }
-  }, [selectedUser?.robloxUsername, selectedUser?.robloxUserId, triggerHapticFeedback]);
+  }, [mergedUser?.robloxUsername, mergedUser?.robloxUserId, triggerHapticFeedback]);
 
   // ✅ Memoize formatCreatedAt
   const formatCreatedAt = useCallback((timestamp) => {
@@ -268,6 +327,7 @@ const ProfileBottomDrawer = ({
       setCreatedAtText(null);
       setUserPoints(null);
       setGameWins(null);
+      setUserData(null); // ✅ Clear fetched user data
     }
   }, [isVisible]);
 
@@ -281,10 +341,11 @@ const ProfileBottomDrawer = ({
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
-        const [avgSnap, createdSnap, userSnap] = await Promise.all([
+        const [avgSnap, createdSnap, userSnap, bioSnap] = await Promise.all([
           get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
           get(ref(appdatabase, `users/${selectedUserId}`)),
+          get(ref(appdatabase, `users/${selectedUserId}/bio`)), // ✅ Also fetch bio directly
         ]);
 
         if (!isMounted) return;
@@ -295,11 +356,30 @@ const ProfileBottomDrawer = ({
             value: Number(val.value || 0),
             count: Number(val.count || 0),
           });
-          // ✅ Load bio from rating doc
-          setUserBio(val.bio || null);
         } else {
           setRatingSummary(null);
-          setUserBio(null);
+        }
+
+        // ✅ Load bio from multiple sources (priority: averageRatings > users/bio > users document)
+        let bioValue = null;
+        if (avgSnap.exists()) {
+          const val = avgSnap.val();
+          bioValue = val.bio || null;
+        }
+        if (!bioValue && bioSnap.exists()) {
+          const bioData = bioSnap.val();
+          bioValue = (typeof bioData === 'string' && bioData.trim()) ? bioData.trim() : null;
+        }
+        if (!bioValue && userSnap.exists()) {
+          const userData = userSnap.val();
+          bioValue = userData.bio || null;
+        }
+        // ✅ Trim and validate bio value
+        if (bioValue && typeof bioValue === 'string') {
+          bioValue = bioValue.trim();
+          setUserBio(bioValue || null);
+        } else {
+          setUserBio(bioValue);
         }
 
         if (createdSnap.exists()) {
@@ -314,13 +394,24 @@ const ProfileBottomDrawer = ({
           setCreatedAtText(null);
         }
 
-        // ✅ Load user points and game wins
+        // ✅ Load user points (RTDB)
         if (userSnap.exists()) {
           const userData = userSnap.val();
           setUserPoints(userData.rewardPoints || 0);
-          setGameWins(userData.petGameWins || 0);
         } else {
           setUserPoints(0);
+        }
+
+        // ✅ Load game wins (Firestore game_stats)
+        if (firestoreDB && selectedUserId) {
+          const statsDoc = await getDoc(doc(firestoreDB, 'game_stats', selectedUserId));
+          if (statsDoc.exists) {
+            const stats = statsDoc.data() || {};
+            setGameWins(stats.petGameWins || 0);
+          } else {
+            setGameWins(0);
+          }
+        } else {
           setGameWins(0);
         }
       } catch (err) {
@@ -630,7 +721,7 @@ const ProfileBottomDrawer = ({
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                     <Text style={styles.drawerSubtitleUser}>
                       {userName}{' '}
-                      {selectedUser?.isPro && (
+                      {mergedUser?.isPro && (
                         <Image
                           source={require('../../../assets/pro.png')}
                           style={{ width: 14, height: 14 }}
@@ -638,10 +729,10 @@ const ProfileBottomDrawer = ({
                       )}{' '}
                       {selectedUser?.flage ? selectedUser.flage : ''}{'   '}
                     </Text>
-                    {selectedUser?.robloxUsername ? (
+                    {mergedUser?.robloxUsername ? (
                       <View style={{ 
                         marginLeft: 6, 
-                        backgroundColor: selectedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
+                        backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
                         paddingHorizontal: 6, 
                         paddingVertical: 2, 
                         borderRadius: 4,
@@ -651,7 +742,7 @@ const ProfileBottomDrawer = ({
                           fontSize: 9, 
                           fontWeight: '600' 
                         }}>
-                          {selectedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
+                          {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
                         </Text>
                       </View>
                     ) : (
@@ -681,7 +772,7 @@ const ProfileBottomDrawer = ({
                   </View>
 
                   {/* Roblox Username Display */}
-                  {selectedUser?.robloxUsername && (
+                  {mergedUser?.robloxUsername && (
                     <Text
                       style={{
                         fontSize: 11,
@@ -690,7 +781,7 @@ const ProfileBottomDrawer = ({
                         fontWeight: '500',
                       }}
                     >
-                      @{selectedUser.robloxUsername}
+                      @{mergedUser.robloxUsername}
                     </Text>
                   )}
 
@@ -1167,7 +1258,7 @@ const ProfileBottomDrawer = ({
             )}
 
             {/* Roblox Profile Button */}
-            {selectedUser?.robloxUsername && (
+            {mergedUser?.robloxUsername && (
               <TouchableOpacity 
                 style={[styles.saveButton, { 
                   backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',

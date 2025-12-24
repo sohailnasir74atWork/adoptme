@@ -19,7 +19,6 @@ import ValueScreen from "./ValueScreen";
 import config from "../Helper/Environment";
 import HDWallpaperScreen from "./HDwallpaper";
 import NewsScreen from "./News";
-import PetGuessingGameScreen from "./PetGuessingGame/PetGuessingGameScreen";
 import { useGlobalState } from "../GlobelStats";
 import NewsFeedbackReport from "./AdminReport";
 
@@ -50,13 +49,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
         key: "News",
         icon: "newspaper-outline",
         iconActive: "newspaper",
-      },
-      {
-        label: "Pet Game",
-        key: "petGame",
-        icon: "game-controller-outline",
-        iconActive: "game-controller",
-      },
+      }
     ];
 
     if (isAdmin) {
@@ -240,16 +233,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
           </View>
         )}
 
-        {mountedTabs.petGame && (
-          <View
-            style={[
-              styles.screen,
-              activeKey !== "petGame" && styles.hiddenScreen,
-            ]}
-          >
-            <PetGuessingGameScreen />
-          </View>
-        )}
+     
 
         {/* 🔹 Admin tab content, only mounted if the tab exists & was visited */}
         {mountedTabs.Admin && isAdmin && (

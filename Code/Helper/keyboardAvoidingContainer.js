@@ -1,39 +1,78 @@
-import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Keyboard, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { KeyboardAvoidingView, Keyboard, Platform, Animated, Easing } from 'react-native';
 
-const ConditionalKeyboardWrapper = ({ children, style, chatscreen = false, privatechatscreen=false }) => {
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+const ConditionalKeyboardWrapper = ({ children, style, chatscreen = false, privatechatscreen = false }) => {
+  const keyboardHeight = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardVisible(true);
+    // Use 'will' events on iOS for smoother animations (fires before animation starts)
+    // Use 'did' events on Android (standard for Android)
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, (e) => {
+      const height = e.endCoordinates?.height || 0;
+      Animated.timing(keyboardHeight, {
+        toValue: height,
+        duration: Platform.OS === 'ios' ? (e?.duration || 200) : 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }).start();
     });
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardVisible(false);
+
+    const hideSubscription = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(keyboardHeight, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? (e?.duration || 200) : 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }).start();
     });
 
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, []);
+  }, [keyboardHeight]);
 
-  const verticalOffset = privatechatscreen && keyboardVisible
-  ? 120
-  : chatscreen
-    ? Platform.OS === 'ios'
-      ? 70
-      : keyboardVisible
-        ? 0
-        : 0
-    : 110;
+  // ✅ For chat and private chat screens: use smooth Animated padding with our own timing.
+  // This avoids the sometimes jittery / slow default KeyboardAvoidingView animation.
+  if (chatscreen || privatechatscreen) {
+    return (
+      <Animated.View
+        style={[
+          style,
+          {
+            paddingBottom: keyboardHeight,
+          },
+        ]}
+      >
+        {children}
+      </Animated.View>
+    );
+  }
 
+  // ✅ For all other screens, keep simple KeyboardAvoidingView behavior.
+  if (Platform.OS === 'ios') {
+    const offset = 10;
+
+    return (
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={offset}
+        style={style}
+      >
+        {children}
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={verticalOffset}
+      behavior="padding"
       style={style}
+      keyboardVerticalOffset={10}
+      enabled={true}
     >
       {children}
     </KeyboardAvoidingView>

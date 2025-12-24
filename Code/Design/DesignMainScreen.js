@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Text,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { 
   collection,
   doc,
@@ -27,8 +28,6 @@ import {
 
 } from '@react-native-firebase/firestore';
 
-import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
-
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
@@ -42,9 +41,7 @@ import { showMessage } from 'react-native-flash-message';
 // import SingleNativeAd from '../Ads/SingleNative';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
-
-
-const availableTags = ['Scam Alert', 'Looking for Trade', 'Discussion', 'Real or Fake', 'Need Help', 'Misc'];
+import PostsHeader from './componenets/PostsHeader';
 
 
 const DesignFeedScreen = ({ route }) => {
@@ -52,6 +49,7 @@ const DesignFeedScreen = ({ route }) => {
   const { appdatabase, user, theme, firestoreDB } = useGlobalState();
   const { localState } = useLocalState();
   const isDarkMode = theme === 'dark';
+  const navigation = useNavigation();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSigninDrawerVisible, setSigninDrawerVisible] = useState(false);
@@ -222,6 +220,23 @@ const DesignFeedScreen = ({ route }) => {
   useEffect(() => {
     fetchInitialPosts();
   }, []);
+
+  // Update header when filter state changes
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <PostsHeader
+          selectedTag={selectedTag}
+          filterMyPosts={filterMyPosts}
+          setFilterMyPosts={setFilterMyPosts}
+          setSelectedTag={setSelectedTag}
+          fetchInitialPosts={fetchInitialPosts}
+          fetchMyPosts={fetchMyPosts}
+          fetchPostsByTag={fetchPostsByTag}
+        />
+      ),
+    });
+  }, [navigation, selectedTag, filterMyPosts, fetchInitialPosts, fetchMyPosts, fetchPostsByTag]);
   useEffect(() => {
     if (posts.length === 0) return;
   
@@ -372,116 +387,6 @@ const DesignFeedScreen = ({ route }) => {
 
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
-      <View style={[styles.header, isDarkMode && styles.headerDark, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-        <Text style={[styles.headerText, isDarkMode && styles.headerTextDark]}>Feed</Text>
-        <Menu>
-          <MenuTrigger style={{flexDirection:'row', alignItems:'center'}}>
-          <Text style={{color:config.colors.primary, fontSize:10, fontWeight:'900'}}>{selectedTag}</Text>
-            <FontAwesome
-              name="filter"
-              size={20}
-              style={{ padding: 6 }}
-              color={filterMyPosts || selectedTag ? config.colors.primary : isDarkMode ? '#ccc' : '#444'}
-            />
-            
-          </MenuTrigger>
-          <MenuOptions customStyles={{ optionsContainer: { width: 200 } }}>
-            {/* All Posts */}
-            <MenuOption
-  onSelect={() => {
-    const handleAction = () => {
-      setFilterMyPosts(false);
-      setSelectedTag(null);
-      fetchInitialPosts();
-    };
-
-    if (!localState.isPro) {
-      // Make sure InterstitialAdManager.showAd supports a callback
-      InterstitialAdManager.showAd(handleAction);
-    } else {
-      handleAction();
-    }
-  }
-  }
->
-
-              <View style={styles.menuItem}>
-                <Text style={[styles.menuText, !filterMyPosts && !selectedTag && styles.selectedText]}>
-                  All Posts
-                </Text>
-                {!filterMyPosts && !selectedTag && <FontAwesome name="check" size={14} color={config.colors.primary} />}
-              </View>
-            </MenuOption>
-
-            {/* My Posts */}
-            <MenuOption
-              onSelect={() => {
-                const handleAction = () => {
-                  setFilterMyPosts(true);
-                  setSelectedTag(null);
-                  fetchMyPosts();
-                };
-              
-                if (!localState.isPro) {
-                  // Make sure InterstitialAdManager.showAd supports a callback
-                  InterstitialAdManager.showAd(handleAction);
-                } else {
-                  handleAction();
-                }
-              }}
-            >
-              <View style={styles.menuItem}>
-                <Text style={[styles.menuText, filterMyPosts && styles.selectedText]}>
-                  My Posts
-                </Text>
-                {filterMyPosts && <FontAwesome name="check" size={14} color={config.colors.primary} />}
-              </View>
-            </MenuOption>
-
-            {/* Divider & Label */}
-            <View style={styles.menuDivider}>
-              <Text style={[styles.menuLabel, isDarkMode && { color: '#aaa' }]}>Filter by Tag</Text>
-            </View>
-
-            {/* Tag Filters */}
-            {availableTags.map((tag, index) => (
-              <MenuOption
-                key={index}
-                onSelect={() => {
-                  const handleAction = () => {
-                    setFilterMyPosts(false);
-                    setSelectedTag(tag);
-                    fetchPostsByTag(tag);
-                  };
-                  if (!localState.isPro) {
-                    // Make sure InterstitialAdManager.showAd supports a callback
-                    InterstitialAdManager.showAd(handleAction);
-                  } else {
-                    handleAction();
-                  }
-                
-                
-                }}
-              >
-                <View style={styles.menuItem}>
-                  <Text style={[styles.menuText, selectedTag === tag && styles.selectedText]}>
-                    {tag}
-                  </Text>
-                  {selectedTag === tag && (
-                    <FontAwesome name="check" size={14} color={config.colors.primary} />
-                  )}
-                </View>
-              </MenuOption>
-            ))}
-          </MenuOptions>
-
-        </Menu>
-
-
-
-      </View>
-
-
       <FlatList
         data={dataToRender}
         keyExtractor={keyExtractor}
@@ -548,13 +453,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     // backgroundColor: '#fff',
-    paddingTop: Platform.OS === 'android' ? 60 : 0
-
   },
   darkContainer: {
     backgroundColor: '#121212',
-    paddingTop: Platform.OS === 'android' ? 60 : 0
-
   },
   fab: {
     position: 'absolute',
@@ -579,61 +480,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Lato-Regular',
   },
   latoBold: {
-    fontFamily: 'Lato-Bold',
-  },
-  header: {
-    paddingTop: 10,
-    paddingBottom: 10,
-    // backgroundColor: '#fff',
-    // alignItems: 'center',
-    // justifyContent: 'center',
-    borderBottomWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 20
-  },
-  headerDark: {
-    // backgroundColor: '#1e1e1e',
-    borderColor: '#333',
-  },
-  headerText: {
-    fontSize: 22,
-    fontFamily: 'Lato-Bold',
-    color: '#111',
-  },
-  headerTextDark: {
-    color: '#fff',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-
-  menuText: {
-    fontSize: 14,
-    color: '#333',
-    fontFamily: 'Lato-Regular',
-  },
-
-  selectedText: {
-    color: config.colors.primary,
-    fontFamily: 'Lato-Bold',
-  },
-
-  menuDivider: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
-    paddingBottom: 4,
-    borderTopWidth: 1,
-    borderColor: '#ccc',
-  },
-
-  menuLabel: {
-    fontWeight: 'bold',
-    fontSize: 12,
-    color: '#444',
     fontFamily: 'Lato-Bold',
   },
 

@@ -1,5 +1,5 @@
 // InviteUsersModal.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,40 +13,194 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
-import { getOnlineUsersForInvite, sendGameInvite } from '../utils/gameInviteSystem';
+import {
+  getOnlineUserIdsForInvite,
+  fetchUserDetailsForInvite,
+  sendGameInvite,
+} from '../utils/gameInviteSystem';
 import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
 
 const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
   const { appdatabase, firestoreDB, theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  
+  // ✅ OPTIMIZED: Store only user IDs (lightweight)
+  const [onlineUserIds, setOnlineUserIds] = useState([]);
+  // ✅ Store fetched user details (only for displayed users)
+  const [userDetails, setUserDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [displayedCount, setDisplayedCount] = useState(5); // Start with 5 users (same as OnlineUsersList)
+  const [loadingMore, setLoadingMore] = useState(false);
   const [invitingIds, setInvitingIds] = useState(new Set());
   const [invitedIds, setInvitedIds] = useState(new Set());
 
+  const userDetailsRef = useRef({}); // ✅ Cache user details (prevents re-renders)
+
+  // ✅ Reset when modal closes
   useEffect(() => {
-    if (visible && appdatabase && currentUser?.id) {
-      loadOnlineUsers();
-    } else {
-      setOnlineUsers([]);
+    if (!visible) {
+      setOnlineUserIds([]);
+      setUserDetails({});
       setSearchQuery('');
+      setDisplayedCount(5);
       setInvitingIds(new Set());
       setInvitedIds(new Set());
+      userDetailsRef.current = {};
     }
-  }, [visible, appdatabase, currentUser?.id]);
+  }, [visible]);
 
-  const loadOnlineUsers = async () => {
-    setLoading(true);
-    try {
-      const users = await getOnlineUsersForInvite(appdatabase, firestoreDB, currentUser.id);
-      setOnlineUsers(users);
-    } catch (error) {
-      console.error('Error loading online users:', error);
-    } finally {
-      setLoading(false);
+  // ✅ Fetch ALL user IDs from Firestore ONCE when modal opens (same pattern as OnlineUsersList.jsx)
+  const hasFetchedIdsRef = useRef(false);
+  
+  useEffect(() => {
+    if (!visible || !firestoreDB || !currentUser?.id) {
+      // Reset when modal closes
+      setOnlineUserIds([]);
+      setUserDetails({});
+      setSearchQuery('');
+      setDisplayedCount(5);
+      setInvitingIds(new Set());
+      setInvitedIds(new Set());
+      userDetailsRef.current = {};
+      hasFetchedIdsRef.current = false;
+      return;
     }
-  };
+
+    // ✅ Only fetch once when modal opens
+    if (hasFetchedIdsRef.current) return;
+
+    let isMounted = true;
+    setLoading(true);
+    hasFetchedIdsRef.current = true;
+
+    const fetchOnlineUserIds = async () => {
+      try {
+        // ✅ Get ALL user IDs from Firestore (same pattern as OnlineUsersList.jsx)
+        const allUserIds = await getOnlineUserIdsForInvite(firestoreDB, currentUser.id);
+        
+        if (!isMounted) return;
+        
+        // Store all IDs
+        setOnlineUserIds(allUserIds);
+        
+        // ✅ Initially fetch details for first 5 users (same as OnlineUsersList.jsx)
+        if (allUserIds.length > 0) {
+          const initialBatch = allUserIds.slice(0, 5);
+          const initialDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, initialBatch);
+          if (isMounted) {
+            setUserDetails(prev => ({ ...prev, ...initialDetails }));
+            setDisplayedCount(5);
+          }
+        }
+        
+        if (isMounted) {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error fetching online users from Firestore:', error);
+        if (isMounted) {
+          setOnlineUserIds([]);
+          setUserDetails({});
+          setDisplayedCount(0);
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchOnlineUserIds();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, firestoreDB, currentUser?.id]);
+
+  // ✅ Load more user details on scroll (5 by 5) - same pattern as OnlineUsersList.jsx
+  const loadedCount = useMemo(() => {
+    return Object.keys(userDetails).length;
+  }, [userDetails]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || searchQuery.trim() || loadedCount >= onlineUserIds.length) return;
+    
+    setLoadingMore(true);
+    try {
+      // ✅ Calculate next batch (5 at a time)
+      const nextBatchStart = loadedCount;
+      const nextBatchEnd = Math.min(nextBatchStart + 5, onlineUserIds.length);
+      const nextBatch = onlineUserIds.slice(nextBatchStart, nextBatchEnd);
+      
+      if (nextBatch.length > 0) {
+        // ✅ Fetch details for next 5 users
+        const newDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, nextBatch);
+        userDetailsRef.current = { ...userDetailsRef.current, ...newDetails };
+        setUserDetails(prev => ({ ...prev, ...newDetails }));
+        setDisplayedCount(nextBatchEnd);
+      }
+    } catch (error) {
+      console.error('Error loading more user details:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, searchQuery, loadedCount, onlineUserIds, appdatabase, firestoreDB]);
+
+  // ✅ Handle search: Fetch details for all users if needed (same pattern as OnlineUsersList.jsx)
+  useEffect(() => {
+    if (!visible || !searchQuery.trim() || !appdatabase || loadedCount >= onlineUserIds.length) return;
+
+    let isMounted = true;
+
+    const performSearch = async () => {
+      try {
+        // ✅ If we haven't loaded all user details yet, load them for search
+        if (loadedCount < onlineUserIds.length) {
+          const remainingIds = onlineUserIds.slice(loadedCount);
+          const remainingDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, remainingIds);
+          if (isMounted) {
+            userDetailsRef.current = { ...userDetailsRef.current, ...remainingDetails };
+            setUserDetails(prev => ({ ...prev, ...remainingDetails }));
+            setDisplayedCount(onlineUserIds.length);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user details for search:', error);
+      }
+    };
+
+    performSearch();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [searchQuery, visible, appdatabase, loadedCount, onlineUserIds.length, firestoreDB]);
+
+  // ✅ Get users with details (only loaded users have details) - same pattern as OnlineUsersList.jsx
+  const usersWithDetails = useMemo(() => {
+    return onlineUserIds
+      .slice(0, loadedCount) // Only show users we've loaded details for
+      .map(userId => {
+        const details = userDetails[userId] || userDetailsRef.current[userId];
+        if (!details) return null; // Not loaded yet
+        return { ...details, id: userId };
+      })
+      .filter(Boolean); // Remove nulls
+  }, [onlineUserIds, loadedCount, userDetails]);
+
+  // ✅ Filter users based on search query
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) {
+      // No search: Return loaded users
+      return usersWithDetails;
+    }
+    
+    // Search active: Filter all loaded users
+    const query = searchQuery.toLowerCase();
+    return usersWithDetails.filter(user => 
+      user?.displayName?.toLowerCase().includes(query)
+    );
+  }, [usersWithDetails, searchQuery]);
+
 
   const handleInvite = async (user) => {
     if (!roomId || invitingIds.has(user.id) || invitedIds.has(user.id) || user.isPlaying) return;
@@ -74,10 +228,6 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
     }
   };
 
-  const filteredUsers = onlineUsers.filter((user) =>
-    user.displayName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <Modal
       visible={visible}
@@ -96,6 +246,8 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.searchContainer}>
+            <Icon name="search" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} style={styles.searchIcon} />
           <TextInput
             style={[
               styles.searchInput,
@@ -109,6 +261,18 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('');
+                  setDisplayedCount(6); // Reset pagination when clearing search
+                }}
+                style={styles.clearButton}
+              >
+                <Icon name="close-circle" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -129,6 +293,19 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
             <FlatList
               data={filteredUsers}
               keyExtractor={(item) => item.id}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                !searchQuery.trim() && loadedCount < onlineUserIds.length ? (
+                  <View style={styles.loadMoreContainer}>
+                    <ActivityIndicator size="small" color="#8B5CF6" />
+                  </View>
+                ) : null
+              }
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={6}
+              windowSize={5}
+              initialNumToRender={6}
               renderItem={({ item }) => {
                 const isInviting = invitingIds.has(item.id);
                 const isInvited = invitedIds.has(item.id);
@@ -193,7 +370,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (isDark) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -218,13 +395,31 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
   },
-  searchInput: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
+    borderRadius: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
     fontSize: 14,
     fontFamily: 'Lato-Regular',
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  loadMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingContainer: {
     paddingVertical: 40,

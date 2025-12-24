@@ -61,9 +61,7 @@ const [petModalVisible, setPetModalVisible] = useState(false);
 const [selectedFruits, setSelectedFruits] = useState([]); 
 const [reviewText, setReviewText] = useState('');   // 👈 new
 const [startRating,setStartRating] = useState(false)
-const [isOnline, setIsOnline] = useState(false); 
-
-
+const [isOnline, setIsOnline] = useState(false);
 
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);

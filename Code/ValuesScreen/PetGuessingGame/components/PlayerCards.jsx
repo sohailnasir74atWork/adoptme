@@ -23,7 +23,10 @@ const PlayerCards = ({ roomData, currentUserId }) => {
     const scores = roomData.gameData?.scores || {};
     const spinHistory = roomData.gameData?.spinHistory || [];
     
-    return playerOrder.map(playerId => {
+    let playersList = playerOrder.map(playerId => {
+      // Get player data - preserve even if player left (use stored data)
+      const playerData = roomData.players[playerId] || {};
+      
       // Get winning pets for this player from spin history
       const winningPets = spinHistory
         .filter(spin => spin.playerId === playerId && spin.petImage)
@@ -35,13 +38,25 @@ const PlayerCards = ({ roomData, currentUserId }) => {
       
       return {
         id: playerId,
-        ...roomData.players[playerId],
+        displayName: playerData.displayName || 'Anonymous',
+        avatar: playerData.avatar || null,
         score: scores[playerId] || 0,
         isHost: playerId === roomData.hostId,
         winningPets,
       };
     });
-  }, [roomData]);
+    
+    // Always show current user's card on the left
+    // Sort so current user is first
+    const currentUserIndex = playersList.findIndex(p => p.id === currentUserId);
+    if (currentUserIndex > 0) {
+      const currentUser = playersList[currentUserIndex];
+      playersList.splice(currentUserIndex, 1);
+      playersList.unshift(currentUser);
+    }
+    
+    return playersList;
+  }, [roomData, currentUserId]);
 
   const currentTurnPlayerId = useMemo(() => {
     const playerOrder = roomData?.gameData?.playerOrder || [];
@@ -109,7 +124,7 @@ const PlayerCards = ({ roomData, currentUserId }) => {
                 </View>
               )}
 
-              {/* Top: Avatar with Host Badge */}
+              {/* Left: Avatar with Host Badge */}
               <View style={styles.avatarContainer}>
                 <Image
                   source={{
@@ -124,35 +139,36 @@ const PlayerCards = ({ roomData, currentUserId }) => {
                 )}
               </View>
 
-              {/* Center: Player Name */}
-              <Text 
-                style={[styles.playerName, { color: isDarkMode ? '#fff' : '#000' }]}
-                numberOfLines={1}
-              >
-                {player.displayName || 'Anonymous'}
-              </Text>
+              {/* Center: Player Info */}
+              <View style={styles.playerInfoContainer}>
+                {/* Player Name */}
+                <Text 
+                  style={[styles.playerName, { color: isDarkMode ? '#fff' : '#000' }]}
+                  numberOfLines={1}
+                >
+                  {player.displayName || 'Anonymous'}
+                </Text>
 
-              {/* Center: Score */}
-              <View style={styles.scoreContainer}>
+                {/* Score */}
                 <Text style={[styles.score, isWinner && styles.scoreWinner]}>
                   {Number(player.score || 0).toLocaleString()}
                 </Text>
-              </View>
 
-              {/* Bottom: Winning Pet Images */}
-              {player.winningPets && player.winningPets.length > 0 && (
-                <View style={styles.petsContainer}>
-                  {player.winningPets.map((pet, petIndex) => (
-                    <View key={petIndex} style={styles.petImageWrapper}>
-                      <Image
-                        source={{ uri: pet.image }}
-                        style={styles.petImage}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  ))}
-                </View>
-              )}
+                {/* Winning Pet Images */}
+                {player.winningPets && player.winningPets.length > 0 && (
+                  <View style={styles.petsContainer}>
+                    {player.winningPets.map((pet, petIndex) => (
+                      <View key={petIndex} style={styles.petImageWrapper}>
+                        <Image
+                          source={{ uri: pet.image }}
+                          style={styles.petImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
           );
         })}
@@ -163,7 +179,7 @@ const PlayerCards = ({ roomData, currentUserId }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   roundIndicator: {
     alignSelf: 'center',
@@ -184,17 +200,18 @@ const styles = StyleSheet.create({
   },
   card: {
     width: CARD_WIDTH,
-    minHeight: 80,
-    padding: 10,
+    minHeight: 50,
+    padding: 6,
     borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 4,
+    // elevation: 3,
     position: 'relative',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   cardActive: {
     borderWidth: 1.5,
@@ -231,14 +248,14 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     position: 'relative',
-    marginBottom: 3,
+    marginRight: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 17.5,
     borderWidth: 2,
     borderColor: '#e5e7eb',
   },
@@ -260,37 +277,40 @@ const styles = StyleSheet.create({
   },
   hostBadgeText: {
     fontSize: 9,
+    fontFamily: 'Lato-Regular',
+  },
+  playerInfoContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   playerName: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: 'Lato-Bold',
-    textAlign: 'center',
+    textAlign: 'left',
     marginBottom: 2,
   },
-  scoreContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
   score: {
-    fontSize: 18,
+    fontSize: 14,
     fontFamily: 'Lato-Bold',
     color: '#10B981',
+    marginBottom: 4,
   },
   scoreWinner: {
     color: '#F59E0B',
   },
   petsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: 4,
-    gap: 4,
+    flexWrap: 'nowrap',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
   },
   petImageWrapper: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#f3f4f6',
     borderWidth: 0.5,

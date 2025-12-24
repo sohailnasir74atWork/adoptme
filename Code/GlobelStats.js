@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
 import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
-import { ref, set, update, get, onDisconnect, getDatabase, onValue } from '@react-native-firebase/database';
-import { getFirestore } from '@react-native-firebase/firestore';
+import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove } from '@react-native-firebase/database';
+import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
@@ -38,6 +38,7 @@ export const GlobalStateProvider = ({ children }) => {
 
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isInActiveGame, setIsInActiveGame] = useState(false); // ✅ Track if user is in active game
   const [user, setUser] = useState({
     id: null,
     // selectedFruits: [],
@@ -75,7 +76,7 @@ export const GlobalStateProvider = ({ children }) => {
     updateLocalStateRef.current = updateLocalState;
   }, [updateLocalState]);
 
-  // ✅ Memoize updateLocalStateAndDatabase to prevent infinite loops
+  // ✅ Memoize updateLocalStateAndDatabase to prevent infinite loops and duplicate writes
   const updateLocalStateAndDatabase = useCallback(async (keyOrUpdates, value) => {
     try {
       let updates = {};
@@ -92,12 +93,19 @@ export const GlobalStateProvider = ({ children }) => {
         throw new Error('Invalid arguments for update.');
       }
 
-      // ✅ Update in-memory user state and Firebase in one functional update
+      // ✅ Update in-memory user state and Firebase in one functional update (prevents duplicate writes)
       setUser((prev) => {
+        // ✅ Check if updates are actually different to prevent duplicate writes
+        const hasChanges = Object.keys(updates).some(key => prev[key] !== updates[key]);
+        if (!hasChanges && prev?.id) {
+          // No changes, skip Firebase write
+          return prev;
+        }
+
         const updatedUser = { ...prev, ...updates };
         
-        // ✅ Update Firebase only if user is logged in (use prev.id to avoid dependency)
-        if (prev?.id && appdatabase) {
+        // ✅ Update Firebase only if user is logged in and there are actual changes
+        if (prev?.id && appdatabase && hasChanges) {
           const userRef = ref(appdatabase, `users/${prev.id}`);
           update(userRef, updates).catch((error) => {
             // Silently handle Firebase errors
@@ -544,70 +552,37 @@ export const GlobalStateProvider = ({ children }) => {
     fetchStockData(true);
   };
   // ✅ Helper function to set user online
+  // ✅ Cloud Function will handle Firestore updates to Firestore & counter
   const setUserOnline = useCallback(async () => {
     if (!user?.id || !appdatabase) return;
-
-    // ✅ Mark user as online in local state & database
-    await updateLocalStateAndDatabase('online', true);
-
-    // ✅ Add user to online_users node (cost-effective: only stores online users)
-    const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-    
-    // Set online status in users node
-    await set(userOnlineRef, true).catch((error) => 
-      console.error("🔥 Error setting online status:", error)
-    );
-    
-    // ✅ Only add to online_users if user wants to show online status (optimized for Firebase costs)
-    if (localState?.showOnlineStatus !== false) {
-      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-      // ✅ Add to online_users list (minimal data: just true, userId is the key)
-      await set(onlineUsersRef, true).catch((error) => 
-        console.error("🔥 Error adding to online_users:", error)
-      );
-    } else {
-      // ✅ User has disabled online status - ensure they're not in online_users
-      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-      await onlineUsersRef.remove().catch((error) => 
-        console.error("🔥 Error removing from online_users:", error)
-      );
+  
+    // If user hides online status, force offline in RTDB
+    if (localState?.showOnlineStatus === false) {
+      await updateLocalStateAndDatabase('online', false);
+      return;
     }
+  
+    // This already updates RTDB at users/{uid}.online
+    await updateLocalStateAndDatabase('online', true);
   }, [user?.id, appdatabase, updateLocalStateAndDatabase, localState?.showOnlineStatus]);
-
-  // ✅ Helper function to set user offline
+  
   const setUserOffline = useCallback(async () => {
     if (!user?.id || !appdatabase) return;
-
-    // ✅ Mark user as offline in local state
-    updateLocalStateAndDatabase('online', false);
-
-    // ✅ Remove from online_users
-    const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-    await onlineUsersRef.remove().catch((error) => 
-      console.error("🔥 Error removing from online_users:", error)
-    );
+  
+    await updateLocalStateAndDatabase('online', false);
   }, [user?.id, appdatabase, updateLocalStateAndDatabase]);
+  
 
-  // console.log(localState.ggData[0])
+  // ✅ Set up online status tracking (Cloud Function handles Firestore sync)
   useEffect(() => {
     if (!user?.id || !appdatabase) return;
 
     // ✅ Mark user as online when component mounts or user changes
     setUserOnline();
 
-    // ✅ Add user to online_users node (cost-effective: only stores online users)
+    // ✅ Set up onDisconnect to mark user offline in Realtime DB
+    // ✅ Cloud Function will automatically sync this to Firestore
     const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-    
-    // ✅ Only set up online_users disconnect if user wants to show online status
-    if (localState?.showOnlineStatus !== false) {
-      const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-      // ✅ Remove from online_users on disconnect
-      onDisconnect(onlineUsersRef)
-        .remove()
-        .catch((error) => console.error("🔥 Error removing from online_users on disconnect:", error));
-    }
-
-    // ✅ Ensure user is marked offline upon disconnection
     onDisconnect(userOnlineRef)
       .set(false)
       .catch((error) => console.error("🔥 Error setting onDisconnect:", error));
@@ -632,56 +607,50 @@ export const GlobalStateProvider = ({ children }) => {
           setUserOnline();
         }
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // ✅ App went to background - immediately remove from online_users
+        // ✅ App went to background - remove from Firestore list and mark offline
         // This ensures user is NOT shown as online when app is in background
-        const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-        onlineUsersRef.remove().catch((error) => 
-          console.error("🔥 Error removing from online_users on background:", error)
-        );
-        
-        // Also mark as offline in users node
-        const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-        set(userOnlineRef, false).catch((error) => 
-          console.error("🔥 Error setting offline status on background:", error)
-        );
-        
-        // Update local state to reflect offline status
-        updateLocalStateAndDatabase('online', false);
+        setUserOffline();
       }
     });
 
     return () => {
       subscription?.remove();
     };
-  }, [user?.id, appdatabase, setUserOnline, localState?.showOnlineStatus, updateLocalStateAndDatabase]);
+  }, [user?.id, appdatabase, setUserOnline, setUserOffline, localState?.showOnlineStatus, updateLocalStateAndDatabase]);
 
-  // ✅ Listen to online users count (COST-EFFECTIVE: only listens to /online_users, not all users)
+  // ✅ Listen to online users count from Firestore (Cloud Function maintains this in online_users/list)
   useEffect(() => {
-    if (!appdatabase) return;
+    if (!firestoreDB) return;
 
-    // ✅ Only listen to /online_users node (much cheaper - only contains online users)
-    const onlineUsersRef = ref(appdatabase, 'online_users');
-    
-    const unsubscribe = onValue(onlineUsersRef, (snapshot) => {
-      if (!snapshot.exists()) {
+    // ✅ Listen to Firestore doc maintained by Cloud Function: online_users/list
+    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+
+    const unsubscribe = onSnapshot(
+      onlineUsersDocRef,
+      (snapshot) => {
+        if (!snapshot.exists) {
+          setOnlineMembersCount(0);
+          return;
+        }
+
+        const data = snapshot.data() || {};
+        // Prefer explicit count field; fallback to userIds length
+        let count = typeof data.count === 'number' ? data.count : 0;
+        if (!count && Array.isArray(data.userIds)) {
+          count = data.userIds.length;
+        }
+        setOnlineMembersCount(count || 0);
+      },
+      (error) => {
+        console.error('Error listening to online members count (Firestore):', error);
         setOnlineMembersCount(0);
-        return;
       }
-
-      // Count children in online_users node (only online users, not all 100k users)
-      const onlineUsers = snapshot.val();
-      const onlineCount = onlineUsers ? Object.keys(onlineUsers).length : 0;
-
-      setOnlineMembersCount(onlineCount);
-    }, (error) => {
-      console.error('Error listening to online members count:', error);
-      setOnlineMembersCount(0);
-    });
+    );
 
     return () => {
       unsubscribe();
     };
-  }, [appdatabase]);
+  }, [firestoreDB]);
 
   // console.log(user)
 
@@ -700,9 +669,11 @@ export const GlobalStateProvider = ({ children }) => {
       freeTranslation,
       isAdmin,
       reload,
-      robloxUsernameRef, api, currentUserEmail, single_offer_wall, tradingServerLink
+      robloxUsernameRef, api, currentUserEmail, single_offer_wall, tradingServerLink,
+      isInActiveGame, // ✅ Game state for invite notifications
+      setIsInActiveGame, // ✅ Set game state
     }),
-    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink]
+    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink, isInActiveGame]
   );
 
   return (

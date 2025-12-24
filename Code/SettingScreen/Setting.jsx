@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Linking,
   Platform,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -64,6 +65,304 @@ const BUNNY_CDN_BASE     = 'https://pull-gag.b-cdn.net';
 // ~500 KB max for avatar (small, DP-friendly)
 const MAX_AVATAR_SIZE_BYTES = 500 * 1024;
 
+// Modern Minimalist Edit Profile Drawer Component
+const EditProfileDrawerContent = ({
+  isDarkMode,
+  newDisplayName,
+  setNewDisplayName,
+  handlePickAndUploadAvatar,
+  uploadingAvatar,
+  avatarSearch,
+  setAvatarSearch,
+  filteredAvatarOptions,
+  selectedImage,
+  setSelectedImage,
+  bio,
+  setBio,
+  handleSaveChanges,
+  t,
+  config,
+  user,
+}) => {
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const PROFILE_EDIT_COOLDOWN_DAYS = 30;
+
+  // ✅ Calculate cooldown status
+  const cooldownStatus = useMemo(() => {
+    if (!user?.lastProfileEditAt) {
+      return { inCooldown: false, daysRemaining: 0 };
+    }
+
+    const lastEditTimestamp = typeof user.lastProfileEditAt === 'number' 
+      ? user.lastProfileEditAt 
+      : Date.parse(user.lastProfileEditAt);
+    
+    if (isNaN(lastEditTimestamp)) {
+      return { inCooldown: false, daysRemaining: 0 };
+    }
+
+    const now = Date.now();
+    const daysSinceLastEdit = (now - lastEditTimestamp) / (1000 * 60 * 60 * 24);
+    const daysRemaining = Math.ceil(PROFILE_EDIT_COOLDOWN_DAYS - daysSinceLastEdit);
+
+    return {
+      inCooldown: daysSinceLastEdit < PROFILE_EDIT_COOLDOWN_DAYS,
+      daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+    };
+  }, [user?.lastProfileEditAt]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.drawer,
+        {
+          padding: 14,
+          paddingBottom: 18,
+          transform: [{ translateY: slideAnim }],
+          opacity: fadeAnim,
+        },
+      ]}
+    >
+      {/* Minimalist Header */}
+      {/* <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <Text style={{ fontSize: 18, fontFamily: 'Lato-Bold', color: isDarkMode ? '#fff' : '#000' }}>
+          Edit Profile
+        </Text>
+        <View style={{
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: config.colors.primary,
+        }} />
+      </View> */}
+
+      {/* Display Name - Minimal Design */}
+      <View style={{ marginBottom: 10 }}>
+        <Text style={{ fontSize: 11, fontFamily: 'Lato-Bold', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Display Name
+        </Text>
+        <TextInput
+          style={{
+            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            padding: 12,
+            borderRadius: 10,
+            fontSize: 14,
+            color: isDarkMode ? '#fff' : '#000',
+            borderWidth: 0,
+          }}
+          placeholder="Enter name"
+          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          value={newDisplayName}
+          onChangeText={setNewDisplayName}
+        />
+      </View>
+
+      {/* Profile Picture - Clean Section */}
+      <View style={{ marginBottom: 10 }}>
+        <Text style={{ fontSize: 11, fontFamily: 'Lato-Bold', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Profile Picture
+        </Text>
+        
+        <TouchableOpacity
+          style={{
+            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 11,
+            borderRadius: 10,
+            marginBottom: 8,
+          }}
+          onPress={handlePickAndUploadAvatar}
+          disabled={uploadingAvatar}
+          activeOpacity={0.7}
+        >
+          {uploadingAvatar ? (
+            <ActivityIndicator color={config.colors.primary} size="small" />
+          ) : (
+            <>
+              <Icon
+                name="cloud-upload-outline"
+                size={16}
+                color={config.colors.primary}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={{ color: config.colors.primary, fontSize: 13, fontFamily: 'Lato-Bold' }}>
+                Upload Photo
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={{
+          backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+          borderRadius: 10,
+          padding: 8,
+          marginBottom: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}>
+          <Icon name="search-outline" size={14} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginRight: 8 }} />
+          <TextInput
+            style={{
+              flex: 1,
+              fontSize: 13,
+              color: isDarkMode ? '#fff' : '#000',
+              padding: 0,
+            }}
+            placeholder="Search pets..."
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            value={avatarSearch}
+            onChangeText={setAvatarSearch}
+          />
+        </View>
+
+        {/* Avatar Grid - Minimal */}
+        <FlatList
+          data={filteredAvatarOptions}
+          keyExtractor={(item, index) => `${item.url}-${index}`}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingVertical: 4 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => setSelectedImage(item.url)}
+              activeOpacity={0.7}
+              style={{
+                marginRight: 8,
+                borderRadius: 20,
+                borderWidth: selectedImage === item.url ? 2.5 : 0,
+                borderColor: config.colors.primary,
+                padding: selectedImage === item.url ? 2 : 0,
+              }}
+            >
+              <Image
+                source={{ uri: item.url }}
+                style={{ width: 40, height: 40, borderRadius: 20, opacity: selectedImage === item.url ? 1 : 0.6 }}
+              />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+
+      {/* Bio - Clean Design */}
+      <View style={{ marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <Text style={{ fontSize: 11, fontFamily: 'Lato-Bold', color: isDarkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Bio
+          </Text>
+          <Text style={{ 
+            fontSize: 10, 
+            color: bio.length > 120 ? '#EF4444' : (isDarkMode ? '#6b7280' : '#9ca3af'),
+            fontFamily: 'Lato-Bold',
+          }}>
+            {bio.length}/120
+          </Text>
+        </View>
+        <TextInput
+          style={{
+            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            minHeight: 65,
+            textAlignVertical: 'top',
+            padding: 12,
+            borderRadius: 10,
+            fontSize: 13,
+            color: isDarkMode ? '#fff' : '#000',
+            borderWidth: 0,
+          }}
+          placeholder="Tell us about yourself..."
+          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          value={bio}
+          onChangeText={(text) => {
+            if (text.length <= 120) {
+              setBio(text);
+            }
+          }}
+          maxLength={120}
+          multiline={true}
+          numberOfLines={3}
+          autoCapitalize="sentences"
+          autoCorrect={true}
+        />
+      </View>
+
+      {/* ✅ Cooldown Warning Message */}
+      {cooldownStatus.inCooldown && (
+        <View
+          style={{
+            backgroundColor: isDarkMode ? '#1a1a1a' : '#fef3c7',
+            padding: 12,
+            borderRadius: 10,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: isDarkMode ? '#F59E0B' : '#FCD34D',
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Icon name="time-outline" size={16} color="#F59E0B" style={{ marginRight: 6 }} />
+            <Text style={{ 
+              fontSize: 12, 
+              fontFamily: 'Lato-Bold', 
+              color: isDarkMode ? '#FCD34D' : '#92400E' 
+            }}>
+              Edit Cooldown Active
+            </Text>
+          </View>
+          <Text style={{ 
+            fontSize: 11, 
+            fontFamily: 'Lato-Regular', 
+            color: isDarkMode ? '#FCD34D' : '#92400E',
+            lineHeight: 16,
+          }}>
+            You can only edit your profile once every {PROFILE_EDIT_COOLDOWN_DAYS} days. 
+            Please try again in {cooldownStatus.daysRemaining} day{cooldownStatus.daysRemaining === 1 ? '' : 's'}.
+          </Text>
+        </View>
+      )}
+
+      {/* Modern Save Button */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: cooldownStatus.inCooldown 
+            ? (isDarkMode ? '#374151' : '#9ca3af') 
+            : config.colors.primary,
+          paddingVertical: 13,
+          borderRadius: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: cooldownStatus.inCooldown ? 0.6 : 1,
+        }}
+        onPress={handleSaveChanges}
+        disabled={cooldownStatus.inCooldown}
+        activeOpacity={0.8}
+      >
+        <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Lato-Bold' }}>
+          {cooldownStatus.inCooldown 
+            ? `Edit Available in ${cooldownStatus.daysRemaining} Day${cooldownStatus.daysRemaining === 1 ? '' : 's'}`
+            : t('settings.save_changes')}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 export default function SettingsScreen({ selectedTheme }) {
   const [isDrawerVisible, setDrawerVisible] = useState(false);
@@ -717,9 +1016,9 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const USERNAME_REGEX = /^[A-Za-z0-9_-]+$/;
 
   const handleSaveChanges = async () => {
-
     triggerHapticFeedback('impactLight');
     const MAX_NAME_LENGTH = 20;
+    const PROFILE_EDIT_COOLDOWN_DAYS = 30;
 
     if (!user?.id) return;
 
@@ -730,6 +1029,28 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
       );
       return;
     }
+
+    // ✅ Check if user has edited profile within the last 30 days
+    if (user?.lastProfileEditAt) {
+      const lastEditTimestamp = typeof user.lastProfileEditAt === 'number' 
+        ? user.lastProfileEditAt 
+        : Date.parse(user.lastProfileEditAt);
+      
+      if (!isNaN(lastEditTimestamp)) {
+        const now = Date.now();
+        const daysSinceLastEdit = (now - lastEditTimestamp) / (1000 * 60 * 60 * 24);
+        const daysRemaining = Math.ceil(PROFILE_EDIT_COOLDOWN_DAYS - daysSinceLastEdit);
+
+        if (daysSinceLastEdit < PROFILE_EDIT_COOLDOWN_DAYS) {
+          showErrorMessage(
+            'Edit Cooldown',
+            `You can only edit your profile once every ${PROFILE_EDIT_COOLDOWN_DAYS} days. Please try again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`
+          );
+          return;
+        }
+      }
+    }
+
     // if (!USERNAME_REGEX.test(newDisplayName)) {
     //   showErrorMessage(
     //     t("home.alert.error"),
@@ -738,9 +1059,13 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     //   return;
     // }
     try {
+      const now = Date.now();
+      
+      // ✅ Update profile with timestamp
       await updateLocalStateAndDatabase({
         displayName: newDisplayName.trim(),
         avatar: selectedImage.trim(),
+        lastProfileEditAt: now, // ✅ Store timestamp of this edit
       });
 
       setDrawerVisible(false);
@@ -2130,163 +2455,24 @@ const formatPlanName = (plan) => {
         />
         <ConditionalKeyboardWrapper>
           <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <View style={styles.drawer}>
-              {/* Header */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                {/* <Image
-                  source={
-                    typeof selectedImage === 'string' && selectedImage.trim()
-                      ? { uri: selectedImage }
-                      : { uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }
-                  }
-                  style={[
-                    styles.profileImage,
-                    { marginRight: 10, width: 30, height: 30, borderRadius: 15 },
-                  ]}
-                /> */}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.drawerSubtitle}>{t('settings.change_display_name')}</Text>
-                  <TextInput
-                    style={[styles.input, { marginTop: 4 }]}
-                    placeholder="Enter new display name"
-                    value={newDisplayName}
-                    onChangeText={setNewDisplayName}
-                  />
-                </View>
-              </View>
-
-              {/* Profile Image Selection title */}
-              <Text style={[styles.drawerSubtitle]}>
-                {t('settings.select_profile_icon')}
-              </Text>
-
-          
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  {
-                    backgroundColor: config.colors.secondary,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 10,
-                  },
-                ]}
-                onPress={handlePickAndUploadAvatar}
-                disabled={uploadingAvatar}
-              >
-                {uploadingAvatar ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <Icon
-                      name="cloud-upload-outline"
-                      size={18}
-                      color="#fff"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.saveButtonText}>
-                      Upload from gallery
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TextInput
-                style={[
-                  styles.input,
-                  // { marginBottom: 8, fontSize: 12, paddingVertical: 6 },
-                ]}
-                placeholder="Search pets (e.g. Giraffe, Egg...)"
-                placeholderTextColor="#999"
-                value={avatarSearch}
-                onChangeText={setAvatarSearch}
-              />
-
-              {/* Avatar list: defaults + pets (filtered) */}
-              <FlatList
-                data={filteredAvatarOptions}
-                keyExtractor={(item, index) => `${item.url}-${index}`}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingVertical: 4 }}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    onPress={() => setSelectedImage(item.url)}
-                    style={[
-                      styles.imageOptionWrapper,
-                      selectedImage === item.url && styles.imageOptionSelected,
-                      { alignItems: 'center', marginRight: 10 },
-                    ]}
-                  >
-                    <Image
-                      source={{ uri: item.url }}
-                      style={styles.imageOption}
-                    />
-                    {/* {item.type !== 'default' && (
-                      <Text
-                        numberOfLines={1}
-                        style={{
-                          fontSize: 10,
-                          marginTop: 4,
-                          maxWidth: 70,
-                          color: isDarkMode ? '#ddd' : '#333',
-                        }}
-                      >
-                        {item.name}
-                      </Text>
-                    )} */}
-                  </TouchableOpacity>
-                )}
-              />
-
-              {/* Bio Editing Section */}
-              <Text style={[styles.drawerSubtitle, { marginTop: 16, marginBottom: 8 }]}>
-                Bio
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                <Text style={{ 
-                  fontSize: 11, 
-                  color: bio.length > 120 ? '#EF4444' : (isDarkMode ? '#9ca3af' : '#6b7280'),
-                  fontWeight: '500',
-                  marginLeft: 'auto'
-                }}>
-                  {bio.length}/120
-                </Text>
-              </View>
-              <TextInput
-                style={[
-                  styles.input,
-                  { 
-                    minHeight: 60,
-                    textAlignVertical: 'top',
-                    paddingTop: 10,
-                  },
-                ]}
-                placeholder="Hi there, I am new here"
-                placeholderTextColor="#999"
-                value={bio}
-                onChangeText={(text) => {
-                  if (text.length <= 120) {
-                    setBio(text);
-                  }
-                }}
-                maxLength={120}
-                multiline={true}
-                numberOfLines={3}
-                autoCapitalize="sentences"
-                autoCorrect={true}
-              />
-
-              {/* Save button */}
-              <TouchableOpacity
-                style={[styles.saveButton, { marginTop: 16 }]}
-                onPress={handleSaveChanges}
-              >
-                <Text style={styles.saveButtonText}>
-                  {t('settings.save_changes')}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <EditProfileDrawerContent
+              isDarkMode={isDarkMode}
+              newDisplayName={newDisplayName}
+              setNewDisplayName={setNewDisplayName}
+              handlePickAndUploadAvatar={handlePickAndUploadAvatar}
+              uploadingAvatar={uploadingAvatar}
+              avatarSearch={avatarSearch}
+              setAvatarSearch={setAvatarSearch}
+              filteredAvatarOptions={filteredAvatarOptions}
+              selectedImage={selectedImage}
+              setSelectedImage={setSelectedImage}
+              bio={bio}
+              setBio={setBio}
+              handleSaveChanges={handleSaveChanges}
+              t={t}
+              config={config}
+              user={user}
+            />
           </View>
         </ConditionalKeyboardWrapper>
       </Modal>

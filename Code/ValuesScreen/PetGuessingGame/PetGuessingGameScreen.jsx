@@ -8,12 +8,17 @@ import {
   ScrollView,
   ActivityIndicator,
   AppState,
+  Platform,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import { useBackgroundMusic } from '../../Helper/useBackgroundMusic';
+import { mixpanel } from '../../AppHelper/MixPenel';
+import InterstitialAdManager from '../../Ads/IntAd';
 import InviteUsersModal from './components/InviteUsersModal';
 import InviteNotification from './components/InviteNotification';
 import PlayerCards from './components/PlayerCards';
@@ -34,7 +39,7 @@ import {
 } from './utils/gameInviteSystem';
 
 const PetGuessingGameScreen = () => {
-  const { appdatabase, firestoreDB, theme, user } = useGlobalState();
+  const { appdatabase, firestoreDB, theme, user, setIsInActiveGame } = useGlobalState();
   const { localState } = useLocalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
@@ -43,9 +48,25 @@ const PetGuessingGameScreen = () => {
   const [roomData, setRoomData] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true); // ✅ Sound on/off state
   const processedGameFinishRef = useRef(new Set()); // Track processed game finishes
+  const gameEndAdShownRef = useRef(new Set()); // ✅ Track which games already showed an ad per player
   const timeoutCheckIntervalRef = useRef(null); // For timeout checking
   const TURN_TIMEOUT_MS = 60000; // 60 seconds timeout per turn
+
+  // Play background music when game is active (room exists and game is in progress)
+  const shouldPlayMusic = useMemo(() => {
+    return currentRoomId && roomData && roomData.status !== 'finished';
+  }, [currentRoomId, roomData]);
+
+  // Background music - plays in loop when game is active
+  // For react-native-sound on Android: use filename without extension (file is in res/raw/)
+  // For iOS: use string filename with extension (file must be added to Xcode project bundle)
+  useBackgroundMusic(
+    Platform.OS === 'android' ? 'audio' : 'audio.mp3', // Android: no extension, iOS: with extension
+    shouldPlayMusic && musicEnabled, // ✅ Respect sound toggle
+    0.5 // Volume (0.0 to 1.0)
+  );
 
   // Get pet data from localState (only PETS type)
   const petData = useMemo(() => {
@@ -87,11 +108,39 @@ const PetGuessingGameScreen = () => {
 
     const unsubscribe = listenToGameRoom(firestoreDB, currentRoomId, (data) => {
       setRoomData(data);
+      
+      // ✅ Update global game state (for GlobalInviteToast)
+      if (data && setIsInActiveGame) {
+        setIsInActiveGame(data.status === 'playing');
+      } else if (!data && setIsInActiveGame) {
+        setIsInActiveGame(false);
+      }
+      
       if (!data) {
         // Room was deleted
         setCurrentRoomId(null);
         setRoomData(null);
+        if (setIsInActiveGame) {
+          setIsInActiveGame(false);
+        }
         return;
+      }
+
+      // ✅ Show interstitial ad at the end of every game for this player (both winner & loser),
+      //    as long as they're not Pro. Uses in‑memory ref only (no local storage).
+      if (data.status === 'finished' && user?.id) {
+        const gameId = data.id || currentRoomId;
+        const adKey = `${gameId}:${user.id}`;
+        if (!gameEndAdShownRef.current.has(adKey)) {
+          gameEndAdShownRef.current.add(adKey);
+          if (!localState?.isPro) {
+            try {
+              InterstitialAdManager.showAd();
+            } catch (err) {
+              console.warn('[AdManager] Failed to show game end ad:', err);
+            }
+          }
+        }
       }
 
       // Handle game finished due to timeout or player leaving
@@ -113,6 +162,9 @@ const PetGuessingGameScreen = () => {
           setTimeout(() => {
             setCurrentRoomId(null);
             setRoomData(null);
+            if (setIsInActiveGame) {
+              setIsInActiveGame(false);
+            }
           }, 2000);
         }
         return;
@@ -127,9 +179,19 @@ const PetGuessingGameScreen = () => {
         if (winnerId === user.id && !processedGameFinishRef.current.has(gameId)) {
           processedGameFinishRef.current.add(gameId);
           
-          awardGameWin(appdatabase, user.id)
+          awardGameWin(appdatabase, firestoreDB, user.id)
             .then((result) => {
               if (result) {
+                // Track game win in Mixpanel
+                mixpanel.track('Game Won', {
+                  gameType: 'Pet Guessing Game',
+                  roomId: gameId,
+                  pointsAwarded: 100,
+                  totalPoints: result.points,
+                  totalWins: result.wins,
+                  winnerScore: data.gameData?.winner?.score || 0,
+                });
+                // ✅ Simple victory toast (ad is handled separately for all players)
                 showSuccessMessage(
                   'Victory! 🎉',
                   `You won! +100 points! Total: ${result.points} points, Wins: ${result.wins}`
@@ -143,8 +205,14 @@ const PetGuessingGameScreen = () => {
       }
     });
 
-    return () => unsubscribe();
-  }, [currentRoomId, firestoreDB, user?.id, appdatabase]);
+    return () => {
+      unsubscribe();
+      // ✅ Reset game state when unmounting
+      if (setIsInActiveGame) {
+        setIsInActiveGame(false);
+      }
+    };
+  }, [currentRoomId, firestoreDB, user?.id, appdatabase, setIsInActiveGame]);
 
   // Handle creating a new room with 10 random pets
   const handleCreateRoom = useCallback(async () => {
@@ -162,13 +230,13 @@ const PetGuessingGameScreen = () => {
     triggerHapticFeedback('impactLight');
 
     try {
-      // Select 10 random pets with images
-      const selectedPets = selectRandomPets(petData, 10).map(pet => ({
+      // Select 8 random pets with images from the same value slab
+      const selectedPets = selectRandomPets(petData, 8).map(pet => ({
         ...pet,
         image: getImageUrl(pet),
       }));
 
-      if (selectedPets.length < 10) {
+      if (selectedPets.length < 8) {
         showErrorMessage('Error', 'Could not select enough pets');
         setLoading(false);
         return;
@@ -210,6 +278,9 @@ const PetGuessingGameScreen = () => {
     if (success) {
       setCurrentRoomId(null);
       setRoomData(null);
+      if (setIsInActiveGame) {
+        setIsInActiveGame(false);
+      }
       // showSuccessMessage('Left Room', 'You left the game room');
     }
   }, [currentRoomId, user?.id, firestoreDB, triggerHapticFeedback]);
@@ -241,6 +312,12 @@ const PetGuessingGameScreen = () => {
       const success = await startGame(firestoreDB, currentRoomId, user.id);
       
       if (success) {
+        // Track game start in Mixpanel
+        mixpanel.track('Game Started', {
+          gameType: 'Pet Guessing Game',
+          roomId: currentRoomId,
+          playerCount: roomData?.currentPlayers || 0,
+        });
         showSuccessMessage('Game Started!', 'Take turns spinning the wheel!');
       } else {
         showErrorMessage('Error', 'Failed to start game');
@@ -252,6 +329,18 @@ const PetGuessingGameScreen = () => {
       setLoading(false);
     }
   }, [currentRoomId, user?.id, roomData, firestoreDB, triggerHapticFeedback]);
+
+  // Handle wheel spin start - reset timeout
+  const handleSpinStart = useCallback(async () => {
+    if (!currentRoomId || !firestoreDB) return;
+
+    try {
+      // Reset the turn start time when spin begins
+      await setTurnStartTime(firestoreDB, currentRoomId);
+    } catch (error) {
+      console.error('Error resetting turn start time:', error);
+    }
+  }, [currentRoomId, firestoreDB]);
 
   // Handle wheel spin completion
   const handleSpinEnd = useCallback(async (result) => {
@@ -374,12 +463,12 @@ const PetGuessingGameScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
+       {!currentRoomId && <View style={styles.header}>
           <Text style={styles.title}>🎡 Pet Wheel Spin</Text>
           <Text style={styles.subtitle}>
             Spin the wheel and collect pet values! 3 rounds, highest score wins!
           </Text>
-        </View>
+        </View>}
 
         {!currentRoomId ? (
           // No room - Show create button and instructions
@@ -403,6 +492,14 @@ const PetGuessingGameScreen = () => {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>🎮 How to Play</Text>
+              {/* Roulette illustration */}
+              <View style={styles.rouletteImageWrapper}>
+                <Image
+                  source={require('../../../assets/roulette.png')}
+                  style={styles.rouletteImage}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.cardText}>
                 • Create a room (10 random pets are selected){'\n'}
                 • Invite 1 friend to join{'\n'}
@@ -427,7 +524,23 @@ const PetGuessingGameScreen = () => {
           <View style={styles.section}>
             {/* Action buttons - Top Right */}
             <View style={styles.actionRow}>
-              {roomData.status === 'waiting' && (
+              {/* Music toggle */}
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => {
+                  setMusicEnabled(prev => !prev);
+                  triggerHapticFeedback('impactLight');
+                }}
+              >
+                <Icon
+                  name={musicEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+                  size={16}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+
+              {/* Hide invite button when 2 players have joined */}
+              {roomData.status === 'waiting' && roomData.currentPlayers < 2 && (
                 <TouchableOpacity
                   style={styles.iconButton}
                   onPress={() => setShowInviteModal(true)}
@@ -505,6 +618,7 @@ const PetGuessingGameScreen = () => {
               <FortuneWheel
                 wheelPets={roomData.wheelPets}
                 onSpinEnd={handleSpinEnd}
+                onSpinStart={handleSpinStart}
                 isMyTurn={isMyTurn}
                 isSpinning={roomData.gameData?.isSpinning || false}
                 currentPlayerName={currentPlayerName}
@@ -563,6 +677,7 @@ const PetGuessingGameScreen = () => {
             avatar: user.avatar || null,
           }}
           onAccept={handleJoinRoom}
+          isInActiveGame={roomData?.status === 'playing'}
         />
       )}
     </View>
@@ -579,6 +694,7 @@ const getStyles = (isDarkMode) =>
       padding: 8,
     },
     header: {
+      marginTop: 40,
       marginBottom: 20,
     },
     title: {
@@ -631,6 +747,15 @@ const getStyles = (isDarkMode) =>
       fontFamily: 'Lato-Regular',
       color: isDarkMode ? '#9ca3af' : '#6b7280',
       lineHeight: 22,
+    },
+    rouletteImageWrapper: {
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    rouletteImage: {
+      width: '100%',
+      height: 140,
+      borderRadius: 12,
     },
     actionRow: {
       // position: 'absolute',

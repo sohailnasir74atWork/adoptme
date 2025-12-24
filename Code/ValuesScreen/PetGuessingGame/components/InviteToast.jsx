@@ -118,7 +118,7 @@ const InviteToast = ({ visible, fromUserName, fromUserAvatar, onPress, onDismiss
               style={[styles.message, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}
               numberOfLines={2}
             >
-              Check game screen, you are invited to play game. Come play!
+              {fromUserName || 'Someone'} invites you play now
             </Text>
           </View>
           {fromUserAvatar && (

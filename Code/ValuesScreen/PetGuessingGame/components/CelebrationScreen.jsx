@@ -173,6 +173,7 @@ const styles = StyleSheet.create({
   confetti: {
     position: 'absolute',
     fontSize: 30,
+    fontFamily: 'Lato-Regular',
   },
   winnerCard: {
     alignItems: 'center',

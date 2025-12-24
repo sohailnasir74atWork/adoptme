@@ -9,12 +9,18 @@ import { showSuccessMessage } from '../../Helper/MessageHelper';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { mixpanel } from '../../AppHelper/MixPenel';
+import { useGlobalState } from '../../GlobelStats';
+import { ref, get } from '@react-native-firebase/database';
 
 const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { updateLocalState } = useLocalState();
   const { t } = useTranslation();
   const [isOnline, setIsOnline] = useState(false); // ✅ Add state to store online status
   const { triggerHapticFeedback } = useHaptic();
+  const { appdatabase } = useGlobalState();
+  
+  // ✅ State for fetched user data (roblox username, etc.)
+  const [userData, setUserData] = useState(null);
 
   // ✅ Memoize copyToClipboard
   const copyToClipboard = useCallback((code) => {
@@ -25,37 +31,97 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     mixpanel.track("Code UserName", { UserName: code });
   }, [triggerHapticFeedback, t]);
 
+  // ✅ Fetch user data from Firebase if roblox data is missing
+  useEffect(() => {
+    const selectedUserId = selectedUser?.senderId || selectedUser?.id;
+    if (!selectedUserId || !appdatabase) return;
+    
+    // Only fetch if robloxUsername is not already in selectedUser
+    if (selectedUser?.robloxUsername || selectedUser?.robloxUserId) {
+      setUserData(null); // Clear fetched data if already in selectedUser
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchUserData = async () => {
+      try {
+        const userSnap = await get(ref(appdatabase, `users/${selectedUserId}`));
+        
+        if (!isMounted) return;
+        
+        if (userSnap.exists()) {
+          const data = userSnap.val();
+          setUserData({
+            robloxUsername: data.robloxUsername || null,
+            robloxUserId: data.robloxUserId || null,
+            robloxUsernameVerified: data.robloxUsernameVerified || false,
+            isPro: data.isPro || false,
+          });
+        } else {
+          setUserData(null);
+        }
+      } catch (error) {
+        console.error('Error fetching user data in PrivateChatHeader:', error);
+        if (isMounted) setUserData(null);
+      }
+    };
+
+    fetchUserData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedUser?.senderId, selectedUser?.id, selectedUser?.robloxUsername, selectedUser?.robloxUserId, appdatabase]);
+
+  // ✅ Merge selectedUser with fetched userData
+  const mergedUser = useMemo(() => {
+    if (!userData) return selectedUser;
+    return {
+      ...selectedUser,
+      robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
+      robloxUserId: selectedUser?.robloxUserId || userData.robloxUserId,
+      robloxUsernameVerified: selectedUser?.robloxUsernameVerified !== undefined 
+        ? selectedUser.robloxUsernameVerified 
+        : userData.robloxUsernameVerified,
+      isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
+    };
+  }, [selectedUser, userData]);
+
   // ✅ Memoize avatarUri and userName
   const avatarUri = useMemo(() => 
-    selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-    [selectedUser?.avatar]
+    mergedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+    [mergedUser?.avatar]
   );
   
   const userName = useMemo(() => 
-    selectedUser?.sender || 'User',
-    [selectedUser?.sender]
+    mergedUser?.sender || 'User',
+    [mergedUser?.sender]
   );
 
   useEffect(() => {
-    if (selectedUser?.senderId) {
-      isUserOnline(selectedUser.senderId)
+    const selectedUserId = mergedUser?.senderId || mergedUser?.id;
+    if (selectedUserId) {
+      isUserOnline(selectedUserId)
         .then(setIsOnline)
         .catch(() => setIsOnline(false));
     } else {
       setIsOnline(false);
     }
-  }, [selectedUser?.senderId]); // ✅ Fixed: use senderId instead of id
+  }, [mergedUser?.senderId, mergedUser?.id]); // ✅ Use mergedUser
 
   // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {
-    if (!selectedUser?.senderId) return false;
+    const selectedUserId = mergedUser?.senderId || mergedUser?.id;
+    if (!selectedUserId) return false;
     const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-    return banned.includes(selectedUser.senderId);
-  }, [bannedUsers, selectedUser?.senderId]);
+    return banned.includes(selectedUserId);
+  }, [bannedUsers, mergedUser?.senderId, mergedUser?.id]);
 
   // ✅ Memoize handleBanToggle
   const handleBanToggle = useCallback(async () => {
-    if (!selectedUser?.senderId) {
+    const selectedUserId = mergedUser?.senderId || mergedUser?.id;
+    if (!selectedUserId) {
       console.warn('⚠️ Invalid user ID for ban toggle');
       return;
     }
@@ -76,10 +142,10 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
               
               if (isBanned) {
                 // 🔹 Unban: Remove from bannedUsers
-                updatedBannedUsers = currentBanned.filter(id => id !== selectedUser.senderId);
+                updatedBannedUsers = currentBanned.filter(id => id !== selectedUserId);
               } else {
                 // 🔹 Ban: Add to bannedUsers
-                updatedBannedUsers = [...currentBanned, selectedUser.senderId];
+                updatedBannedUsers = [...currentBanned, selectedUserId];
               }
 
               // ✅ Update local storage & state
@@ -93,7 +159,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         },
       ]
     );
-  }, [isBanned, bannedUsers, selectedUser?.senderId, userName, t, updateLocalState]);
+  }, [isBanned, bannedUsers, mergedUser?.senderId, mergedUser?.id, userName, t, updateLocalState]);
 
   // ✅ Memoize drawer open handler
   const handleOpenDrawer = useCallback(() => {
@@ -110,9 +176,15 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer}>
         <Text style={[styles.userName, { color: selectedTheme?.colors?.text || '#000' }]}>
           {userName} 
-          {selectedUser?.isPro && (
+          {mergedUser?.isPro && (
             <Image
               source={require('../../../assets/pro.png')} 
+              style={{ width: 14, height: 14 }} 
+            />
+          )}
+          {mergedUser?.robloxUsernameVerified && (
+            <Image
+              source={require('../../../assets/verification.png')} 
               style={{ width: 14, height: 14 }} 
             />
           )}

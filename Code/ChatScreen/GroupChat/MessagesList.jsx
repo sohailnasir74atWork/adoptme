@@ -301,6 +301,12 @@ const MessagesList = ({
       : 0;
     // console.log(user.id)
 
+    // Winner badge info comes directly from message payload, similar to isPro / robloxUsernameVerified
+    const hasRecentWin =
+      !!item?.hasRecentGameWin ||
+      (typeof item?.lastGameWinAt === 'number' &&
+        Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+
     return (
       <View>
         {/* Display the date header if it's a new day */}
@@ -374,7 +380,7 @@ const MessagesList = ({
                       ? { backgroundColor: 'red' }
                       : null,]}>
                    <View style={styles.nameRow}>
-  <Text style={styles.userNameText}>{item.sender}</Text>
+            <Text style={styles.userNameText}>{item.sender}</Text>
 
   {item?.isPro && (
     <Image
@@ -396,16 +402,26 @@ const MessagesList = ({
     />
   )}
 
+  {hasRecentWin && (
+    <Image
+      source={require('../../../assets/trophy.webp')}
+      style={{  width: 12,
+        height: 12,
+        marginLeft: 4,}}
+    />
+  )}
+
   {isAdmin && item.OS && (
     <View
       style={[
         styles.platformBadge,
-        { backgroundColor: item.OS === 'ios' ? '#007AFF' : '#34C759' },
       ]}
     >
-      <Text style={[ {color:'white', fontFamily: 'Lato-Bold', fontSize:9}]}>
-        {item.OS.toUpperCase().slice(0, 1)}
-      </Text>
+      <Icon
+        name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
+        size={14}
+        color={item.OS === 'ios' ? '#007AFF' : '#34C759' }
+      />
     </View>
   )}
 </View>

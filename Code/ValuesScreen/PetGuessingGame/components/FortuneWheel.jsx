@@ -45,6 +45,7 @@ const PILL_H = 26;
 const FortuneWheel = ({
   wheelPets = [],
   onSpinEnd,
+  onSpinStart,
   isMyTurn,
   isSpinning,
   currentPlayerName,
@@ -61,13 +62,23 @@ const FortuneWheel = ({
   const [isSpinningLocal, setIsSpinningLocal] = useState(false);
   const [showWinToast, setShowWinToast] = useState(false);
   const [winToastData, setWinToastData] = useState(null);
+  const previousTurnRef = useRef(false); // Track previous turn state
 
+  // Detect when it becomes user's turn and trigger haptic feedback
   useEffect(() => {
-    if (isMyTurn && !isSpinning && !isSpinningLocal) {
+    // Check if turn just changed from false to true (it's now my turn)
+    if (isMyTurn && !previousTurnRef.current && !isSpinning && !isSpinningLocal) {
+      triggerHapticFeedback('impactLight'); // Haptic when turn becomes active
+      setWinner(null);
+      setHasSpun(false);
+    } else if (isMyTurn && !isSpinning && !isSpinningLocal) {
       setWinner(null);
       setHasSpun(false);
     }
-  }, [isMyTurn, isSpinning, isSpinningLocal]);
+    
+    // Update previous turn state
+    previousTurnRef.current = isMyTurn;
+  }, [isMyTurn, isSpinning, isSpinningLocal, triggerHapticFeedback]);
 
   const colors = useMemo(() => {
     const baseColors = [
@@ -104,6 +115,12 @@ const FortuneWheel = ({
     if (!isMyTurn || isSpinning || disabled || hasSpun || isSpinningLocal || wheelPets.length === 0) return;
 
     triggerHapticFeedback('impactMedium'); // ✅ Haptic feedback when spin starts
+    
+    // Call onSpinStart callback if provided (to reset timeout)
+    if (onSpinStart) {
+      onSpinStart();
+    }
+    
     setIsSpinningLocal(true);
     setHasSpun(true);
     setWinner(null);
@@ -300,6 +317,12 @@ const FortuneWheel = ({
           (isSpinning || isSpinningLocal) && styles.spinButtonSpinning,
         ]}
         onPress={handleSpinPress}
+        onPressIn={() => {
+          // Haptic feedback when button is pressed (becomes active)
+          if (isMyTurn && !isSpinning && !disabled && !hasSpun && !isSpinningLocal) {
+            triggerHapticFeedback('impactLight');
+          }
+        }}
         disabled={!isMyTurn || isSpinning || disabled || hasSpun || isSpinningLocal}
       >
         <Icon name={(isSpinning || isSpinningLocal) ? 'sync' : 'play-circle'} size={24} color="#fff" />
@@ -471,7 +494,7 @@ const styles = StyleSheet.create({
     borderRightWidth: POINTER_W,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderRightColor: '#111827',
+    borderRightColor: '#EF4444', // 🔴 Red pointer color
   },
 
   spinButton: {

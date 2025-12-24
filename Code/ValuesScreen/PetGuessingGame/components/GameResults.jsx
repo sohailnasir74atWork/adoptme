@@ -10,15 +10,16 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
 import { ref, get, onValue } from '@react-native-firebase/database';
+import { doc, getDoc } from '@react-native-firebase/firestore';
 
 const GameResults = ({ roomData, currentUser }) => {
-  const { theme, appdatabase } = useGlobalState();
+  const { theme, appdatabase, firestoreDB } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [userPoints, setUserPoints] = useState(null);
   const [userWins, setUserWins] = useState(null);
 
-  // Fetch and listen to user points and wins
+  // Fetch and listen to user points (RTDB) and wins (Firestore)
   useEffect(() => {
     if (!appdatabase || !currentUser?.id) return;
 
@@ -31,7 +32,16 @@ const GameResults = ({ roomData, currentUser }) => {
         if (snapshot.exists()) {
           const userData = snapshot.val();
           setUserPoints(userData.rewardPoints || 0);
-          setUserWins(userData.petGameWins || 0);
+        }
+
+        // Wins are now tracked in Firestore only
+        if (firestoreDB) {
+          const statsRef = doc(firestoreDB, 'game_stats', currentUser.id);
+          const statsSnap = await getDoc(statsRef);
+          if (statsSnap.exists) {
+            const stats = statsSnap.data() || {};
+            setUserWins(stats.petGameWins || 0);
+          }
         }
       } catch (error) {
         console.error('Error fetching user stats:', error);
@@ -40,36 +50,42 @@ const GameResults = ({ roomData, currentUser }) => {
 
     fetchUserStats();
 
-    // Listen for real-time updates
+    // Listen for real-time updates for points only (RTDB)
     const unsubscribe = onValue(userRef, (snapshot) => {
       if (snapshot.exists()) {
         const userData = snapshot.val();
         setUserPoints(userData.rewardPoints || 0);
-        setUserWins(userData.petGameWins || 0);
       }
     });
 
     return () => unsubscribe();
-  }, [appdatabase, currentUser?.id]);
+  }, [appdatabase, firestoreDB, currentUser?.id]);
 
   // Calculate leaderboard from scores
+  // Preserve player data even if they left (don't show Anonymous)
   const leaderboard = useMemo(() => {
     if (!roomData?.gameData?.scores || !roomData?.players) return [];
 
     const scores = roomData.gameData.scores;
     const players = roomData.players;
+    const playerOrder = roomData.gameData?.playerOrder || Object.keys(players);
 
-    return Object.entries(players)
-      .map(([playerId, playerData]) => ({
-        id: playerId,
-        name: playerData.displayName || 'Anonymous',
-        avatar: playerData.avatar,
-        score: scores[playerId] || 0,
-        isCurrentUser: playerId === currentUser?.id,
-        isHost: playerId === roomData.hostId,
-      }))
+    // Use playerOrder to ensure all players are included, even if they left
+    return playerOrder
+      .map(playerId => {
+        const playerData = players[playerId] || {};
+        return {
+          id: playerId,
+          name: playerData.displayName || 'Anonymous',
+          avatar: playerData.avatar,
+          score: scores[playerId] || 0,
+          isCurrentUser: playerId === currentUser?.id,
+          isHost: playerId === roomData.hostId,
+        };
+      })
+      .filter(player => player.score !== undefined) // Only include players with scores
       .sort((a, b) => b.score - a.score);
-  }, [roomData?.gameData?.scores, roomData?.players, currentUser?.id, roomData?.hostId]);
+  }, [roomData?.gameData?.scores, roomData?.players, roomData?.gameData?.playerOrder, currentUser?.id, roomData?.hostId]);
 
   const isGameFinished = roomData?.status === 'finished';
   const spinHistory = roomData?.gameData?.spinHistory || [];
@@ -106,23 +122,11 @@ const GameResults = ({ roomData, currentUser }) => {
           <Text style={styles.winnerScore}>
             {Number(winner.score).toLocaleString()} points
           </Text>
-          {winner.isCurrentUser && userPoints !== null && (
-            <View style={styles.pointsSection}>
-              <Text style={[styles.pointsLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-                Your Points: <Text style={styles.pointsValue}>{Number(userPoints).toLocaleString()}</Text>
-              </Text>
-              {userWins !== null && (
-                <Text style={[styles.pointsLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-                  Total Wins: <Text style={styles.pointsValue}>{userWins}</Text>
-                </Text>
-              )}
-            </View>
-          )}
         </View>
       )}
 
       {/* Leaderboard */}
-      <View style={styles.leaderboardSection}>
+      {/* <View style={styles.leaderboardSection}>
         <View style={styles.sectionHeader}>
           <Icon name="podium-outline" size={18} color="#8B5CF6" />
           <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
@@ -167,25 +171,11 @@ const GameResults = ({ roomData, currentUser }) => {
                   }}
                   style={styles.avatar}
                 />
-
-                <Text 
-                  style={[styles.playerName, { color: isDarkMode ? '#fff' : '#000' }]} 
-                  numberOfLines={1}
-                >
-                  {player.name}
-                  {player.isCurrentUser && ' (You)'}
-                </Text>
-
-                <View style={styles.scoreContainer}>
-                  <Text style={[styles.score, isWinner && styles.winnerScoreText]}>
-                    {Number(player.score).toLocaleString()}
-                  </Text>
-                </View>
               </View>
             );
           })}
         </View>
-      </View>
+      </View> */}
 
       {/* Spin History */}
       {spinHistory.length > 0 && (
@@ -215,7 +205,8 @@ const GameResults = ({ roomData, currentUser }) => {
                 return (
                   <View key={index} style={styles.historyItem}>
                     <View style={styles.historyRound}>
-                      <Text style={[styles.historyRoundText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                      {/* Always use high-contrast white text on purple pill so R1/R2 stand out */}
+                      <Text style={styles.historyRoundText}>
                         R{spin.round}
                       </Text>
                     </View>
@@ -253,6 +244,7 @@ const styles = StyleSheet.create({
   winnerEmoji: {
     fontSize: 40,
     marginBottom: 8,
+    fontFamily: 'Lato-Regular',
   },
   winnerText: {
     fontSize: 20,
@@ -400,6 +392,7 @@ const styles = StyleSheet.create({
   timeoutEmoji: {
     fontSize: 48,
     marginBottom: 8,
+    fontFamily: 'Lato-Regular',
   },
   timeoutText: {
     fontSize: 20,

@@ -152,12 +152,7 @@ export const getStyles = (isDarkMode) =>
       textAlign: 'center',
       marginVertical: 10,
     },
-    platformBadge: {
-      paddingHorizontal: 3,
-      paddingVertical: 1,
-      borderRadius: '50%',
-      marginLeft: 2,
-    },
+
     platformText: {
       color: 'white',
       fontSize: 6,
@@ -289,7 +284,8 @@ export const getStyles = (isDarkMode) =>
       justifyContent:'center',
       // backgroundColor:'red',
       backgroundColor:'red',
-      lineHeight:14
+      lineHeight:14,
+      fontFamily:'Lato-Bold'
 
     },
     adminActions: {
@@ -531,7 +527,7 @@ adminContainer: {
 
 platformBadge: {
   marginLeft: 6,
-  paddingHorizontal: 3,
+  // paddingHorizontal: 3,
   // paddingVertical: 1,
   borderRadius: '50%',
   alignItems: 'center',

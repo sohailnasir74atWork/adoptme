@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,203 +12,130 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
-import { ref, onChildAdded, onChildRemoved, get } from '@react-native-firebase/database';
+import { doc, getDoc } from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { isUserOnline } from '../utils';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 
+const BATCH_SIZE = 5; // Fetch 5 users at a time
+
 const OnlineUsersList = ({ visible, onClose }) => {
-  const { theme, user, appdatabase } = useGlobalState();
+  const { theme, user, firestoreDB } = useGlobalState();
   const { localState } = useLocalState();
   const navigation = useNavigation();
   const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
   
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  // ✅ Store all online users from Firestore (id, displayName, avatar, index)
+  const [allOnlineUsers, setAllOnlineUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const userDetailsRef = useRef({}); // ✅ Use ref to cache user details (prevents re-renders)
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [displayedCount, setDisplayedCount] = useState(BATCH_SIZE); // How many users are shown
 
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  // ✅ Fetch user details from Firebase - optimized with ref to prevent re-renders
-  const fetchUserDetails = useCallback(async (userId) => {
-    if (!userId) {
-      return {
-        id: userId,
-        displayName: 'Anonymous',
-        avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-      };
-    }
-
-    // ✅ Check cache first (using ref - no re-renders)
-    if (userDetailsRef.current[userId]) {
-      return userDetailsRef.current[userId];
-    }
-
-    try {
-      const userRef = ref(appdatabase, `users/${userId}`);
-      const snapshot = await get(userRef);
-      
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const userInfo = {
-          id: userId,
-          displayName: data?.displayName || 'Anonymous',
-          avatar: data?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-        };
-        
-        // ✅ Cache in ref (no state update = no re-render)
-        userDetailsRef.current[userId] = userInfo;
-        return userInfo;
-      }
-    } catch (error) {
-      console.error(`Error fetching user ${userId}:`, error);
-    }
-    
-    // ✅ Default user and cache it
-    const defaultUser = {
-      id: userId,
-      displayName: 'Anonymous',
-      avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-    };
-
-    userDetailsRef.current[userId] = defaultUser;
-    return defaultUser;
-  }, [appdatabase]);
-
-  // ✅ Listen to online users - OPTIMIZED: Incremental updates (Solution 1)
+  // ✅ Fetch ALL online users (IDs + details) from Firestore ONCE when modal opens
   useEffect(() => {
-    if (!visible || !appdatabase) {
+    if (!visible || !firestoreDB) {
       // Reset when modal closes
-      setOnlineUsers([]);
+      setAllOnlineUsers([]);
       setLoading(true);
-      userDetailsRef.current = {}; // Clear cache when modal closes
+      setSearchQuery('');
+      setDisplayedCount(BATCH_SIZE);
       return;
     }
 
     let isMounted = true;
-    let isInitialLoad = true;
-    let initialLoadTimeout;
     setLoading(true);
-    const onlineUsersRef = ref(appdatabase, 'online_users');
-    
-    // ✅ Helper: Update user in list (add or update)
-    // ✅ OPTIMIZED: New users added to bottom, no sorting = stable list
-    const addOrUpdateUser = async (userId) => {
-      if (!isMounted || !userId) return;
-      
+
+    const fetchOnlineUsers = async () => {
       try {
-        const userInfo = await fetchUserDetails(userId);
-        if (!userInfo || !isMounted) return;
-        
-        // ✅ Add timestamp for tracking (optional, for future features)
-        const userInfoWithTime = {
-          ...userInfo,
-          joinedAt: Date.now(), // Track when user was added to list
-        };
-        
-        setOnlineUsers(prev => {
-          // Check if user already exists
-          const existingIndex = prev.findIndex(u => u?.id === userId);
-          if (existingIndex >= 0) {
-            // ✅ Update existing user in place (maintains position)
-            const updated = [...prev];
-            updated[existingIndex] = {
-              ...updated[existingIndex],
-              ...userInfoWithTime,
-              // Preserve original position and joinedAt
-              joinedAt: updated[existingIndex].joinedAt || userInfoWithTime.joinedAt,
+        // ✅ One-time fetch from Firestore (online_users/list)
+        const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+        const docSnapshot = await getDoc(onlineUsersDocRef);
+
+        if (!isMounted) return;
+
+        if (!docSnapshot.exists) {
+          setAllOnlineUsers([]);
+          setLoading(false);
+          return;
+        }
+
+        const data = docSnapshot.data() || {};
+        const userIds = Array.isArray(data.userIds) ? data.userIds : [];
+        const usersMap =
+          typeof data.users === 'object' && data.users !== null ? data.users : {};
+
+        // ✅ Build ordered array of users (filter out current user)
+        const users = userIds
+          .filter((id) => id !== user?.id)
+          .map((id, index) => {
+            const u = usersMap[id] || {};
+            return {
+              id,
+              displayName: u.displayName || 'Anonymous',
+              avatar:
+                u.avatar ||
+                'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+              index: index + 1, // 1-based index for display/search
             };
-            return updated;
-          } else {
-            // ✅ Add new user to BOTTOM (no sorting = stable list)
-            // This keeps the list stable - existing users stay in place
-            return [...prev, userInfoWithTime];
-          }
-        });
+          });
+
+        setAllOnlineUsers(users);
+        setDisplayedCount(Math.min(BATCH_SIZE, users.length));
+
+        if (isMounted) {
+          setLoading(false);
+        }
       } catch (error) {
-        console.error(`Error adding/updating user ${userId}:`, error);
+        console.error('Error fetching online users from Firestore:', error);
+        if (isMounted) {
+          setAllOnlineUsers([]);
+          setLoading(false);
+        }
       }
     };
 
-    // ✅ Helper: Remove user from list
-    const removeUser = (userId) => {
-      if (!isMounted || !userId) return;
-      
-      setOnlineUsers(prev => prev.filter(u => u?.id !== userId));
-    };
-
-    // ✅ Listen for new users joining (child_added)
-    const unsubscribeAdded = onChildAdded(onlineUsersRef, async (snapshot) => {
-      if (!isMounted) return;
-      
-      const userId = snapshot.key;
-      if (!userId) return;
-
-      // Fetch user details only for the NEW user (cost-optimized!)
-      await addOrUpdateUser(userId);
-      
-      // Mark initial load as complete after first user or timeout
-      if (isInitialLoad) {
-        clearTimeout(initialLoadTimeout);
-        initialLoadTimeout = setTimeout(() => {
-          if (isMounted && isInitialLoad) {
-            setLoading(false);
-            isInitialLoad = false;
-          }
-        }, 1000); // Wait 1 second for initial users to load
-      }
-    }, (error) => {
-      console.error('Error listening to child_added:', error);
-      if (isMounted && isInitialLoad) {
-        setLoading(false);
-        isInitialLoad = false;
-      }
-    });
-
-    // ✅ Listen for users leaving (child_removed)
-    const unsubscribeRemoved = onChildRemoved(onlineUsersRef, (snapshot) => {
-      if (!isMounted) return;
-      
-      const userId = snapshot.key;
-      if (userId) {
-        removeUser(userId);
-      }
-    }, (error) => {
-      console.error('Error listening to child_removed:', error);
-    });
-
-    // ✅ Initial load timeout (in case no users are online)
-    initialLoadTimeout = setTimeout(() => {
-      if (isMounted && isInitialLoad) {
-        setLoading(false);
-        isInitialLoad = false;
-      }
-    }, 2000);
+    fetchOnlineUsers();
 
     return () => {
       isMounted = false;
-      clearTimeout(initialLoadTimeout);
-      unsubscribeAdded();
-      unsubscribeRemoved();
     };
-  }, [visible, appdatabase, fetchUserDetails]);
+  }, [visible, firestoreDB, user?.id]);
 
-  // ✅ Filter users based on search query
+  // ✅ Load more users on scroll (5 by 5) - client-side paging only
+  const handleLoadMore = useCallback(() => {
+    if (loadingMore || searchQuery.trim()) return;
+    if (displayedCount >= allOnlineUsers.length) return;
+
+    setLoadingMore(true);
+    const next = Math.min(displayedCount + BATCH_SIZE, allOnlineUsers.length);
+    setDisplayedCount(next);
+    setLoadingMore(false);
+  }, [loadingMore, searchQuery, displayedCount, allOnlineUsers.length]);
+
+  // ✅ Compute visible users (with search + pagination)
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return onlineUsers;
-    
-    const query = searchQuery.toLowerCase();
-    return onlineUsers.filter(user => 
-      user?.displayName?.toLowerCase().includes(query)
-    );
-  }, [onlineUsers, searchQuery]);
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      // No search: show first `displayedCount` users
+      return allOnlineUsers.slice(0, displayedCount);
+    }
+
+    // Search by displayName or index (as string)
+    return allOnlineUsers.filter((u) => {
+      const name = (u.displayName || '').toLowerCase();
+      const indexStr = String(u.index || '');
+      return name.includes(query) || indexStr.includes(query);
+    });
+  }, [allOnlineUsers, displayedCount, searchQuery]);
 
   // ✅ Handle start private chat
   const handleStartChat = useCallback((selectedUser) => {
@@ -253,7 +180,8 @@ const OnlineUsersList = ({ visible, onClose }) => {
         </View>
         <View style={styles.userInfo}>
           <Text style={styles.userName} numberOfLines={1}>
-            {item.displayName || 'Anonymous'}
+            {/* Include index in name for easier identification/search */}
+            {`${item.index || ''}${item.index ? '. ' : ''}${item.displayName || 'Anonymous'}`}
           </Text>
         </View>
         <Icon name="chatbubble-outline" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
@@ -299,7 +227,10 @@ const OnlineUsersList = ({ visible, onClose }) => {
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <TouchableOpacity 
+                onPress={() => setSearchQuery('')} 
+                style={styles.clearButton}
+              >
                 <Icon name="close-circle" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
               </TouchableOpacity>
             )}
@@ -330,20 +261,28 @@ const OnlineUsersList = ({ visible, onClose }) => {
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               removeClippedSubviews={true}
-              maxToRenderPerBatch={10}
-              windowSize={10}
-              initialNumToRender={15}
-              // ✅ Maintain scroll position when items are added/removed (keeps list stable)
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-              }}
+              maxToRenderPerBatch={5}
+              windowSize={5}
+              initialNumToRender={5}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                !searchQuery.trim() && displayedCount < allOnlineUsers.length ? (
+                  <View style={styles.loadMoreContainer}>
+                    <ActivityIndicator size="small" color={config.colors.primary} />
+                  </View>
+                ) : null
+              }
             />
           )}
 
           {/* Footer Info */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'} online
+              {searchQuery.trim() 
+                ? `${filteredUsers.length} ${filteredUsers.length === 1 ? 'user' : 'users'} found`
+                : `${allOnlineUsers.length} ${allOnlineUsers.length === 1 ? 'user' : 'users'} online${displayedCount < allOnlineUsers.length ? ` (showing ${displayedCount})` : ''}`
+              }
             </Text>
           </View>
         </View>
@@ -480,7 +419,11 @@ const getStyles = (isDark) =>
       color: isDark ? '#9CA3AF' : '#6B7280',
       fontFamily: 'Lato-Regular',
     },
+    loadMoreContainer: {
+      paddingVertical: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
   });
 
 export default OnlineUsersList;
-
