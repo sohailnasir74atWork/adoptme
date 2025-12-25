@@ -28,11 +28,18 @@ export const saveTokenToDatabase = async (token, currentUserId) => {
     return;
   }
 
+  // ✅ Validate user ID - must be non-empty string without invalid Firebase path characters
+  const userIdStr = String(currentUserId).trim();
+  if (!userIdStr || /[.#$\[\]]/.test(userIdStr)) {
+    console.warn('⚠️ Invalid user ID format. Cannot save FCM token.');
+    return;
+  }
+
   try {
     const db = getDatabase();
 
-    const tokenRef = ref(db, `users/${currentUserId}/fcmToken`);
-    const invalidTokenRef = ref(db, `users/${currentUserId}/isTokenInvalid`);
+    const tokenRef = ref(db, `users/${userIdStr}/fcmToken`);
+    const invalidTokenRef = ref(db, `users/${userIdStr}/isTokenInvalid`);
 
     // optional timeout guard
     const timeoutPromise = new Promise((_, reject) =>
@@ -72,8 +79,10 @@ export const registerForNotifications = async (
   retryCount = 0,
   maxRetries = 3,
 ) => {
-  if (!currentUserId) {
-    // console.warn('⚠️ User ID is null. Cannot register for notifications.');
+  // ✅ Validate user ID - must be non-empty string without invalid Firebase path characters
+  const userIdStr = currentUserId ? String(currentUserId).trim() : '';
+  if (!userIdStr || /[.#$\[\]]/.test(userIdStr)) {
+    // console.warn('⚠️ Invalid user ID format. Cannot register for notifications.');
     return;
   }
 
@@ -125,7 +134,7 @@ export const registerForNotifications = async (
         setTimeout(
           () =>
             registerForNotifications(
-              currentUserId,
+              userIdStr,
               retryCount + 1,
               maxRetries,
             ),
@@ -135,7 +144,7 @@ export const registerForNotifications = async (
       return;
     }
 
-    await saveTokenToDatabase(fcmToken, currentUserId);
+    await saveTokenToDatabase(fcmToken, userIdStr);
   } catch (error) {
     console.warn(
       '🔥 Error registering for notifications:',

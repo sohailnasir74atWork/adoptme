@@ -670,26 +670,9 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     }
 
     // ✅ Pro users can toggle freely
+    // ✅ Just update local state - GlobelStats.js will handle RTDB update (users/{uid}/online)
+    // ✅ Cloud Function will sync RTDB changes to Firestore online_users/list
     updateLocalState('showOnlineStatus', value);
-    
-    if (user?.id && appdatabase) {
-      try {
-        const onlineUsersRef = ref(appdatabase, `/online_users/${user.id}`);
-        if (value) {
-          // ✅ Show online status - add to online_users
-          await set(onlineUsersRef, true).catch((error) => 
-            console.error("🔥 Error adding to online_users:", error)
-          );
-        } else {
-          // ✅ Hide online status - remove from online_users to save Firebase costs
-          await remove(onlineUsersRef).catch((error) => 
-            console.error("🔥 Error removing from online_users:", error)
-          );
-        }
-      } catch (error) {
-        console.error('Error updating online status visibility:', error);
-      }
-    }
   };
 
   // ✅ Generate verification code for Roblox username
@@ -865,21 +848,33 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
 
   const isDarkMode = theme === 'dark';
+  const initializedUserIdRef = useRef(null); // ✅ Track which user ID we've initialized for
+  
+  // ✅ Initialize form values when drawer opens or user ID changes
   useEffect(() => {
+    // Only initialize when drawer opens (isDrawerVisible becomes true) or when user ID changes
+    if (!isDrawerVisible) return; // Don't initialize when drawer is closed
+    
     if (user && user?.id) {
-      setNewDisplayName(user?.displayName?.trim() || 'Anonymous');
-      setSelectedImage(user?.avatar?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png');
-      // ✅ Load Roblox username if exists
-      setRobloxUsername(user?.robloxUsername || '');
-      setRobloxUsernameVerified(user?.robloxUsernameVerified || false);
+      // Only reset if this is a different user or first time initialization for this user
+      if (initializedUserIdRef.current !== user.id) {
+        initializedUserIdRef.current = user.id;
+        setNewDisplayName(user?.displayName?.trim() || 'Anonymous');
+        setSelectedImage(user?.avatar?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png');
+        // ✅ Load Roblox username if exists
+        setRobloxUsername(user?.robloxUsername || '');
+        setRobloxUsernameVerified(user?.robloxUsernameVerified || false);
+      }
     } else {
+      // User logged out - reset everything
+      initializedUserIdRef.current = null;
       setNewDisplayName('Guest User');
       setSelectedImage('https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png');
       setRobloxUsername('');
       setRobloxUsernameVerified(false);
     }
 
-  }, [user]);
+  }, [isDrawerVisible, user?.id]); // ✅ Only initialize when drawer opens or user ID changes
 
   // Load bio and rating from averageRatings node
   useEffect(() => {
@@ -1017,7 +1012,7 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const handleSaveChanges = async () => {
     triggerHapticFeedback('impactLight');
-    const MAX_NAME_LENGTH = 20;
+    const MAX_NAME_LENGTH = 15;
     const PROFILE_EDIT_COOLDOWN_DAYS = 30;
 
     if (!user?.id) return;
@@ -1061,12 +1056,26 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     try {
       const now = Date.now();
       
-      // ✅ Update profile with timestamp
+      // ✅ Update profile with timestamp (displayName, avatar, lastProfileEditAt)
       await updateLocalStateAndDatabase({
         displayName: newDisplayName.trim(),
         avatar: selectedImage.trim(),
         lastProfileEditAt: now, // ✅ Store timestamp of this edit
       });
+
+      // ✅ Save bio separately to averageRatings node (where it's stored)
+      if (user?.id && appdatabase) {
+        const avgRatingRef = ref(appdatabase, `averageRatings/${user.id}`);
+        // Get existing data to preserve rating and count
+        const avgSnap = await get(avgRatingRef);
+        const existingData = avgSnap.exists() ? avgSnap.val() : {};
+        
+        // Update bio while preserving existing rating data
+        await update(avgRatingRef, {
+          ...existingData,
+          bio: bio.trim() || 'Hi there, I am new here',
+        });
+      }
 
       setDrawerVisible(false);
       showSuccessMessage(
@@ -1074,7 +1083,11 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
         t("settings.profile_success")
       );
     } catch (error) {
-      // console.error('Error updating profile:', error);
+      console.error('Error updating profile:', error);
+      showErrorMessage(
+        t("home.alert.error"),
+        "Failed to save profile changes. Please try again."
+      );
     }
   };
 
@@ -1747,6 +1760,12 @@ const formatPlanName = (plan) => {
               <Text style={!user?.id ? styles.userNameLogout : styles.userName}>
                 {!user?.id ? t("settings.login_register") : displayName}
                 </Text>
+                {/* ✅ Country Flag */}
+                {user?.id && user?.flage && localState?.showFlag !== false && (
+                  <Text style={{ fontSize: 14, marginLeft: 4 }}>
+                    {user.flage}
+                  </Text>
+                )}
                 {user?.isPro &&  
         <Image
         source={require('../../assets/pro.png')} 

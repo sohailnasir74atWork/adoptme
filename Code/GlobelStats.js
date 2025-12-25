@@ -551,72 +551,109 @@ export const GlobalStateProvider = ({ children }) => {
   const reload = () => {
     fetchStockData(true);
   };
-  // ✅ Helper function to set user online
-  // ✅ Cloud Function will handle Firestore updates to Firestore & counter
-  const setUserOnline = useCallback(async () => {
-    if (!user?.id || !appdatabase) return;
-  
-    // If user hides online status, force offline in RTDB
-    if (localState?.showOnlineStatus === false) {
-      await updateLocalStateAndDatabase('online', false);
-      return;
-    }
-  
-    // This already updates RTDB at users/{uid}.online
-    await updateLocalStateAndDatabase('online', true);
-  }, [user?.id, appdatabase, updateLocalStateAndDatabase, localState?.showOnlineStatus]);
-  
-  const setUserOffline = useCallback(async () => {
-    if (!user?.id || !appdatabase) return;
-  
-    await updateLocalStateAndDatabase('online', false);
-  }, [user?.id, appdatabase, updateLocalStateAndDatabase]);
+
   
 
   // ✅ Set up online status tracking (Cloud Function handles Firestore sync)
-  useEffect(() => {
-    if (!user?.id || !appdatabase) return;
+// ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
+useEffect(() => {
+  if (!user?.id || !appdatabase) return;
 
-    // ✅ Mark user as online when component mounts or user changes
-    setUserOnline();
+  const uid = user.id;
+  const onlineRef = ref(appdatabase, `users/${uid}/online`);
+  const connectedRef = ref(appdatabase, ".info/connected")
 
-    // ✅ Set up onDisconnect to mark user offline in Realtime DB
-    // ✅ Cloud Function will automatically sync this to Firestore
-    const userOnlineRef = ref(appdatabase, `/users/${user.id}/online`);
-    onDisconnect(userOnlineRef)
-      .set(false)
-      .catch((error) => console.error("🔥 Error setting onDisconnect:", error));
+  let isConnected = false;
+  let currentAppState = AppState.currentState; // 'active' | 'background' | 'inactive'
+  let armedOnDisconnect = false;
 
-    return () => {
-      // ✅ Cleanup: Mark user offline when the app is closed
-      setUserOffline();
-    };
-  }, [user?.id, appdatabase, setUserOnline, setUserOffline, localState?.showOnlineStatus]);
+  const setLocalOnline = (val) => {
+    setUser((prev) => (prev?.id ? { ...prev, online: val } : prev));
+  };
 
-  // ✅ Handle app state changes (background/foreground)
-  // When app goes to background: Remove from online_users list immediately
-  // When app comes to foreground: Add back to online_users list (only if showOnlineStatus is enabled and user is actively watching)
-  useEffect(() => {
-    if (!user?.id || !appdatabase) return;
-    
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        // ✅ App came to foreground - user is actively watching/using the app
-        // Only add to online_users if user has showOnlineStatus enabled
-        if (localState?.showOnlineStatus !== false) {
-          setUserOnline();
-        }
-      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // ✅ App went to background - remove from Firestore list and mark offline
-        // This ensures user is NOT shown as online when app is in background
-        setUserOffline();
+  const forceOffline = async () => {
+    try {
+      await set(onlineRef, false);
+    } catch (e) {
+      // log if you want: console.log("forceOffline error", e);
+    }
+    setLocalOnline(false);
+  };
+
+  const armOnDisconnect = async () => {
+    if (armedOnDisconnect) return;
+    await onDisconnect(onlineRef).set(false);
+    armedOnDisconnect = true;
+  };
+
+  let running = false;
+  let pending = false;
+  
+  const updatePresence = async () => {
+    if (running) {
+      pending = true;
+      return;
+    }
+    running = true;
+  
+    try {
+      if (localState?.showOnlineStatus === false) {
+        try { await onDisconnect(onlineRef).cancel(); } catch {}
+        armedOnDisconnect = false;
+        await forceOffline();
+        return;
       }
-    });
+  
+      if (!isConnected || currentAppState !== "active") {
+        await forceOffline();
+        return;
+      }
+  
+      await armOnDisconnect();
+      await set(onlineRef, true);
+      setLocalOnline(true);
+  
+    } catch (e) {
+      // console.log("updatePresence error", e);
+    } finally {
+      running = false;
+  
+      // ✅ if something changed while we were running, apply latest state once more
+      if (pending) {
+        pending = false;
+        updatePresence();
+      }
+    }
+  };
+  
+  
 
-    return () => {
-      subscription?.remove();
-    };
-  }, [user?.id, appdatabase, setUserOnline, setUserOffline, localState?.showOnlineStatus, updateLocalStateAndDatabase]);
+  // Listen to RTDB connection state
+  const unsubConnected = onValue(connectedRef, (snap) => {
+    isConnected = snap.val() === true;
+    updatePresence();
+  });
+
+  // Listen to AppState changes
+  const sub = AppState.addEventListener("change", (nextState) => {
+    currentAppState = nextState;
+    // immediately offline when background/inactive
+    updatePresence();
+  });
+
+  // Initial sync
+  updatePresence();
+
+  return () => {
+    sub.remove();
+    if (typeof unsubConnected === "function") unsubConnected();
+
+    // On unmount, mark offline
+    set(onlineRef, false).catch(() => {});
+    setLocalOnline(false);
+  };
+}, [user?.id, appdatabase, localState?.showOnlineStatus]);
+
 
   // ✅ Listen to online users count from Firestore (Cloud Function maintains this in online_users/list)
   useEffect(() => {

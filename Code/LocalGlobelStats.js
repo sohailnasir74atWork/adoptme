@@ -59,6 +59,7 @@ export const LocalStateProvider = ({ children }) => {
     lastServerFetch: storage.getString('lastServerFetch') || null,
     showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
     showOnlineStatus: storage.getBoolean('showOnlineStatus') ?? true, // ✅ Default true (show online), user can hide to save Firebase costs
+    gameMusicEnabled: storage.getBoolean('gameMusicEnabled') ?? true, // ✅ Default true (music on), user can toggle off/on
 
   }));
 

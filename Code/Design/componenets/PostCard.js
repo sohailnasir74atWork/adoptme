@@ -180,6 +180,18 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
           style={{ width: 14, height: 14, marginLeft: 4 }}
         />
       )}
+      {(() => {
+        const hasRecentWin =
+          !!item?.hasRecentGameWin ||
+          (typeof item?.lastGameWinAt === 'number' &&
+            Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+        return hasRecentWin ? (
+          <Image
+            source={require('../../../assets/trophy.webp')}
+            style={{ width: 14, height: 14, marginLeft: 4 }}
+          />
+        ) : null;
+      })()}
     </View>
     <Text style={themedStyles.time}>
       {formattedTime}

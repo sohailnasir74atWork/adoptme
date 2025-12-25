@@ -312,6 +312,13 @@ const DesignFeedScreen = ({ route }) => {
 
   const handleUploadPost = async (desc, imageUrl, selectedTags, currentUserEmail) => {
     if (!user?.id) return;
+    
+    // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
+    const now = Date.now();
+    const hasRecentWin =
+      typeof user?.lastGameWinAt === 'number' &&
+      now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+    
     const post = {
       imageUrl,
       desc,
@@ -326,6 +333,8 @@ const DesignFeedScreen = ({ route }) => {
       flage: user.flage ? user.flage : null,
       robloxUsername: user?.robloxUsername || null,
       robloxUsernameVerified: user?.robloxUsernameVerified || false,
+      hasRecentGameWin: hasRecentWin, // ✅ Game win info
+      lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
 
     };
     await addDoc(collection(firestoreDB, 'designPosts'), post);

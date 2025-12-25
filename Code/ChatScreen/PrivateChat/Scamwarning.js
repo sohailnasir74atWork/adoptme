@@ -66,10 +66,10 @@ export default function ScamSafetyBox({
             onPress={handleOpenServer}
           >
             <Text style={[styles.buttonTitle, styles.serverButtonTitle]}>
-              Join safe server
+              Join Server
             </Text>
             <Text style={[styles.buttonSub, styles.serverButtonSub]}>
-              Trade using a trusted Roblox link
+              Trade using a trusted link
             </Text>
           </TouchableOpacity>
 
@@ -79,11 +79,11 @@ export default function ScamSafetyBox({
             onPress={handleOpenRating}
           >
             <Text style={[styles.buttonTitle, styles.rateButtonTitle]}>
-              {hasRated ? 'Edit rating' : 'Rate trader'}
+              {hasRated ? 'Edit Rating' : 'Rate Trader'}
             </Text>
             <Text style={[styles.buttonSub, styles.rateButtonSub]}>
               {hasRated
-                ? 'Update your review for this trader'
+                ? 'Update your review'
                 : 'Help other players stay safe'}
             </Text>
           </TouchableOpacity>
@@ -164,7 +164,7 @@ const getStyles = (isDark) =>
       fontFamily: 'Lato-Bold',
     },
     buttonSub: {
-      fontSize: 9,
+      fontSize: 8,
       marginTop: 2,
     },
 

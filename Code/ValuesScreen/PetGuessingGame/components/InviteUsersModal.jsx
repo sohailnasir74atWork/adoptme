@@ -10,6 +10,8 @@ import {
   Image,
   ActivityIndicator,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
@@ -20,7 +22,7 @@ import {
 } from '../utils/gameInviteSystem';
 import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
 
-const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
+const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent }) => {
   const { appdatabase, firestoreDB, theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -213,6 +215,10 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
       if (success) {
         setInvitedIds((prev) => new Set([...prev, user.id]));
         showSuccessMessage('Invite Sent', `Invited ${user.displayName} to play!`);
+        // ✅ Notify parent component that invite was sent
+        if (onInviteSent && typeof onInviteSent === 'function') {
+          onInviteSent(user);
+        }
       } else {
         showErrorMessage('Error', 'Failed to send invite. Please try again.');
       }
@@ -236,7 +242,12 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
               Invite Friends to Play
@@ -295,6 +306,8 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
               keyExtractor={(item) => item.id}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.5}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               ListFooterComponent={
                 !searchQuery.trim() && loadedCount < onlineUserIds.length ? (
                   <View style={styles.loadMoreContainer}>
@@ -365,6 +378,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser }) => {
             />
           )}
         </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

@@ -18,7 +18,7 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { useBackgroundMusic } from '../../Helper/useBackgroundMusic';
 import { mixpanel } from '../../AppHelper/MixPenel';
-import InterstitialAdManager from '../../Ads/IntAd';
+import GameInterstitialAdManager from '../../Ads/GameIntAd';
 import InviteUsersModal from './components/InviteUsersModal';
 import InviteNotification from './components/InviteNotification';
 import PlayerCards from './components/PlayerCards';
@@ -40,7 +40,7 @@ import {
 
 const PetGuessingGameScreen = () => {
   const { appdatabase, firestoreDB, theme, user, setIsInActiveGame } = useGlobalState();
-  const { localState } = useLocalState();
+  const { localState, updateLocalState } = useLocalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
 
@@ -48,7 +48,10 @@ const PetGuessingGameScreen = () => {
   const [roomData, setRoomData] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [musicEnabled, setMusicEnabled] = useState(true); // ✅ Sound on/off state
+  // ✅ Use persisted state from LocalGlobelStats.js (defaults to true)
+  const musicEnabled = localState?.gameMusicEnabled ?? true;
+  // ✅ Track pending invitations (temporary UI state, not in database)
+  const [pendingInvites, setPendingInvites] = useState([]);
   const processedGameFinishRef = useRef(new Set()); // Track processed game finishes
   const gameEndAdShownRef = useRef(new Set()); // ✅ Track which games already showed an ad per player
   const timeoutCheckIntervalRef = useRef(null); // For timeout checking
@@ -109,6 +112,11 @@ const PetGuessingGameScreen = () => {
     const unsubscribe = listenToGameRoom(firestoreDB, currentRoomId, (data) => {
       setRoomData(data);
       
+      // ✅ Clear pending invites when someone joins (player count increases)
+      if (data && data.currentPlayers >= 2 && pendingInvites.length > 0) {
+        setPendingInvites([]);
+      }
+      
       // ✅ Update global game state (for GlobalInviteToast)
       if (data && setIsInActiveGame) {
         setIsInActiveGame(data.status === 'playing');
@@ -120,6 +128,7 @@ const PetGuessingGameScreen = () => {
         // Room was deleted
         setCurrentRoomId(null);
         setRoomData(null);
+        setPendingInvites([]); // ✅ Clear pending invites when room is deleted
         if (setIsInActiveGame) {
           setIsInActiveGame(false);
         }
@@ -128,17 +137,21 @@ const PetGuessingGameScreen = () => {
 
       // ✅ Show interstitial ad at the end of every game for this player (both winner & loser),
       //    as long as they're not Pro. Uses in‑memory ref only (no local storage).
+      //    Delay ad by 2 seconds so user can see the result screen first
       if (data.status === 'finished' && user?.id) {
         const gameId = data.id || currentRoomId;
         const adKey = `${gameId}:${user.id}`;
         if (!gameEndAdShownRef.current.has(adKey)) {
           gameEndAdShownRef.current.add(adKey);
           if (!localState?.isPro) {
-            try {
-              InterstitialAdManager.showAd();
-            } catch (err) {
-              console.warn('[AdManager] Failed to show game end ad:', err);
-            }
+            // ✅ Delay ad by 2 seconds so result screen is visible first
+            setTimeout(() => {
+              try {
+                GameInterstitialAdManager.showAd();
+              } catch (err) {
+                console.warn('[AdManager] Failed to show game end ad:', err);
+              }
+            }, 2000);
           }
         }
       }
@@ -212,7 +225,7 @@ const PetGuessingGameScreen = () => {
         setIsInActiveGame(false);
       }
     };
-  }, [currentRoomId, firestoreDB, user?.id, appdatabase, setIsInActiveGame]);
+  }, [currentRoomId, firestoreDB, user?.id, appdatabase, setIsInActiveGame, pendingInvites.length]);
 
   // Handle creating a new room with 10 random pets
   const handleCreateRoom = useCallback(async () => {
@@ -278,6 +291,7 @@ const PetGuessingGameScreen = () => {
     if (success) {
       setCurrentRoomId(null);
       setRoomData(null);
+      setPendingInvites([]); // ✅ Clear pending invites when leaving
       if (setIsInActiveGame) {
         setIsInActiveGame(false);
       }
@@ -289,7 +303,53 @@ const PetGuessingGameScreen = () => {
   const handleJoinRoom = useCallback((roomId) => {
     setCurrentRoomId(roomId);
     setShowInviteModal(false);
+    setPendingInvites([]); // ✅ Clear pending invites when joining
   }, []);
+
+  // ✅ Handle when an invite is sent (callback from InviteUsersModal)
+  const handleInviteSent = useCallback((invitedUser) => {
+    if (!invitedUser || !invitedUser.id) {
+      return;
+    }
+    
+    const now = Date.now();
+    const expiresAt = now + 60000; // 1 minute expiry
+    
+    setPendingInvites((prev) => {
+      // Check if this user is already in the list (avoid duplicates)
+      const exists = prev.some(inv => inv.userId === invitedUser.id);
+      if (exists) {
+        return prev;
+      }
+      
+      return [
+        ...prev,
+        {
+          userId: invitedUser.id,
+          displayName: invitedUser.displayName || 'Anonymous',
+          avatar: invitedUser.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          sentAt: now,
+          expiresAt: expiresAt,
+        },
+      ];
+    });
+  }, []);
+
+  // ✅ Clean up expired invites and update progress
+  useEffect(() => {
+    if (pendingInvites.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setPendingInvites((prev) => {
+        // Remove expired invites
+        const active = prev.filter((invite) => now < invite.expiresAt);
+        return active;
+      });
+    }, 1000); // Update every second
+
+    return () => clearInterval(interval);
+  }, [pendingInvites.length]);
 
   // Handle starting the game
   const handleStartGame = useCallback(async () => {
@@ -501,11 +561,15 @@ const PetGuessingGameScreen = () => {
                 />
               </View>
               <Text style={styles.cardText}>
-                • Create a room (10 random pets are selected){'\n'}
+                • Create a room (8 random pets are selected){'\n'}
                 • Invite 1 friend to join{'\n'}
                 • Take turns spinning the wheel{'\n'}
                 • The pet's value = your points{'\n'}
-                • 3 rounds each, highest total wins!
+                • 3 rounds each, highest total wins!{'\n'}
+                {'\n'}
+              </Text>
+              <Text style={[styles.cardText, { fontFamily: 'Lato-Bold', color: isDarkMode ? '#10B981' : '#059669', marginTop: 8 }]}>
+                🏆 Win the game and earn 100 points!
               </Text>
             </View>
 
@@ -528,7 +592,8 @@ const PetGuessingGameScreen = () => {
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => {
-                  setMusicEnabled(prev => !prev);
+                  const newValue = !musicEnabled;
+                  updateLocalState('gameMusicEnabled', newValue);
                   triggerHapticFeedback('impactLight');
                 }}
               >
@@ -614,6 +679,58 @@ const PetGuessingGameScreen = () => {
                   </View>
                 )}
 
+            {/* ✅ Pending Invitations List - Show below waiting card */}
+            {roomData.status === 'waiting' && pendingInvites.length > 0 && (
+              <View style={styles.pendingInvitesContainer}>
+                <Text style={styles.pendingInvitesTitle}>
+                  Pending Invitations ({pendingInvites.length})
+                </Text>
+                {pendingInvites.map((invite, index) => {
+                  const now = Date.now();
+                  const timeRemaining = Math.max(0, invite.expiresAt - now);
+                  const progress = Math.max(0, Math.min(1, timeRemaining / 60000)); // 0 to 1 (1 minute)
+                  const secondsRemaining = Math.ceil(timeRemaining / 1000);
+                  const isLastItem = index === pendingInvites.length - 1;
+
+                  return (
+                    <View
+                      key={invite.userId}
+                      style={[
+                        styles.pendingInviteItem,
+                        isLastItem && styles.pendingInviteItemLast,
+                      ]}
+                    >
+                      <Image
+                        source={{
+                          uri: invite.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                        }}
+                        style={styles.pendingInviteAvatar}
+                      />
+                      <View style={styles.pendingInviteInfo}>
+                        <Text style={styles.pendingInviteName} numberOfLines={1}>
+                          {invite.displayName}
+                        </Text>
+                        <View style={styles.progressBarContainer}>
+                          <View
+                            style={[
+                              styles.progressBar,
+                              {
+                                width: `${progress * 100}%`,
+                                backgroundColor: progress > 0.3 ? '#10B981' : progress > 0.1 ? '#F59E0B' : '#EF4444',
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.progressBarText}>
+                          {secondsRemaining > 0 ? `${secondsRemaining}s remaining` : 'Expired'}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
             {roomData.status === 'playing' && roomData.wheelPets && (
               <FortuneWheel
                 wheelPets={roomData.wheelPets}
@@ -658,13 +775,17 @@ const PetGuessingGameScreen = () => {
       {currentRoomId && (
         <InviteUsersModal
           visible={showInviteModal}
-          onClose={() => setShowInviteModal(false)}
+          onClose={() => {
+            setShowInviteModal(false);
+            // ✅ Don't clear pending invites when modal closes - keep them visible
+          }}
           roomId={currentRoomId}
           currentUser={{
             id: user?.id,
             displayName: user?.displayName || 'Anonymous',
             avatar: user?.avatar || null,
           }}
+          onInviteSent={handleInviteSent} // ✅ Callback when invite is sent
         />
       )}
 
@@ -842,6 +963,66 @@ const getStyles = (isDarkMode) =>
     loadingText: {
       marginTop: 12,
       fontSize: 14,
+      fontFamily: 'Lato-Regular',
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+    },
+    pendingInvitesContainer: {
+      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+      borderRadius: 12,
+      padding: 16,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333' : '#e5e7eb',
+    },
+    pendingInvitesTitle: {
+      fontSize: 14,
+      fontFamily: 'Lato-Bold',
+      color: isDarkMode ? '#fff' : '#000',
+      marginBottom: 12,
+    },
+    pendingInviteItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: isDarkMode ? '#333' : '#e5e7eb',
+    },
+    pendingInviteItemLast: {
+      marginBottom: 0,
+      paddingBottom: 0,
+      borderBottomWidth: 0,
+    },
+    pendingInviteAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: 12,
+      backgroundColor: isDarkMode ? '#333' : '#e5e7eb',
+    },
+    pendingInviteInfo: {
+      flex: 1,
+    },
+    pendingInviteName: {
+      fontSize: 14,
+      fontFamily: 'Lato-Bold',
+      color: isDarkMode ? '#fff' : '#000',
+      marginBottom: 6,
+    },
+    progressBarContainer: {
+      height: 6,
+      backgroundColor: isDarkMode ? '#333' : '#e5e7eb',
+      borderRadius: 3,
+      overflow: 'hidden',
+      marginBottom: 4,
+    },
+    progressBar: {
+      height: '100%',
+      borderRadius: 3,
+      transition: 'width 0.3s ease',
+    },
+    progressBarText: {
+      fontSize: 11,
       fontFamily: 'Lato-Regular',
       color: isDarkMode ? '#9ca3af' : '#6b7280',
     },

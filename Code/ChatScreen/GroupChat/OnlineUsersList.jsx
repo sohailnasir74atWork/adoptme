@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -181,7 +183,7 @@ const OnlineUsersList = ({ visible, onClose }) => {
         <View style={styles.userInfo}>
           <Text style={styles.userName} numberOfLines={1}>
             {/* Include index in name for easier identification/search */}
-            {`${item.index || ''}${item.index ? '. ' : ''}${item.displayName || 'Anonymous'}`}
+            {`${item.displayName || 'Anonymous'}`}
           </Text>
         </View>
         <Icon name="chatbubble-outline" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
@@ -204,10 +206,15 @@ const OnlineUsersList = ({ visible, onClose }) => {
         activeOpacity={1}
         onPress={onClose}
       >
-        <View 
-          style={styles.modalContent}
-          onStartShouldSetResponder={() => true}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
+          <View 
+            style={styles.modalContent}
+            onStartShouldSetResponder={() => true}
+          >
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Online Users</Text>
@@ -266,6 +273,8 @@ const OnlineUsersList = ({ visible, onClose }) => {
               initialNumToRender={5}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.5}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               ListFooterComponent={
                 !searchQuery.trim() && displayedCount < allOnlineUsers.length ? (
                   <View style={styles.loadMoreContainer}>
@@ -286,6 +295,7 @@ const OnlineUsersList = ({ visible, onClose }) => {
             </Text>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </TouchableOpacity>
     </Modal>
   );
@@ -346,6 +356,7 @@ const getStyles = (isDark) =>
     },
     list: {
       flex: 1,
+      maxHeight: '100%',
     },
     listContent: {
       padding: 8,

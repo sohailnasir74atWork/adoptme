@@ -35,31 +35,38 @@ const ConditionalKeyboardWrapper = ({ children, style, chatscreen = false, priva
     };
   }, [keyboardHeight]);
 
-  // ✅ For chat and private chat screens: use smooth Animated padding with our own timing.
-  // This avoids the sometimes jittery / slow default KeyboardAvoidingView animation.
+  // ✅ For chat and private chat screens: use KeyboardAvoidingView with padding behavior
+  // This ensures the input sits right on top of the keyboard without extra space
   if (chatscreen || privatechatscreen) {
-    return (
-      <Animated.View
-        style={[
-          style,
-          {
-            paddingBottom: keyboardHeight,
-          },
-        ]}
-      >
-        {children}
-      </Animated.View>
-    );
-  }
-
-  // ✅ For all other screens, keep simple KeyboardAvoidingView behavior.
-  if (Platform.OS === 'ios') {
-    const offset = 10;
-
+    if (Platform.OS === 'ios') {
+      return (
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={style}
+          keyboardVerticalOffset={100}
+        >
+          {children}
+        </KeyboardAvoidingView>
+      );
+    }
+    
     return (
       <KeyboardAvoidingView
         behavior="padding"
-        keyboardVerticalOffset={offset}
+        style={style}
+        enabled={true}
+        keyboardVerticalOffset={115}
+      >
+        {children}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ✅ For all other screens, use default KeyboardAvoidingView behavior (no custom offset)
+  if (Platform.OS === 'ios') {
+    return (
+      <KeyboardAvoidingView
+        behavior="padding"
         style={style}
       >
         {children}
@@ -71,7 +78,6 @@ const ConditionalKeyboardWrapper = ({ children, style, chatscreen = false, priva
     <KeyboardAvoidingView
       behavior="padding"
       style={style}
-      keyboardVerticalOffset={10}
       enabled={true}
     >
       {children}

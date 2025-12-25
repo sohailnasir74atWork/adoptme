@@ -57,6 +57,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             robloxUserId: data.robloxUserId || null,
             robloxUsernameVerified: data.robloxUsernameVerified || false,
             isPro: data.isPro || false,
+            lastGameWinAt: data.lastGameWinAt || null, // ✅ Game win timestamp
           });
         } else {
           setUserData(null);
@@ -85,6 +86,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         ? selectedUser.robloxUsernameVerified 
         : userData.robloxUsernameVerified,
       isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
+      lastGameWinAt: selectedUser?.lastGameWinAt !== undefined 
+        ? selectedUser.lastGameWinAt 
+        : userData.lastGameWinAt, // ✅ Game win timestamp
     };
   }, [selectedUser, userData]);
 
@@ -188,6 +192,18 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
               style={{ width: 14, height: 14 }} 
             />
           )}
+          {(() => {
+            const hasRecentWin =
+              !!mergedUser?.hasRecentGameWin ||
+              (typeof mergedUser?.lastGameWinAt === 'number' &&
+                Date.now() - mergedUser.lastGameWinAt <= 24 * 60 * 60 * 1000);
+            return hasRecentWin ? (
+              <Image
+                source={require('../../../assets/trophy.webp')}
+                style={{ width: 14, height: 14, marginLeft: 4 }}
+              />
+            ) : null;
+          })()}
           {'  '}
           <Icon 
             name="copy-outline" 

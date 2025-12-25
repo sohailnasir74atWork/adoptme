@@ -149,14 +149,28 @@ const startPrivateChat = useCallback(() => {
 
 
   const validateMessage = useCallback((message) => {
-    const hasText = message?.text?.trim();
+    const text = (message?.text ?? "").toString();
+    const trimmed = text.trim();
+  
+    const hasFruits = Array.isArray(message?.fruits) && message.fruits.length > 0;
+    const hasGif = !!message?.gif;
+  
+    const hasContent = trimmed.length > 0 || hasFruits || hasGif;
+  
     return {
       ...message,
-      sender: message.sender?.trim() || 'Anonymous',
-      text: hasText || '',
-      timestamp: hasText ? message.timestamp || Date.now() : Date.now() - 60 * 1000,
+      sender: (message?.sender ?? "Anonymous").toString().trim() || "Anonymous",
+      text: trimmed, // keep trimmed text, but don't force empty for fruits-only
+      // ✅ do NOT invent fake timestamps
+      timestamp:
+        typeof message?.timestamp === "number"
+          ? message.timestamp
+          : Date.now(), // fallback only if missing
+      // Optional: if message is truly empty (shouldn't exist), mark it
+      _invalid: !hasContent,
     };
   }, []);
+  
 
   const loadMessages = useCallback(
     async (reset = false) => {
@@ -187,15 +201,16 @@ const startPrivateChat = useCallback(() => {
         // console.log('Banned User IDs:', bannedUserIds);
 
         // ✅ Safety check for bannedUsers array
-        const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-        const parsedMessages = Object.entries(data)
+        const bannedIds = Array.isArray(bannedUsers)
+        ? bannedUsers.map(u => (typeof u === "string" ? u : u?.id)).filter(Boolean)
+        : [];
+                const parsedMessages = Object.entries(data)
           .map(([key, value]) => {
             if (!key || !value || typeof value !== 'object') return null;
             return validateMessage({ id: key, ...value });
           })
           .filter(Boolean)
-          .filter((msg) => msg?.senderId && !banned.includes(msg.senderId))
-          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId)).sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
   
         // console.log('Parsed Messages:', parsedMessages);
 
@@ -490,6 +505,12 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
 
   // Use the argument, not external state
   const trimmedInput = (trimmedInputArg || '').trim();
+
+  // ✅ Validate fruits count - maximum 18 fruits allowed
+  if (hasFruits && fruits.length > 18) {
+    Alert.alert(t('home.alert.error'), 'You can only send up to 18 pets in a message.');
+    return;
+  }
 
   // Disallow empty text + no fruits
   if (!trimmedInput && !hasFruits && !emojiUrl) {

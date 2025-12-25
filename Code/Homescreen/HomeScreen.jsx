@@ -632,6 +632,11 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       const now = Date.now(); // ✅ Use Date.now() for cooldown comparison
       const timestamp = serverTimestamp(); // ✅ Use serverTimestamp() for Firestore
 
+      // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
+      const hasRecentWin =
+        typeof user?.lastGameWinAt === 'number' &&
+        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+
       const mapTradeItem = item => ({
         name: item.name || item.Name,
         type: item.type || item.Type,
@@ -660,6 +665,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         flage: user.flage ? user.flage : null,
         robloxUsername: user?.robloxUsername || null,
         robloxUsernameVerified: user?.robloxUsernameVerified || false,
+        hasRecentGameWin: hasRecentWin, // ✅ Game win info
+        lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
 
 
       };

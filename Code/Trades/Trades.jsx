@@ -771,6 +771,18 @@ const GG = item.isSharkMode === 'GG'
                     style={{ width: 14, height: 14 }} 
                   />
                 )}
+                {(() => {
+                  const hasRecentWin =
+                    !!item?.hasRecentGameWin ||
+                    (typeof item?.lastGameWinAt === 'number' &&
+                      Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+                  return hasRecentWin ? (
+                    <Image
+                      source={require('../../assets/trophy.webp')}
+                      style={{ width: 14, height: 14, marginLeft: 4 }}
+                    />
+                  ) : null;
+                })()}
                 {item.rating ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#FFD700', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
                     <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />

@@ -472,6 +472,12 @@ showSuccessMessage(
     const hasImage = !!image;
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
   
+    // ✅ Validate fruits count - maximum 18 fruits allowed
+    if (hasFruits && fruits.length > 18) {
+      showErrorMessage(t("home.alert.error"), "You can only send up to 18 pets in a message.");
+      return;
+    }
+  
     // Block only if there's no text, no image AND no fruits
     if (!trimmedText && !hasImage && !hasFruits) {
       showErrorMessage(t("home.alert.error"), t("chat.cannot_empty"));

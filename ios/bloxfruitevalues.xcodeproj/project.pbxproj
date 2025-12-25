@@ -12,8 +12,8 @@
 		18210E3A2D5CBE7900113462 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 18210E392D5CBE7900113462 /* StoreKit.framework */; };
 		183231FB2D66329F00278B1F /* testing.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 183231FA2D66329F00278B1F /* testing.storekit */; };
 		184488282E390BE5003EB68A /* StoreKitTestCertificate.cer in Resources */ = {isa = PBXBuildFile; fileRef = 184488272E390BE5003EB68A /* StoreKitTestCertificate.cer */; };
+		186AE12E2EFC2E8E00574D82 /* audio.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 186AE12D2EFC2E8E00574D82 /* audio.mp3 */; };
 		187146CE2D5CB1B5003890D6 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 187146CD2D5CB1B5003890D6 /* GoogleService-Info.plist */; };
-		1883677C2EF597CA00D1878D /* audio.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 1883677B2EF597CA00D1878D /* audio.mp3 */; };
 		3CB3B02363450A64CDC9063D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		3DD773292011487396EB3CB0 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7C9634A738C64C4B9FFE6234 /* Lato-Regular.ttf */; };
 		56F857E2D0424B5587F79BC7 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 67352802B153454498C63C76 /* Colors.xcassets */; };
@@ -36,8 +36,8 @@
 		18210E392D5CBE7900113462 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		183231FA2D66329F00278B1F /* testing.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = testing.storekit; path = bloxfruitevalues/testing.storekit; sourceTree = "<group>"; };
 		184488272E390BE5003EB68A /* StoreKitTestCertificate.cer */ = {isa = PBXFileReference; lastKnownFileType = file; path = StoreKitTestCertificate.cer; sourceTree = "<group>"; };
+		186AE12D2EFC2E8E00574D82 /* audio.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = audio.mp3; sourceTree = "<group>"; };
 		187146CD2D5CB1B5003890D6 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		1883677B2EF597CA00D1878D /* audio.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = audio.mp3; sourceTree = "<group>"; };
 		3F7B9F506D5D2B861D02FFDF /* Pods_bloxfruitevalues.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_bloxfruitevalues.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		67352802B153454498C63C76 /* Colors.xcassets */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = folder.assetcatalog; name = Colors.xcassets; path = bloxfruitevalues/Colors.xcassets; sourceTree = "<group>"; };
 		7C9634A738C64C4B9FFE6234 /* Lato-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-Regular.ttf"; path = "../assets/fonts/Lato-Regular.ttf"; sourceTree = "<group>"; };
@@ -98,7 +98,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				1883677B2EF597CA00D1878D /* audio.mp3 */,
+				186AE12D2EFC2E8E00574D82 /* audio.mp3 */,
 				184488272E390BE5003EB68A /* StoreKitTestCertificate.cer */,
 				183231FA2D66329F00278B1F /* testing.storekit */,
 				187146CD2D5CB1B5003890D6 /* GoogleService-Info.plist */,
@@ -205,7 +205,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
-				1883677C2EF597CA00D1878D /* audio.mp3 in Resources */,
+				186AE12E2EFC2E8E00574D82 /* audio.mp3 in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				184488282E390BE5003EB68A /* StoreKitTestCertificate.cer in Resources */,
 				3CB3B02363450A64CDC9063D /* PrivacyInfo.xcprivacy in Resources */,
@@ -371,7 +371,7 @@
 				CODE_SIGN_ENTITLEMENTS = bloxfruitevalues/bloxfruitevalues.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = P32FX5FC6Z;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = bloxfruitevalues/Info.plist;
@@ -381,7 +381,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.7;
+				MARKETING_VERSION = 3.8;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -411,7 +411,7 @@
 				CODE_SIGN_ENTITLEMENTS = bloxfruitevalues/bloxfruitevalues.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = P32FX5FC6Z;
 				INFOPLIST_FILE = bloxfruitevalues/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Adopt Me Values";
@@ -420,7 +420,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.7;
+				MARKETING_VERSION = 3.8;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
