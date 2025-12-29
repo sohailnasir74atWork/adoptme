@@ -263,7 +263,6 @@ const PrivateMessageList = ({
   <View
     style={[
       fruitStyles.fruitsWrapper,
-      { backgroundColor: fruitColors.wrapperBg },
     ]}
   >
     {fruits.map((fruit, index )=> {
@@ -442,9 +441,8 @@ export const fruitStyles = StyleSheet.create({
   fruitsWrapper: {
     marginTop: 1,
     // gap: 1,
-    backgroundColor: '#1E293B15', // subtle blue-ish bg
     padding: 4,
-    borderRadius: 8,
+    // borderRadius: 8,
 
   },
   fruitCard: {
@@ -462,7 +460,6 @@ export const fruitStyles = StyleSheet.create({
     height: 20,
     borderRadius: 2,
     marginRight: 2,
-    backgroundColor: '#0002',
   },
   fruitInfo: {
     // flex: 1,

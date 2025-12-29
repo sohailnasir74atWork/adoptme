@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ChatScreen from './GroupChat/Trader';
 import PrivateChatScreen from './PrivateChat/PrivateChat';
 import InboxScreen from './GroupChat/InboxScreen';
+import GroupsScreen from './GroupChat/GroupsScreen';
+import GroupChatScreen from './GroupChat/GroupChatScreen';
 import { useGlobalState } from '../GlobelStats';
 import PrivateChatHeader from './PrivateChat/PrivateChatHeader';
 import BlockedUsersScreen from './PrivateChat/BlockUserList';
@@ -16,7 +18,7 @@ import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 const Stack = createNativeStackNavigator();
 
 export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
-  const { user, unreadMessagesCount, appdatabase, onlineMembersCount } = useGlobalState();
+  const { user, unreadMessagesCount, appdatabase } = useGlobalState();
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
   const [chats, setChats] = useState([]);
@@ -25,6 +27,9 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const { localState, updateLocalState } = useLocalState()
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupUnreadCount, setGroupUnreadCount] = useState(0); // Total unread count for groups
 
 
 
@@ -122,11 +127,75 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
+  // ✅ Load groups from group_meta_data
+  useEffect(() => {
+    if (!user?.id || !appdatabase) {
+      setGroups([]);
+      return;
+    }
+
+    setGroupsLoading(true);
+    const userGroupsRef = ref(appdatabase, `group_meta_data/${user.id}`);
+
+    const onValueChange = userGroupsRef.on('value', (snapshot) => {
+      try {
+        if (!snapshot.exists()) {
+          setGroups([]);
+          setGroupUnreadCount(0);
+          setGroupsLoading(false);
+          return;
+        }
+
+        const fetchedData = snapshot.val();
+        if (!fetchedData || typeof fetchedData !== 'object') {
+          setGroups([]);
+          setGroupUnreadCount(0);
+          setGroupsLoading(false);
+          return;
+        }
+
+        const updatedGroups = Object.entries(fetchedData).map(([groupId, groupData]) => {
+          if (!groupData || typeof groupData !== 'object') {
+            return null;
+          }
+
+          return {
+            groupId,
+            groupName: groupData.groupName || 'Group',
+            groupAvatar: groupData.groupAvatar || null,
+            lastMessage: groupData.lastMessage || 'No messages yet',
+            lastMessageTimestamp: groupData.lastMessageTimestamp || 0,
+            unreadCount: groupData.unreadCount || 0,
+            memberCount: groupData.memberCount || 0,
+            createdBy: groupData.createdBy || null, // Add creator info
+          };
+        }).filter(Boolean);
+
+        const sortedGroups = updatedGroups.sort(
+          (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
+        );
+        setGroups(sortedGroups);
+        
+        // ✅ Calculate total group unread count
+        const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
+        setGroupUnreadCount(totalGroupUnread);
+        
+        setGroupsLoading(false);
+      } catch (error) {
+        console.error('❌ Error fetching groups:', error);
+        setGroupsLoading(false);
+      }
+    });
+
+    return () => {
+      userGroupsRef.off('value', onValueChange);
+    };
+  }, [user?.id, appdatabase]);
 
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
 
   const getGroupChatOptions = useCallback(() => ({
-    title: 'Chat',
+    title: '', // Hide title
     headerTitleAlign: 'left',
     headerTitleStyle: { 
       fontFamily: 'Lato-Bold', 
@@ -139,9 +208,10 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     headerRight: () => (
       <CommunityChatHeader
         selectedTheme={selectedTheme}
-        onlineMembersCount={onlineMembersCount}
         unreadcount={unreadcount}
         setunreadcount={setunreadcount}
+        groupUnreadCount={groupUnreadCount}
+        setGroupUnreadCount={setGroupUnreadCount}
         triggerHapticFeedback={triggerHapticFeedback}
         onOnlineUsersPress={() => setOnlineUsersVisible(true)}
       />
@@ -150,7 +220,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       paddingRight: 0,
       marginRight: 0,
     },
-  }), [selectedTheme, onlineMembersCount, unreadcount, setunreadcount, triggerHapticFeedback]);
+  }), [selectedTheme, unreadcount, setunreadcount, groupUnreadCount, setGroupUnreadCount, triggerHapticFeedback]);
 
   return (
     <Stack.Navigator screenOptions={headerOptions}>
@@ -171,6 +241,30 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         options={{ title: 'Inbox' }}
       >
         {props => <InboxScreen {...props} chats={chats} setChats={setChats} loading={loading} bannedUsers={bannedUsers} />}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="Groups"
+        options={{ title: 'Groups' }}
+      >
+        {props => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} />}
+      </Stack.Screen>
+
+      <Stack.Screen
+        name="GroupChatDetail"
+        options={({ route, navigation }) => ({
+          headerBackVisible: true,
+          headerTitle: () => {
+            // This will be set dynamically by GroupChatScreen
+            return null;
+          },
+          headerRight: () => {
+            // This will be set dynamically by GroupChatScreen
+            return null;
+          },
+        })}
+      >
+        {(props) => <GroupChatScreen {...props} />}
       </Stack.Screen>
 
       <Stack.Screen

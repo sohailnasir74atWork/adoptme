@@ -26,7 +26,7 @@ const PostsHeader = ({
     <Menu>
       <MenuTrigger style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
         <Text style={{ color: config.colors.primary, fontSize: 10, fontWeight: '900', marginRight: 4 }}>
-          {selectedTag || 'Filter'}
+          {selectedTag || ''}
         </Text>
         <FontAwesome
           name="filter"

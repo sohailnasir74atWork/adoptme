@@ -8,18 +8,21 @@ import { useTranslation } from 'react-i18next';
 export const FilterMenu = ({ selectedFilters, setSelectedFilters, analytics, platform }) => {
   const { t } = useTranslation();
 
-  // We ONLY toggle "myTrades" from the menu.
+  // Toggle any filter (myTrades, win, lose, fair)
   const toggleFilter = (filterKey) => {
     setSelectedFilters((prevFilters) =>
       prevFilters.includes(filterKey)
-        ? prevFilters.filter((f) => f !== filterKey)      // remove myTrades
-        : [...prevFilters, filterKey]                     // add myTrades
+        ? prevFilters.filter((f) => f !== filterKey)      // remove filter
+        : [...prevFilters, filterKey]                     // add filter
     );
   };
 
-  // Only show My Trades in the menu
+  // Filter options: My Trades and Status filters
   const filterOptions = [
     { key: "myTrades", label: t("trade.filter_my_trades") },
+    { key: "win", label: "Win" },
+    { key: "lose", label: "Lose" },
+    { key: "fair", label: "Fair" },
   ];
 
   return (

@@ -10,6 +10,8 @@ import {
   AppState,
   Platform,
   Image,
+  StatusBar,
+  SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -19,7 +21,7 @@ import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper
 import { useBackgroundMusic } from '../../Helper/useBackgroundMusic';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import GameInterstitialAdManager from '../../Ads/GameIntAd';
-import InviteUsersModal from './components/InviteUsersModal';
+import OnlineUsersList from '../../ChatScreen/GroupChat/OnlineUsersList';
 import InviteNotification from './components/InviteNotification';
 import PlayerCards from './components/PlayerCards';
 import FortuneWheel from './components/FortuneWheel';
@@ -515,13 +517,22 @@ const PetGuessingGameScreen = () => {
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
+  const containerBgColor = isDarkMode ? '#121212' : '#f2f2f7';
+
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <>
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={containerBgColor}
+        translucent={false}
+      />
+      <SafeAreaView style={{ flex: 1, backgroundColor: containerBgColor }}>
+        <View style={[styles.container, { backgroundColor: containerBgColor }]}>
+          <ScrollView
+            style={[styles.container, { backgroundColor: containerBgColor }]}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
         {/* Header */}
        {!currentRoomId && <View style={styles.header}>
           <Text style={styles.title}>🎡 Pet Wheel Spin</Text>
@@ -771,20 +782,16 @@ const PetGuessingGameScreen = () => {
         )}
       </ScrollView>
 
-      {/* Invite Modal */}
+      {/* Invite Modal - Using shared OnlineUsersList component */}
       {currentRoomId && (
-        <InviteUsersModal
+        <OnlineUsersList
           visible={showInviteModal}
           onClose={() => {
             setShowInviteModal(false);
             // ✅ Don't clear pending invites when modal closes - keep them visible
           }}
+          mode="gameInvite"
           roomId={currentRoomId}
-          currentUser={{
-            id: user?.id,
-            displayName: user?.displayName || 'Anonymous',
-            avatar: user?.avatar || null,
-          }}
           onInviteSent={handleInviteSent} // ✅ Callback when invite is sent
         />
       )}
@@ -801,7 +808,9 @@ const PetGuessingGameScreen = () => {
           isInActiveGame={roomData?.status === 'playing'}
         />
       )}
-    </View>
+        </View>
+      </SafeAreaView>
+    </>
   );
 };
 

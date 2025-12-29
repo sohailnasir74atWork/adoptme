@@ -70,13 +70,16 @@ const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, is
 };
 
 const getTradeStatus = (hasTotal, wantsTotal) => {
+  // If both are 0 (initial state), show WIN
+  if (hasTotal === 0 && wantsTotal === 0) return 'win';
+
   // If only has items are selected (wantsTotal is 0), show LOSE
   if (hasTotal > wantsTotal) return 'lose';
 
   // If only wants items are selected (hasTotal is 0), show WIN
   if (hasTotal < wantsTotal) return 'win';
 
-  // If both are 0 or both have values, show FAIR
+  // If both have equal values, show FAIR
   return 'fair';
 };
 
@@ -640,12 +643,16 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       const mapTradeItem = item => ({
         name: item.name || item.Name,
         type: item.type || item.Type,
-        value: item.selectedValue,
         valueType: item.valueType,
         isFly: item.isFly,
         isRide: item.isRide,
         image: item.image ? item.image : '' ,
       });
+      
+      // ✅ Calculate trade status and convert to single letter: 'w' (win), 'l' (lose), 'f' (fair)
+      const tradeStatus = getTradeStatus(hasTotal, wantsTotal);
+      const statusLetter = tradeStatus === 'win' ? 'w' : tradeStatus === 'lose' ? 'l' : 'f';
+      
       const newTrade = {
         userId: user?.id || "Anonymous",
         traderName: user?.displayName || "Anonymous",
@@ -658,7 +665,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         wantsTotal,
         description: description || "",
         timestamp: timestamp, // ✅ Use serverTimestamp for Firestore
-
+        status: statusLetter, // ✅ Trade status: 'w' (win), 'l' (lose), 'f' (fair)
         rating: userRating,
         ratingCount,
         isSharkMode: localState.isGG ? 'GG' : isSharkMode,
@@ -769,20 +776,29 @@ await addDoc(tradesCollection, newTrade);
                       <View style={styles.statusContainer}>
                         <Text style={[
                           styles.statusText,
-                          tradeStatus === 'win' ? styles.statusActive : styles.statusInactive
-                        ]}>WIN</Text>
-                        <Text style={[
-                          styles.statusText,
-                          tradeStatus === 'fair' ? styles.statusActive : styles.statusInactive
+                          tradeStatus === 'fair' ? {
+                            ...styles.statusActive,
+                            backgroundColor: config.colors.secondary // Blue for fair
+                          } : styles.statusInactive
                         ]}>FAIR</Text>
                         <Text style={[
                           styles.statusText,
-                          tradeStatus === 'lose' ? styles.statusActive : styles.statusInactive
+                          tradeStatus === 'win' ? {
+                            ...styles.statusActive,
+                            backgroundColor: '#10B981' // Green for win
+                          } : styles.statusInactive
+                        ]}>WIN</Text>
+                        <Text style={[
+                          styles.statusText,
+                          tradeStatus === 'lose' ? {
+                            ...styles.statusActive,
+                            backgroundColor: config.colors.primary // Primary color for lose
+                          } : styles.statusInactive
                         ]}>LOSE</Text>
                       </View>
                       <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
                     </View>
-                    <View style={styles.progressContainer}>
+                    {/* <View style={styles.progressContainer}>
                       <View style={styles.progressBar}>
                         <View
                           style={[
@@ -797,20 +813,13 @@ await addDoc(tradesCollection, newTrade);
                           ]}
                         />
                       </View>
-                    </View>
-                    <View style={styles.labelContainer}>
-                      <Text style={styles.offerLabel}>OFFER</Text>
-                      <Text style={styles.dividerText}>|</Text>
-                      <Text style={styles.offerLabel}>WANT</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-              <View style={styles.profitLossBox}>
+                    </View> */}
+                   
+                     <View style={styles.profitLossBox}>
                 <Text style={[styles.bigNumber2, { color: isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
                   {Math.abs(profitLoss).toLocaleString()}
                 </Text>
-                <View style={[styles.divider, { position: 'absolute', right: 0 }]}>
+                <View style={[styles.divider, { position: 'absolute', right: 0 , bottom:0}]}>
                   <Image
                     source={require('../../assets/reset.png')}
                     style={{ width: 18, height: 18, tintColor: 'white' }}
@@ -818,7 +827,15 @@ await addDoc(tradesCollection, newTrade);
                   />
                 </View>
               </View>
-
+                  </View>
+                </View>
+              )}
+             
+ <View style={styles.labelContainer}>
+                      <Text style={styles.offerLabel}>ME</Text>
+                      <Text style={styles.dividerText}></Text>
+                      <Text style={styles.offerLabel}>YOU</Text>
+                    </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <View style={styles.itemRow}>
                   {hasItems?.map((item, index) => {
@@ -1230,12 +1247,14 @@ const getStyles = (isDarkMode,isGG) =>
     },
     summaryContainer: {
       width: '100%',
+      
     },
     summaryInner: {
       backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
       borderRadius: 15,
-
-      padding: 15,
+      marginBottom: 10,
+      
+      padding: 10,
       shadowColor: 'rgba(255, 255, 255, 0.9)',
       shadowOffset: {
         width: 0,
@@ -1249,7 +1268,8 @@ const getStyles = (isDarkMode,isGG) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      // marginBottom: 10,
+      
 
     },
     bigNumber: {
@@ -1271,12 +1291,12 @@ const getStyles = (isDarkMode,isGG) =>
     },
     statusContainer: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       alignItems: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.05)',
       borderRadius: 20,
       padding: 5,
-
+      paddingHorizontal: 8,
     },
     statusText: {
       fontSize: 12,
@@ -1284,7 +1304,9 @@ const getStyles = (isDarkMode,isGG) =>
       paddingHorizontal: 10,
     },
     statusActive: {
-      color: isDarkMode ? 'white' : '#333',
+      color: isDarkMode ? 'white' : 'white',
+      backgroundColor: config.colors.hasBlockGreen,
+      borderRadius: 20,
     },
     statusInactive: {
       color: isDarkMode ? '#999' : '#999',
@@ -1313,15 +1335,18 @@ const getStyles = (isDarkMode,isGG) =>
     labelContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'space-evenly',
       // marginTop: 5,
+      flex:1,
+      width:'100%',
+      // backgroundColor:'red',
 
     },
     offerLabel: {
-      fontSize: 10,
+      fontSize: 12,
       color: isDarkMode ? '#999' : '#666',
-      fontWeight: '600',
-      paddingHorizontal: 10,
+      fontFamily: 'Lato-Bold',
+      paddingBottom: 5,
     },
     dividerText: {
       fontSize: 14,
@@ -1337,7 +1362,7 @@ const getStyles = (isDarkMode,isGG) =>
       justifyContent: 'center',
       alignItems: 'center',
       flexDirection: 'row',
-      paddingVertical: 10,
+      // paddingVertical: 10,
     },
     hasBox: {
       backgroundColor: config.colors.hasBlockGreen,

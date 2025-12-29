@@ -37,7 +37,7 @@ leoProfanity.loadDictionary('en');
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
-  const { user, theme, onlineMembersCount, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
+  const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -637,7 +637,6 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
             pinnedMessages={pinnedMessages}
             onUnpinMessage={unpinSingleMessage}
             selectedTheme={selectedTheme}
-            onlineMembersCount={onlineMembersCount}
             modalVisibleChatinfo={modalVisibleChatinfo}
             setModalVisibleChatinfo={setModalVisibleChatinfo}
             triggerHapticFeedback={triggerHapticFeedback}

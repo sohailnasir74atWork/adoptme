@@ -33,7 +33,7 @@ const AdminHeader = ({
   pinnedMessages,
   onUnpinMessage,
 }) => {
-  const { theme, user, isAdmin, onlineMembersCount } = useGlobalState();
+  const { theme, user, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
   const { t } = useTranslation();
@@ -107,13 +107,6 @@ const AdminHeader = ({
                   size={24}
                   color={config.colors.primary}
                 />
-                {onlineMembersCount > 0 && (
-                  <View style={[styles.badge, { backgroundColor: '#10B981' }]}>
-                    <Text style={styles.badgeText}>
-                      {onlineMembersCount > 999 ? '1k+' : onlineMembersCount}
-                    </Text>
-                  </View>
-                )}
               </TouchableOpacity>
 
               {/* Pet Guessing Game Button */}
@@ -275,6 +268,7 @@ const AdminHeader = ({
       <OnlineUsersList
         visible={onlineUsersVisible}
         onClose={() => setOnlineUsersVisible(false)}
+        mode="view"
       />
 
       {/* Full-screen Pet Guessing Game Modal */}

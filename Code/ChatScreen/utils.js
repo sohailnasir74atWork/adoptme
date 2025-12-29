@@ -320,8 +320,9 @@ export const isUserOnline = async (userId) => {
   if (!userId) return false; // ✅ Return early if userId is invalid
 
   try {
-    const userRef = ref(getDatabase(), `users/${userId}/online`);
-    const snapshot = await get(userRef);
+    // ✅ Read from presence node instead of users/{uid}/online
+    const presenceRef = ref(getDatabase(), `presence/${userId}`);
+    const snapshot = await get(presenceRef);
     
     return snapshot.val() ?? false; // ✅ Return online status OR false (cleaner)
   } catch (error) {
@@ -368,6 +369,69 @@ export const clearActiveChat = async (userId) => {
     await set(activeChatRef, null);
   } catch (error) {
     console.error(`❌ Failed to clear active chat for user ${userId}:`, error);
+  }
+};
+
+// ========== Group Chat Helper Functions ==========
+
+/**
+ * Set active group chat (for efficient batch checking)
+ * @param {String} userId - User ID
+ * @param {String} groupId - Group ID
+ */
+export const setActiveGroupChat = async (userId, groupId) => {
+  if (!userId || !groupId) {
+    console.error('❌ Invalid userId or groupId for setActiveGroupChat');
+    return;
+  }
+
+  try {
+    const database = getDatabase();
+    const activeGroupRef = ref(database, `activeGroupChats/${groupId}/${userId}`);
+    await set(activeGroupRef, true);
+    await onDisconnect(activeGroupRef).remove(); // Auto-clear on disconnect
+  } catch (error) {
+    console.error('❌ Failed to set active group chat:', error);
+  }
+};
+
+/**
+ * Clear active group chat
+ * @param {String} userId - User ID
+ * @param {String} groupId - Group ID
+ */
+export const clearActiveGroupChat = async (userId, groupId) => {
+  if (!userId || !groupId) {
+    console.error('❌ Invalid userId or groupId for clearActiveGroupChat');
+    return;
+  }
+
+  try {
+    const database = getDatabase();
+    const activeGroupRef = ref(database, `activeGroupChats/${groupId}/${userId}`);
+    await set(activeGroupRef, null);
+  } catch (error) {
+    console.error('❌ Failed to clear active group chat:', error);
+  }
+};
+
+/**
+ * Check if user is in active group (for notifications)
+ * @param {String} groupId - Group ID
+ * @param {String} userId - User ID
+ * @returns {Promise<boolean>}
+ */
+export const isUserInActiveGroup = async (groupId, userId) => {
+  if (!groupId || !userId) return false;
+
+  try {
+    const database = getDatabase();
+    const activeGroupRef = ref(database, `activeGroupChats/${groupId}/${userId}`);
+    const snapshot = await get(activeGroupRef);
+    return snapshot.exists() && snapshot.val() === true;
+  } catch (error) {
+    console.error('❌ Error checking active group:', error);
+    return false;
   }
 };
 

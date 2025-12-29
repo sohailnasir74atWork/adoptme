@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, FlatList, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, TextInput, Alert, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import dayjs from 'dayjs';
@@ -69,6 +69,7 @@ const TradeList = ({ route }) => {
   const { t } = useTranslation();
   const platform = Platform.OS.toLowerCase();
   const isDarkMode = theme === 'dark'
+  const isInitialMountRef = useRef(true); // ✅ Track initial mount to prevent double fetch
   const formatName = (name) => {
     let formattedName = name.replace(/^\+/, '');
     formattedName = formattedName.replace(/\s+/g, '-');
@@ -78,7 +79,7 @@ const TradeList = ({ route }) => {
 
   // console.log(trades, 'trades')
 
-  const [selectedFilters, setSelectedFilters] = useState(['has', 'wants']);
+  const [selectedFilters, setSelectedFilters] = useState([]); // ✅ Default: no filters (show all)
 
   useEffect(() => {
     // console.log(localState.isPro, 'from trade model'); // ✅ Check if isPro is updated
@@ -93,32 +94,46 @@ const TradeList = ({ route }) => {
         // If no filters selected, show all trades
         if (selectedFilters.length === 0) return true;
 
-        let matchesAnyFilter = false;
+        // ✅ Separate filter types
+        const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
+        const hasMyTradesFilter = selectedFilters.includes("myTrades");
+        const hasSearchFilters = lowerCaseQuery && (selectedFilters.includes("has") || selectedFilters.includes("wants"));
 
-        if (selectedFilters.includes("has")) {
-          matchesAnyFilter =
-            matchesAnyFilter ||
-            trade.hasItems?.some((item) =>
+        // ✅ Check status filter match
+        let matchesStatus = true;
+        if (statusFilters.length > 0) {
+          const statusMap = { win: 'w', lose: 'l', fair: 'f' };
+          const statusValues = statusFilters.map(f => statusMap[f]);
+          matchesStatus = trade.status && statusValues.includes(trade.status);
+        }
+
+        // ✅ Check myTrades filter match
+        let matchesMyTrades = true;
+        if (hasMyTradesFilter) {
+          matchesMyTrades = trade.userId === user.id;
+        }
+
+        // ✅ Check search filter match
+        let matchesSearch = true;
+        if (hasSearchFilters) {
+          matchesSearch = false;
+          if (selectedFilters.includes("has")) {
+            matchesSearch = matchesSearch || trade.hasItems?.some((item) =>
               item.name.toLowerCase().includes(lowerCaseQuery)
             );
-        }
-
-        if (selectedFilters.includes("wants")) {
-          matchesAnyFilter =
-            matchesAnyFilter ||
-            trade.wantsItems?.some((item) =>
+          }
+          if (selectedFilters.includes("wants")) {
+            matchesSearch = matchesSearch || trade.wantsItems?.some((item) =>
               item.name.toLowerCase().includes(lowerCaseQuery)
             );
+          }
         }
 
-        if (selectedFilters.includes("myTrades")) {
-          matchesAnyFilter = matchesAnyFilter || trade.userId === user.id;
-        }
-
-        return matchesAnyFilter; // Show if it matches at least one selected filter
+        // ✅ All selected filters must match (AND logic)
+        return matchesStatus && matchesMyTrades && matchesSearch;
       })
     );
-  }, [searchQuery, trades, selectedFilters]);
+  }, [searchQuery, trades, selectedFilters, user.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -307,16 +322,34 @@ const TradeList = ({ route }) => {
     if (!hasMore || !lastDoc) return;
 
     try {
-      // ✅ Fetch more normal trades
-      const normalTradesQuerySnap = await getDocs(
-        query(
+      // ✅ Get status filters and map to status values
+      const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
+      const statusValues = statusFilters.length > 0 
+        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        : null;
+
+      // ✅ Build query for more normal trades
+      let normalQuery = query(
+        collection(firestoreDB, 'trades_new'),
+        where('isFeatured', '==', false),
+        orderBy('timestamp', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+
+      // ✅ Add status filter if status filters are selected
+      if (statusValues && statusValues.length > 0) {
+        normalQuery = query(
           collection(firestoreDB, 'trades_new'),
           where('isFeatured', '==', false),
+          where('status', 'in', statusValues),
           orderBy('timestamp', 'desc'),
           startAfter(lastDoc),
           limit(PAGE_SIZE)
-        )
-      );
+        );
+      }
+
+      const normalTradesQuerySnap = await getDocs(normalQuery);
   
       const newNormalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -341,8 +374,12 @@ const TradeList = ({ route }) => {
       setHasMore(newNormalTrades.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ Error fetching more trades:', error);
+      // ✅ If error is about missing index, log helpful message
+      if (error.code === 'failed-precondition') {
+        console.warn('⚠️ Firestore index required. Please create composite index for: status + timestamp');
+      }
     }
-  }, [lastDoc, hasMore, remainingFeaturedTrades, firestoreDB]);
+  }, [lastDoc, hasMore, remainingFeaturedTrades, firestoreDB, selectedFilters]);
 
 
 
@@ -422,16 +459,32 @@ const TradeList = ({ route }) => {
   const fetchInitialTrades = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ Fetch latest normal trades
-      const normalTradesQuerySnap = await getDocs(
-        query(
+      // ✅ Get status filters (win, lose, fair) and map to status values (w, l, f)
+      const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
+      const statusValues = statusFilters.length > 0 
+        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        : null;
+
+      // ✅ Build query for normal trades
+      let normalQuery = query(
+        collection(firestoreDB, 'trades_new'),
+        where('isFeatured', '==', false),
+        orderBy('timestamp', 'desc'),
+        limit(PAGE_SIZE)
+      );
+
+      // ✅ Add status filter if status filters are selected
+      if (statusValues && statusValues.length > 0) {
+        normalQuery = query(
           collection(firestoreDB, 'trades_new'),
-          orderBy('isFeatured'),
-          where('isFeatured', '!=', true),
+          where('isFeatured', '==', false),
+          where('status', 'in', statusValues),
           orderBy('timestamp', 'desc'),
           limit(PAGE_SIZE)
-        )
-      );
+        );
+      }
+
+      const normalTradesQuerySnap = await getDocs(normalQuery);
   
       const normalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -439,15 +492,26 @@ const TradeList = ({ route }) => {
       }));
   
 
-      // ✅ Fetch only valid featured trades (NOT expired)
-      const featuredQuerySnapshot = await getDocs(
-        query(
+      // ✅ Build query for featured trades
+      let featuredQuery = query(
+        collection(firestoreDB, 'trades_new'),
+        where('isFeatured', '==', true),
+        where('featuredUntil', '>', Timestamp.now()),
+        orderBy('featuredUntil', 'desc')
+      );
+
+      // ✅ Add status filter to featured trades if status filters are selected
+      if (statusValues && statusValues.length > 0) {
+        featuredQuery = query(
           collection(firestoreDB, 'trades_new'),
           where('isFeatured', '==', true),
           where('featuredUntil', '>', Timestamp.now()),
+          where('status', 'in', statusValues),
           orderBy('featuredUntil', 'desc')
-        )
-      );
+        );
+      }
+
+      const featuredQuerySnapshot = await getDocs(featuredQuery);
   
       let featuredTrades = [];
       if (!featuredQuerySnapshot.empty) {
@@ -475,10 +539,14 @@ const TradeList = ({ route }) => {
       setHasMore(normalTrades.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ Error fetching trades:', error);
+      // ✅ If error is about missing index, log helpful message
+      if (error.code === 'failed-precondition') {
+        console.warn('⚠️ Firestore index required. Please create composite index for: status + timestamp');
+      }
     } finally {
       setLoading(false);
     }
-  }, [firestoreDB]);
+  }, [firestoreDB, selectedFilters]);
 
 
   // const captureAndSave = async () => {
@@ -603,14 +671,34 @@ const TradeList = ({ route }) => {
 
 
 
+  // ✅ Track status filters separately for refetch trigger
+  const statusFiltersString = useMemo(() => {
+    const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
+    return statusFilters.sort().join(',');
+  }, [selectedFilters]);
+
+  // ✅ Refetch when user changes
   useEffect(() => {
     fetchInitialTrades();
+    isInitialMountRef.current = false; // ✅ Mark initial mount as complete
     // updateLatest50TradesWithoutIsFeatured()
 
     if (!user?.id) {
       setTrades((prev) => prev.slice(0, PAGE_SIZE)); // Keep only 20 trades for logged-out users
     }
   }, [user?.id]);
+
+  // ✅ Refetch when status filters change (for database-level filtering)
+  useEffect(() => {
+    // Skip refetch on initial mount (user?.id effect handles that)
+    if (isInitialMountRef.current) return;
+    
+    // Refetch when status filters change to apply database-level filtering
+    if (user?.id) {
+      fetchInitialTrades();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFiltersString]); // ✅ Only refetch when status filters change
 
   const closeProfileDrawer = async () => {
     setIsDrawerVisible(false);
@@ -621,6 +709,7 @@ const TradeList = ({ route }) => {
       return;
     }
     setSelectedTrade(item)
+    setIsOnline(false); // Reset online status before checking to prevent stale state
     // console.log(item, selectedTrade)
     try {
       const online = await isUserOnline(item?.userId);
@@ -628,7 +717,9 @@ const TradeList = ({ route }) => {
     } catch (error) {
       console.error('🔥 Error checking online status:', error);
       setIsOnline(false);
-    }setIsDrawerVisible(true)}
+    }
+    setIsDrawerVisible(true);
+  }
   
   const renderTextWithUsername = (description) => {
     const parts = description.split(/(@\w+)/g); // Split text by @username pattern
@@ -762,15 +853,15 @@ const GG = item.isSharkMode === 'GG'
                 {item.isPro && (
                   <Image
                     source={require('../../assets/pro.png')} 
-                    style={{ width: 14, height: 14 }} 
+                    style={{ width: 10, height: 10 }}
                   />
-                )}
+                )}{' '}
                 {item.robloxUsernameVerified && (
                   <Image
                     source={require('../../assets/verification.png')} 
-                    style={{ width: 14, height: 14 }} 
+                    style={{ width: 10, height: 10 }} 
                   />
-                )}
+                )}{' '}
                 {(() => {
                   const hasRecentWin =
                     !!item?.hasRecentGameWin ||
@@ -779,10 +870,10 @@ const GG = item.isSharkMode === 'GG'
                   return hasRecentWin ? (
                     <Image
                       source={require('../../assets/trophy.webp')}
-                      style={{ width: 14, height: 14, marginLeft: 4 }}
+                      style={{ width: 10, height: 10 }}
                     />
                   ) : null;
-                })()}
+                })()}{' '}
                 {item.rating ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#FFD700', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
                     <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />
@@ -806,6 +897,23 @@ const GG = item.isSharkMode === 'GG'
           </TouchableOpacity>
 
           <View style={{ flexDirection: 'row' }}>
+            {/* Status Badge (Win/Lose/Fair) - Only show if status field exists */}
+            {item.status && (
+              <View style={[
+                styles.dealContainer, 
+                { 
+                  backgroundColor: item.status === 'w' ? '#10B981' : // Green for win
+                                  item.status === 'f' ? config.colors.secondary : // Blue for fair
+                                  config.colors.primary, // Pink/red for lose
+                  marginRight: 5,
+                }
+              ]}>
+                <Text style={styles.dealText}>
+                  {item.status === 'w' ? 'Win' : item.status === 'f' ? 'Fair' : 'Lose'}
+                </Text>
+              </View>
+            )}
+            {/* Shark/Frost/GG Badge */}
             <View style={[styles.dealContainer, { backgroundColor: item.isSharkMode == 'GG' ? '#5c4c49' : item.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen }]}>
               <Text style={styles.dealText}>
 
@@ -922,7 +1030,7 @@ const GG = item.isSharkMode === 'GG'
         <View style={styles.tradeTotals}>
           {item.hasItems && item.hasItems.length > 0 && (
             <Text style={[styles.priceText, styles.hasBackground]}>
-              Offer: {formatValue(item.hasTotal)}
+              ME: {formatValue(item.hasTotal)}
             </Text>
           )}
           <View style={styles.transfer}>
@@ -962,7 +1070,7 @@ const GG = item.isSharkMode === 'GG'
           </View>
           {item.wantsItems && item.wantsItems.length > 0 && (
             <Text style={[styles.priceText, styles.wantBackground]}>
-              Want: {formatValue(item.wantsTotal)}
+              YOU: {formatValue(item.wantsTotal)}
             </Text>
           )}
         </View>
@@ -1253,8 +1361,8 @@ const getStyles = (isDarkMode) =>
 
     },
     priceText: {
-      fontSize: 10,
-      fontFamily: 'Lato-Regular',
+      fontSize: 8,
+      fontFamily: 'Lato-Bold',
       color: '#007BFF',
       // width: '40%',
       textAlign: 'center', // Centers text within its own width

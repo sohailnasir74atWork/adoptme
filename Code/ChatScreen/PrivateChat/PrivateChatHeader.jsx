@@ -183,13 +183,13 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           {mergedUser?.isPro && (
             <Image
               source={require('../../../assets/pro.png')} 
-              style={{ width: 14, height: 14 }} 
+              style={{ width: 12, height: 12, marginLeft: 4 }} 
             />
           )}
           {mergedUser?.robloxUsernameVerified && (
             <Image
               source={require('../../../assets/verification.png')} 
-              style={{ width: 14, height: 14 }} 
+              style={{ width: 12, height: 12, marginLeft: 4 }} 
             />
           )}
           {(() => {
@@ -200,7 +200,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             return hasRecentWin ? (
               <Image
                 source={require('../../../assets/trophy.webp')}
-                style={{ width: 14, height: 14, marginLeft: 4 }}
+                style={{ width: 10, height: 10, marginLeft: 4 }}
               />
             ) : null;
           })()}

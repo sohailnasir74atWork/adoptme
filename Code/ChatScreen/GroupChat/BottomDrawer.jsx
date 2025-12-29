@@ -341,11 +341,11 @@ const ProfileBottomDrawer = ({
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
-        const [avgSnap, createdSnap, userSnap, bioSnap] = await Promise.all([
+        const [avgSnap, createdSnap, userSnap, reviewDocSnap] = await Promise.all([
           get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
           get(ref(appdatabase, `users/${selectedUserId}`)),
-          get(ref(appdatabase, `users/${selectedUserId}/bio`)), // ✅ Also fetch bio directly
+          getDoc(doc(firestoreDB, 'reviews', selectedUserId)), // ✅ Load bio from Firestore
         ]);
 
         if (!isMounted) return;
@@ -360,27 +360,16 @@ const ProfileBottomDrawer = ({
           setRatingSummary(null);
         }
 
-        // ✅ Load bio from multiple sources (priority: averageRatings > users/bio > users document)
+        // ✅ Load bio from Firestore reviews/{userId}
         let bioValue = null;
-        if (avgSnap.exists()) {
-          const val = avgSnap.val();
-          bioValue = val.bio || null;
+        if (reviewDocSnap.exists) { // ✅ Firestore: exists is a property, not a function
+          const reviewData = reviewDocSnap.data();
+          if (reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim()) {
+            bioValue = reviewData.bio.trim();
+          }
         }
-        if (!bioValue && bioSnap.exists()) {
-          const bioData = bioSnap.val();
-          bioValue = (typeof bioData === 'string' && bioData.trim()) ? bioData.trim() : null;
-        }
-        if (!bioValue && userSnap.exists()) {
-          const userData = userSnap.val();
-          bioValue = userData.bio || null;
-        }
-        // ✅ Trim and validate bio value
-        if (bioValue && typeof bioValue === 'string') {
-          bioValue = bioValue.trim();
-          setUserBio(bioValue || null);
-        } else {
-          setUserBio(bioValue);
-        }
+        // ✅ Set bio value (use default if not found or empty)
+        setUserBio(bioValue || 'Hi there, I am new here');
 
         if (createdSnap.exists()) {
           const raw = createdSnap.val();
@@ -432,7 +421,7 @@ const ProfileBottomDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [isVisible, selectedUserId, loadDetails, appdatabase]);
+  }, [isVisible, selectedUserId, loadDetails, appdatabase, firestoreDB]);
 
   // ─────────────────────────────────────────────
   // Load pets
@@ -708,60 +697,51 @@ const ProfileBottomDrawer = ({
                 marginBottom: 12,
               }}
             >
-              <View style={{ flexDirection: 'row' }}>
-                <Image
-                  source={{
-                    uri: avatar
-                      ? avatar
-                      : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                  }}
-                  style={styles.profileImage2}
-                />
-                <View style={{ justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row', flex: 1, marginRight: 8 }}>
+                {/* Avatar with Online Indicator - matches OnlineUsersList.jsx structure */}
+                <View style={{ position: 'relative', marginRight: 12 }}>
+                  <Image
+                    source={{
+                      uri: avatar
+                        ? avatar
+                        : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                    }}
+                    style={styles.profileImage2}
+                  />
+                  {/* Online/Offline Indicator - attached to avatar bottom-right */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 1,
+                      right: 1,
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: isOnline ? '#10B981' : '#9CA3AF', // Green for online, gray for offline
+                      borderWidth: 2,
+                      borderColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+                      zIndex: 10, // Ensure it's above the image
+                    }}
+                  />
+                </View>
+
+                <View style={{ justifyContent: 'center', flex: 1, marginRight: 8 }}>
+                  {/* Username Row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Text style={styles.drawerSubtitleUser}>
+                    <Text 
+                      style={[styles.drawerSubtitleUser, { flexShrink: 1 }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       {userName}{' '}
                       {mergedUser?.isPro && (
                         <Image
                           source={require('../../../assets/pro.png')}
-                          style={{ width: 14, height: 14 }}
+                          style={{ width: 10, height: 10 }}
                         />
                       )}{' '}
-                      {selectedUser?.flage ? selectedUser.flage : ''}{'   '}
+                      {selectedUser?.flage ? selectedUser.flage : ''}
                     </Text>
-                    {mergedUser?.robloxUsername ? (
-                      <View style={{ 
-                        marginLeft: 6, 
-                        backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
-                        paddingHorizontal: 6, 
-                        paddingVertical: 2, 
-                        borderRadius: 4,
-                      }}>
-                        <Text style={{ 
-                          color: '#FFFFFF', 
-                          fontSize: 9, 
-                          fontWeight: '600' 
-                        }}>
-                          {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{ 
-                        marginLeft: 6, 
-                        backgroundColor: '#9CA3AF', 
-                        paddingHorizontal: 6, 
-                        paddingVertical: 2, 
-                        borderRadius: 4,
-                      }}>
-                        <Text style={{ 
-                          color: '#FFFFFF', 
-                          fontSize: 9, 
-                          fontWeight: '600' 
-                        }}>
-                          No Roblox ID
-                        </Text>
-                      </View>
-                    )}
                     <Icon
                       name="copy-outline"
                       size={16}
@@ -770,9 +750,45 @@ const ProfileBottomDrawer = ({
                       onPress={() => copyToClipboard(userName)}
                     />
                   </View>
-
+                  <View style={{ alignItems: 'flex-start', justifyContent: 'center' }}>
+                  {/* Roblox Badge */}
+                  {mergedUser?.robloxUsername ? (
+                    <View style={{ 
+                      backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
+                      paddingHorizontal: 6, 
+                      paddingVertical: 2, 
+                      borderRadius: 4,
+                      marginBottom: 4,
+                      marginTop: 2,
+                    }}>
+                      <Text style={{ 
+                        color: '#FFFFFF', 
+                        fontSize: 9, 
+                        fontWeight: '600' 
+                      }}>
+                        {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ 
+                      backgroundColor: '#9CA3AF', 
+                      paddingHorizontal: 6, 
+                      paddingVertical: 2, 
+                      borderRadius: 4,
+                      marginBottom: 4,
+                    }}>
+                      <Text style={{ 
+                        color: '#FFFFFF', 
+                        fontSize: 9, 
+                        fontWeight: '600' 
+                      }}>
+                        No Roblox ID
+                      </Text>
+                    </View>
+                  )}
+                </View>
                   {/* Roblox Username Display */}
-                  {mergedUser?.robloxUsername && (
+                  {/* {mergedUser?.robloxUsername && (
                     <Text
                       style={{
                         fontSize: 11,
@@ -780,23 +796,19 @@ const ProfileBottomDrawer = ({
                         marginTop: 4,
                         fontWeight: '500',
                       }}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
                       @{mergedUser.robloxUsername}
                     </Text>
-                  )}
-
-                  <Text
-                    style={{
-                      color: !isOnline
-                        ? config.colors.hasBlockGreen
-                        : config.colors.wantBlockRed,
-                      fontSize: 10,
-                      marginTop: 2,
-                    }}
-                  >
-                    {isOnline ? 'Online' : 'Offline'}
-                  </Text>
+                    
+                  )} */}
+                   
+                  
                 </View>
+
+                {/* Right Side: Badges */}
+           
               </View>
 
               {/* Ban/Unban Icon */}
@@ -858,7 +870,7 @@ const ProfileBottomDrawer = ({
                     <Text
                       style={{
                         fontSize: 10,
-                        backgroundColor: isDarkMode ? '#FACC15' : '#16A34A',
+                        backgroundColor:  '#16A34A',
                         paddingHorizontal: 5,
                         borderRadius: 4,
                         paddingVertical: 1,
@@ -920,7 +932,7 @@ const ProfileBottomDrawer = ({
                           borderColor: isDarkMode ? '#334155' : '#fde68a',
                         }}
                       >
-                        <Icon name="trophy" size={14} color="#F59E0B" />
+                        <Icon name="trophy" size={12} color="#F59E0B" />
                         <Text
                           style={{
                             fontSize: 11,
@@ -938,7 +950,7 @@ const ProfileBottomDrawer = ({
               </View>
             )}
      {/* 📝 Bio Section */}
-     {loadDetails && userBio && (
+     {loadDetails && (
               <View
                 style={{
                   borderRadius: 12,
@@ -964,7 +976,7 @@ const ProfileBottomDrawer = ({
                     lineHeight: 18,
                   }}
                 >
-                  {userBio}
+                  {userBio || 'Hi there, I am new here'}
                 </Text>
               </View>
             )}

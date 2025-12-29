@@ -70,7 +70,7 @@ export const getStyles = (isDarkMode) =>
     myMessageText: {
       fontSize: 12,
       color: isDarkMode ? 'white' : 'black',
-      backgroundColor: isDarkMode ? config.colors.primary : 'lightgreen',
+      backgroundColor: isDarkMode ? '#1E88E5' : 'lightgreen',
       paddingVertical: 5,
       paddingHorizontal: 10,
       borderRadius: 10,
@@ -509,8 +509,8 @@ userNameAdmin: {
 },
 
 icon: {
-  width: 14,
-  height: 14,
+  width: 10,
+  height: 10,
   marginLeft: 4,
   // paddingBottom:5
 },

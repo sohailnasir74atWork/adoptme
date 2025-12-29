@@ -405,8 +405,8 @@ const MessagesList = ({
   {hasRecentWin && (
     <Image
       source={require('../../../assets/trophy.webp')}
-      style={{  width: 12,
-        height: 12,
+      style={{  width: 10,
+        height: 10,
         marginLeft: 4,}}
     />
   )}

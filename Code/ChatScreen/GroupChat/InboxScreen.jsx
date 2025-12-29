@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,12 @@ import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
 import database from '@react-native-firebase/database';
-import { showSuccessMessage } from '../../Helper/MessageHelper';
+import { ref, onValue } from '@react-native-firebase/database';
+import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 
 const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
   const navigation = useNavigation();
-  // const { chats = [], setChats } = route.params || {}; // ✅ Prevents errors if `params` is missing  
-  const { user, theme } = useGlobalState();
+  const { user, theme, appdatabase } = useGlobalState();
   const { t } = useTranslation();
 
 // console.log(chats)
@@ -40,6 +40,7 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
   const isDarkMode = theme === 'dark';
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+
 
  // ✅ Memoize handleDelete with useCallback
  const handleDelete = useCallback((chatId) => {
@@ -227,6 +228,7 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       </View>
     );
   }, [styles, user, handleOpenChat, handleDelete, t]);
+
   return (
     <View style={styles.container}>
       {loading ? (
@@ -238,11 +240,11 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       ) : (
         <FlatList
           data={filteredChats}
-          keyExtractor={(item, index) => item?.chatId || `chat-${index}`} // ✅ Ensure a unique key with safety check
+          keyExtractor={(item, index) => item?.chatId || `chat-${index}`}
           renderItem={renderChatItem}
-          removeClippedSubviews={true} // ✅ Performance optimization
-          maxToRenderPerBatch={10} // ✅ Performance optimization
-          windowSize={10} // ✅ Performance optimization
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
     </View>
@@ -254,9 +256,7 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      padding: 10,
       backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
-
     },
     itemContainer: {
       flex: 1,
@@ -264,7 +264,8 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       borderBottomWidth: 1,
-      borderBottomColor: '#ccc',
+      borderBottomColor: isDarkMode ? '#333' : '#e5e7eb',
+      paddingHorizontal: 10,
     },
     chatItem: {
       flex: 1,

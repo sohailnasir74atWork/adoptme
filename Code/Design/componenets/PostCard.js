@@ -105,8 +105,9 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
       return;
     }
     // setSelectedUser(item)
+    setIsOnline(false); // Reset online status before checking
     try {
-      const online =  isUserOnline(item?.userId);
+      const online = await isUserOnline(item?.userId);
       setIsOnline(online);
     } catch (error) {
       console.error('🔥 Error checking online status:', error);
@@ -188,7 +189,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         return hasRecentWin ? (
           <Image
             source={require('../../../assets/trophy.webp')}
-            style={{ width: 14, height: 14, marginLeft: 4 }}
+            style={{ width: 12, height: 12, marginLeft: 4 }}
           />
         ) : null;
       })()}

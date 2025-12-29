@@ -79,8 +79,8 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
 
     const fetchOnlineUserIds = async () => {
       try {
-        // ✅ Get ALL user IDs from Firestore (same pattern as OnlineUsersList.jsx)
-        const allUserIds = await getOnlineUserIdsForInvite(firestoreDB, currentUser.id);
+        // ✅ Get ALL user IDs from RTDB presence node (same pattern as OnlineUsersList.jsx)
+        const allUserIds = await getOnlineUserIdsForInvite(appdatabase, currentUser.id);
         
         if (!isMounted) return;
         
@@ -90,7 +90,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
         // ✅ Initially fetch details for first 5 users (same as OnlineUsersList.jsx)
         if (allUserIds.length > 0) {
           const initialBatch = allUserIds.slice(0, 5);
-          const initialDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, initialBatch);
+          const initialDetails = await fetchUserDetailsForInvite(appdatabase, initialBatch);
           if (isMounted) {
             setUserDetails(prev => ({ ...prev, ...initialDetails }));
             setDisplayedCount(5);
@@ -101,7 +101,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
           setLoading(false);
         }
       } catch (error) {
-        console.error('Error fetching online users from Firestore:', error);
+        console.error('Error fetching online users from RTDB:', error);
         if (isMounted) {
           setOnlineUserIds([]);
           setUserDetails({});
@@ -135,7 +135,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
       
       if (nextBatch.length > 0) {
         // ✅ Fetch details for next 5 users
-        const newDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, nextBatch);
+        const newDetails = await fetchUserDetailsForInvite(appdatabase, nextBatch);
         userDetailsRef.current = { ...userDetailsRef.current, ...newDetails };
         setUserDetails(prev => ({ ...prev, ...newDetails }));
         setDisplayedCount(nextBatchEnd);
@@ -158,7 +158,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
         // ✅ If we haven't loaded all user details yet, load them for search
         if (loadedCount < onlineUserIds.length) {
           const remainingIds = onlineUserIds.slice(loadedCount);
-          const remainingDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, remainingIds);
+          const remainingDetails = await fetchUserDetailsForInvite(appdatabase, remainingIds);
           if (isMounted) {
             userDetailsRef.current = { ...userDetailsRef.current, ...remainingDetails };
             setUserDetails(prev => ({ ...prev, ...remainingDetails }));

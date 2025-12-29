@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
 import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
-import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove } from '@react-native-firebase/database';
+import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
 import { useLocalState } from './LocalGlobelStats';
@@ -57,7 +57,6 @@ export const GlobalStateProvider = ({ children }) => {
 
   });
 
-  const [onlineMembersCount, setOnlineMembersCount] = useState(0);
   const [loading, setLoading] = useState(false);
   // const [robloxUsername, setRobloxUsername] = useState('');
   const robloxUsernameRef = useRef('');
@@ -105,9 +104,12 @@ export const GlobalStateProvider = ({ children }) => {
         const updatedUser = { ...prev, ...updates };
         
         // ✅ Update Firebase only if user is logged in and there are actual changes
+        // ✅ Exclude 'online' field from user data (it's stored in presence/{uid} node)
         if (prev?.id && appdatabase && hasChanges) {
           const userRef = ref(appdatabase, `users/${prev.id}`);
-          update(userRef, updates).catch((error) => {
+          const userDataUpdates = { ...updates };
+          delete userDataUpdates.online; // ✅ Don't sync online to user data
+          update(userRef, userDataUpdates).catch((error) => {
             // Silently handle Firebase errors
           });
         }
@@ -554,152 +556,136 @@ export const GlobalStateProvider = ({ children }) => {
 
   
 
-  // ✅ Set up online status tracking (Cloud Function handles Firestore sync)
-// ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
-useEffect(() => {
-  if (!user?.id || !appdatabase) return;
-
-  const uid = user.id;
-  const onlineRef = ref(appdatabase, `users/${uid}/online`);
-  const connectedRef = ref(appdatabase, ".info/connected")
-
-  let isConnected = false;
-  let currentAppState = AppState.currentState; // 'active' | 'background' | 'inactive'
-  let armedOnDisconnect = false;
-
-  const setLocalOnline = (val) => {
-    setUser((prev) => (prev?.id ? { ...prev, online: val } : prev));
-  };
-
-  const forceOffline = async () => {
-    try {
-      await set(onlineRef, false);
-    } catch (e) {
-      // log if you want: console.log("forceOffline error", e);
-    }
-    setLocalOnline(false);
-  };
-
-  const armOnDisconnect = async () => {
-    if (armedOnDisconnect) return;
-    await onDisconnect(onlineRef).set(false);
-    armedOnDisconnect = true;
-  };
-
-  let running = false;
-  let pending = false;
-  
-  const updatePresence = async () => {
-    if (running) {
-      pending = true;
-      return;
-    }
-    running = true;
-  
-    try {
-      if (localState?.showOnlineStatus === false) {
-        try { await onDisconnect(onlineRef).cancel(); } catch {}
-        armedOnDisconnect = false;
-        await forceOffline();
-        return;
-      }
-  
-      if (!isConnected || currentAppState !== "active") {
-        await forceOffline();
-        return;
-      }
-  
-      await armOnDisconnect();
-      await set(onlineRef, true);
-      setLocalOnline(true);
-  
-    } catch (e) {
-      // console.log("updatePresence error", e);
-    } finally {
-      running = false;
-  
-      // ✅ if something changed while we were running, apply latest state once more
-      if (pending) {
-        pending = false;
-        updatePresence();
-      }
-    }
-  };
-  
-  
-
-  // Listen to RTDB connection state
-  const unsubConnected = onValue(connectedRef, (snap) => {
-    isConnected = snap.val() === true;
-    updatePresence();
-  });
-
-  // Listen to AppState changes
-  const sub = AppState.addEventListener("change", (nextState) => {
-    currentAppState = nextState;
-    // immediately offline when background/inactive
-    updatePresence();
-  });
-
-  // Initial sync
-  updatePresence();
-
-  return () => {
-    sub.remove();
-    if (typeof unsubConnected === "function") unsubConnected();
-
-    // On unmount, mark offline
-    set(onlineRef, false).catch(() => {});
-    setLocalOnline(false);
-  };
-}, [user?.id, appdatabase, localState?.showOnlineStatus]);
-
-
-  // ✅ Listen to online users count from Firestore (Cloud Function maintains this in online_users/list)
+  // ✅ Set up online status tracking using separate presence node (RTDB-only, optimized for scale)
+  // ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
+  // ✅ Uses presence/{uid} instead of users/{uid}/online for better scalability
   useEffect(() => {
-    if (!firestoreDB) return;
+    if (!user?.id || !appdatabase) return;
 
-    // ✅ Listen to Firestore doc maintained by Cloud Function: online_users/list
-    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
+    const uid = user.id;
+    const presenceRef = ref(appdatabase, `presence/${uid}`); // ✅ Separate presence node
+    const connectedRef = ref(appdatabase, ".info/connected")
 
-    const unsubscribe = onSnapshot(
-      onlineUsersDocRef,
-      (snapshot) => {
-        if (!snapshot.exists) {
-          setOnlineMembersCount(0);
+    let isConnected = false;
+    let currentAppState = AppState.currentState; // 'active' | 'background' | 'inactive'
+    let armedOnDisconnect = false;
+
+    const setLocalOnline = (val) => {
+      setUser((prev) => (prev?.id ? { ...prev, online: val } : prev));
+    };
+
+    const forceOffline = async () => {
+      try {
+        await set(presenceRef, false);
+      } catch (e) {
+        // log if you want: console.log("forceOffline error", e);
+      }
+      setLocalOnline(false);
+    };
+
+    let onDisconnectHandler = null;
+    
+    const armOnDisconnect = async () => {
+      if (armedOnDisconnect) return;
+      try {
+        onDisconnectHandler = onDisconnect(presenceRef);
+        await onDisconnectHandler.set(false);
+        armedOnDisconnect = true;
+      } catch (e) {
+        // Handle error silently
+      }
+    };
+
+    let running = false;
+    let pending = false;
+  
+    const updatePresence = async () => {
+      if (running) {
+        pending = true;
+        return;
+      }
+      running = true;
+  
+      try {
+        if (localState?.showOnlineStatus === false) {
+          try { 
+            if (onDisconnectHandler) {
+              await onDisconnectHandler.cancel(); 
+            }
+          } catch {}
+          armedOnDisconnect = false;
+          await forceOffline();
           return;
         }
-
-        const data = snapshot.data() || {};
-        // Prefer explicit count field; fallback to userIds length
-        let count = typeof data.count === 'number' ? data.count : 0;
-        if (!count && Array.isArray(data.userIds)) {
-          count = data.userIds.length;
+  
+        if (!isConnected || currentAppState !== "active") {
+          await forceOffline();
+          return;
         }
-        setOnlineMembersCount(count || 0);
-      },
-      (error) => {
-        console.error('Error listening to online members count (Firestore):', error);
-        setOnlineMembersCount(0);
+  
+        await armOnDisconnect();
+        await set(presenceRef, true);
+        setLocalOnline(true);
+  
+      } catch (e) {
+        // console.log("updatePresence error", e);
+      } finally {
+        running = false;
+  
+        // ✅ if something changed while we were running, apply latest state once more
+        if (pending) {
+          pending = false;
+          updatePresence();
+        }
       }
-    );
+    };
+  
+  
+
+    // Listen to RTDB connection state
+    const unsubConnected = onValue(connectedRef, (snap) => {
+      isConnected = snap.val() === true;
+      updatePresence();
+    });
+
+    // Listen to AppState changes
+    const sub = AppState.addEventListener("change", (nextState) => {
+      currentAppState = nextState;
+      // immediately offline when background/inactive
+      updatePresence();
+    });
+
+    // Initial sync
+    updatePresence();
 
     return () => {
-      unsubscribe();
+      // ✅ Cleanup: Mark user offline when component unmounts or user.id changes (logout)
+      sub.remove();
+      if (typeof unsubConnected === "function") unsubConnected();
+
+      // ✅ Cancel onDisconnect handler if it exists
+      if (onDisconnectHandler) {
+        onDisconnectHandler.cancel().catch(() => {});
+      }
+
+      // ✅ Mark offline in RTDB (using closure to capture the old uid)
+      // This ensures when user.id changes to null (logout), the previous user is marked offline
+      set(presenceRef, false).catch(() => {});
+      setLocalOnline(false);
     };
-  }, [firestoreDB]);
+  }, [user?.id, appdatabase, localState?.showOnlineStatus]);
+
+
 
   // console.log(user)
 
   const contextValue = useMemo(
     () => ({
       user, auth,
-      onlineMembersCount,
       firestoreDB,
       appdatabase,
       theme,
       setUser,
-      setOnlineMembersCount,
       updateLocalStateAndDatabase,
       fetchStockData,
       loading,
@@ -710,7 +696,7 @@ useEffect(() => {
       isInActiveGame, // ✅ Game state for invite notifications
       setIsInActiveGame, // ✅ Set game state
     }),
-    [user, onlineMembersCount, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink, isInActiveGame]
+    [user, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink, isInActiveGame]
   );
 
   return (

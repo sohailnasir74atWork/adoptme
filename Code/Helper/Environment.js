@@ -36,6 +36,9 @@ const config = {
 
   otherapplink: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.bloxfruitevalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
   otherapplink2: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.mm2tradesvalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
+  // Cloud Functions URL (update with your actual region)
+  cloudFunctionsUrl: 'https://us-central1-adoptme-7b50c.cloudfunctions.net',
+  
   colors: isNoman
     ? {
       primary: '#ff6666', // Muted grayish blue

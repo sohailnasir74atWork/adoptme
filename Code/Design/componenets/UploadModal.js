@@ -65,6 +65,13 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
     return () => unsubscribe();
   }, [currentUserEmail]);
 
+  // ✅ Reset loading state when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setLoading(false);
+    }
+  }, [visible]);
+
   // console.log(currentUserEmail)show
   
 
@@ -177,11 +184,14 @@ const pickAndCompress = useCallback(async () => {
   
 
   const handleSubmit = useCallback(() => {
+    // ✅ Guard: Prevent multiple simultaneous submissions
+    if (loading) return;
+    
     if (!user?.id) return;
-if (!currentUserEmail) {
-   Alert.alert('Missing Email', 'Could not detect your account email. Please re-login.');
-   return;
-}
+    if (!currentUserEmail) {
+      Alert.alert('Missing Email', 'Could not detect your account email. Please re-login.');
+      return;
+    }
   
     if (!desc && imageUris.length === 0) {
       return Alert.alert('Missing Info', 'Please add a description or at least one image.');
@@ -231,10 +241,12 @@ if (!currentUserEmail) {
       }
     }
     
+    // ✅ Set loading immediately to prevent duplicate submissions
+    setLoading(true);
+    
     // Extract core logic into a callback
     const callbackfunction = async () => {
       try {
-        setLoading(true);
         const uploadedUrls = await uploadToBunny();
         // console.log('[UploadModal] submitting with email:', currentUserEmail);
         await onUpload(desc, uploadedUrls, selectedTags, currentUserEmail);
@@ -249,6 +261,9 @@ if (!currentUserEmail) {
         const postTime = Date.now();
         setLastPostTime(postTime);
         
+        // ✅ Reset loading before closing modal
+        setLoading(false);
+        
         onClose();
         showMessage({
           message: 'Success',
@@ -257,8 +272,8 @@ if (!currentUserEmail) {
         });
       } catch (err) {
         Alert.alert('Upload Failed', 'Something went wrong. Try again.', err);
-        console.log(err)
-      } finally {
+        console.log(err);
+        // ✅ Reset loading on error so user can retry
         setLoading(false);
       }
     };
@@ -283,7 +298,7 @@ if (!currentUserEmail) {
       }, 500);
     });
   
-  }, [user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime]);
+  }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime, strikeInfo]);
   
 
   const themedStyles = getStyles(isDark);

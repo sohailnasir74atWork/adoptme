@@ -26,7 +26,6 @@ const ChatHeaderContent = ({
   triggerHapticFeedback,
   pinnedMessages,
   onUnpinMessage,
-  onlineMembersCount,
   onlineUsersVisible,
   setOnlineUsersVisible,
 }) => {
@@ -162,6 +161,7 @@ const ChatHeaderContent = ({
         <OnlineUsersList
           visible={onlineUsersVisible}
           onClose={() => setOnlineUsersVisible(false)}
+          mode="view"
         />
       )}
     </>

@@ -44,6 +44,7 @@ import RNFS from 'react-native-fs';
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   serverTimestamp,
@@ -89,8 +90,10 @@ const EditProfileDrawerContent = ({
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   const PROFILE_EDIT_COOLDOWN_DAYS = 30;
 
-  // ✅ Calculate cooldown status
+  // ✅ Calculate cooldown status - only checks existing cooldown from last save, not unsaved changes
   const cooldownStatus = useMemo(() => {
+    // ✅ Only check if user is in cooldown from their last saved edit
+    // Cooldown is NOT triggered by making changes, only when they press "Save"
     if (!user?.lastProfileEditAt) {
       return { inCooldown: false, daysRemaining: 0 };
     }
@@ -112,6 +115,16 @@ const EditProfileDrawerContent = ({
       daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
     };
   }, [user?.lastProfileEditAt]);
+
+  // ✅ Check if user is trying to save name/avatar changes (for save button state)
+  const isTryingToSaveNameOrAvatar = useMemo(() => {
+    const displayNameChanged = newDisplayName.trim() !== (user?.displayName || '').trim();
+    const avatarChanged = (selectedImage || '').trim() !== (user?.avatar || '').trim();
+    return displayNameChanged || avatarChanged;
+  }, [newDisplayName, selectedImage, user?.displayName, user?.avatar]);
+
+  // ✅ Determine if save button should be disabled (only if in cooldown AND trying to save name/avatar)
+  const shouldDisableSave = cooldownStatus.inCooldown && isTryingToSaveNameOrAvatar;
 
   useEffect(() => {
     Animated.parallel([
@@ -304,8 +317,8 @@ const EditProfileDrawerContent = ({
         />
       </View>
 
-      {/* ✅ Cooldown Warning Message */}
-      {cooldownStatus.inCooldown && (
+      {/* ✅ Cooldown Warning Message - only show if trying to save name/avatar changes */}
+      {shouldDisableSave && (
         <View
           style={{
             backgroundColor: isDarkMode ? '#1a1a1a' : '#fef3c7',
@@ -332,8 +345,9 @@ const EditProfileDrawerContent = ({
             color: isDarkMode ? '#FCD34D' : '#92400E',
             lineHeight: 16,
           }}>
-            You can only edit your profile once every {PROFILE_EDIT_COOLDOWN_DAYS} days. 
-            Please try again in {cooldownStatus.daysRemaining} day{cooldownStatus.daysRemaining === 1 ? '' : 's'}.
+            You can only edit your display name and profile picture once every {PROFILE_EDIT_COOLDOWN_DAYS} days. 
+            Please try again in {cooldownStatus.daysRemaining} day{cooldownStatus.daysRemaining === 1 ? '' : 's'}. 
+            (Bio can be edited anytime)
           </Text>
         </View>
       )}
@@ -341,21 +355,21 @@ const EditProfileDrawerContent = ({
       {/* Modern Save Button */}
       <TouchableOpacity
         style={{
-          backgroundColor: cooldownStatus.inCooldown 
-            ? (isDarkMode ? '#374151' : '#9ca3af') 
+          backgroundColor: shouldDisableSave
+            ? (isDarkMode ? '#374151' : '#9ca3af')
             : config.colors.primary,
           paddingVertical: 13,
           borderRadius: 10,
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: cooldownStatus.inCooldown ? 0.6 : 1,
+          opacity: shouldDisableSave ? 0.6 : 1,
         }}
         onPress={handleSaveChanges}
-        disabled={cooldownStatus.inCooldown}
+        disabled={shouldDisableSave}
         activeOpacity={0.8}
       >
         <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Lato-Bold' }}>
-          {cooldownStatus.inCooldown 
+          {shouldDisableSave
             ? `Edit Available in ${cooldownStatus.daysRemaining} Day${cooldownStatus.daysRemaining === 1 ? '' : 's'}`
             : t('settings.save_changes')}
         </Text>
@@ -670,8 +684,8 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     }
 
     // ✅ Pro users can toggle freely
-    // ✅ Just update local state - GlobelStats.js will handle RTDB update (users/{uid}/online)
-    // ✅ Cloud Function will sync RTDB changes to Firestore online_users/list
+    // ✅ Just update local state - GlobelStats.js will handle RTDB update (presence/{uid})
+    // ✅ Cloud Function will sync RTDB changes to Firestore online_users_node/list
     updateLocalState('showOnlineStatus', value);
   };
 
@@ -876,9 +890,9 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   }, [isDrawerVisible, user?.id]); // ✅ Only initialize when drawer opens or user ID changes
 
-  // Load bio and rating from averageRatings node
+  // Load bio from Firestore and rating from averageRatings node
   useEffect(() => {
-    if (!user?.id || !appdatabase) {
+    if (!user?.id || !appdatabase || !firestoreDB) {
       setBio('Hi there, I am new here');
       setRatingSummary(null);
       setCreatedAtText(null);
@@ -889,21 +903,53 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const loadBioAndRating = async () => {
       setLoadingRating(true);
       try {
-        const [ratingSnap, createdSnap] = await Promise.all([
+        const [ratingSnap, createdSnap, reviewDocSnap] = await Promise.all([
           get(ref(appdatabase, `averageRatings/${user.id}`)),
           get(ref(appdatabase, `users/${user.id}/createdAt`)),
+          getDoc(doc(firestoreDB, 'reviews', user.id)), // ✅ Load bio from Firestore
         ]);
 
-        // Load bio
+        // ✅ Load bio from Firestore reviews/{userId}
+        // ✅ If bio doesn't exist, initialize it with default value in Firestore
+        if (reviewDocSnap.exists) { // ✅ Firestore: exists is a property, not a function
+          const reviewData = reviewDocSnap.data();
+          const loadedBio = (reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim()) 
+            ? reviewData.bio.trim() 
+            : 'Hi there, I am new here';
+          setBio(loadedBio);
+          
+          // ✅ If bio doesn't exist in Firestore, save default bio
+          if (!reviewData.bio || !reviewData.bio.trim()) {
+            await setDoc(
+              doc(firestoreDB, 'reviews', user.id),
+              {
+                bio: 'Hi there, I am new here',
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+        } else {
+          // ✅ Bio doesn't exist - initialize with default value in Firestore
+          setBio('Hi there, I am new here');
+          await setDoc(
+            doc(firestoreDB, 'reviews', user.id),
+            {
+              bio: 'Hi there, I am new here',
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+
+        // Load rating from RTDB averageRatings
         if (ratingSnap.exists()) {
           const data = ratingSnap.val();
-          setBio(data.bio || 'Hi there, I am new here');
           setRatingSummary({
             value: Number(data.value || 0),
             count: Number(data.count || 0),
           });
         } else {
-          setBio('Hi there, I am new here');
           setRatingSummary(null);
         }
 
@@ -954,7 +1000,7 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     };
 
     loadBioAndRating();
-  }, [user?.id, appdatabase]);
+  }, [user?.id, appdatabase, firestoreDB]);
 
   useEffect(() => { }, [mySubscriptions])
 
@@ -1025,8 +1071,12 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
       return;
     }
 
-    // ✅ Check if user has edited profile within the last 30 days
-    if (user?.lastProfileEditAt) {
+    // ✅ Check if displayName or avatar changed (30-day cooldown only applies to these)
+    const displayNameChanged = newDisplayName.trim() !== (user?.displayName || '').trim();
+    const avatarChanged = (selectedImage || '').trim() !== (user?.avatar || '').trim();
+    
+    // ✅ Only check cooldown if displayName or avatar is being changed (not bio)
+    if ((displayNameChanged || avatarChanged) && user?.lastProfileEditAt) {
       const lastEditTimestamp = typeof user.lastProfileEditAt === 'number' 
         ? user.lastProfileEditAt 
         : Date.parse(user.lastProfileEditAt);
@@ -1039,7 +1089,7 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
         if (daysSinceLastEdit < PROFILE_EDIT_COOLDOWN_DAYS) {
           showErrorMessage(
             'Edit Cooldown',
-            `You can only edit your profile once every ${PROFILE_EDIT_COOLDOWN_DAYS} days. Please try again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`
+            `You can only edit your display name and profile picture once every ${PROFILE_EDIT_COOLDOWN_DAYS} days. Please try again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`
           );
           return;
         }
@@ -1056,25 +1106,41 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     try {
       const now = Date.now();
       
+      // ✅ Only update lastProfileEditAt if displayName or avatar changed (not for bio-only changes)
+      const displayNameChanged = newDisplayName.trim() !== (user?.displayName || '').trim();
+      const avatarChanged = (selectedImage || '').trim() !== (user?.avatar || '').trim();
+      
       // ✅ Update profile with timestamp (displayName, avatar, lastProfileEditAt)
-      await updateLocalStateAndDatabase({
+      // Only update lastProfileEditAt if displayName or avatar changed
+      const updateData = {
         displayName: newDisplayName.trim(),
-        avatar: selectedImage.trim(),
-        lastProfileEditAt: now, // ✅ Store timestamp of this edit
-      });
+        avatar: (selectedImage || '').trim(),
+      };
+      
+      if (displayNameChanged || avatarChanged) {
+        updateData.lastProfileEditAt = now; // ✅ Store timestamp only when name/avatar changes
+      }
+      
+      await updateLocalStateAndDatabase(updateData);
 
-      // ✅ Save bio separately to averageRatings node (where it's stored)
-      if (user?.id && appdatabase) {
-        const avgRatingRef = ref(appdatabase, `averageRatings/${user.id}`);
-        // Get existing data to preserve rating and count
-        const avgSnap = await get(avgRatingRef);
-        const existingData = avgSnap.exists() ? avgSnap.val() : {};
+      // ✅ Save bio to Firestore reviews/{userId} (alongside ownedPets and wishlistPets)
+      // Bio can be changed anytime (no cooldown restriction)
+      if (user?.id && firestoreDB) {
+        const userReviewRef = doc(firestoreDB, 'reviews', user.id);
         
-        // Update bio while preserving existing rating data
-        await update(avgRatingRef, {
-          ...existingData,
-          bio: bio.trim() || 'Hi there, I am new here',
-        });
+        // ✅ Trim bio and use default if empty/whitespace
+        const trimmedBio = bio.trim();
+        const bioToSave = trimmedBio || 'Hi there, I am new here';
+        
+        // Update bio in Firestore (merge to preserve existing ownedPets and wishlistPets)
+        await setDoc(
+          userReviewRef,
+          {
+            bio: bioToSave,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       setDrawerVisible(false);

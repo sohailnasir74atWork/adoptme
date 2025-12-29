@@ -1,5 +1,5 @@
 // gameInviteSystem.js
-import { ref, set, update, remove, get, onValue, push, query as dbQuery, orderByKey, limitToFirst } from '@react-native-firebase/database';
+import { ref, set, update, remove, get, onValue, push, query as dbQuery, orderByKey, limitToFirst, orderByValue, equalTo } from '@react-native-firebase/database';
 import {
   collection,
   doc,
@@ -113,11 +113,11 @@ export const selectRandomPets = (petData, count = 8) => {
           petsBySlab[slab.name] = [];
         }
         petsBySlab[slab.name].push({
-          id: pet.id || pet.name,
-          name: pet.name,
-          image: pet.image || null,
+    id: pet.id || pet.name,
+    name: pet.name,
+    image: pet.image || null,
           value: value,
-          rarity: pet.rarity || 'Common',
+    rarity: pet.rarity || 'Common',
         });
         break;
       }
@@ -212,7 +212,9 @@ export const sendGameInvite = async (
   fromUser,
   invitedUserId
 ) => {
-  if (!firestoreDB || !roomId || !fromUser?.id || !invitedUserId) return false;
+  if (!firestoreDB || !roomId || !fromUser?.id || !invitedUserId) {
+    return false;
+  }
 
   try {
     // ✅ Check if invited user is in an active game
@@ -251,12 +253,10 @@ export const sendGameInvite = async (
 
     // Add to user's invite list in Firestore (for real-time notifications)
     const userInviteRef = doc(
-      firestoreDB,
-      'petGuessingGame_userInvites',
-      invitedUserId,
-      'invites',
+      collection(firestoreDB, 'petGuessingGame_userInvites', invitedUserId, 'invites'),
       roomId
     );
+    
     await setDoc(userInviteRef, {
       roomId,
       fromUserId: fromUser.id,
@@ -284,10 +284,7 @@ export const sendGameInvite = async (
 
         // Also delete from user's invite list
         const checkUserInviteRef = doc(
-          firestoreDB,
-          'petGuessingGame_userInvites',
-          invitedUserId,
-          'invites',
+          collection(firestoreDB, 'petGuessingGame_userInvites', invitedUserId, 'invites'),
           roomId
         );
         const checkUserInviteSnap = await getDoc(checkUserInviteRef);
@@ -473,7 +470,9 @@ export const declineGameInvite = async (firestoreDB, roomId, userId) => {
  * Listen to user's pending invites
  */
 export const listenToUserInvites = (firestoreDB, userId, callback) => {
-  if (!firestoreDB || !userId) return () => {};
+  if (!firestoreDB || !userId) {
+    return () => {};
+  }
 
   const invitesCollectionRef = collection(
     firestoreDB,
@@ -482,10 +481,10 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
     'invites'
   );
   
+  // ✅ Query without orderBy to avoid index requirements (we'll sort client-side if needed)
   const q = query(
     invitesCollectionRef,
-    where('status', '==', 'pending'),
-    orderBy('timestamp', 'desc')
+    where('status', '==', 'pending')
   );
   
   const unsubscribe = onSnapshot(
@@ -495,10 +494,19 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
       const now = Date.now();
       const expiredInviteIds = [];
       
+      if (snapshot.empty) {
+        callback([]);
+        return;
+      }
+      
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        if (!data) {
+          return;
+        }
+        
         const timestamp = data.timestamp?.toMillis?.() || data.timestamp || Date.now();
-        const expiresAt = data.expiresAt || (timestamp + 60000); // Default 1 minute if not set (for testing)
+        const expiresAt = data.expiresAt || (timestamp + 60000); // Default 1 minute if not set
         
         // ✅ Filter out expired invites (not received within time limit)
         if (now > expiresAt && data.status === 'pending') {
@@ -520,10 +528,7 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
         expiredInviteIds.forEach(async (inviteId) => {
           try {
             const inviteRef = doc(
-              firestoreDB,
-              'petGuessingGame_userInvites',
-              userId,
-              'invites',
+              collection(firestoreDB, 'petGuessingGame_userInvites', userId, 'invites'),
               inviteId
             );
             await deleteDoc(inviteRef);
@@ -533,10 +538,13 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
         });
       }
 
+      // ✅ Sort by timestamp descending (client-side)
+      invites.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      
       callback(invites);
     },
     (error) => {
-      console.error('Error listening to invites:', error);
+      console.error('Error listening to invites for user:', userId, error);
       callback([]);
     }
   );
@@ -631,129 +639,78 @@ export const isUserInActiveGame = async (firestoreDB, userId) => {
 };
 
 /**
- * Get ALL online user IDs from Firestore (optimized - only IDs, no details)
+ * Get ALL online user IDs from RTDB presence node (optimized - only IDs, no details)
  * Returns all user IDs (filtered to exclude current user)
- * Same pattern as OnlineUsersList.jsx - fetch all IDs once, then batch load details
+ * Same pattern as OnlineUsersList.jsx - fetch all IDs from presence node
  */
-export const getOnlineUserIdsForInvite = async (firestoreDB, currentUserId) => {
-  if (!firestoreDB || !currentUserId) return [];
+export const getOnlineUserIdsForInvite = async (appdatabase, currentUserId) => {
+  if (!appdatabase || !currentUserId) return [];
 
   try {
-    // ✅ One-time fetch from Firestore (same pattern as OnlineUsersList.jsx)
-    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
-    const docSnapshot = await getDoc(onlineUsersDocRef);
+    // ✅ Query presence node for online users (value === true)
+    const presenceRef = ref(appdatabase, 'presence');
+    const onlineQuery = dbQuery(presenceRef, orderByValue(), equalTo(true));
+    const snapshot = await get(onlineQuery);
 
-    if (!docSnapshot.exists) return [];
+    if (!snapshot.exists()) return [];
 
-    const data = docSnapshot.data();
-    const allUserIds = Array.isArray(data?.userIds) ? data.userIds : [];
+    const presenceData = snapshot.val() || {};
+    const allUserIds = Object.keys(presenceData)
+      .filter((id) => presenceData[id] === true);
 
-    // Filter out current user and return ALL IDs (not just first N)
+    // Filter out current user and return ALL IDs
     const filteredIds = allUserIds.filter((id) => id !== currentUserId);
     return filteredIds;
   } catch (error) {
-    console.error('Error getting online user IDs from Firestore:', error);
+    console.error('Error getting online user IDs from RTDB:', error);
     return [];
   }
 };
 
-/**
- * Get more online user IDs from Firestore (for pagination - load next batch)
- * @deprecated Use getOnlineUserIdsForInvite to get all IDs, then slice client-side
- */
-export const getMoreOnlineUserIds = async (firestoreDB, currentUserId, currentCount, batchSize = 6) => {
-  if (!firestoreDB || !currentUserId) return [];
-
-  try {
-    // ✅ Fetch from Firestore online_users/list document
-    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
-    const docSnapshot = await getDoc(onlineUsersDocRef);
-
-    if (!docSnapshot.exists) return [];
-
-    const data = docSnapshot.data();
-    const allUserIds = Array.isArray(data?.userIds) ? data.userIds : [];
-
-    // Filter out current user
-    const filteredIds = allUserIds.filter((id) => id !== currentUserId);
-
-    // Return only the new IDs (those beyond currentCount)
-    if (filteredIds.length > currentCount) {
-      return filteredIds.slice(currentCount, currentCount + batchSize);
-    }
-
-    return [];
-  } catch (error) {
-    console.error('Error getting more online user IDs from Firestore:', error);
-    return [];
-  }
-};
 
 /**
- * Fetch user details for specific user IDs (from Firestore only)
- * Same pattern as OnlineUsersList.jsx – read from `online_users/list.users`
- *
- * NOTE:
- * - RTDB is no longer used here (keeps this fast and cheap)
- * - `isPlaying` comes from Firestore if you later add it to `online_users/list.users[id]`
+ * Fetch user details for specific user IDs from RTDB users node
+ * Only fetches relevant fields needed for display
  */
-export const fetchUserDetailsForInvite = async (appdatabase, firestoreDB, userIds) => {
-  if (!firestoreDB || !userIds || !Array.isArray(userIds) || userIds.length === 0) return {};
+export const fetchUserDetailsForInvite = async (appdatabase, userIds) => {
+  if (!appdatabase || !userIds || !Array.isArray(userIds) || userIds.length === 0) return {};
 
   try {
-    // ✅ Read once from Firestore `online_users/list` (same as OnlineUsersList.jsx)
-    const onlineUsersDocRef = doc(firestoreDB, 'online_users', 'list');
-    const docSnapshot = await getDoc(onlineUsersDocRef);
+    // ✅ Fetch user data for each ID in parallel (only relevant fields)
+    const userPromises = userIds.map(async (userId) => {
+      try {
+        const userRef = ref(appdatabase, `users/${userId}`);
+        const userSnapshot = await get(userRef);
 
-    if (!docSnapshot.exists) return {};
+        if (!userSnapshot.exists()) return null;
 
-    const data = docSnapshot.data() || {};
-    const usersMap =
-      typeof data.users === 'object' && data.users !== null ? data.users : {};
+        const userData = userSnapshot.val() || {};
+        return {
+          id: userId,
+          displayName: userData.displayName || 'Anonymous',
+          avatar:
+            userData.avatar ||
+            'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          isPlaying: userData.isPlaying || false,
+        };
+      } catch (error) {
+        console.error(`Error fetching user ${userId}:`, error);
+        return null;
+      }
+    });
 
+    const users = (await Promise.all(userPromises)).filter((u) => u !== null);
+    
+    // Convert to object with userId as key
     const userDetails = {};
-
-    userIds.forEach((userId) => {
-      const u = usersMap[userId] || {};
-      userDetails[userId] = {
-        id: userId,
-        displayName: u.displayName || 'Anonymous',
-        avatar:
-          u.avatar ||
-          'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-        // If you later store isPlaying in Firestore, we can read it here:
-        isPlaying: !!u.isPlaying,
-      };
+    users.forEach((user) => {
+      userDetails[user.id] = user;
     });
 
     return userDetails;
   } catch (error) {
     console.error('Error fetching user details:', error);
     return {};
-  }
-};
-
-/**
- * Get online users for inviting with their game status (optimized version)
- * Fetches ALL user IDs from Firestore, then fetches details for initial batch
- * Same pattern as OnlineUsersList.jsx - fetch all IDs once, batch load details
- * @deprecated Use getOnlineUserIdsForInvite + fetchUserDetailsForInvite for better performance
- */
-export const getOnlineUsersForInvite = async (appdatabase, firestoreDB, currentUserId) => {
-  if (!appdatabase || !firestoreDB || !currentUserId) return [];
-
-  try {
-    // ✅ Get ALL user IDs from Firestore (same pattern as OnlineUsersList.jsx)
-    const allUserIds = await getOnlineUserIdsForInvite(firestoreDB, currentUserId);
-    
-    // ✅ Fetch details only for first 6 users from RTDB (initial batch)
-    const initialBatch = allUserIds.slice(0, 6);
-    const userDetails = await fetchUserDetailsForInvite(appdatabase, firestoreDB, initialBatch);
-    
-    return Object.values(userDetails);
-  } catch (error) {
-    console.error('Error getting online users:', error);
-    return [];
   }
 };
 
@@ -824,7 +781,7 @@ export const leaveGameRoom = async (firestoreDB, roomId, userId) => {
     // Only remove player if game is still waiting
     const players = { ...roomData.players };
     if (roomData.status === 'waiting') {
-      delete players[userId];
+    delete players[userId];
     }
     // If game is playing or finished, keep player data for display
 
