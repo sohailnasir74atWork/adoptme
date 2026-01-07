@@ -31,7 +31,8 @@ import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
 
-const PAGE_SIZE = 15; // ✅ Optimized: Match private chat page size for consistency
+const INITIAL_PAGE_SIZE = 15; // ✅ Initial load: 15 messages
+const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
 
 const GroupChatScreen = () => {
@@ -59,7 +60,11 @@ const GroupChatScreen = () => {
   const [memberToMakeCreator, setMemberToMakeCreator] = useState(null);
   const [petModalVisible, setPetModalVisible] = useState(false);
   const [selectedFruits, setSelectedFruits] = useState([]);
-  const lastLoadedKeyRef = useRef(null);
+  const [replyTo, setReplyTo] = useState(null); // Reply to message state
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null); // Highlighted message ID
+  const flatListRef = useRef(null); // Ref for FlatList in GroupMessageList
+  const lastLoadedKeyRef = useRef(null); // Oldest message ID (for pagination)
+  const newestMessageIdRef = useRef(null); // Newest message ID (for real-time listener)
   const previousGroupIdRef = useRef(null);
   const { t } = useTranslation();
 
@@ -315,6 +320,7 @@ const GroupChatScreen = () => {
         setLoading(true);
         setMessages([]);
         lastLoadedKeyRef.current = null;
+        newestMessageIdRef.current = null; // Reset newest message ID
       } else {
         setIsPaginating(true);
       }
@@ -325,19 +331,28 @@ const GroupChatScreen = () => {
 
         const lastKey = lastLoadedKeyRef.current;
         if (!reset && lastKey) {
-          // ✅ OPTIMIZED: Get older messages starting from lastKey (avoids loading duplicates)
+          // ✅ Get older messages (messages before lastKey)
+          // endAt includes lastKey, but we'll filter it out to avoid duplicates
           query = query.endAt(lastKey);
         }
 
-        // ✅ Apply limit ONLY ONCE, at the end (matching private chat)
-        query = query.limitToLast(PAGE_SIZE);
+        // ✅ Apply limit ONLY ONCE, at the end
+        // limitToLast gets the last N messages from the query result
+        // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
+        const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
+        query = query.limitToLast(limitSize);
 
         const snapshot = await query.once('value');
         const data = snapshot.val() || {};
 
         let parsedMessages = Object.entries(data)
           .map(([key, value]) => ({ id: key, ...value }))
-          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0)); // ✅ DESCENDING: newest -> oldest
+          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0)); // ✅ DESCENDING: newest -> oldest (for inverted FlatList)
+        
+        // ✅ Filter out the lastKey itself when loading more (to avoid duplicate)
+        if (!reset && lastKey && parsedMessages.length > 0) {
+          parsedMessages = parsedMessages.filter(msg => String(msg.id) !== String(lastKey));
+        }
 
         // ✅ If reset and no messages found, return early
         if (parsedMessages.length === 0) {
@@ -373,13 +388,17 @@ const GroupChatScreen = () => {
         if (newMessagesRef.value.length > 0) {
           // ✅ Use the oldest message from the new batch (last item in descending array)
           lastLoadedKeyRef.current = newMessagesRef.value[newMessagesRef.value.length - 1]?.id;
+          // ✅ Store newest message ID (first item in descending array) for real-time listener
+          newestMessageIdRef.current = newMessagesRef.value[0]?.id;
         } else if (parsedMessages.length > 0) {
           // ✅ If all were duplicates, still update to oldest from parsed to prevent infinite loop
           // ✅ This handles edge case where all messages in batch are duplicates
           lastLoadedKeyRef.current = parsedMessages[parsedMessages.length - 1]?.id;
+          newestMessageIdRef.current = parsedMessages[0]?.id;
         } else {
           // ✅ No messages at all - set to null to stop pagination
           lastLoadedKeyRef.current = null;
+          newestMessageIdRef.current = null;
         }
       } catch (err) {
         console.warn('Error loading messages:', err);
@@ -407,7 +426,8 @@ const GroupChatScreen = () => {
     }
   }, [groupId, messagesRef, loadMessages, isMember]);
 
-  // Listen to new messages in real-time (only if user is a member)
+  // ✅ Listen to new messages in real-time (matching private chat pattern exactly)
+  // This adds new messages when someone sends them using child_added
   useEffect(() => {
     if (!messagesRef || !isMember) {
       // Clear messages if user is not a member
@@ -430,23 +450,31 @@ const GroupChatScreen = () => {
       setMessages((prev) => {
         if (!Array.isArray(prev)) return [newMessage];
         const exists = prev.some((m) => String(m?.id) === String(newMessage.id));
-        if (exists) return prev;
-        // Add new message and maintain descending order (newest first)
-        return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+        if (exists) return prev; // don't duplicate
+
+        // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
+        // This matches private chat exactly
+        const updated = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+        // ✅ Update newest message ID for tracking
+        if (updated.length > 0) {
+          newestMessageIdRef.current = updated[0]?.id;
+        }
+        return updated;
       });
     };
 
-    // ✅ OPTIMIZED: Listen for new messages (matching private chat pattern)
-    // Note: child_added fires for existing messages too, but we filter duplicates
-    const unsubscribe = messagesRef.on('child_added', handleChildAdded);
+    // ✅ Use same pattern as private chat - listen directly to messagesRef
+    // child_added will fire for existing messages, but we filter duplicates
+    // This ensures new messages are added in real-time when someone sends them
+    messagesRef.on('child_added', handleChildAdded);
 
     return () => {
       isMounted = false;
-      if (messagesRef && unsubscribe) {
+      if (messagesRef) {
         messagesRef.off('child_added', handleChildAdded);
       }
     };
-  }, [messagesRef, isMember]);
+  }, [messagesRef, isMember]); // Re-run when messagesRef or isMember changes
 
   // Set active chat and reset unread count
   useFocusEffect(
@@ -486,9 +514,65 @@ const GroupChatScreen = () => {
     loadMessages(false);
   }, [loadMessages, isPaginating, isMember]);
 
+  // Scroll to message function (for reply navigation)
+  const scrollToMessage = useCallback(
+    (targetId) => {
+      if (!flatListRef?.current || !targetId) return;
+
+      // Filtered messages are sorted descending (newest first) for inverted FlatList
+      const filteredMessages = [...messages].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+      const index = filteredMessages.findIndex((m) => m.id === targetId);
+      if (index === -1) return;
+
+      try {
+        flatListRef.current.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.5,
+        });
+
+        // Highlight the scrolled-to message
+        setHighlightedMessageId(targetId);
+
+        setTimeout(() => {
+          setHighlightedMessageId((current) =>
+            current === targetId ? null : current,
+          );
+        }, 1500);
+      } catch (e) {
+        console.log('scrollToIndex error:', e);
+        // Fallback: try scrolling to offset
+        try {
+          const offset = index * 100; // Approximate height per message
+          flatListRef.current.scrollToOffset({ offset, animated: true });
+        } catch (e2) {
+          console.log('scrollToOffset error:', e2);
+        }
+      }
+    },
+    [messages],
+  );
+
+  // Handle reply to message
+  const handleReply = useCallback((message) => {
+    setReplyTo({
+      id: message.id,
+      text: message.text || '',
+      sender: message.sender || 'Anonymous',
+      hasFruits: Array.isArray(message.fruits) && message.fruits.length > 0,
+      fruitsCount: Array.isArray(message.fruits) ? message.fruits.length : 0,
+      imageUrl: message.imageUrl || null,
+    });
+  }, []);
+
+  // Cancel reply
+  const handleCancelReply = useCallback(() => {
+    setReplyTo(null);
+  }, []);
+
   // Send message
   const sendMessage = useCallback(
-    async (text, image, fruits) => {
+    async (text, image, fruits, replyToMessage) => {
       const trimmedText = (text || '').trim();
       const hasImage = !!image;
       const hasFruits = Array.isArray(fruits) && fruits.length > 0;
@@ -558,6 +642,18 @@ const GroupChatScreen = () => {
         messageData.fruits = fruits;
       }
 
+      // Add replyTo if replying to a message
+      if (replyToMessage && replyToMessage.id) {
+        messageData.replyTo = {
+          id: replyToMessage.id,
+          text: replyToMessage.text || '',
+          sender: replyToMessage.sender || 'Anonymous',
+          imageUrl: replyToMessage.imageUrl || null,
+          hasFruits: replyToMessage.hasFruits || false,
+          fruitsCount: replyToMessage.fruitsCount || 0,
+        };
+      }
+
       try {
         const result = await sendGroupMessage(
           appdatabase,
@@ -573,6 +669,9 @@ const GroupChatScreen = () => {
 
         if (!result.success) {
           showErrorMessage('Error', result.error || 'Failed to send message');
+        } else {
+          // Clear reply after successful send
+          setReplyTo(null);
         }
       } catch (error) {
         console.error('Error sending message:', error);
@@ -949,16 +1048,22 @@ const GroupChatScreen = () => {
               loading={loading}
               isPaginating={isPaginating}
               onUserPress={handleUserPress}
+              onReply={handleReply}
+              scrollToMessage={scrollToMessage}
+              highlightedMessageId={highlightedMessageId}
+              flatListRef={flatListRef}
             />
           )}
 
           <GroupMessageInput
-            onSend={sendMessage}
+            onSend={(text, image, fruits) => sendMessage(text, image, fruits, replyTo)}
             isBanned={false}
             petModalVisible={petModalVisible}
             setPetModalVisible={setPetModalVisible}
             selectedFruits={selectedFruits}
             setSelectedFruits={setSelectedFruits}
+            replyTo={replyTo}
+            onCancelReply={handleCancelReply}
           />
         </View>
       </ConditionalKeyboardWrapper>

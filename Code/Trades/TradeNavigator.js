@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
-import ServerScreen from './Server';
 import { useNavigation } from '@react-navigation/native';
 import NotifierDrawer from './Notifier';
 
@@ -158,11 +157,6 @@ export const TradeStack = ({ selectedTheme }) => {
     />
   )}
 </Stack.Screen>
-<Stack.Screen
-          name="Server"
-          component={ServerScreen}
-         
-        />
         <Stack.Screen
           name="Trade Notifier"
           component={NotifierDrawer}

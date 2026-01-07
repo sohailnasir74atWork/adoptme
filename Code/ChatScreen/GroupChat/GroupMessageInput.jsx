@@ -59,6 +59,8 @@ const GroupMessageInput = ({
   setPetModalVisible,
   selectedFruits,
   setSelectedFruits,
+  replyTo, // Message being replied to
+  onCancelReply, // Callback to cancel reply
 }) => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -156,7 +158,12 @@ const GroupMessageInput = ({
         imageUrl = await uploadToBunny(imageToSend);
       }
 
-      await onSend(textToSend, imageUrl, fruitsToSend);
+      await onSend(textToSend, imageUrl, fruitsToSend, replyTo);
+      
+      // Clear reply after successful send
+      if (onCancelReply) {
+        onCancelReply();
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message.');
@@ -172,6 +179,8 @@ const GroupMessageInput = ({
     setSelectedFruits,
     localState?.isPro,
     uploadToBunny,
+    replyTo,
+    onCancelReply,
   ]);
 
   const hasFruits = useMemo(
@@ -184,8 +193,44 @@ const GroupMessageInput = ({
     [input, imageUri, hasFruits]
   );
 
+  // Get reply preview text
+  const getReplyPreview = (replyTo) => {
+    if (!replyTo) return '[Deleted message]';
+    if (replyTo.text && replyTo.text.trim().length > 0) {
+      return replyTo.text;
+    }
+    if (replyTo.imageUrl) {
+      return '[Image]';
+    }
+    if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
+      const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
+      return count > 0 ? `[${count} pet(s) message]` : '[Pets message]';
+    }
+    return '[Deleted message]';
+  };
+
   return (
     <View style={styles.inputWrapper}>
+      {/* Reply context UI */}
+      {replyTo && (
+        <View style={[styles.replyContainer, { 
+          backgroundColor: isDark ? '#374151' : '#E5E7EB',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }]}>
+          <Text style={[styles.replyText, { color: isDark ? '#9CA3AF' : '#6B7280', flex: 1 }]} numberOfLines={1}>
+            {t('chat.replying_to')}: {getReplyPreview(replyTo)}
+          </Text>
+          <TouchableOpacity
+            onPress={onCancelReply}
+            style={styles.cancelReplyButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="close" size={18} color={isDark ? '#9CA3AF' : '#6B7280'} />
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.inputContainer}>
         {/* Pets drawer icon */}
         <TouchableOpacity

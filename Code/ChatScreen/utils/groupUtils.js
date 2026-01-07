@@ -1814,7 +1814,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
       deletedCount = results.filter(r => r.success).length;
       failedCount = results.filter(r => !r.success).length;
       
-      console.log(`✅ Deleted group metadata: ${deletedCount} successful, ${failedCount} failed out of ${allMemberIds.length} total`);
+      // console.log(`✅ Deleted group metadata: ${deletedCount} successful, ${failedCount} failed out of ${allMemberIds.length} total`);
       
       if (failedCount > 0) {
         const failedMembers = results.filter(r => !r.success).map(r => r.memberId);

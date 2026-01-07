@@ -113,6 +113,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
   const viewRef = useRef();
+  // ✅ Add refs to track timeouts and animation frames for cleanup
+  const timeoutRefs = useRef({});
+  const rafRefs = useRef({});
+  const isMountedRef = useRef(true);
   const [selectedValueType, setSelectedValueType] = useState('d');
   const [isFlySelected, setIsFlySelected] = useState(false);
   const [isRideSelected, setIsRideSelected] = useState(false);
@@ -122,6 +126,24 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
   const [factor, setFactor] = useState(null);
   const [showofferwall, setShowofferwall] = useState(false);
+
+  // ✅ Cleanup all timeouts and animation frames on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Clear all timeouts
+      Object.values(timeoutRefs.current).forEach(id => {
+        if (id) clearTimeout(id);
+      });
+      timeoutRefs.current = {};
+      // Cancel all animation frames
+      Object.values(rafRefs.current).forEach(id => {
+        if (id) cancelAnimationFrame(id);
+      });
+      rafRefs.current = {};
+    };
+  }, []);
 
 
 
@@ -315,28 +337,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
 
-    const callbackfunction = ()=>{}
-    // if()
-      requestAnimationFrame(() => {
-        // Step 4: Wait for modal animation to finish before showing ad
-        setTimeout(() => {
-          if (!adShowen && index ==1 && !localState.isPro && !isHas) {
-            requestAnimationFrame(() => {
-              setTimeout(() => {
-                try {
-                  callbackfunction()
-                } catch (err) {
-                  console.warn('[AdManager] Failed to show ad:', err);
-                  callbackfunction();
-                }
-              }, 400); // Adjust based on animation time
-            });
-          } else {
-            callbackfunction();
-          }
-        }, 500); // Give modal time to fully disappear on iOS
-
-      });
+    const callbackfunction = () => {};
 
     if (items[index]) {
       triggerHapticFeedback('impactLight');
@@ -346,11 +347,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
       if (isHas) {
         setHasItems(updatedItems);
-        // console.log(item)
-
         updateTotal(item, 'has', false, true);
-
-
       } else {
         setWantsItems(updatedItems);
         updateTotal(item, 'wants', false, true);
@@ -359,8 +356,45 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       triggerHapticFeedback('impactLight');
       setSelectedSection(isHas ? 'has' : 'wants');
       setIsDrawerVisible(true);
+
+      // ✅ Store timeout and animation frame IDs for cleanup
+      const rafKey1 = `cellPress_${Date.now()}_1`;
+      const timeoutKey1 = `cellPress_${Date.now()}_2`;
+      const rafKey2 = `cellPress_${Date.now()}_3`;
+      const timeoutKey2 = `cellPress_${Date.now()}_4`;
+
+      rafRefs.current[rafKey1] = requestAnimationFrame(() => {
+        if (!isMountedRef.current) return;
+        
+        timeoutRefs.current[timeoutKey1] = setTimeout(() => {
+          if (!isMountedRef.current) return;
+          
+          if (!adShowen && index === 1 && !localState.isPro && !isHas) {
+            rafRefs.current[rafKey2] = requestAnimationFrame(() => {
+              if (!isMountedRef.current) return;
+              
+              timeoutRefs.current[timeoutKey2] = setTimeout(() => {
+                if (!isMountedRef.current) return;
+                
+                try {
+                  callbackfunction();
+                } catch (err) {
+                  console.warn('[AdManager] Failed to show ad:', err);
+                  callbackfunction();
+                }
+                // Clean up after execution
+                delete timeoutRefs.current[timeoutKey2];
+              }, 400);
+            });
+          } else {
+            callbackfunction();
+          }
+          // Clean up after execution
+          delete timeoutRefs.current[timeoutKey1];
+        }, 500);
+      });
     }
-  }, [hasItems, wantsItems, triggerHapticFeedback, updateTotal]);
+  }, [hasItems, wantsItems, triggerHapticFeedback, updateTotal, adShowen, localState.isPro]);
 
   // Memoize the mode change effect to prevent unnecessary recalculations
   const updateItemsForMode = useCallback((items) => {
@@ -369,26 +403,25 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, localState.isGG, factor);
       return { ...item, selectedValue: value };
     });
-  }, [isSharkMode]);
+  }, [isSharkMode, localState.isGG, factor]); // ✅ Added missing dependencies
 
-  // Optimize the mode change effect
+  // ✅ Optimize the mode change effect - Fixed: Only update when mode changes, not when items change
   useEffect(() => {
-    const updatedHasItems = updateItemsForMode(hasItems);
-    const updatedWantsItems = updateItemsForMode(wantsItems);
+    // ✅ Use functional updates to avoid dependency on hasItems/wantsItems
+    setHasItems(prevItems => {
+      const updated = updateItemsForMode(prevItems);
+      const newTotal = updated.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
+      setHasTotal(newTotal);
+      return updated;
+    });
 
-    // Batch state updates
-    const updates = () => {
-      setHasItems(updatedHasItems);
-      setWantsItems(updatedWantsItems);
-
-      const newHasTotal = updatedHasItems.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
-      const newWantsTotal = updatedWantsItems.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
-      setHasTotal(newHasTotal);
-      setWantsTotal(newWantsTotal);
-    };
-
-    updates();
-  }, [isSharkMode, updateItemsForMode]);
+    setWantsItems(prevItems => {
+      const updated = updateItemsForMode(prevItems);
+      const newTotal = updated.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
+      setWantsTotal(newTotal);
+      return updated;
+    });
+  }, [isSharkMode, updateItemsForMode]); // ✅ Removed hasItems/wantsItems from deps to prevent infinite loop
   // Add toggleFavorite function
   const toggleFavorite = useCallback((item) => {
     if (!item) return;
@@ -413,10 +446,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       if (!item) return null;
       return {
         ...item,
-        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, selectedPetType, localState.isGG, factor),
+        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
       };
     });
-  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, selectedPetType]);
+  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor]); // ✅ Added missing dependencies
 
   // Step 3: Use optimized filteredData
   const filteredData = useMemo(() => {
@@ -444,7 +477,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     isRideSelected,
     isSharkMode,
     localState.favorites,
-    localState.isGG
+    localState.isGG,
+    factor // ✅ Added missing dependency
   ]);
   // Update renderGridItem to handle favorites mode
   const renderGridItem = useCallback(({ item }) => (
@@ -607,7 +641,11 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       return;
     }
 
-    setTimeout(() => {
+    // ✅ Store timeout ID for cleanup
+    const timeoutKey = `createTrade_${Date.now()}`;
+    timeoutRefs.current[timeoutKey] = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      
       const hasItemsCount = hasItems.filter(Boolean).length;
       const wantsItemsCount = wantsItems.filter(Boolean).length;
 
@@ -618,6 +656,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
       setType('create');
       setModalVisible(true);
+      // Clean up after execution
+      delete timeoutRefs.current[timeoutKey];
     }, 100); // Small delay to allow React state to settle
   }, [hasItems, wantsItems, t, user?.id]);
 
@@ -678,10 +718,16 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
       };
       
-      // ✅ 1-minute cooldown check (using Date.now() for accurate comparison)
-      if (lastTradeTime && (now - lastTradeTime) < 60000) {
-        const secondsLeft = Math.ceil((60000 - (now - lastTradeTime)) / 1000);
-        showErrorMessage(t("home.alert.error"), `Please wait ${secondsLeft} second${secondsLeft === 1 ? '' : 's'} before creating a new trade.`);
+      // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
+      const COOLDOWN_MS = 120000; // 2 minutes
+      if (lastTradeTime && (now - lastTradeTime) < COOLDOWN_MS) {
+        const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastTradeTime)) / 1000);
+        const minutesLeft = Math.floor(secondsLeft / 60);
+        const remainingSeconds = secondsLeft % 60;
+        const timeMessage = minutesLeft > 0 
+          ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
+          : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
+        showErrorMessage(t("home.alert.error"), `Please wait ${timeMessage} before creating a new trade.`);
         setIsSubmitting(false);
         return;
       }
@@ -697,6 +743,7 @@ await addDoc(tradesCollection, newTrade);
 
       // Step 3: Define the success callback
       const callbackfunction = () => {
+        if (!isMountedRef.current) return;
         showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
       };
 
@@ -704,26 +751,43 @@ await addDoc(tradesCollection, newTrade);
       setLastTradeTime(now); // ✅ Use Date.now() for cooldown tracking
       mixpanel.track("Trade Created", { user: user?.id });
 
+      // ✅ Store timeout and animation frame IDs for cleanup
+      const rafKey1 = `createTrade_raf_${Date.now()}_1`;
+      const timeoutKey1 = `createTrade_timeout_${Date.now()}_1`;
+      const rafKey2 = `createTrade_raf_${Date.now()}_2`;
+      const timeoutKey2 = `createTrade_timeout_${Date.now()}_2`;
+
       // Step 5: Wait for next frame (modal animation finish) then delay for iOS
-      requestAnimationFrame(() => {
+      rafRefs.current[rafKey1] = requestAnimationFrame(() => {
+        if (!isMountedRef.current) return;
+        
         // Wait for modal animation to finish before showing ad
-        setTimeout(() => {
+        timeoutRefs.current[timeoutKey1] = setTimeout(() => {
+          if (!isMountedRef.current) return;
+          
           if (!localState.isPro) {
-            requestAnimationFrame(() => {
-              setTimeout(() => {
+            rafRefs.current[rafKey2] = requestAnimationFrame(() => {
+              if (!isMountedRef.current) return;
+              
+              timeoutRefs.current[timeoutKey2] = setTimeout(() => {
+                if (!isMountedRef.current) return;
+                
                 try {
                   InterstitialAdManager.showAd(callbackfunction);
                 } catch (err) {
                   console.warn('[AdManager] Failed to show ad:', err);
                   callbackfunction();
                 }
+                // Clean up after execution
+                delete timeoutRefs.current[timeoutKey2];
               }, 400); // Adjust based on animation time
             });
           } else {
             callbackfunction();
           }
+          // Clean up after execution
+          delete timeoutRefs.current[timeoutKey1];
         }, 500); // Give modal time to fully disappear on iOS
-
       });
 
     } catch (error) {

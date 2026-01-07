@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { Appearance } from 'react-native';
 import { MMKV } from 'react-native-mmkv';
 import Purchases from 'react-native-purchases';
@@ -89,8 +89,8 @@ export const LocalStateProvider = ({ children }) => {
   }, [localState.data, localState.ggData]);
 
   // console.log(localState.isPro)
-  // Update local state and MMKV storage
-  const updateLocalState = (key, value) => {
+  // ✅ Memoize updateLocalState to prevent recreation on every render
+  const updateLocalState = useCallback((key, value) => {
     setLocalState((prevState) => ({
       ...prevState,
       [key]: value,
@@ -108,8 +108,8 @@ export const LocalStateProvider = ({ children }) => {
     } else {
       // console.error('🚨 MMKV supports only string, number, boolean, or JSON stringified objects.');
     }
-  };
-  const canTranslate = () => {
+  }, []); // ✅ Empty deps - function is stable, doesn't depend on any props/state
+  const canTranslate = useCallback(() => {
     const today = new Date().toDateString();
     const { count, date } = localState.translationUsage || { count: 0, date: today };
 
@@ -121,14 +121,16 @@ export const LocalStateProvider = ({ children }) => {
     }
 
     return count < 20;
-  };
-  const toggleAd = () => {
+  }, [localState.translationUsage, updateLocalState]);
+  
+  // ✅ Memoize toggleAd to prevent recreation on every render
+  const toggleAd = useCallback(() => {
     const newAdState = !localState.showAd1;
     updateLocalState('showAd1', newAdState);
     return newAdState;
-  };
+  }, [localState.showAd1, updateLocalState]);
 
-  const incrementTranslationCount = () => {
+  const incrementTranslationCount = useCallback(() => {
     const today = new Date().toDateString();
     const { count, date } = localState.translationUsage || { count: 0, date: today };
 
@@ -138,7 +140,7 @@ export const LocalStateProvider = ({ children }) => {
     };
 
     updateLocalState('translationUsage', updatedUsage);
-  };
+  }, [localState.translationUsage, updateLocalState]);
 
 
   // console.log(localState.data)
@@ -303,11 +305,11 @@ export const LocalStateProvider = ({ children }) => {
     storage.clearAll();
   };
 
-  const getRemainingTranslationTries = () => {
+  const getRemainingTranslationTries = useCallback(() => {
     const today = new Date().toDateString();
     const { count = 0, date = today } = localState.translationUsage || {};
     return date === today ? 20 - count : 20;
-  };
+  }, [localState.translationUsage]);
 
 
   const contextValue = useMemo(

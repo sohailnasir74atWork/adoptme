@@ -63,6 +63,7 @@ const DesignFeedScreen = ({ route }) => {
   const [myPosts, setMyPosts] = useState([]);
   const [bannedUsers, setBannedUsers] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
+  const [lastPostTime, setLastPostTime] = useState(null);
   const AD_FREQUENCY = 5;
 
   useEffect(() => {
@@ -313,8 +314,25 @@ const DesignFeedScreen = ({ route }) => {
   const handleUploadPost = async (desc, imageUrl, selectedTags, currentUserEmail) => {
     if (!user?.id) return;
     
-    // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
+    // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
     const now = Date.now();
+    const COOLDOWN_MS = 120000; // 2 minutes
+    if (lastPostTime && (now - lastPostTime) < COOLDOWN_MS) {
+      const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastPostTime)) / 1000);
+      const minutesLeft = Math.floor(secondsLeft / 60);
+      const remainingSeconds = secondsLeft % 60;
+      const timeMessage = minutesLeft > 0 
+        ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
+        : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
+      showMessage({ 
+        message: `Please wait ${timeMessage} before posting again.`, 
+        type: 'danger',
+        duration: 3000
+      });
+      return;
+    }
+    
+    // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
     const hasRecentWin =
       typeof user?.lastGameWinAt === 'number' &&
       now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
@@ -338,6 +356,13 @@ const DesignFeedScreen = ({ route }) => {
 
     };
     await addDoc(collection(firestoreDB, 'designPosts'), post);
+    
+    // ✅ Update last post time after successful upload
+    setLastPostTime(now);
+    
+    // ✅ Refresh feed after posting
+    setRefreshing(true);
+    fetchInitialPosts();
   };
   
   const renderItem = ({ item, index }) => {

@@ -10,6 +10,8 @@ import {
   Alert,
   TextInput,
   Switch,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
@@ -19,7 +21,7 @@ import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-m
 import { useTranslation } from 'react-i18next';
 import { leaveGroup, acceptGroupInvite, declineGroupInvite, updateGroupAvatar, approveJoinRequest, rejectJoinRequest, getAllGroups, sendJoinRequest, deleteGroup } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
-import { collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -103,6 +105,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
   const [editGroupModalVisible, setEditGroupModalVisible] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [mutedGroups, setMutedGroups] = useState({}); // { groupId: boolean } - Track muted status
+  const [groupInfoModalVisible, setGroupInfoModalVisible] = useState(false);
+  const [selectedGroupInfo, setSelectedGroupInfo] = useState(null);
+  const [groupInfoLoading, setGroupInfoLoading] = useState(false);
 
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -189,7 +194,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             ...doc.data(),
           });
         });
-        console.log('📥 Join requests for creator:', requests.length);
+        // console.log('📥 Join requests for creator:', requests.length);
         setPendingJoinRequests(requests);
         setJoinRequestsLoading(false);
       },
@@ -435,13 +440,23 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     }
   }, []);
 
-  // Handle edit group (Admin only) - Opens CreateGroupModal in edit mode
+  // Handle edit group (Group creator, group admin, or global admin) - Opens CreateGroupModal in edit mode
   const handleEditGroup = useCallback((groupId) => {
-    if (!groupId || !isAdmin) return;
+    if (!groupId || !user?.id) return;
     
     const group = groups.find(g => g.groupId === groupId);
     if (!group) {
       showErrorMessage('Error', 'Group not found');
+      return;
+    }
+
+    // Check if user has permission to edit (group creator, group admin, or global admin)
+    const isCreator = group.createdBy === user.id;
+    const isGroupAdmin = group.members?.[user.id]?.role === 'admin';
+    const canEdit = isCreator || isGroupAdmin || (isAdmin && group.members?.[user.id]);
+    
+    if (!canEdit) {
+      showErrorMessage('Error', 'Only group creator or admin can edit this group');
       return;
     }
 
@@ -452,7 +467,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       avatar: group.groupAvatar || group.avatar || null,
     });
     setEditGroupModalVisible(true);
-  }, [isAdmin, groups]);
+  }, [isAdmin, groups, user?.id, showErrorMessage]);
 
   // Handle group updated callback
   const handleGroupUpdated = useCallback(() => {
@@ -487,6 +502,88 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
     loadMuteStatus();
   }, [appdatabase, user?.id, groups]);
+
+  // Handle show group info
+  const handleShowGroupInfo = useCallback(async (groupId) => {
+    console.log('handleShowGroupInfo called with groupId:', groupId);
+    if (!groupId || !firestoreDB || !appdatabase) {
+      console.log('Missing required data:', { groupId, firestoreDB: !!firestoreDB, appdatabase: !!appdatabase });
+      return;
+    }
+
+    setGroupInfoLoading(true);
+    setGroupInfoModalVisible(true);
+    console.log('Modal visibility set to true');
+
+    try {
+      // Get group data from Firestore
+      const groupDocRef = doc(firestoreDB, 'groups', groupId);
+      const groupDocSnapshot = await getDoc(groupDocRef);
+      
+      if (!groupDocSnapshot.exists) {
+        showErrorMessage('Error', 'Group not found');
+        setGroupInfoModalVisible(false);
+        return;
+      }
+
+      const groupData = groupDocSnapshot.data();
+      console.log('Group data:', groupData);
+      const createdBy = groupData.createdBy;
+      let createdAt = groupData.createdAt || groupData.createdAtTimestamp || groupData.createdAt?.toMillis?.() || null;
+      
+      // Handle Firestore Timestamp
+      if (createdAt && typeof createdAt === 'object' && createdAt.toMillis) {
+        createdAt = createdAt.toMillis();
+      } else if (createdAt && typeof createdAt === 'object' && createdAt.seconds) {
+        createdAt = createdAt.seconds * 1000;
+      }
+      
+      // Get creator info
+      let creatorName = 'Unknown';
+      let creatorAvatar = null;
+      if (createdBy) {
+        try {
+          const creatorRef = ref(appdatabase, `users/${createdBy}`);
+          const creatorSnapshot = await get(creatorRef);
+          if (creatorSnapshot.exists()) {
+            const creatorData = creatorSnapshot.val() || {};
+            creatorName = creatorData.displayName || 'Unknown';
+            creatorAvatar = creatorData.avatar || null;
+          }
+        } catch (error) {
+          console.error('Error fetching creator info:', error);
+        }
+      }
+
+      // Get member count only (don't fetch member details to reduce Firebase costs)
+      const memberIds = groupData.memberIds || [];
+      const memberCount = memberIds.length;
+
+      const groupInfo = {
+        groupId,
+        name: groupData.name || 'Group',
+        description: groupData.description || 'No description',
+        avatar: groupData.avatar || groupData.groupAvatar || null,
+        createdBy: {
+          id: createdBy,
+          name: creatorName,
+          avatar: creatorAvatar,
+        },
+        createdAt: createdAt,
+        memberCount: memberCount,
+      };
+      
+      console.log('Setting group info:', groupInfo);
+      setSelectedGroupInfo(groupInfo);
+    } catch (error) {
+      console.error('Error loading group info:', error);
+      showErrorMessage('Error', 'Failed to load group information');
+      setGroupInfoModalVisible(false);
+    } finally {
+      setGroupInfoLoading(false);
+      console.log('Loading finished');
+    }
+  }, [firestoreDB, appdatabase, showErrorMessage]);
 
   // ✅ Toggle mute notifications for a group
   const handleToggleMute = useCallback(async (groupId, groupName) => {
@@ -650,6 +747,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             />
           </MenuTrigger>
           <MenuOptions>
+            {/* Group Info */}
+            <MenuOption onSelect={() => handleShowGroupInfo(groupId)}>
+              <Text style={{ fontSize: 16, padding: 10 }}>Group Info</Text>
+            </MenuOption>
             {/* Mute/Unmute Notifications */}
             <MenuOption onSelect={() => {}} closeOnSelect={false}>
               <View style={{ 
@@ -1607,6 +1708,230 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         isAdmin={isAdmin}
         onGroupUpdated={handleGroupUpdated}
       />
+
+      {/* Group Info Modal */}
+      <Modal
+        visible={groupInfoModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setGroupInfoModalVisible(false);
+          setSelectedGroupInfo(null);
+        }}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'flex-end',
+        }}>
+          <View style={{
+            backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            maxHeight: '90%',
+            minHeight: 400,
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: 20,
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontFamily: 'Lato-Bold',
+                color: isDarkMode ? '#fff' : '#000',
+              }}>
+                Group Information
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setGroupInfoModalVisible(false);
+                  setSelectedGroupInfo(null);
+                }}
+              >
+                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Content */}
+            {groupInfoLoading ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#8B5CF6" />
+              </View>
+            ) : selectedGroupInfo ? (
+              <ScrollView 
+                style={{ flex: 1 }} 
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={{ padding: 20 }}>
+                  {/* Group Avatar */}
+                  <View style={{ alignItems: 'center', marginBottom: 24 }}>
+                    <Image
+                      source={{
+                        uri: selectedGroupInfo.avatar ||
+                          'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                      }}
+                      style={{
+                        width: 100,
+                        height: 100,
+                        borderRadius: 50,
+                        borderWidth: 3,
+                        borderColor: config.colors.primary,
+                      }}
+                    />
+                    <Text style={{
+                      fontSize: 22,
+                      fontFamily: 'Lato-Bold',
+                      color: isDarkMode ? '#fff' : '#000',
+                      marginTop: 12,
+                      textAlign: 'center',
+                    }}>
+                      {selectedGroupInfo.name}
+                    </Text>
+                  </View>
+
+                  {/* Description */}
+                  <View style={{ marginBottom: 24 }}>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: 'Lato-Bold',
+                      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                      marginBottom: 8,
+                    }}>
+                      Description
+                    </Text>
+                    <Text style={{
+                      fontSize: 15,
+                      fontFamily: 'Lato-Regular',
+                      color: isDarkMode ? '#E5E7EB' : '#374151',
+                      lineHeight: 22,
+                    }}>
+                      {selectedGroupInfo.description || 'No description'}
+                    </Text>
+                  </View>
+
+                  {/* Created By */}
+                  {selectedGroupInfo.createdBy && (
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginBottom: 24,
+                      padding: 12,
+                      backgroundColor: isDarkMode ? '#111827' : '#F9FAFB',
+                      borderRadius: 12,
+                    }}>
+                      <Image
+                        source={{
+                          uri: selectedGroupInfo.createdBy.avatar ||
+                            'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                        }}
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          marginRight: 12,
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{
+                          fontSize: 12,
+                          fontFamily: 'Lato-Regular',
+                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          marginBottom: 4,
+                        }}>
+                          Created by
+                        </Text>
+                        <Text style={{
+                          fontSize: 16,
+                          fontFamily: 'Lato-Bold',
+                          color: isDarkMode ? '#fff' : '#000',
+                        }}>
+                          {selectedGroupInfo.createdBy.name}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Created Date */}
+                  {selectedGroupInfo.createdAt && (
+                    <View style={{ marginBottom: 24 }}>
+                      <Text style={{
+                        fontSize: 14,
+                        fontFamily: 'Lato-Bold',
+                        color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                        marginBottom: 8,
+                      }}>
+                        Created on
+                      </Text>
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: 'Lato-Regular',
+                        color: isDarkMode ? '#E5E7EB' : '#374151',
+                      }}>
+                        {new Date(selectedGroupInfo.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Members Count */}
+                  <View style={{ marginBottom: 24 }}>
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 16,
+                      backgroundColor: isDarkMode ? '#111827' : '#F9FAFB',
+                      borderRadius: 12,
+                    }}>
+                      <Icon 
+                        name="people-outline" 
+                        size={24} 
+                        color={isDarkMode ? '#8B5CF6' : '#8B5CF6'} 
+                        style={{ marginRight: 12 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{
+                          fontSize: 14,
+                          fontFamily: 'Lato-Bold',
+                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          marginBottom: 4,
+                        }}>
+                          Members
+                        </Text>
+                        <Text style={{
+                          fontSize: 18,
+                          fontFamily: 'Lato-Bold',
+                          color: isDarkMode ? '#fff' : '#000',
+                        }}>
+                          {selectedGroupInfo.memberCount || 0} {selectedGroupInfo.memberCount === 1 ? 'member' : 'members'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{
+                  fontSize: 16,
+                  fontFamily: 'Lato-Regular',
+                  color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                }}>
+                  No group information available
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );

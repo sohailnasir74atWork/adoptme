@@ -76,6 +76,37 @@ This function is automatically triggered when a user's online status changes in 
 
 **Note:** User IDs are obtained from `Object.keys(users)` - no redundant `userIds` array or `count` field needed.
 
+### notifyPostComment
+
+Firestore-triggered Cloud Function to send push notifications when someone comments on a design post.
+
+**How it works:**
+- Triggers automatically when a new comment is created in `designPosts/{postId}/comments/{commentId}`
+- Sends notifications to:
+  1. The post creator (if they didn't comment themselves)
+  2. All previous commenters on that post (excluding the new commenter)
+- Limits to last 100 comments and max 50 users to notify (cost optimization)
+- Respects user notification preferences (`postCommentNotifications`)
+
+**Deployment:**
+```bash
+firebase deploy --only functions:notifyPostComment
+```
+
+**Automatic Trigger:**
+This function is automatically triggered when a new comment is added to any design post. No client-side code needed.
+
+**Notification Payload:**
+- For post creator: "New Comment on Your Post" - "{Commenter Name} commented on your post: '{post description}'"
+- For previous commenters: "New Comment on Post" - "{Commenter Name} also commented on '{post description}'"
+- Data: `{ type: 'postComment', postId: '...', commentId: '...', commenterId: '...', commenterName: '...', timestamp: '...' }`
+
+**Cost Optimizations:**
+- Limits comment reads to last 100 comments (prevents expensive reads on popular posts)
+- Limits notifications to max 50 users (prevents excessive notification costs)
+- Batches RTDB reads for better performance
+- Early exit if only creator has commented
+
 **Notes:**
 - Uses Firestore transactions to ensure data consistency
 - Automatically removes users from the list when they go offline
@@ -217,6 +248,32 @@ firebase deploy --only functions:cleanupOnlineUsers
 - The document will be automatically recreated by `syncOnlineStatusToFirestore` when users come online
 - This periodic cleanup ensures the online users list stays fresh and doesn't accumulate stale data
 - If the document doesn't exist, the function logs a message and continues (no error)
+
+### clearPresenceNode
+
+Scheduled Cloud Function that clears the entire `presence` node in Firebase Realtime Database every 20 minutes.
+
+**How it works:**
+- Runs automatically every 20 minutes via Cloud Scheduler
+- Clears the entire `presence/{uid}` node in Realtime Database
+- Helps clean up stale presence data and ensures only truly active users remain
+- Active users will automatically re-establish their presence when the app is in foreground
+
+**Deployment:**
+```bash
+firebase deploy --only functions:clearPresenceNode
+```
+
+**Automatic Schedule:**
+- Runs every 20 minutes automatically once deployed
+- No manual configuration needed
+- Uses UTC timezone
+
+**Notes:**
+- The presence node will be automatically repopulated by active users through the client-side presence tracking in `GlobelStats.js`
+- This periodic cleanup ensures the presence node doesn't accumulate stale data from users who disconnected without proper cleanup
+- If the presence node is already empty, the function logs a message and continues (no error)
+- Users who are actively using the app will immediately re-establish their presence after the cleanup
 
 ## Notes
 

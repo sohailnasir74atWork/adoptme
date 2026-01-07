@@ -34,6 +34,10 @@ const GroupMessageList = ({
   loading,
   isPaginating,
   onUserPress, // Callback to open profile drawer
+  onReply, // Callback to reply to a message
+  scrollToMessage, // Function to scroll to a message
+  highlightedMessageId, // ID of highlighted message
+  flatListRef, // Ref for FlatList
 }) => {
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -72,6 +76,28 @@ const GroupMessageList = ({
     showSuccessMessage('Success', 'Message Copied');
   }, [triggerHapticFeedback]);
 
+  // Get reply preview text
+  const getReplyPreview = useCallback((replyTo) => {
+    if (!replyTo || typeof replyTo !== 'object') return '[Deleted message]';
+
+    if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
+      return replyTo.text;
+    }
+
+    if (replyTo.imageUrl) {
+      return '[Image]';
+    }
+
+    if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
+      const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
+      return count > 0
+        ? `[${count} pet(s) message]`
+        : '[Pets message]';
+    }
+
+    return '[Deleted message]';
+  }, []);
+
   // Filtered messages (sorted descending for inverted FlatList)
   const filteredMessages = useMemo(() => {
     if (!Array.isArray(messages)) return [];
@@ -106,6 +132,11 @@ const GroupMessageList = ({
           style={[
             isMyMessage ? styles.mymessageBubble : styles.othermessageBubble,
             isMyMessage ? styles.myMessage : styles.otherMessage,
+            item.id === highlightedMessageId && {
+              backgroundColor: isDarkMode ? '#3a2a10' : '#fef3c7',
+              borderWidth: 2,
+              borderColor: '#F59E0B',
+            },
           ]}
         >
           {/* Avatar Container - matching main chat structure */}
@@ -136,6 +167,23 @@ const GroupMessageList = ({
 
           {/* Message Content Container */}
           <View style={styles.messageTextBox}>
+            {/* Reply Preview */}
+            {item.replyTo && (
+              <TouchableOpacity
+                style={[
+                  styles.replyContainer,
+                  { backgroundColor: isDarkMode ? '#374151' : '#E5E7EB' },
+                ]}
+                activeOpacity={0.7}
+                onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
+              >
+                <Text style={[styles.replyText, { color: isDarkMode ? '#9CA3AF' : '#6B7280' }]} numberOfLines={2}>
+                  Replying to: {'\n'}
+                  {getReplyPreview(item.replyTo)}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {/* Username with badges - shown for ALL messages (including current user) */}
            
 
@@ -160,15 +208,28 @@ const GroupMessageList = ({
               }}
               disabled={!onUserPress}
               activeOpacity={0.7}
+              style={{ alignSelf: 'flex-start' }}
             >
-              <View style={styles.nameRow}>
-                <Text style={styles.userNameText}>{senderName}</Text>
+              <View style={{ 
+                flexDirection: 'row', 
+                alignItems: 'center', 
+                flexWrap: 'nowrap',
+              }}>
+                <Text 
+                  style={[styles.userNameText, { 
+                    flexShrink: 1,
+                  }]} 
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {senderName}
+                </Text>
 
                 {/* Pro badge */}
                 {item?.isPro && (
                   <Image
                     source={require('../../../assets/pro.png')}
-                    style={styles.icon}
+                    style={{ width: 16, height: 16, marginLeft: 4 }}
                   />
                 )}
 
@@ -176,7 +237,7 @@ const GroupMessageList = ({
                 {item?.robloxUsernameVerified && (
                   <Image
                     source={require('../../../assets/verification.png')}
-                    style={styles.icon}
+                    style={{ width: 16, height: 16, marginLeft: 4 }}
                   />
                 )}
 
@@ -329,6 +390,11 @@ const GroupMessageList = ({
               <MenuOption onSelect={() => handleCopy(item)}>
                 <Text style={styles.menuOptionText}>Copy</Text>
               </MenuOption>
+              {userId && onReply && (
+                <MenuOption onSelect={() => onReply(item)}>
+                  <Text style={styles.menuOptionText}>{t('chat.reply')}</Text>
+                </MenuOption>
+              )}
             </MenuOptions>
           </Menu>
           </View>
@@ -344,7 +410,7 @@ const GroupMessageList = ({
         </View>
       );
     },
-    [userId, user, groupData, styles, fruitColors, handleCopy, navigation, triggerHapticFeedback, onUserPress, isDarkMode]
+    [userId, user, groupData, styles, fruitColors, handleCopy, navigation, triggerHapticFeedback, onUserPress, isDarkMode, onReply, scrollToMessage, highlightedMessageId, getReplyPreview, t]
   );
 
   const keyExtractor = useCallback((item, index) => {
@@ -371,17 +437,23 @@ const GroupMessageList = ({
 
   return (
     <FlatList
+      ref={flatListRef}
       data={filteredMessages}
       renderItem={renderMessage}
       keyExtractor={keyExtractor}
-      inverted
+      inverted={true} // ✅ Latest messages at bottom
       style={messageListStyles}
       contentContainerStyle={messageListContentStyles}
+      extraData={highlightedMessageId} // Re-render when highlight changes
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
       }
-      onEndReached={handleLoadMore}
-      onEndReachedThreshold={0.5}
+      onEndReached={handleLoadMore} // ✅ Fires when scrolling to top (for inverted list)
+      onEndReachedThreshold={0.3} // ✅ Trigger earlier for smoother loading
+      initialNumToRender={15} // ✅ Render 15 messages initially
+      maxToRenderPerBatch={10} // ✅ Render 10 per batch
+      windowSize={5} // ✅ Optimize memory usage
+      removeClippedSubviews={true} // ✅ Improve performance
       ListFooterComponent={
         isPaginating ? (
           <View style={{ padding: 16, alignItems: 'center' }}>

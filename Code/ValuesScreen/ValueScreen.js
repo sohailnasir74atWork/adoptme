@@ -106,10 +106,24 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [showAd1, setShowAd1] = useState(localState?.showAd1);
   const [sortOrder, setSortOrder] = useState('none'); // 'asc', 'desc', or 'none'
+  
+  // ✅ Add refs to track mounted state and debounce cleanup
+  const isMountedRef = useRef(true);
+  const debounceTimeoutRef = useRef(null);
 
 
-  const hideBadge = !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
-  const CATEGORIES = !localState.isGG ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', , 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+  // ✅ Memoize categories to prevent recreation
+  const hideBadge = useMemo(() => 
+    !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
+    [localState.isGG]
+  );
+  
+  const CATEGORIES = useMemo(() => 
+    !localState.isGG 
+      ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] 
+      : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
+    [localState.isGG]
+  );
 
   // console.log(selectedFruits)
 
@@ -183,11 +197,30 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     Biliprice: '',
     Robuxprice: '',
   });
+  // ✅ Cleanup on unmount - Fixed: Use ref to track if ad was toggled to prevent infinite loop
+  const hasToggledAdRef = useRef(false);
+  
   useEffect(() => {
-    // Toggle the ad state when the screen is mounted
-    const newAdState = toggleAd();
-    setShowAd1(newAdState);
-  }, []);
+    isMountedRef.current = true;
+    
+    // ✅ Only toggle ad once on mount, not on every render
+    if (!hasToggledAdRef.current) {
+      hasToggledAdRef.current = true;
+      const newAdState = toggleAd();
+      if (isMountedRef.current) {
+        setShowAd1(newAdState);
+      }
+    }
+    
+    return () => {
+      isMountedRef.current = false;
+      // ✅ Cleanup debounce timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
+    };
+  }, []); // ✅ Empty deps - only run once on mount, toggleAd is stable
   const CustomAd = () => (
     <View style={styles.adContainer}>
       <View style={styles.adContent}>
@@ -273,7 +306,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       item?.rarity ? item.rarity.toUpperCase() : null
     ).filter(Boolean))];
     return [...CATEGORIES, ...uniqueRarities.filter(r => !CATEGORIES.includes(r))];
-  }, [parsedValuesData]);
+  }, [parsedValuesData, CATEGORIES]); // ✅ Added CATEGORIES dependency
 
   // Optimize the search and filter logic
 
@@ -333,7 +366,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     }
 
     return filtered;
-  }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected]);
+  }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected, getItemValue, CATEGORIES]); // ✅ Added getItemValue and CATEGORIES dependencies
 
 
   // Optimize the handleItemBadgePress function
@@ -404,6 +437,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       );
 
       const handlePress = () => {
+        if (!isMountedRef.current) return;
+        
         const fruitObj = {
           Name: item.Name ?? item.name,
           name: item.name,
@@ -417,15 +452,15 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
         };
 
         // 👉 From chat: always add another copy
-        if (fromChat) {
+        if (fromChat && setSelectedFruits) {
           setSelectedFruits(prev => [...(prev || []), fruitObj]);
         }
 
         // 👉 From settings: always add another copy
         if (fromSetting) {
-          if (owned) {
+          if (owned && setOwnedPets) {
             setOwnedPets(prev => [...(prev || []), fruitObj]);
-          } else {
+          } else if (setWishlistPets) {
             setWishlistPets(prev => [...(prev || []), fruitObj]);
           }
         }
@@ -454,59 +489,88 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       localState.isGG,
       localState.imgurl,
       localState.imgurlGG,
-      selectedFruits,
-      ownedPets, wishlistPets
+      fromChat,
+      fromSetting,
+      owned,
+      setSelectedFruits,
+      setOwnedPets,
+      setWishlistPets
     ]
   );
 
 
   // Update the useEffect for values data
   useEffect(() => {
+    if (!isMountedRef.current) return;
     setValuesData(parsedValuesData);
     setFilters(availableFilters);
   }, [parsedValuesData, availableFilters]);
 
   // Update the useEffect for codes data
   useEffect(() => {
+    if (!isMountedRef.current) return;
     setCodesData(parsedCodesData);
   }, [parsedCodesData]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    
     setRefreshing(true);
 
     try {
       await reload(); // Re-fetch stock data
+      if (!isMountedRef.current) return;
     } catch (error) {
       console.error('Error refreshing data:', error);
+      if (!isMountedRef.current) return;
     } finally {
-      setRefreshing(false);
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
     }
-  };
+  }, [reload]);
 
-  const toggleDrawer = () => {
+  const toggleDrawer = useCallback(() => {
+    if (!isMountedRef.current) return;
+    
     triggerHapticFeedback('impactLight');
     const callbackfunction = () => {
+      if (!isMountedRef.current) return;
       setHasAdBeenShown(true); // Mark the ad as shown
-      setIsDrawerVisible(!isDrawerVisible);
+      setIsDrawerVisible(prev => !prev);
     };
 
     if (!hasAdBeenShown && !localState.isPro) {
       InterstitialAdManager.showAd(callbackfunction);
     }
     else {
-      setIsDrawerVisible(!isDrawerVisible);
+      if (isMountedRef.current) {
+        setIsDrawerVisible(prev => !prev);
+      }
     }
     mixpanel.track("Code Drawer Open");
-  }
+  }, [triggerHapticFeedback, hasAdBeenShown, localState.isPro]); // ✅ Removed isDrawerVisible - using functional update
 
 
   const applyFilter = (filter) => {
     setSelectedFilter(filter);
   };
 
-  const handleSearchChange = debounce((text) => {
-    setSearchText(text);
-  }, 300);
+  // ✅ Memoize debounced search with cleanup
+  const handleSearchChange = useCallback((text) => {
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    
+    // Set new timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        setSearchText(text);
+      }
+      debounceTimeoutRef.current = null;
+    }, 300);
+  }, []);
   const closeDrawer = () => {
     setFilterDropdownVisible(false);
   };
