@@ -80,7 +80,8 @@ const [selectedEmoji, setSelectedEmoji] = useState(null);
   }, [isAtBottom, pendingMessages]);
 
 
-  const PAGE_SIZE = 20;
+  const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
+  const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
   const navigation = useNavigation()
 // ✅ Memoize openProfileDrawer
@@ -183,9 +184,11 @@ const startPrivateChat = useCallback(() => {
 
         // console.log(`Fetching messages. Reset: ${reset}, LastLoadedKey: ${lastLoadedKey}`);
 
+        // ✅ Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
+        const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
         const messageQuery = reset
-          ? chatRef.orderByKey().limitToLast(PAGE_SIZE)
-          : chatRef.orderByKey().endAt(lastLoadedKey).limitToLast(PAGE_SIZE);
+          ? chatRef.orderByKey().limitToLast(limitSize)
+          : chatRef.orderByKey().endAt(lastLoadedKey).limitToLast(limitSize);
 
         const snapshot = await messageQuery.once('value');
         const data = snapshot.val() || {};

@@ -34,7 +34,8 @@ import ProfileBottomDrawer from '../GroupChat/BottomDrawer';
 
 
 
-const PAGE_SIZE = 15;
+const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
+const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
 const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
@@ -44,6 +45,7 @@ const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisi
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isPaginating, setIsPaginating] = useState(false);
   const lastLoadedKeyRef = useRef(null);
   const [lastLoadedKey, setLastLoadedKey] = useState(null);
   const previousChatKeyRef = useRef(null); // ✅ Track previous chatKey to prevent unnecessary resets
@@ -313,6 +315,8 @@ showSuccessMessage(
         // ✅ Only clear messages if we're actually resetting (chat changed or manual refresh)
         setMessages([]);
         lastLoadedKeyRef.current = null;
+      } else {
+        setIsPaginating(true);
       }
   
       try {
@@ -324,8 +328,10 @@ showSuccessMessage(
           query = query.endAt(lastKey);
         }
   
-        // ✅ apply limit ONLY ONCE, at the end
-        query = query.limitToLast(PAGE_SIZE);
+        // ✅ Apply limit ONLY ONCE, at the end
+        // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
+        const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
+        query = query.limitToLast(limitSize);
 
   
         const snapshot = await query.once('value');
@@ -366,6 +372,7 @@ showSuccessMessage(
         console.warn('Error loading messages:', err);
       } finally {
         if (reset) setLoading(false);
+        setIsPaginating(false);
       }
     },
     [messagesRef],
@@ -395,9 +402,13 @@ showSuccessMessage(
   }, [chatKey, messagesRef, loadMessages]);
   
   const handleLoadMore = useCallback(() => {
+    // ✅ Prevent loading if already paginating or no more messages
+    if (isPaginating || !lastLoadedKeyRef.current) {
+      return;
+    }
     // explicitly say "this is NOT a reset"
     loadMessages(false);
-  }, [loadMessages]);
+  }, [loadMessages, isPaginating]);
   // ✅ Memoize groupItems
   const groupItems = useCallback((items) => {
     if (!Array.isArray(items)) return [];

@@ -24,7 +24,7 @@ import {
   onSnapshot,
   addDoc,
   writeBatch,
-  deleteField,       
+  deleteField,
 
 } from '@react-native-firebase/firestore';
 
@@ -300,7 +300,6 @@ const DesignFeedScreen = ({ route }) => {
       setLoadingMore(false);
     }
   };
-
 
   const handleLike = async (post) => {
     const postRef = doc(firestoreDB, 'designPosts', post.id);

@@ -46,22 +46,26 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     const fetchUserData = async () => {
       try {
-        const userSnap = await get(ref(appdatabase, `users/${selectedUserId}`));
+        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+        const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap, 
+               isProSnap, lastGameWinAtSnap] = await Promise.all([
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+        ]);
         
         if (!isMounted) return;
         
-        if (userSnap.exists()) {
-          const data = userSnap.val();
-          setUserData({
-            robloxUsername: data.robloxUsername || null,
-            robloxUserId: data.robloxUserId || null,
-            robloxUsernameVerified: data.robloxUsernameVerified || false,
-            isPro: data.isPro || false,
-            lastGameWinAt: data.lastGameWinAt || null, // ✅ Game win timestamp
-          });
-        } else {
-          setUserData(null);
-        }
+        // ✅ Extract values only if they exist
+        setUserData({
+          robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
+          robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
+          robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+          isPro: isProSnap?.exists() ? isProSnap.val() : false,
+          lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+        });
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
         if (isMounted) setUserData(null);

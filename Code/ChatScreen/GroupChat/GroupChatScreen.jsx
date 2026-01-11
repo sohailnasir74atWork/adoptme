@@ -31,7 +31,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
 
-const INITIAL_PAGE_SIZE = 15; // ✅ Initial load: 15 messages
+const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
 
@@ -248,14 +248,17 @@ const GroupChatScreen = () => {
           // 2. Fallback: Lazy load from RTDB users node ONLY if stored data not available (OPTIMIZATION: avoid unnecessary read)
           if (displayName === 'Anonymous' && invitedUserId && onlineUsersMap === null) {
             try {
-              const userRef = ref(appdatabase, `users/${invitedUserId}`);
-              const userSnapshot = await get(userRef);
-              if (userSnapshot.exists()) {
-                const userData = userSnapshot.val() || {};
+              // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+              const [displayNameSnap, avatarSnap] = await Promise.all([
+                get(ref(appdatabase, `users/${invitedUserId}/displayName`)).catch(() => null),
+                get(ref(appdatabase, `users/${invitedUserId}/avatar`)).catch(() => null),
+              ]);
+              
+              if (displayNameSnap?.exists() || avatarSnap?.exists()) {
                 onlineUsersMap = {
                   [invitedUserId]: {
-                    displayName: userData.displayName || 'Anonymous',
-                    avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                    displayName: displayNameSnap?.exists() ? displayNameSnap.val() : 'Anonymous',
+                    avatar: avatarSnap?.exists() ? avatarSnap.val() : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                   }
                 };
               } else {

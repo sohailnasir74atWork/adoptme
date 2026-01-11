@@ -28,6 +28,7 @@ import { useNavigation } from '@react-navigation/native';
 import InterstitialAdManager from '../../Ads/IntAd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { validateContent } from '../../Helper/ContentModeration';
 
 dayjs.extend(relativeTime);
 
@@ -92,6 +93,13 @@ const CommentModal = ({ visible, onClose, postId }) => {
     if (!firestoreDB || !postId) {
       console.error('Missing firestoreDB or postId', { firestoreDB, postId });
       Alert.alert('Error', 'Cannot post comment right now. Please try again.');
+      return;
+    }
+
+    // ✅ Content moderation: Check comment for inappropriate content
+    const contentValidation = validateContent(text);
+    if (!contentValidation.isValid) {
+      Alert.alert('Content Not Allowed', contentValidation.reason || 'Your comment contains inappropriate content.');
       return;
     }
     const comment = {

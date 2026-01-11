@@ -1,13 +1,14 @@
 // NotifierDrawer.js
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, FlatList, Image, StyleSheet, ScrollView, Modal, ToastAndroid, Platform, Alert } from 'react-native';
-import { ref, onValue, remove, set } from '@react-native-firebase/database';
+import { ref, onValue, remove, set, update, get } from '@react-native-firebase/database';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import Icon from 'react-native-vector-icons/Ionicons';
 import InterstitialAdManager from '../Ads/IntAd';
 import { requestPermission } from '../Helper/PermissionCheck';
 import { showMessage } from 'react-native-flash-message';
+import config from '../Helper/Environment';
 
 const NotifierDrawer = () => {
   const { user, appdatabase, theme } = useGlobalState();
@@ -43,14 +44,34 @@ const NotifierDrawer = () => {
     }
   }, [localState.isGG, localState.data, localState.ggData]);
 
-  const getImageUrl = (item) => {
-    if (!item || !item.name) return '';
-    const encoded = encodeURIComponent(item.name);
+  const getImageUrl = useCallback((item, itemNameOverride = null) => {
+    const itemName = itemNameOverride || item?.name || item?.Name || '';
+    if (!itemName) return '';
+    
+    // ✅ Generate image URL client-side based on item name
+    // This reduces Firebase storage costs (we only store name, not image URL)
+    const encoded = encodeURIComponent(itemName);
     if (localState.isGG) {
       return `${localState.imgurlGG?.replace(/"/g, '')}/items/${encoded}.webp`;
     }
-    return `${localState.imgurl?.replace(/"/g, '')}/${item.image?.replace(/^\/+/, '')}`;
-};
+    
+    // ✅ For non-GG mode, try to get image from item object if available
+    if (item?.image) {
+      return `${localState.imgurl?.replace(/"/g, '')}/${item.image.replace(/^\/+/, '')}`;
+    }
+    
+    // ✅ Fallback: try to find item in parsedValuesData to get image
+    if (itemName && parsedValuesData.length > 0) {
+      const foundItem = parsedValuesData.find(
+        (i) => (i?.name || i?.Name || '').toLowerCase() === itemName.toLowerCase()
+      );
+      if (foundItem?.image) {
+        return `${localState.imgurl?.replace(/"/g, '')}/${foundItem.image.replace(/^\/+/, '')}`;
+      }
+    }
+    
+    return '';
+  }, [localState.isGG, localState.imgurlGG, localState.imgurl, parsedValuesData]);
 
   // const showMessage = (msg) => {
   //   if (Platform.OS === 'android') ToastAndroid.show(msg, ToastAndroid.SHORT);
@@ -62,18 +83,115 @@ const NotifierDrawer = () => {
     const buyRef = ref(appdatabase, `/notifier/buy/${user.id}`);
     const saleRef = ref(appdatabase, `/notifier/sale/${user.id}`);
 
-    const buyListener = onValue(buyRef, snap => {
-      setSavedItems(prev => ({ ...prev, buy: snap.val() || {} }));
+    const buyListener = onValue(buyRef, async (snap) => {
+      const buyData = snap.val() || {};
+      setSavedItems(prev => ({ ...prev, buy: buyData }));
+      
+      // ✅ OPTIMIZED: Migrate old format items to new string format + create indexes
+      // This reduces storage and download costs significantly
+      if (Object.keys(buyData).length > 0) {
+        const indexUpdates = {};
+        const migrationUpdates = {};
+        let hasIndexUpdates = false;
+        let hasMigrationUpdates = false;
+        
+        // Batch check and migrate old format items + create missing indexes
+        const checkPromises = Object.entries(buyData).map(async ([itemKey, itemValue]) => {
+          const itemName = typeof itemValue === 'string' ? itemValue : (itemValue?.name || itemValue?.Name || '');
+          if (!itemName) return;
+          
+          // ✅ MIGRATION: Convert old object format to new string format
+          if (typeof itemValue !== 'string') {
+            migrationUpdates[`notifier/buy/${user.id}/${itemKey}`] = itemName;
+            hasMigrationUpdates = true;
+          }
+          
+          // Create reverse index
+          const indexRef = ref(appdatabase, `/notifier_index/buy/${itemKey}/${user.id}`);
+          try {
+            const indexSnap = await get(indexRef);
+            if (!indexSnap.exists()) {
+              indexUpdates[`notifier_index/buy/${itemKey}/${user.id}`] = true;
+              hasIndexUpdates = true;
+            }
+          } catch (error) {
+            // Silently fail - index creation is not critical
+          }
+        });
+        
+        await Promise.all(checkPromises);
+        
+        // Batch migrate old format items
+        if (hasMigrationUpdates && Object.keys(migrationUpdates).length > 0) {
+          update(ref(appdatabase), migrationUpdates).catch((error) => {
+            console.warn('Error migrating notifier items:', error);
+          });
+        }
+        
+        // Batch create all missing indexes at once
+        if (hasIndexUpdates && Object.keys(indexUpdates).length > 0) {
+          update(ref(appdatabase), indexUpdates).catch((error) => {
+            // Silently fail - index creation is not critical for app functionality
+          });
+        }
+      }
     });
-    const saleListener = onValue(saleRef, snap => {
-      setSavedItems(prev => ({ ...prev, sale: snap.val() || {} }));
+    
+    const saleListener = onValue(saleRef, async (snap) => {
+      const saleData = snap.val() || {};
+      setSavedItems(prev => ({ ...prev, sale: saleData }));
+      
+      // ✅ OPTIMIZED: Migrate old format items to new string format + create indexes
+      if (Object.keys(saleData).length > 0) {
+        const indexUpdates = {};
+        const migrationUpdates = {};
+        let hasIndexUpdates = false;
+        let hasMigrationUpdates = false;
+        
+        const checkPromises = Object.entries(saleData).map(async ([itemKey, itemValue]) => {
+          const itemName = typeof itemValue === 'string' ? itemValue : (itemValue?.name || itemValue?.Name || '');
+          if (!itemName) return;
+          
+          // ✅ MIGRATION: Convert old object format to new string format
+          if (typeof itemValue !== 'string') {
+            migrationUpdates[`notifier/sale/${user.id}/${itemKey}`] = itemName;
+            hasMigrationUpdates = true;
+          }
+          
+          const indexRef = ref(appdatabase, `/notifier_index/sale/${itemKey}/${user.id}`);
+          try {
+            const indexSnap = await get(indexRef);
+            if (!indexSnap.exists()) {
+              indexUpdates[`notifier_index/sale/${itemKey}/${user.id}`] = true;
+              hasIndexUpdates = true;
+            }
+          } catch (error) {
+            // Silently fail
+          }
+        });
+        
+        await Promise.all(checkPromises);
+        
+        // Batch migrate old format items
+        if (hasMigrationUpdates && Object.keys(migrationUpdates).length > 0) {
+          update(ref(appdatabase), migrationUpdates).catch((error) => {
+            console.warn('Error migrating notifier items:', error);
+          });
+        }
+        
+        if (hasIndexUpdates && Object.keys(indexUpdates).length > 0) {
+          update(ref(appdatabase), indexUpdates).catch((error) => {
+            // Silently fail
+          });
+        }
+      }
     });
 
     return () => {
       buyListener();
       saleListener();
     };
-  }, [user?.id]);
+  }, [user?.id, appdatabase]);
 
   const subtitleText =
   mode === 'buy'
@@ -86,17 +204,25 @@ const NotifierDrawer = () => {
   
 
   const handleSelect =  (item) => {
-   
-  
-    if (!item?.name) return;
-    const key = item.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const itemName = item?.name || item?.Name;
+    if (!itemName) return;
+    const key = itemName.replace(/[^a-zA-Z0-9]/g, '_');
     const itemRef = ref(appdatabase, `/notifier/${mode}/${user.id}/${key}`);
-    set(itemRef, {
-      name: item.name,
-      image: item.image || '',
+    const indexRef = ref(appdatabase, `/notifier_index/${mode}/${key}/${user.id}`);
+    
+    // ✅ OPTIMIZED: Store only name (not image URL) to reduce Firebase storage/download costs
+    // Image URL can be generated client-side using getImageUrl() function which looks up image from parsedValuesData
+    // Cloud function only needs 'name' for matching, so storing image is unnecessary
+    set(itemRef, itemName); // Store as string value instead of object
+    
+    // ✅ OPTIMIZED: Create reverse index for cloud function optimization
+    // This allows cloud function to query by item name instead of downloading all users' items
+    set(indexRef, true).catch((error) => {
+      console.error('Error creating notifier index:', error);
     });
+    
     showMessage({
-      message: `${item.name} added to ${mode.toUpperCase()}`,
+      message: `${itemName} added to ${mode.toUpperCase()}`,
       type: 'success',
       duration: 2500,
     });
@@ -107,7 +233,14 @@ const NotifierDrawer = () => {
   
     const proceedToRemove = () => {
       const itemRef = ref(appdatabase, `/notifier/${mode}/${user.id}/${key}`);
+      const indexRef = ref(appdatabase, `/notifier_index/${mode}/${key}/${user.id}`);
+      
+      // ✅ OPTIMIZED: Remove both item and reverse index
       remove(itemRef);
+      remove(indexRef).catch((error) => {
+        console.error('Error removing notifier index:', error);
+      });
+      
       showMessage({
         message: 'Item removed',
         type: 'info',
@@ -125,7 +258,8 @@ const NotifierDrawer = () => {
   
 
   const renderItem = ({ item }) => {
-    const key = item.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const itemName = item?.name || item?.Name || '';
+    const key = itemName.replace(/[^a-zA-Z0-9]/g, '_');
     const isSelected = !!savedItems[mode]?.[key];
     return (
       <TouchableOpacity
@@ -135,20 +269,27 @@ const NotifierDrawer = () => {
           source={{ uri: getImageUrl(item) }}
           style={styles.itemImage}
         />
-        <Text style={[styles.itemText, { fontFamily: 'Lato-Regular', color: isDarkMode ? '#fff' : '#000' }]}>{item.name}</Text>
+        <Text style={[styles.itemText, { fontFamily: 'Lato-Regular', color: isDarkMode ? '#fff' : '#000' }]}>{itemName}</Text>
       </TouchableOpacity>
     );
   };
 
-  const renderSavedItem = ([key, data]) => (
-    <View style={styles.savedItem} key={key}>
-      <Image source={{ uri: getImageUrl(data) }} style={styles.itemImageSelected} />
-      <Text style={[styles.itemText, { fontFamily: 'Lato-Regular', color: isDarkMode ? '#fff' : '#000', marginLeft:5 }]}>{data.name}</Text>
-      <TouchableOpacity onPress={() => handleRemove(key)}>
-      <Icon name="close-circle" size={20} color="red" style={styles.removeText} />
-      </TouchableOpacity>
-    </View>
-  );
+  const renderSavedItem = ([key, data]) => {
+    // ✅ OPTIMIZED: Generate image URL from name only (image is inferred from parsedValuesData)
+    // This reduces Firebase storage and download costs significantly
+    // Handle both old format (object with name) and new format (string value)
+    const itemName = typeof data === 'string' ? data : (data?.name || data?.Name || '');
+    const imageUrl = getImageUrl({}, itemName); // Pass empty object, name as override
+    return (
+      <View style={styles.savedItem} key={key}>
+        <Image source={{ uri: imageUrl }} style={styles.itemImageSelected} />
+        <Text style={[styles.itemText, { fontFamily: 'Lato-Regular', color: isDarkMode ? '#fff' : '#000', marginLeft:5 }]}>{itemName}</Text>
+        <TouchableOpacity onPress={() => handleRemove(key)}>
+        <Icon name="close-circle" size={20} color="red" style={styles.removeText} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#fff' }]}>
@@ -157,7 +298,7 @@ const NotifierDrawer = () => {
 </Text> */}
 
       <TouchableOpacity style={styles.fab} onPress={openDrawerToSelect}>
-        <Icon name="add-circle" size={44} color="#FF6666" />
+        <Icon name="add-circle" size={44} color={config.colors.primary} />
       </TouchableOpacity>
 
       <View style={styles.modeToggle}>
@@ -191,7 +332,7 @@ const NotifierDrawer = () => {
           <FlatList
             data={parsedValuesData}
             renderItem={renderItem}
-            keyExtractor={(item) => item.name}
+            keyExtractor={(item, index) => item?.name || item?.Name || `item-${index}`}
             numColumns={3}
             contentContainerStyle={styles.grid}
           />
@@ -213,7 +354,7 @@ const styles = StyleSheet.create({
     drawerContainer: { flex: 1, padding: 12 },
     modeToggle: { flexDirection: 'row', justifyContent: 'center', marginBottom: 10 },
     toggleButton: { padding: 10, marginHorizontal: 5, backgroundColor: '#ccc', borderRadius: 8 },
-    active: { backgroundColor: '#FF6666' },
+    active: { backgroundColor: config.colors.primary },
   
     sectionTitle: {
       fontFamily: 'Lato-Bold',
@@ -230,7 +371,7 @@ const styles = StyleSheet.create({
       // borderWidth:1
     },
     itemContainerDark: { borderColor: '#333' },
-    itemSelected: { borderColor: '#FF6666', borderWidth: 2 },
+    itemSelected: { borderColor: config.colors.primary, borderWidth: 2 },
   
     itemImage: { width: 50, height: 50, borderRadius: 8 },
     itemImageSelected: { width: 25, height: 25, borderRadius: 8 },
@@ -269,7 +410,7 @@ const styles = StyleSheet.create({
     closeButton: {
       marginTop: 20,
       alignSelf: 'center',
-      backgroundColor: '#FF6666',
+      backgroundColor: config.colors.primary,
       paddingHorizontal: 16,
       paddingVertical: 10,
       borderRadius: 8,

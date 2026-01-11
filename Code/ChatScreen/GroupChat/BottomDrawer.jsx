@@ -105,21 +105,26 @@ const ProfileBottomDrawer = ({
 
     const fetchUserData = async () => {
       try {
-        const userSnap = await get(ref(appdatabase, `users/${selectedUserId}`));
+        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+        const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap, 
+               isProSnap, lastGameWinAtSnap] = await Promise.all([
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+        ]);
         
         if (!isMounted) return;
         
-        if (userSnap.exists()) {
-          const data = userSnap.val();
-          setUserData({
-            robloxUsername: data.robloxUsername || null,
-            robloxUserId: data.robloxUserId || null,
-            robloxUsernameVerified: data.robloxUsernameVerified || false,
-            isPro: data.isPro || false,
-          });
-        } else {
-          setUserData(null);
-        }
+        // ✅ Extract values only if they exist
+        setUserData({
+          robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
+          robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
+          robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+          isPro: isProSnap?.exists() ? isProSnap.val() : false,
+          lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+        });
       } catch (error) {
         console.error('Error fetching user data in BottomDrawer:', error);
         if (isMounted) setUserData(null);
@@ -341,10 +346,11 @@ const ProfileBottomDrawer = ({
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
-        const [avgSnap, createdSnap, userSnap, reviewDocSnap] = await Promise.all([
+        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+        const [avgSnap, createdSnap, rewardPointsSnap, reviewDocSnap] = await Promise.all([
           get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
-          get(ref(appdatabase, `users/${selectedUserId}`)),
+          get(ref(appdatabase, `users/${selectedUserId}/rewardPoints`)).catch(() => null),
           getDoc(doc(firestoreDB, 'reviews', selectedUserId)), // ✅ Load bio from Firestore
         ]);
 
@@ -384,9 +390,9 @@ const ProfileBottomDrawer = ({
         }
 
         // ✅ Load user points (RTDB)
-        if (userSnap.exists()) {
-          const userData = userSnap.val();
-          setUserPoints(userData.rewardPoints || 0);
+        // ✅ Use rewardPointsSnap instead of full user object
+        if (rewardPointsSnap?.exists()) {
+          setUserPoints(rewardPointsSnap.val() || 0);
         } else {
           setUserPoints(0);
         }

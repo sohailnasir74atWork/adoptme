@@ -13,6 +13,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
+import { validateContent } from '../../Helper/ContentModeration';
 
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
@@ -177,6 +178,15 @@ const PrivateMessageInput = ({
     // nothing to send
     if (!trimmedInput && !hasImage && !hasFruits) return;
     if (isSending) return;
+
+    // ✅ Comprehensive content moderation check
+    if (trimmedInput) {
+      const validation = validateContent(trimmedInput);
+      if (!validation.isValid) {
+        Alert.alert('Error', validation.reason || 'Inappropriate content detected.');
+        return;
+      }
+    }
 
     // ✅ Validate onSend callback
     if (!onSend || typeof onSend !== 'function') {

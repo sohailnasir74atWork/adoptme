@@ -20,6 +20,7 @@ import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { onValue, ref } from '@react-native-firebase/database';
 import { showMessage } from 'react-native-flash-message';
 import RNFS from 'react-native-fs';
+import { validateContent } from '../../Helper/ContentModeration';
 
 
 const CLOUD_NAME = 'djtqw0jb5';
@@ -195,6 +196,16 @@ const pickAndCompress = useCallback(async () => {
   
     if (!desc && imageUris.length === 0) {
       return Alert.alert('Missing Info', 'Please add a description or at least one image.');
+    }
+    
+    // ✅ Content moderation: Check description for inappropriate content
+    const trimmedDesc = (desc || '').trim();
+    if (trimmedDesc) {
+      const contentValidation = validateContent(trimmedDesc);
+      if (!contentValidation.isValid) {
+        Alert.alert('Content Not Allowed', contentValidation.reason || 'Your post contains inappropriate content.');
+        return;
+      }
     }
     
     // ✅ Check 1-minute cooldown (session-based, resets on app restart)
