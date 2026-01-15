@@ -19,6 +19,7 @@ const CommunityChatHeader = ({
   setGroupUnreadCount,
   triggerHapticFeedback,
   onOnlineUsersPress,
+  onLeaderboardPress,
 }) => {
   const { user, firestoreDB, isInActiveGame = false, theme } = useGlobalState();
   const navigation = useNavigation();
@@ -207,6 +208,23 @@ const CommunityChatHeader = ({
                 </Text>
               </View>
             )}
+          </TouchableOpacity>
+
+          {/* Leaderboard Button */}
+          <TouchableOpacity
+            onPress={() => {
+              if (onLeaderboardPress) {
+                onLeaderboardPress();
+              }
+              triggerHapticFeedback('impactLight');
+            }}
+            style={{ position: 'relative', padding: 8, marginRight: 4 }}
+          >
+            <Icon
+              name="trophy-outline"
+              size={24}
+              color={config.colors.primary}
+            />
           </TouchableOpacity>
         </>
       )}

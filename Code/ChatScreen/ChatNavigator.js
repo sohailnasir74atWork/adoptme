@@ -12,8 +12,9 @@ import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 // import database from '@react-native-firebase/database';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
-import { ref, update } from '@react-native-firebase/database';
+import { ref, update, get } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
+import LeaderboardScreen from './GroupChat/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -49,81 +50,100 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   }), [selectedTheme]);
 
 
-  // ✅ Move listener setup directly into useEffect for proper cleanup
+  // ✅ OPTIMIZED: Use child listeners instead of full value listener to reduce data download
+  // Listen to individual chat unreadCount changes instead of downloading entire chat_meta_data
+  // Only tracks unread counts - full chat list is loaded in InboxScreen when focused
   useEffect(() => {
     if (!user?.id || !appdatabase) {
-      setChats([]);
       setunreadcount(0);
       return;
     }
   
-    setLoading(true);
     const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
-  
-    const onValueChange = userChatsRef.on('value', (snapshot) => {
+    let totalUnread = 0;
+    const unreadCounts = new Map(); // Track unread counts per chat
+    
+    // ✅ OPTIMIZED: Use child_added and child_changed to listen to individual chats
+    // This only downloads data when a specific chat changes, not the entire metadata
+    const handleChildChange = (snapshot) => {
+      if (!snapshot || !snapshot.key) return;
+      const chatData = snapshot.val();
+      if (!chatData || typeof chatData !== 'object') return;
+      
+      const chatPartnerId = snapshot.key;
+      const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
+      const rawUnread = chatData?.unreadCount || 0;
+      
+      if (isBlocked && rawUnread > 0) {
+        update(
+          ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
+          { unreadCount: 0 }
+        ).catch((error) => {
+          console.error("Error resetting unread count:", error);
+        });
+        unreadCounts.set(chatPartnerId, 0);
+      } else {
+        unreadCounts.set(chatPartnerId, isBlocked ? 0 : rawUnread);
+      }
+      
+      // Recalculate total
+      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
+      setunreadcount(totalUnread);
+    };
+    
+    const handleChildRemoved = (snapshot) => {
+      if (!snapshot || !snapshot.key) return;
+      unreadCounts.delete(snapshot.key);
+      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
+      setunreadcount(totalUnread);
+    };
+    
+    // Initial load: fetch only unreadCount fields for each chat (lighter than full data)
+    const loadInitialCounts = async () => {
       try {
+        const snapshot = await get(userChatsRef);
         if (!snapshot.exists()) {
-          setChats([]); 
           setunreadcount(0);
-          setLoading(false);
           return;
         }
-  
+        
         const fetchedData = snapshot.val();
         if (!fetchedData || typeof fetchedData !== 'object') {
-          setChats([]);
           setunreadcount(0);
-          setLoading(false);
           return;
         }
-  
-        const updatedChats = Object.entries(fetchedData).map(([chatPartnerId, chatData]) => {
-          // ✅ Safety check for chatData
-          if (!chatData || typeof chatData !== 'object') {
-            return null;
-          }
-
-          const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
+        
+        const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+        totalUnread = 0;
+        
+        Object.entries(fetchedData).forEach(([chatPartnerId, chatData]) => {
+          if (!chatData || typeof chatData !== 'object') return;
+          const isBlocked = banned.includes(chatPartnerId);
           const rawUnread = chatData?.unreadCount || 0;
-  
-          // ✅ Reset unread count for blocked users with error handling
-          if (isBlocked && rawUnread > 0) {
-            update(
-              ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
-              { unreadCount: 0 }
-            ).catch((error) => {
-              console.error("Error resetting unread count:", error);
-            });
-          }
-          
-          return {
-            chatId: chatData.chatId,
-            otherUserId: chatPartnerId,
-            lastMessage: chatData.lastMessage || 'No messages yet',
-            lastMessageTimestamp: chatData.timestamp || 0,
-            unreadCount: isBlocked ? 0 : rawUnread,
-            otherUserAvatar: chatData.receiverAvatar || 'https://example.com/default-avatar.jpg',
-            otherUserName: chatData.receiverName || 'Anonymous',
-          };
-        }).filter(Boolean); // ✅ Remove null entries
-  
-        // ✅ Sort by latest message (newest first)
-        const sortedChats = updatedChats.sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-        setChats(sortedChats);
-  
-        // ✅ Calculate total unread count
-        const totalUnread = sortedChats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
+          const count = isBlocked ? 0 : rawUnread;
+          unreadCounts.set(chatPartnerId, count);
+          totalUnread += count;
+        });
+        
         setunreadcount(totalUnread);
-        setLoading(false);
       } catch (error) {
-        console.error("❌ Error fetching chats:", error);
-        setLoading(false);
+        console.error("❌ Error loading initial unread counts:", error);
+        setunreadcount(0);
       }
-    });
+    };
+    
+    loadInitialCounts();
+    
+    // Listen to individual chat changes
+    userChatsRef.on('child_added', handleChildChange);
+    userChatsRef.on('child_changed', handleChildChange);
+    userChatsRef.on('child_removed', handleChildRemoved);
   
     // ✅ Proper cleanup
     return () => {
-      userChatsRef.off('value', onValueChange);
+      userChatsRef.off('child_added', handleChildChange);
+      userChatsRef.off('child_changed', handleChildChange);
+      userChatsRef.off('child_removed', handleChildRemoved);
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
@@ -194,7 +214,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
 
-  const getGroupChatOptions = useCallback(() => ({
+  const getGroupChatOptions = useCallback(({ navigation }) => ({
     title: '', // Hide title
     headerTitleAlign: 'left',
     headerTitleStyle: { 
@@ -214,6 +234,12 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         setGroupUnreadCount={setGroupUnreadCount}
         triggerHapticFeedback={triggerHapticFeedback}
         onOnlineUsersPress={() => setOnlineUsersVisible(true)}
+        onLeaderboardPress={() => {
+          // Navigate to Leaderboard screen instead of showing modal
+          if (navigation && typeof navigation.navigate === 'function') {
+            navigation.navigate('Leaderboard');
+          }
+        }}
       />
     ),
     headerRightContainerStyle: {
@@ -240,7 +266,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         name="Inbox"
         options={{ title: 'Inbox' }}
       >
-        {props => <InboxScreen {...props} chats={chats} setChats={setChats} loading={loading} bannedUsers={bannedUsers} />}
+        {props => <InboxScreen {...props} chats={[]} setChats={() => {}} loading={false} bannedUsers={bannedUsers} />}
       </Stack.Screen>
 
       <Stack.Screen
@@ -301,7 +327,13 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         component={ImageViewerScreenChat}
         options={{ title: 'Image' }}
       />
-    </Stack.Navigator>
 
+      <Stack.Screen
+        name="Leaderboard"
+        options={{ title: 'Top Rated Users' }}
+      >
+        {props => <LeaderboardScreen {...props} />}
+      </Stack.Screen>
+    </Stack.Navigator>
   );
 };

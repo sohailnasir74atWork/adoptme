@@ -231,25 +231,47 @@ const PrivateMessageList = ({
         {/* Message Content */}
        
         <Menu>
-        {item.imageUrl && (
-  <View style={{ marginBottom: 4 }}>
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() =>
-        navigation.navigate('ImageViewerScreenChat', {
-          // if your viewer expects an array of images:
-          images: [item.imageUrl],
-          initialIndex: 0, // only one image here
-        })
-      }
-    >
-      <Image
-        source={{ uri: item.imageUrl }}
-        style={styles.chatImage}
-      />
-    </TouchableOpacity>
-  </View>
-)}
+        {/* Images - Support multiple images */}
+        {(item.imageUrls || item.imageUrl) && (() => {
+          // Support both array (imageUrls) and single (imageUrl) for backward compatibility
+          const imageArray = Array.isArray(item.imageUrls) && item.imageUrls.length > 0
+            ? item.imageUrls
+            : (item.imageUrl ? [item.imageUrl] : []);
+          
+          if (imageArray.length === 0) return null;
+          
+          return (
+            <View style={{ marginBottom: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+              {imageArray.map((imageUri, imgIndex) => {
+                // Fixed size approach: larger for single, smaller for multiple
+                const imageSize = imageArray.length === 1 ? 250 : imageArray.length === 2 ? 150 : 110;
+                
+                return (
+                  <TouchableOpacity
+                    key={`img-${imgIndex}`}
+                    activeOpacity={0.8}
+                    onPress={() =>
+                      navigation.navigate('ImageViewerScreenChat', {
+                        images: imageArray,
+                        initialIndex: imgIndex,
+                      })
+                    }
+                  >
+                    <Image 
+                      source={{ uri: imageUri }} 
+                      style={{ 
+                        width: imageSize,
+                        height: imageSize,
+                        borderRadius: 8,
+                        resizeMode: 'cover',
+                      }} 
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          );
+        })()}
           <MenuTrigger
             onLongPress={() => triggerHapticFeedback('impactMedium')}
             customStyles={{ triggerTouchable: { activeOpacity: 1 } }}

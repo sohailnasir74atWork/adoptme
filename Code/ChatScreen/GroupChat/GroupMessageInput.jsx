@@ -65,7 +65,7 @@ const GroupMessageInput = ({
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
-  const [imageUri, setImageUri] = useState(null);
+  const [imageUris, setImageUris] = useState([]); // Array to hold up to 3 images
 
   const { localState } = useLocalState();
   const { theme, user } = useGlobalState();
@@ -101,15 +101,25 @@ const GroupMessageInput = ({
     }
   }, []);
 
-  const handlePickImage = useCallback(() => {
+  const handlePickImage = useCallback(async () => {
     if (isBanned) return;
+
+    // Calculate how many more images can be selected
+    const currentCount = imageUris.length;
+    const maxImages = 3;
+    const remainingSlots = maxImages - currentCount;
+
+    if (remainingSlots <= 0) {
+      Alert.alert('Limit Reached', 'You can only select up to 3 images per message.');
+      return;
+    }
 
     launchImageLibrary(
       {
         mediaType: 'photo',
-        selectionLimit: 1,
+        selectionLimit: remainingSlots, // Allow selecting up to remaining slots
       },
-      (response) => {
+      async (response) => {
         if (!response || response.didCancel) return;
 
         if (response.errorCode) {
@@ -117,28 +127,68 @@ const GroupMessageInput = ({
           return;
         }
 
-        const asset = response.assets?.[0];
-        if (asset?.uri) {
-          setImageUri(asset.uri);
+        const assets = response.assets || [];
+        if (assets.length > 0) {
+          const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+          const validUris = [];
+          const rejectedCount = [];
+
+          // Check file size for each image
+          for (const asset of assets) {
+            if (!asset?.uri || typeof asset.uri !== 'string') continue;
+
+            try {
+              const filePath = asset.uri.replace('file://', '');
+              const fileInfo = await RNFS.stat(filePath);
+              const fileSize = fileInfo.size || 0;
+
+              if (fileSize > MAX_SIZE_BYTES) {
+                rejectedCount.push(asset.fileName || 'image');
+                continue;
+              }
+
+              validUris.push(asset.uri);
+            } catch (error) {
+              console.warn('Error checking file size:', error);
+              // If we can't check size, allow it (better UX than blocking)
+              validUris.push(asset.uri);
+            }
+          }
+
+          // Show alert if any images were rejected
+          if (rejectedCount.length > 0) {
+            Alert.alert(
+              'Image Too Large',
+              `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
+            );
+          }
+
+          // Add valid images to existing ones, but cap at 3 total
+          if (validUris.length > 0) {
+            setImageUris(prev => {
+              const combined = [...prev, ...validUris];
+              return combined.slice(0, maxImages); // Ensure we never exceed 3
+            });
+          }
         }
       }
     );
-  }, [isBanned]);
+  }, [isBanned, imageUris.length]);
 
   const handleSend = useCallback(async () => {
     if (isSending) return;
 
     const textToSend = input.trim();
-    const imageToSend = imageUri;
+    const imagesToSend = Array.isArray(imageUris) && imageUris.length > 0 ? [...imageUris] : [];
     const fruitsToSend = Array.isArray(selectedFruits) ? selectedFruits : [];
 
-    if (!textToSend && !imageToSend && fruitsToSend.length === 0) {
+    if (!textToSend && imagesToSend.length === 0 && fruitsToSend.length === 0) {
       return;
     }
 
     setIsSending(true);
     setInput('');
-    setImageUri(null);
+    setImageUris([]);
     if (setSelectedFruits && typeof setSelectedFruits === 'function') {
       setSelectedFruits([]);
     }
@@ -152,13 +202,20 @@ const GroupMessageInput = ({
     });
 
     try {
-      let imageUrl = null;
+      let imageUrls = [];
 
-      if (imageToSend) {
-        imageUrl = await uploadToBunny(imageToSend);
+      // Upload all images in parallel
+      if (imagesToSend.length > 0) {
+        const uploadPromises = imagesToSend.map(uri => uploadToBunny(uri));
+        imageUrls = await Promise.all(uploadPromises);
+        // Filter out any failed uploads (null values)
+        imageUrls = imageUrls.filter(url => url !== null);
       }
 
-      await onSend(textToSend, imageUrl, fruitsToSend, replyTo);
+      // Send single image URL if only one, or array if multiple
+      const imageUrlToSend = imageUrls.length === 1 ? imageUrls[0] : (imageUrls.length > 1 ? imageUrls : null);
+
+      await onSend(textToSend, imageUrlToSend, fruitsToSend, replyTo);
       
       // Clear reply after successful send
       if (onCancelReply) {
@@ -172,7 +229,7 @@ const GroupMessageInput = ({
     }
   }, [
     input,
-    imageUri,
+    imageUris,
     selectedFruits,
     isSending,
     onSend,
@@ -189,8 +246,8 @@ const GroupMessageInput = ({
   );
 
   const hasContent = useMemo(
-    () => (input || '').trim().length > 0 || !!imageUri || hasFruits,
-    [input, imageUri, hasFruits]
+    () => (input || '').trim().length > 0 || (Array.isArray(imageUris) && imageUris.length > 0) || hasFruits,
+    [input, imageUris, hasFruits]
   );
 
   // Get reply preview text
@@ -281,20 +338,31 @@ const GroupMessageInput = ({
         </TouchableOpacity>
       </View>
 
-      {/* Attached image indicator */}
-      {imageUri && (
+      {/* Attached images indicator */}
+      {Array.isArray(imageUris) && imageUris.length > 0 && (
         <View
           style={{
             paddingHorizontal: 10,
             paddingTop: 4,
             flexDirection: 'row',
             alignItems: 'center',
+            flexWrap: 'wrap',
           }}
         >
-          <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>1 image attached</Text>
-          <TouchableOpacity onPress={() => setImageUri(null)} style={{ marginLeft: 8 }}>
-            <Icon name="close-circle" size={18} color={isDark ? '#ccc' : '#555'} />
-          </TouchableOpacity>
+          <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12, marginRight: 8 }}>
+            {imageUris.length} image{imageUris.length > 1 ? 's' : ''} attached
+          </Text>
+          {imageUris.map((uri, index) => (
+            <TouchableOpacity
+              key={`${uri}-${index}`}
+              onPress={() => {
+                setImageUris(prev => prev.filter((_, i) => i !== index));
+              }}
+              style={{ marginLeft: 4 }}
+            >
+              <Icon name="close-circle" size={18} color={isDark ? '#ccc' : '#555'} />
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 

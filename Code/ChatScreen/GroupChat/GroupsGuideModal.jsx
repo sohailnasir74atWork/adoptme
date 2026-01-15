@@ -71,7 +71,7 @@ const GroupsGuideModal = ({ visible, onClose }) => {
               <Text style={[styles.sectionText, { color: isDarkMode ? '#D1D5DB' : '#4B5563' }]}>
                 • <Text style={styles.boldText}>One Group Limit:</Text> Each user can only be an admin/creator of one group at a time.{'\n\n'}
                 • <Text style={styles.boldText}>Minimum Members:</Text> A group must have at least 2 members (including yourself).{'\n\n'}
-                • <Text style={styles.boldText}>Maximum Members:</Text> Each group can have up to 15 members.{'\n\n'}
+                • <Text style={styles.boldText}>Maximum Members:</Text> Each group can have up to 50 members.{'\n\n'}
                 • <Text style={styles.boldText}>Group Admin:</Text> The creator is the admin. Admins can remove members and make other members admin.{'\n\n'}
                 • <Text style={styles.boldText}>Admin Transfer:</Text> If an admin (not creator) makes another member admin, they will revert to a regular member. The creator always remains admin.{'\n\n'}
                 • <Text style={styles.boldText}>Leaving Groups:</Text> Members can leave at any time. If an admin/creator leaves, a new admin is randomly selected. If the last member leaves, the group is deleted.{'\n\n'}

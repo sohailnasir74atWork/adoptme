@@ -533,6 +533,23 @@ platformBadge: {
   alignItems: 'center',
   justifyContent: 'center',
 },
-
+scrollToBottomButton: {
+  position: 'absolute',
+  bottom: 80,
+  right: 8,
+  marginTop: -24, // Half of icon size (48/2) to center it perfectly
+  zIndex: 1000,
+  elevation: 8, // For Android shadow
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+},
+scrollToBottomTouchable: {
+  borderRadius: 24,
+  // padding: 4,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
 
   });

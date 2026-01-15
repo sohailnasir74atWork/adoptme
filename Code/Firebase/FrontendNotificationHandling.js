@@ -57,9 +57,13 @@ const NotificationHandler = () => {
         const senderId = data?.senderId;
         const type = data?.taype;
 
-        if (localState?.bannedUsers?.includes(senderId)) {
-          // console.log('[Notification] Sender is banned, skipping:', senderId);
-          return;
+        // ✅ Filter out notifications from blocked users (client-side only)
+        if (senderId) {
+          const bannedUsersList = Array.isArray(localState?.bannedUsers) ? localState.bannedUsers : [];
+          if (bannedUsersList.includes(senderId)) {
+            // console.log('[Notification] Sender is banned, skipping:', senderId);
+            return; // Skip notification - user is blocked
+          }
         }
 
         if (!title || !body) {

@@ -494,9 +494,18 @@ export const GlobalStateProvider = ({ children }) => {
           await updateLocalState('data', JSON.stringify(json));
         } catch (err) {
           console.warn('⚠️ Non-GG CDN failed, fallback to Firebase:', err.message);
-          const snapshot = await get(ref(appdatabase, 'xlsData'));
-          const fallbackData = snapshot.exists() ? snapshot.val() : {};
-          await updateLocalState('data', JSON.stringify(fallbackData));
+          // ✅ OPTIMIZED: Only fetch from Firebase if localState.data is empty or very old
+          // This prevents downloading 21.87 MB repeatedly when CDN fails
+          const hasLocalData = localState.data && Object.keys(JSON.parse(localState.data || '{}')).length > 0;
+          const isDataOld = timeElapsed > 24 * 60 * 60 * 1000; // 24 hours
+          
+          if (!hasLocalData || isDataOld) {
+            const snapshot = await get(ref(appdatabase, 'xlsData'));
+            const fallbackData = snapshot.exists() ? snapshot.val() : {};
+            await updateLocalState('data', JSON.stringify(fallbackData));
+          } else {
+            console.log('✅ Using cached data instead of downloading from Firebase');
+          }
         }
 
         // 🔹 Fetch GG data

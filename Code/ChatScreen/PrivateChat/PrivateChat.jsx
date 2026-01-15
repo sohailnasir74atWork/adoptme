@@ -34,7 +34,8 @@ import ProfileBottomDrawer from '../GroupChat/BottomDrawer';
 
 
 
-const PAGE_SIZE = 15;
+const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
+const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
 const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
@@ -44,6 +45,7 @@ const PrivateChatScreen = ({route, bannedUsers, isDrawerVisible, setIsDrawerVisi
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isPaginating, setIsPaginating] = useState(false);
   const lastLoadedKeyRef = useRef(null);
   const [lastLoadedKey, setLastLoadedKey] = useState(null);
   const previousChatKeyRef = useRef(null); // ✅ Track previous chatKey to prevent unnecessary resets
@@ -94,13 +96,16 @@ const [isOnline, setIsOnline] = useState(false);
     }
   }, [messages, myUserId, selectedUserId]);
   
+  // ✅ FIRESTORE ONLY: Check if user already rated
   useEffect(() => {
-    if (!selectedUserId || !myUserId || !appdatabase) return;
+    if (!selectedUserId || !myUserId || !firestoreDB) return;
   
-    const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
-    ratingRef.once('value')
+    const reviewDocId = `${selectedUserId}_${myUserId}`; // toUser_fromUser
+    const reviewRef = doc(firestoreDB, "reviews", reviewDocId);
+    
+    getDoc(reviewRef)
       .then(snapshot => {
-        if (snapshot.exists()) {
+        if (snapshot.exists && snapshot.data()?.rating) {
           setHasRated(true);
         } else {
           setHasRated(false);
@@ -110,7 +115,7 @@ const [isOnline, setIsOnline] = useState(false);
         console.error("Error checking existing rating:", error);
         setHasRated(false);
       });
-  }, [selectedUserId, myUserId, appdatabase]);
+  }, [selectedUserId, myUserId, firestoreDB]);
   
   
   // ✅ Safety check for bannedUsers array
@@ -176,7 +181,7 @@ const [isOnline, setIsOnline] = useState(false);
       };
     }, [user?.id])
   );
-  // ✅ Memoize handleRating
+  // ✅ Memoize handleRating - FIRESTORE ONLY (no RTDB)
   const handleRating = useCallback(async () => {
     if (!rating || rating < 1 || rating > 5) {
       showErrorMessage("Error", "Please select a rating first.");
@@ -184,30 +189,31 @@ const [isOnline, setIsOnline] = useState(false);
     }
 
     // ✅ Safety checks
-    if (!selectedUserId || !myUserId || !appdatabase || !firestoreDB) {
+    if (!selectedUserId || !myUserId || !firestoreDB) {
       showErrorMessage("Error", "Missing required data. Please try again.");
       return;
     }
   
     try {
       setStartRating(true);
-      const ratingRef = ref(appdatabase, `ratings/${selectedUserId}/${myUserId}`);
-      const avgRef = ref(appdatabase, `averageRatings/${selectedUserId}`);
-  
-      const [oldRatingSnap, avgSnap] = await Promise.all([
-        ratingRef.once('value'),
-        avgRef.once('value'),
-      ]);
-  
-      const oldRating = oldRatingSnap.val()?.rating;
-      const avgData = avgSnap.val();
-      const oldAverage = avgData?.value || 0;
-      const oldCount = avgData?.count || 0;
+      
+      // ✅ FIRESTORE ONLY: Read existing rating from reviews collection
+      const reviewDocId = `${selectedUserId}_${myUserId}`; // toUser_fromUser
+      const reviewRef = doc(firestoreDB, "reviews", reviewDocId);
+      const existingReviewSnap = await getDoc(reviewRef);
+      const oldRating = existingReviewSnap.exists ? existingReviewSnap.data()?.rating : undefined;
+      
+      // ✅ FIRESTORE ONLY: Read current summary from user_ratings_summary
+      const summaryRef = doc(firestoreDB, 'user_ratings_summary', selectedUserId);
+      const summarySnap = await getDoc(summaryRef);
+      const summaryData = summarySnap.exists ? summarySnap.data() : null;
+      const oldAverage = summaryData?.averageRating || 0;
+      const oldCount = summaryData?.count || 0;
   
       let newAverage = 0;
       let newCount = oldCount;
   
-      if (oldRating !== undefined) {
+      if (oldRating !== undefined && oldRating !== null) {
         // 🔁 Updating existing rating
         newAverage = ((oldAverage * oldCount) - oldRating + rating) / oldCount;
       } else {
@@ -215,56 +221,57 @@ const [isOnline, setIsOnline] = useState(false);
         newCount = oldCount + 1;
         newAverage = ((oldAverage * oldCount) + rating) / newCount;
       }
-  
-      // ✅ Save rating in Realtime Database
-      await ratingRef.set({
-        rating,
-        timestamp: Date.now(),
-      });
-  
-      // ✅ Update average in Realtime Database
-      await avgRef.set({
-        value: parseFloat(newAverage.toFixed(2)),
-        count: newCount,
-        updatedAt: Date.now(),
-      });
-  
-      // ✅ Optional review in Firestore (using app Firestore: firestoreDB)
-// ✅ Optional review in Firestore (using app Firestore: firestoreDB)
-const trimmedReview = (reviewText || "").trim();
 
-let reviewWasSaved = false;
-let reviewWasUpdated = false;
+      // ✅ FIRESTORE ONLY: Update user_ratings_summary (single source of truth)
+      await setDoc(
+        summaryRef,
+        {
+          averageRating: parseFloat(newAverage.toFixed(2)),
+          count: newCount,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      
+      // ✅ FIRESTORE ONLY: Save/update rating in reviews collection (even without text review)
+      // This ensures we track who rated whom, even if they didn't write a review
+      const now = serverTimestamp();
+      const isUpdate = existingReviewSnap.exists;
+      
+      await setDoc(
+        reviewRef,
+        {
+          fromUserId: myUserId,
+          toUserId: selectedUserId,
+          rating,
+          userName: user?.displayName || user?.displayname || null,
+          createdAt: isUpdate ? existingReviewSnap.data()?.createdAt ?? now : now,
+          updatedAt: now,
+          edited: isUpdate,
+        },
+        { merge: true }
+      );
 
-if (trimmedReview) {
-  // one doc per (fromUser, toUser)
-  const reviewDocId = `${selectedUserId}_${myUserId}`; // toUser_fromUser
-  const reviewRef = doc(firestoreDB, "reviews", reviewDocId);
+      // ✅ Optional review text in Firestore
+      const trimmedReview = (reviewText || "").trim();
+      let reviewWasSaved = false;
+      let reviewWasUpdated = false;
 
-  const now = serverTimestamp();
+      if (trimmedReview) {
+        // Update review with text
+        await setDoc(
+          reviewRef,
+          {
+            review: trimmedReview,
+            updatedAt: now,
+            edited: isUpdate,
+          },
+          { merge: true }
+        );
 
-  // 🔍 check if this user already reviewed this trader
-  const existingSnap = await getDoc(reviewRef);
-  const isUpdate = existingSnap.exists;
-
-  await setDoc(
-    reviewRef,
-    {
-      fromUserId: myUserId,
-      toUserId: selectedUserId,
-      rating,
-      userName: user?.displayName || user?.displayname || null,
-      review: trimmedReview, // guaranteed non-empty here
-      createdAt: isUpdate ? existingSnap.data()?.createdAt ?? now : now,
-      updatedAt: now,
-      edited: isUpdate,
-    },
-    { merge: true }
-  );
-
-  reviewWasSaved = true;
-  reviewWasUpdated = isUpdate;
-}
+        reviewWasSaved = true;
+        reviewWasUpdated = isUpdate;
+      }
 
 // 🎉 feedback based on whether we actually saved a text review
 showSuccessMessage(
@@ -289,7 +296,7 @@ showSuccessMessage(
       showErrorMessage("Error", "Error submitting rating. Try again!");
       setStartRating(false);
     }
-  }, [rating, selectedUserId, myUserId, appdatabase, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints]);
+  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints]);
   
   
 
@@ -313,6 +320,8 @@ showSuccessMessage(
         // ✅ Only clear messages if we're actually resetting (chat changed or manual refresh)
         setMessages([]);
         lastLoadedKeyRef.current = null;
+      } else {
+        setIsPaginating(true);
       }
   
       try {
@@ -324,8 +333,10 @@ showSuccessMessage(
           query = query.endAt(lastKey);
         }
   
-        // ✅ apply limit ONLY ONCE, at the end
-        query = query.limitToLast(PAGE_SIZE);
+        // ✅ Apply limit ONLY ONCE, at the end
+        // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
+        const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
+        query = query.limitToLast(limitSize);
 
   
         const snapshot = await query.once('value');
@@ -340,6 +351,9 @@ showSuccessMessage(
           if (reset) {
             // Only clear if we explicitly reset (manual refresh or chat change)
             // This prevents accidental clearing
+          } else {
+            // ✅ No more messages to load - set ref to null to prevent further pagination
+            lastLoadedKeyRef.current = null;
           }
           return;
         }
@@ -366,6 +380,7 @@ showSuccessMessage(
         console.warn('Error loading messages:', err);
       } finally {
         if (reset) setLoading(false);
+        setIsPaginating(false);
       }
     },
     [messagesRef],
@@ -395,9 +410,13 @@ showSuccessMessage(
   }, [chatKey, messagesRef, loadMessages]);
   
   const handleLoadMore = useCallback(() => {
+    // ✅ Prevent loading if already paginating or no more messages
+    if (isPaginating || !lastLoadedKeyRef.current) {
+      return;
+    }
     // explicitly say "this is NOT a reset"
     loadMessages(false);
-  }, [loadMessages]);
+  }, [loadMessages, isPaginating]);
   // ✅ Memoize groupItems
   const groupItems = useCallback((items) => {
     if (!Array.isArray(items)) return [];
@@ -469,7 +488,8 @@ showSuccessMessage(
   // ✅ Memoize sendMessage
   const sendMessage = useCallback(async (text, image, fruits) => {
     const trimmedText = (text || '').trim(); // safe guard
-    const hasImage = !!image;
+    // Handle both single image (string) and multiple images (array)
+    const hasImage = !!image && (typeof image === 'string' || (Array.isArray(image) && image.length > 0));
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
   
     // ✅ Validate fruits count - maximum 18 fruits allowed
@@ -489,6 +509,10 @@ showSuccessMessage(
       showErrorMessage(t("home.alert.error"), "Missing required data. Please try again.");
       return;
     }
+
+    // ⚠️ NOTE: Block prevention check is missing here
+    // Currently, blocked users can still send messages (they're just filtered on receiver's side)
+    // See BLOCK_FUNCTIONALITY_ANALYSIS.md for details and recommended solution
 
     setInput(''); // clear input, image & fruits already cleared in PrivateMessageInput
   
@@ -510,7 +534,13 @@ showSuccessMessage(
     };
   
     if (hasImage) {
-      messageData.imageUrl = image;      // 👈 used in PrivateMessageList
+      // Store as array if multiple images, single string if one image
+      if (Array.isArray(image)) {
+        messageData.imageUrls = image; // Array of image URLs
+        messageData.imageUrl = image[0]; // Keep first for backward compatibility
+      } else {
+        messageData.imageUrl = image; // Single image URL
+      }
     }
   
     if (hasFruits) {
@@ -518,9 +548,10 @@ showSuccessMessage(
     }
   
     // What to show as last message in chat list
+    const imageCount = Array.isArray(image) ? image.length : (image ? 1 : 0);
     const lastMessagePreview =
       trimmedText ||
-      (hasImage ? '📷 Photo' : hasFruits ? `🐾 ${fruits.length} pet(s)` : '');
+      (hasImage ? (imageCount > 1 ? `📷 ${imageCount} Photos` : '📷 Photo') : hasFruits ? `🐾 ${fruits.length} pet(s)` : '');
   
     try {
       // Save the message
@@ -594,9 +625,15 @@ showSuccessMessage(
 
 
 
+// ✅ OPTIMIZED: Only listen to the newest message to avoid duplicate reads
+// This prevents child_added from firing for all existing messages when listener is attached
 useEffect(() => {
   if (!messagesRef) return;
 
+  // ✅ Use limitToLast(1) to only listen to the newest message
+  // This ensures we only get NEW messages, not all existing ones
+  const limitedRef = messagesRef.limitToLast(1);
+  
   const handleChildAdded = snapshot => {
     if (!snapshot || !snapshot.key) return;
     const data = snapshot.val();
@@ -617,11 +654,11 @@ useEffect(() => {
     });
   };
 
-  messagesRef.on('child_added', handleChildAdded);
+  const listener = limitedRef.on('child_added', handleChildAdded);
 
   return () => {
-    if (messagesRef) {
-      messagesRef.off('child_added', handleChildAdded);
+    if (limitedRef) {
+      limitedRef.off('child_added', listener);
     }
   };
 }, [messagesRef]);

@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Image,
   Alert,
-  useColorScheme,
+  Pressable,
 } from 'react-native';
 import {
    collection,
@@ -28,6 +28,7 @@ import { useNavigation } from '@react-navigation/native';
 import InterstitialAdManager from '../../Ads/IntAd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { validateContent } from '../../Helper/ContentModeration';
 
 dayjs.extend(relativeTime);
 
@@ -94,6 +95,13 @@ const CommentModal = ({ visible, onClose, postId }) => {
       Alert.alert('Error', 'Cannot post comment right now. Please try again.');
       return;
     }
+
+    // ✅ Content moderation: Check comment for inappropriate content
+    const contentValidation = validateContent(text);
+    if (!contentValidation.isValid) {
+      Alert.alert('Content Not Allowed', contentValidation.reason || 'Your comment contains inappropriate content.');
+      return;
+    }
     const comment = {
       userId: user.id,
       displayName: user.displayName || 'Guest User',
@@ -138,7 +146,13 @@ const CommentModal = ({ visible, onClose, postId }) => {
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalBackground}>
+        {/* Backdrop */}
+        <Pressable style={styles.backdrop} onPress={onClose} />
+
+        {/* Bottom sheet */}
         <View style={[styles.modalContent, isDarkMode && styles.darkContent]}>
+          <View style={styles.sheetHandle} />
+
           <FlatList
             data={comments}
             keyExtractor={(item) => item.id}
@@ -174,18 +188,30 @@ const CommentModal = ({ visible, onClose, postId }) => {
 const styles = StyleSheet.create({
   modalBackground: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
   },
   modalContent: {
     backgroundColor: 'white',
-    margin: 20,
-    borderRadius: 10,
-    padding: 10,
-    maxHeight: '80%',
+    padding: 12,
+    paddingTop: 8,
+    maxHeight: '85%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   darkContent: {
     backgroundColor: '#1e1e1e',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#bbb',
+    marginBottom: 10,
   },
   comment: {
     flexDirection: 'row',

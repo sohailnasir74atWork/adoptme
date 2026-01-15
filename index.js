@@ -13,6 +13,7 @@ import { LanguageProvider } from './Code/Translation/LanguageProvider';
 
 // 🔁 MODULAR Firebase Messaging imports
 import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
+import { MMKV } from 'react-native-mmkv';
 
 import FlashMessage from 'react-native-flash-message';
 
@@ -32,10 +33,50 @@ const GlobalInviteToast = lazy(() =>
 // ✅ Create a messaging instance (default Firebase app)
 const messaging = getMessaging();
 
+// ✅ Create MMKV storage instance for background access
+const storage = new MMKV();
+
+// ✅ Helper function to safely parse JSON from storage
+const safeParseJSON = (key, defaultValue) => {
+  try {
+    const value = storage.getString(key);
+    return value ? JSON.parse(value) : defaultValue;
+  } catch (error) {
+    return defaultValue;
+  }
+};
+
 // ✅ Background Notification Handler (modular API)
+// Filters out notifications from blocked users even when app is closed
 setBackgroundMessageHandler(messaging, async remoteMessage => {
-  // handle background notification (optional)
-  // console.log('📩 Background message:', remoteMessage);
+  try {
+    if (!remoteMessage) {
+      return; // No message, nothing to process
+    }
+
+    const { notification, data } = remoteMessage || {};
+    const senderId = data?.senderId;
+
+    // ✅ Filter out notifications from blocked users (client-side only)
+    if (senderId) {
+      // Read bannedUsers directly from MMKV storage (works in background)
+      const bannedUsers = safeParseJSON('bannedUsers', []);
+      
+      if (Array.isArray(bannedUsers) && bannedUsers.includes(senderId)) {
+        // User is blocked - don't show notification
+        // console.log('[Background] Sender is banned, skipping notification:', senderId);
+        return; // Return early to prevent notification display
+      }
+    }
+
+    // If not blocked, notification will be shown by the OS
+    // Note: We can't prevent OS-level notifications completely in background,
+    // but this handler prevents processing, which helps with some notification types
+    // console.log('[Background] Notification allowed:', senderId);
+  } catch (error) {
+    // Silently handle errors to prevent crashes
+    // console.error('[Background] Error processing notification:', error);
+  }
 });
 
 // 🧠 Calculate StatusBar height (Android vs iOS)

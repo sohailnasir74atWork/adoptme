@@ -24,7 +24,7 @@ import {
   onSnapshot,
   addDoc,
   writeBatch,
-  deleteField,       
+  deleteField,
 
 } from '@react-native-firebase/firestore';
 
@@ -64,6 +64,7 @@ const DesignFeedScreen = ({ route }) => {
   const [bannedUsers, setBannedUsers] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [lastPostTime, setLastPostTime] = useState(null);
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const AD_FREQUENCY = 5;
 
   useEffect(() => {
@@ -301,7 +302,6 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-
   const handleLike = async (post) => {
     const postRef = doc(firestoreDB, 'designPosts', post.id);
     const alreadyLiked = !!post.likes?.[user.id];
@@ -311,58 +311,109 @@ const DesignFeedScreen = ({ route }) => {
     });
   };
 
-  const handleUploadPost = async (desc, imageUrl, selectedTags, currentUserEmail) => {
-    if (!user?.id) return;
-    
-    // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
-    const now = Date.now();
-    const COOLDOWN_MS = 120000; // 2 minutes
-    if (lastPostTime && (now - lastPostTime) < COOLDOWN_MS) {
-      const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastPostTime)) / 1000);
-      const minutesLeft = Math.floor(secondsLeft / 60);
-      const remainingSeconds = secondsLeft % 60;
-      const timeMessage = minutesLeft > 0 
-        ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
-        : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
-      showMessage({ 
-        message: `Please wait ${timeMessage} before posting again.`, 
-        type: 'danger',
-        duration: 3000
-      });
+  const handleUploadPost = async (desc, imageUrls, selectedTags, currentUserEmail) => {
+    // ✅ Prevent multiple submissions - check if already submitting
+    if (isSubmittingPost) {
       return;
     }
     
-    // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
-    const hasRecentWin =
-      typeof user?.lastGameWinAt === 'number' &&
-      now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+    if (!user?.id) return;
     
-    const post = {
-      imageUrl,
-      desc,
-      userId: user.id,
-      displayName: user.displayName,
-      avatar: user.avatar,
-      createdAt: serverTimestamp(),
-      likes: {},
-      selectedTags,
-      email: currentUserEmail,
-      report: false,
-      flage: user.flage ? user.flage : null,
-      robloxUsername: user?.robloxUsername || null,
-      robloxUsernameVerified: user?.robloxUsernameVerified || false,
-      hasRecentGameWin: hasRecentWin, // ✅ Game win info
-      lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
-
-    };
-    await addDoc(collection(firestoreDB, 'designPosts'), post);
+    // ✅ Set submitting state IMMEDIATELY to prevent duplicate submissions
+    setIsSubmittingPost(true);
     
-    // ✅ Update last post time after successful upload
-    setLastPostTime(now);
-    
-    // ✅ Refresh feed after posting
-    setRefreshing(true);
-    fetchInitialPosts();
+    try {
+      // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
+      const now = Date.now();
+      const COOLDOWN_MS = 120000; // 2 minutes
+      if (lastPostTime && (now - lastPostTime) < COOLDOWN_MS) {
+        const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastPostTime)) / 1000);
+        const minutesLeft = Math.floor(secondsLeft / 60);
+        const remainingSeconds = secondsLeft % 60;
+        const timeMessage = minutesLeft > 0 
+          ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
+          : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
+        showMessage({ 
+          message: `Please wait ${timeMessage} before posting again.`, 
+          type: 'danger',
+          duration: 3000
+        });
+        setIsSubmittingPost(false);
+        throw new Error('Cooldown period not elapsed'); // ✅ Throw error to prevent clearing form
+      }
+      // ✅ Tags are mandatory
+      if (!selectedTags || (Array.isArray(selectedTags) && selectedTags.length === 0)) {
+        showMessage({
+          message: 'Missing Tag',
+          description: 'Please select at least one tag.',
+          type: 'danger',
+        });
+        setIsSubmittingPost(false);
+        throw new Error('Missing tags'); // ✅ Throw error to prevent clearing form
+      }
+      
+      // Ensure imageUrls is an array (PostCard expects imageUrl as array)
+      const imageUrlArray = Array.isArray(imageUrls) 
+        ? imageUrls.filter(url => url && typeof url === 'string' && url.trim().length > 0)
+        : (imageUrls && typeof imageUrls === 'string' && imageUrls.trim().length > 0 ? [imageUrls] : []);
+      
+      // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
+      const hasRecentWin =
+        typeof user?.lastGameWinAt === 'number' &&
+        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+      
+      // ✅ Images are optional - posts can have text only, images only, or both
+      // ✅ Tags are always required and must be saved to database
+      const post = {
+        imageUrl: imageUrlArray.length > 0 ? imageUrlArray : [], // PostCard expects imageUrl as array
+        desc: (desc && desc.trim()) || "",
+        userId: user?.id || "Anonymous",
+        displayName: user?.displayName || "Anonymous",
+        avatar: user?.avatar || null,
+        createdAt: serverTimestamp(),
+        likes: {},
+        selectedTags: Array.isArray(selectedTags) && selectedTags.length > 0 
+          ? selectedTags 
+          : (selectedTags ? [selectedTags] : ['Discussion']), // ✅ Always ensure tags exist
+        email: currentUserEmail || null,
+        report: false,
+        flage: user?.flage || null,
+        robloxUsername: user?.robloxUsername || null,
+        robloxUsernameVerified: user?.robloxUsernameVerified || false,
+        hasRecentGameWin: hasRecentWin, // ✅ Game win info
+        lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
+      };
+      
+      await addDoc(collection(firestoreDB, 'designPosts'), post);
+      
+      // ✅ Update last post time after successful upload
+      setLastPostTime(now);
+      
+      // ✅ Refresh feed after posting
+      setRefreshing(true);
+      await fetchInitialPosts();
+      
+      showMessage({
+        message: 'Success',
+        description: 'Post created successfully',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('Error uploading post:', error);
+      // ✅ Only show error message if it's not a validation error (cooldown/tags)
+      if (!error.message || (!error.message.includes('Cooldown') && !error.message.includes('tags'))) {
+        showMessage({
+          message: 'Upload Failed',
+          description: 'Something went wrong. Please try again.',
+          type: 'danger',
+        });
+      }
+      // ✅ Re-throw error so UploadModal can handle it and prevent form clearing
+      throw error;
+    } finally {
+      // ✅ Always reset submitting state, even if there was an error
+      setIsSubmittingPost(false);
+    }
   };
   
   const renderItem = ({ item, index }) => {

@@ -18,7 +18,7 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
-import { addDoc, collection, serverTimestamp } from '@react-native-firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 
 const GRID_STEPS = [9, 12, 15, 18];
@@ -91,7 +91,7 @@ const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
 const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
 
   const [fruitRecords, setFruitRecords] = useState([]);
-  const [selectedPetType, setSelectedPetType] = useState('ALL');
+  const [selectedPetType, setSelectedPetType] = useState('INVENTORY');
   // const [wantsItems, setWantsItems] = useState(INITIAL_ITEMS);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedSection, setSelectedSection] = useState(null);
@@ -100,6 +100,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const [wantsTotal, setWantsTotal] = useState(0);
   const { triggerHapticFeedback } = useHaptic();
   const { localState, updateLocalState } = useLocalState();
+  // ✅ State for item selections (value types, fly, ride) for favorites
+  const [itemSelections, setItemSelections] = useState({});
   const [modalVisible, setModalVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
@@ -149,8 +151,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
   const CATEGORIES = useMemo(() => {
     return localState.isGG
-      ? ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS', 'FAVORITES', ]
-      : ['ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR','STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'FAVORITES'];
+      ? ['INVENTORY', 'ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS']
+      : ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR','STROLLERS', 'OTHER', 'FOOD', 'GIFTS'];
   }, [localState.isGG]);
 
   const tradeStatus = useMemo(() =>
@@ -196,18 +198,22 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   }, [triggerHapticFeedback]);
   
 
-  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+  // ✅ getImageUrl - No longer needs fallback since favorites now use current data
+  const getImageUrl = useCallback((item, isGG, baseImgUrl, baseImgUrlGG) => {
     if (!item || !item.name) return '';
 
     if (isGG) {
       const encoded = encodeURIComponent(item.name);
-      // console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
       return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
     }
 
-    if (!item.image || !baseImgUrl) return '';
-    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-  };
+    // For non-GG mode, check if item has image property
+    if (item.image && baseImgUrl) {
+      return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+    }
+
+    return '';
+  }, []);
 
 
   const updateTotal = useCallback((item, section, add = true, isNew = false) => {
@@ -422,18 +428,32 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       return updated;
     });
   }, [isSharkMode, updateItemsForMode]); // ✅ Removed hasItems/wantsItems from deps to prevent infinite loop
-  // Add toggleFavorite function
+  // Add toggleFavorite function - Save only identifiers (name, type, id) for favorites
   const toggleFavorite = useCallback((item) => {
-    if (!item) return;
+    if (!item || !item.name) return;
 
     const currentFavorites = localState.favorites || [];
-    const isFavorite = currentFavorites.some(fav => fav.id === item.id);
+    // ✅ Save only identifiers to keep favorites updated with latest values
+    const favoriteIdentifier = {
+      name: item.name,
+      type: item.type,
+      id: item.id,
+    };
+    
+    const isFavorite = currentFavorites.some(
+      fav => (fav.id && fav.id === item.id) || 
+             (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
+    );
 
     let newFavorites;
     if (isFavorite) {
-      newFavorites = currentFavorites.filter(fav => fav.id !== item.id);
+      // Remove by matching id or name+type
+      newFavorites = currentFavorites.filter(
+        fav => !((fav.id && fav.id === item.id) || 
+                 (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase()))
+      );
     } else {
-      newFavorites = [...currentFavorites, item];
+      newFavorites = [...currentFavorites, favoriteIdentifier];
     }
 
     updateLocalState('favorites', newFavorites);
@@ -453,18 +473,37 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
   // Step 3: Use optimized filteredData
   const filteredData = useMemo(() => {
-    const list = selectedPetType === 'FAVORITES'
-      ? (localState.favorites || []).map(item => ({
-        ...item,
-        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
-      }))
-      : memoizedFruitRecords;
+    let list;
+    if (selectedPetType === 'INVENTORY') {
+      // ✅ Match favorite identifiers with current fruitRecords to get latest data
+      const favoriteIdentifiers = localState.favorites || [];
+      list = favoriteIdentifiers
+        .map(favIdentifier => {
+          // Find matching item in fruitRecords by id or name+type
+          const foundItem = memoizedFruitRecords.find(
+            item => item && (
+              (favIdentifier.id && item.id === favIdentifier.id) ||
+              (favIdentifier.name && item.name && 
+               item.name.toLowerCase() === favIdentifier.name.toLowerCase() &&
+               favIdentifier.type && item.type &&
+               item.type.toLowerCase() === favIdentifier.type.toLowerCase())
+            )
+          );
+          return foundItem || null;
+        })
+        .filter(Boolean) // Remove nulls (items that no longer exist)
+        .map(item => ({
+          ...item,
+          cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
+        }));
+    } else {
+      list = memoizedFruitRecords;
+    }
     return list
       .filter(item => {
-
         if (!item?.type) return false;
         const matchesSearch = item.name.toLowerCase().includes(debouncedSearchText.toLowerCase());
-        const matchesType = selectedPetType === 'FAVORITES' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
+        const matchesType = selectedPetType === 'INVENTORY' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
         return matchesSearch && matchesType;
       })
       .sort((a, b) => (b.cachedValue || 0) - (a.cachedValue || 0));
@@ -480,62 +519,215 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     localState.isGG,
     factor // ✅ Added missing dependency
   ]);
-  // Update renderGridItem to handle favorites mode
-  const renderGridItem = useCallback(({ item }) => (
-    <TouchableOpacity
-      style={styles.gridItem}
-      onPress={() => {
-        if (isAddingToFavorites) {
-          toggleFavorite(item);
-        } else {
-          selectItem(item);
-        }
-      }}
-    >
+  // ✅ Handler for badge presses in favorites (N, M, D, R, F)
+  const handleFavoriteBadgePress = useCallback((itemId, badge) => {
+    triggerHapticFeedback('impactLight');
+    setItemSelections(prev => {
+      const currentSelection = prev[itemId] || { valueType: 'd', isFly: false, isRide: false };
+      const newSelection = { ...currentSelection };
 
+      switch (badge) {
+        case 'F': newSelection.isFly = !currentSelection.isFly; break;
+        case 'R': newSelection.isRide = !currentSelection.isRide; break;
+        default: newSelection.valueType = badge.toLowerCase();
+      }
 
-      <Image
-        source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+      return { ...prev, [itemId]: newSelection };
+    });
+  }, [triggerHapticFeedback]);
 
+  // ✅ BadgeButton component for favorites
+  const BadgeButton = useCallback(({ badge, isActive, onPress }) => {
+    let activeColor;
+    if (badge === 'M') activeColor = '#9b59b6';
+    else if (badge === 'N') activeColor = '#2ecc71';
+    else if (badge === 'D') activeColor = '#FF6666';
+    else if (badge === 'F') activeColor = '#3498db';
+    else if (badge === 'R') activeColor = '#e74c3c';
 
-        style={styles.gridItemImage}
-      />
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        style={[
+          styles.favoriteBadgeButton,
+          isActive && [styles.favoriteBadgeButtonActive, { backgroundColor: activeColor }]
+        ]}
+      >
+        <Text style={[styles.favoriteBadgeButtonText, isActive && styles.favoriteBadgeButtonTextActive]}>
+          {badge}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, []);
+
+  // ✅ Render favorite item in row layout (one per row) - matching ValueScreen.js
+  const renderFavoriteItem = useCallback(({ item }) => {
+    const imageUrl = getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG);
+    const itemSelection = itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
+    const currentValue = getItemValue(
+      item,
+      itemSelection.valueType,
+      itemSelection.isFly,
+      itemSelection.isRide,
+      isSharkMode,
+      localState.isGG,
+      factor
+    );
+
+    const hideBadgeForType = !localState.isGG 
+      ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS']
+      : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+    const showBadges = !hideBadgeForType.includes(item.type?.toUpperCase());
+
+    // Handler to add item to calculator
+    const handleAddToCalculator = () => {
+      if (!selectedSection) return;
+      triggerHapticFeedback('impactLight');
+      
+      const selectedItem = {
+        ...item,
+        selectedValue: currentValue,
+        valueType: itemSelection.valueType,
+        isFly: itemSelection.isFly,
+        isRide: itemSelection.isRide,
+      };
+
+      const nextHasItems = [...hasItems];
+      const nextWantsItems = [...wantsItems];
+      const targetArray = selectedSection === 'has' ? nextHasItems : nextWantsItems;
+      let nextEmptyIndex = targetArray.indexOf(null);
+
+      if (nextEmptyIndex === -1) return;
+
+      targetArray[nextEmptyIndex] = selectedItem;
+      updateTotal(selectedItem, selectedSection === 'has' ? 'has' : 'wants', true, true);
+      maybeExpandGrid(nextHasItems, nextWantsItems);
+      setIsDrawerVisible(false);
+    };
+
+    return (
+      <View style={styles.favoriteRowItem}>
+        {/* Left side: Image and Info (clickable to add to calculator) */}
+        <TouchableOpacity
+          style={styles.favoriteClickableArea}
+          onPress={handleAddToCalculator}
+          activeOpacity={0.7}
+        >
+          <View style={styles.favoriteImageContainer}>
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} style={styles.favoriteItemImage} />
+            ) : (
+              <View style={[styles.favoriteItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
+              <Icon name="image-outline" size={18} color={isDarkMode ? '#666' : '#999'} />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.favoriteItemInfo}>
+            <Text style={styles.favoriteItemName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.favoriteItemValue}>Value: {Number(currentValue).toLocaleString()}</Text>
+            {item.rarity && (
+              <Text style={styles.favoriteItemRarity}>{item.rarity}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {/* Badges container (below image/info) */}
+        {showBadges && (
+          <View style={styles.favoriteBadgesContainer}>
+            {VALUE_TYPES.map((badge) => (
+              <BadgeButton
+                key={badge}
+                badge={badge}
+                isActive={itemSelection.valueType === badge.toLowerCase()}
+                onPress={() => handleFavoriteBadgePress(item.id, badge)}
+              />
+            ))}
+            {MODIFIERS.map((badge) => (
+              <BadgeButton
+                key={badge}
+                badge={badge}
+                isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
+                onPress={() => handleFavoriteBadgePress(item.id, badge)}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Right side: Delete button (only removes from favorites) */}
+        <TouchableOpacity
+          style={styles.favoriteDeleteButton}
+          activeOpacity={0.8}
+          onPress={() => {
+            triggerHapticFeedback('impactLight');
+            toggleFavorite(item);
+          }}
+        >
+          <Icon name="close-circle" size={20} color="#e74c3c" />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [itemSelections, localState.isGG, localState.imgurl, localState.imgurlGG, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, toggleFavorite, isDarkMode, getImageUrl, getItemValue, handleFavoriteBadgePress, BadgeButton]);
+
+  // Update renderGridItem to handle non-favorites mode
+  const renderGridItem = useCallback(({ item }) => {
+    const imageUrl = getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG);
+    const isFavorite = (localState.favorites || []).some(
+      fav => (fav.id && fav.id === item.id) || 
+             (fav.name && fav.name.toLowerCase() === item.name?.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
+    );
+    
+    return (
+      <TouchableOpacity
+        style={styles.gridItem}
+        onPress={() => {
+          if (isAddingToFavorites) {
+            // When in "add to favorites" mode, clicking toggles favorite
+            toggleFavorite(item);
+          } else {
+            // Normal mode: clicking adds item to calculator
+            selectItem(item);
+          }
+        }}
+      >
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.gridItemImage}
+          />
+        ) : (
+          <View style={[styles.gridItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
+            <Icon name="image-outline" size={30} color={isDarkMode ? '#666' : '#999'} />
+          </View>
+        )}
       <Text numberOfLines={1} style={styles.gridItemText}>
         {item.name}
       </Text>
       {isAddingToFavorites && (
         <TouchableOpacity
           style={styles.favoriteButton}
-          onPress={() => toggleFavorite(item)}
+          activeOpacity={0.8}
+          onPress={() => {
+            toggleFavorite(item);
+          }}
         >
           <Icon
-            name={(localState.favorites || []).some(fav => fav.id === item.id) ? "heart" : "heart-outline"}
+            name={isFavorite ? "heart" : "heart-outline"}
             size={20}
-            color={(localState.favorites || []).some(fav => fav.id === item.id) ? "#e74c3c" : "#666"}
+            color={isFavorite ? "#e74c3c" : "#666"}
           />
         </TouchableOpacity>
       )}
-      {selectedPetType === 'FAVORITES' && (
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => toggleFavorite(item)}
-        >
-          <Icon
-            name="close-circle"
-            size={20}
-            color="#e74c3c"
-          />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  ), [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, selectedPetType]);
+      </TouchableOpacity>
+    );
+  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.isGG, localState.imgurl, localState.imgurlGG, isDarkMode]);
 
   // Update renderFavoritesHeader function
   const renderFavoritesHeader = useCallback(() => {
-    if (selectedPetType === 'FAVORITES') {
+    if (selectedPetType === 'INVENTORY') {
       return (
         <View style={styles.favoritesHeader}>
-          <Text style={styles.favoritesTitle}>Your Favorites</Text>
+          <Text style={styles.favoritesTitle}>My Inventory</Text>
         </View>
       );
     }
@@ -544,7 +736,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
   // Update renderFavoritesFooter function
   const renderFavoritesFooter = useCallback(() => {
-    if (selectedPetType === 'FAVORITES') {
+    if (selectedPetType === 'INVENTORY') {
       return (
         <View style={styles.badgeContainer}>
           <TouchableOpacity
@@ -555,7 +747,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
             }}
           >
             <Icon name="add-circle" size={30} color={config.colors.hasBlockGreen} />
-            <Text style={styles.addToFavoritesText}>Add Items to Favorites</Text>
+            <Text style={styles.addToFavoritesText}>Add Items to Inventory</Text>
           </TouchableOpacity>
         </View>
       );
@@ -569,11 +761,15 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
 
   // Optimize FlatList performance
-  const getItemLayout = useCallback((data, index) => ({
-    length: 100, // Approximate height of each item
-    offset: 100 * index,
-    index,
-  }), []);
+  const getItemLayout = useCallback((data, index) => {
+    // For favorites: row layout with larger height, for grid: smaller height
+    const itemHeight = selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 100 : 100;
+    return {
+      length: itemHeight,
+      offset: itemHeight * index,
+      index,
+    };
+  }, [selectedPetType, isAddingToFavorites]);
 
 
 
@@ -666,12 +862,42 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
     setIsSubmitting(true);
     try {
-      const database = getDatabase();
-      const avgRatingSnap = await ref(database, `averageRatings/${user?.id}`).once('value');
-      const avgRatingData = avgRatingSnap.val();
-
-      const userRating = avgRatingData?.value || null;
-      const ratingCount = avgRatingData?.count || 0;
+      // ✅ FIRESTORE ONLY: Read rating summary from user_ratings_summary (single source of truth)
+      let userRating = null;
+      let ratingCount = 0;
+      
+      if (firestoreDB && user?.id) {
+        const summaryDocSnap = await getDoc(doc(firestoreDB, 'user_ratings_summary', user.id));
+        if (summaryDocSnap.exists) {
+          const summaryData = summaryDocSnap.data();
+          userRating = summaryData.averageRating || null;
+          ratingCount = summaryData.count || 0;
+        } else {
+          // ✅ ONE-TIME MIGRATION: If Firestore summary doesn't exist, check RTDB and migrate (legacy data only)
+          // This is a temporary migration path for existing data. New ratings only use Firestore.
+          const database = getDatabase();
+          const avgRatingSnap = await ref(database, `averageRatings/${user.id}`).once('value');
+          const avgRatingData = avgRatingSnap.val();
+          
+          if (avgRatingData) {
+            userRating = avgRatingData.value || null;
+            ratingCount = avgRatingData.count || 0;
+            
+            // ✅ ONE-TIME MIGRATION: Copy to Firestore (async, don't wait)
+            if (userRating || ratingCount > 0) {
+              setDoc(
+                doc(firestoreDB, 'user_ratings_summary', user.id),
+                {
+                  averageRating: userRating || 0,
+                  count: ratingCount || 0,
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).catch(err => console.error('Error migrating rating summary to Firestore:', err));
+            }
+          }
+        }
+      }
       const now = Date.now(); // ✅ Use Date.now() for cooldown comparison
       const timestamp = serverTimestamp(); // ✅ Use serverTimestamp() for Firestore
 
@@ -1149,7 +1375,11 @@ await addDoc(tradesCollection, newTrade);
               </View>
 
               <View style={styles.drawerContent}>
-                <View style={styles.categoryList}>
+                <ScrollView 
+                  showsVerticalScrollIndicator={false}
+                  style={styles.categoryListScroll}
+                  contentContainerStyle={styles.categoryList}
+                >
                   {CATEGORIES.map((category) => (
                     <TouchableOpacity
                       key={category}
@@ -1159,8 +1389,13 @@ await addDoc(tradesCollection, newTrade);
                       ]}
                       onPress={() => {
                         setSelectedPetType(category);
-                        if (category !== 'FAVORITES') {
+                        if (category !== 'INVENTORY') {
                           setIsAddingToFavorites(false);
+                        } else {
+                          // ✅ Force refresh when switching to INVENTORY tab
+                          setIsAddingToFavorites(false);
+                          // Trigger a re-render by updating a dummy state
+                          // The filteredData will recalculate because it depends on localState.favorites
                         }
                       }}
                     >
@@ -1170,22 +1405,23 @@ await addDoc(tradesCollection, newTrade);
                       ]}>{category}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
 
                 <View style={styles.gridContainer}>
                   {renderFavoritesHeader()}
                   <FlatList
+                    key={`${selectedPetType}-${isAddingToFavorites ? 'add' : 'view'}-${(localState.favorites || []).length}`}
                     data={filteredData}
                     keyExtractor={keyExtractor}
-                    renderItem={renderGridItem}
-                    numColumns={3}
+                    renderItem={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? renderFavoriteItem : renderGridItem}
+                    numColumns={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 1 : 3}
                     initialNumToRender={12}
                     maxToRenderPerBatch={12}
                     windowSize={5}
                     removeClippedSubviews={true}
-                    getItemLayout={getItemLayout}
+                    getItemLayout={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? undefined : getItemLayout}
                   />
-                  {selectedPetType === 'FAVORITES' ? renderFavoritesFooter() : (
+                  {selectedPetType === 'INVENTORY' ? renderFavoritesFooter() : (
                     <View style={styles.badgeContainer}>
                       {VALUE_TYPES.map((badge) => (
                         <TouchableOpacity
@@ -1520,23 +1756,29 @@ const getStyles = (isDarkMode,isGG) =>
       flex: 1,
       flexDirection: 'row',
     },
-    categoryList: {
-      width: '30%',
+    categoryListScroll: {
+      maxWidth: '25%',
+      width: '25%',
       paddingRight: 12,
     },
+    categoryList: {
+      paddingVertical: 2,
+    },
     categoryButton: {
-      marginVertical: 4,
-      paddingVertical: 12,
-      paddingHorizontal: 8,
+      marginVertical: 2,
+      marginHorizontal: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 6,
       backgroundColor: '#f0f0f0',
-      borderRadius: 12,
+      borderRadius: 6,
       alignItems: 'center',
+      minWidth: 40,
     },
     categoryButtonActive: {
       backgroundColor: '#FF9999',
     },
     categoryButtonText: {
-      fontSize: 13,
+      fontSize: 10,
       fontWeight: '600',
       color: '#666',
     },
@@ -1544,6 +1786,8 @@ const getStyles = (isDarkMode,isGG) =>
       color: '#fff',
     },
     gridContainer: {
+      flex: 1,
+      flexShrink: 1,
       flex: 1,
       // paddingBottom: 60,
     },
@@ -1802,6 +2046,100 @@ const getStyles = (isDarkMode,isGG) =>
     itemBadgeNeon: {
       backgroundColor: '#2ecc71',
     },
+    // ✅ Favorites row layout styles - matching ValueScreen.js (compact version)
+    favoriteRowItem: {
+      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+      borderRadius: 6,
+      marginHorizontal: 4,
+      marginBottom: 4,
+      padding: 6,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+      position: 'relative',
+    },
+    favoriteClickableArea: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 4,
+    },
+    favoriteImageContainer: {
+      position: 'relative',
+    },
+    favoriteItemImage: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: isDarkMode ? '#2a2a2a' : '#f8f9fa',
+    },
+    favoriteItemInfo: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    favoriteItemName: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: isDarkMode ? '#ffffff' : '#000000',
+      marginBottom: 1,
+      letterSpacing: -0.3,
+    },
+    favoriteItemValue: {
+      fontSize: 9,
+      color: isDarkMode ? '#e0e0e0' : '#333333',
+      marginBottom: 1,
+      fontWeight: '500',
+    },
+    favoriteItemRarity: {
+      fontSize: 8,
+      color: config.colors.primary,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    favoriteBadgesContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 2,
+      backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
+      borderRadius: 8,
+      padding: 4,
+      marginTop: 2,
+    },
+    favoriteBadgeButton: {
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+      backgroundColor: isDarkMode ? '#3a3a3a' : '#ffffff',
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+      minWidth: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    favoriteBadgeButtonActive: {
+      backgroundColor: config.colors.primary,
+    },
+    favoriteBadgeButtonText: {
+      fontSize: 8,
+      fontWeight: '600',
+      color: isDarkMode ? '#ffffff' : '#666666',
+      textAlign: 'center',
+    },
+    favoriteBadgeButtonTextActive: {
+      color: '#ffffff',
+    },
+    favoriteDeleteButton: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      padding: 2,
+      zIndex: 10,
+    },
     favoriteButton: {
       position: 'absolute',
       top: 5,
@@ -1827,14 +2165,14 @@ const getStyles = (isDarkMode,isGG) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
-      padding: 15,
+      padding: 10,
       borderRadius: 8,
       margin: 10,
       width: '100%',
     },
     addToFavoritesText: {
       marginLeft: 8,
-      fontSize: 14,
+      fontSize: 10,
       color: isDarkMode ? '#fff' : '#666',
     },
     favoritesHeader: {

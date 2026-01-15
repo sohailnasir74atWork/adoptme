@@ -32,10 +32,89 @@ import {
   orderBy,
   limit,
   startAfter,           // ✅ moved here
+  setDoc,
+  serverTimestamp,
 } from '@react-native-firebase/firestore';
 import { ref, get } from '@react-native-firebase/database';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 const REVIEWS_PAGE_SIZE = 3; // how many reviews per page
+
+// ✅ Helper function to format fruit names for image URLs
+const formatName = (name) => {
+  if (!name || typeof name !== 'string') return '';
+  return name.replace(/^\+/, '').replace(/\s+/g, '-');
+};
+
+// Helper function to format trade item names
+const formatTradeName = (name) => {
+  if (!name || typeof name !== 'string') return '';
+  let formattedName = name.replace(/^\+/, '');
+  formattedName = formattedName.replace(/\s+/g, '-');
+  return formattedName;
+};
+
+// Helper function to format values
+const formatTradeValue = (value) => {
+  if (!value || typeof value !== 'number') return '0';
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(1)}B`;
+  } else if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  } else if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  } else {
+    return value.toLocaleString();
+  }
+};
+
+// Helper function to group items
+const groupTradeItems = (items) => {
+  if (!Array.isArray(items)) return [];
+  const grouped = {};
+  items.forEach(({ name, type }) => {
+    const key = `${name}-${type}`;
+    if (grouped[key]) {
+      grouped[key].count += 1;
+    } else {
+      grouped[key] = { name, type, count: 1 };
+    }
+  });
+  return Object.values(grouped);
+};
+
+// Helper function to get trade deal
+const getTradeDeal = (hasTotal, wantsTotal) => {
+  // Handle both number and object formats
+  const hasValue = typeof hasTotal === 'number' ? hasTotal : hasTotal?.value;
+  const wantsValue = typeof wantsTotal === 'number' ? wantsTotal : wantsTotal?.value;
+  
+  if (!hasValue || hasValue <= 0) {
+    return { deal: { label: "trade.unknown_deal", color: "#8E8E93" }, tradeRatio: 0 };
+  }
+
+  const tradeRatio = wantsValue ? wantsValue / hasValue : 0;
+  let deal;
+
+  if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
+    deal = { label: "trade.best_deal", color: "#34C759" };
+  } else if (tradeRatio > 0.6 && tradeRatio <= 0.75) {
+    deal = { label: "trade.great_deal", color: "#32D74B" };
+  } else if (tradeRatio > 0.75 && tradeRatio <= 1.25) {
+    deal = { label: "trade.fair_deal", color: "#FFCC00" };
+  } else if (tradeRatio > 1.25 && tradeRatio <= 1.4) {
+    deal = { label: "trade.decent_deal", color: "#FF9F0A" };
+  } else if (tradeRatio > 1.4 && tradeRatio <= 1.55) {
+    deal = { label: "trade.weak_deal", color: "#D65A31" };
+  } else {
+    deal = { label: "trade.risky_deal", color: "#7D1128" };
+  }
+
+  return { deal, tradeRatio };
+};
 
 const ProfileBottomDrawer = ({
   isVisible,
@@ -47,7 +126,7 @@ const ProfileBottomDrawer = ({
   fromPvtChat,
 }) => {
   const { theme, firestoreDB, appdatabase } = useGlobalState();
-  const { updateLocalState } = useLocalState();
+  const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
 
@@ -62,7 +141,7 @@ const ProfileBottomDrawer = ({
   // 🔒 ban state - ✅ Safety check for array
   const isBlock = Array.isArray(bannedUsers) && bannedUsers.includes(selectedUserId);
 
-  // ⭐ rating summary (from RTDB /averageRatings)
+  // ⭐ rating summary (from Firestore user_ratings_summary - single source of truth)
   const [ratingSummary, setRatingSummary] = useState(null);
   const [loadingRating, setLoadingRating] = useState(false);
   const [userBio, setUserBio] = useState(null);
@@ -85,6 +164,12 @@ const ProfileBottomDrawer = ({
   const [wishlistPets, setWishlistPets] = useState([]);
   const [loadingPets, setLoadingPets] = useState(false);
 
+  // 💼 trades list (from Firestore /trades_new where userId == selectedUserId)
+  const [trades, setTrades] = useState([]);
+  const [loadingTrades, setLoadingTrades] = useState(false);
+  const [lastTradeDoc, setLastTradeDoc] = useState(null);
+  const [hasMoreTrades, setHasMoreTrades] = useState(false);
+
   // toggle details
   const [loadDetails, setLoadDetails] = useState(false);
 
@@ -105,21 +190,26 @@ const ProfileBottomDrawer = ({
 
     const fetchUserData = async () => {
       try {
-        const userSnap = await get(ref(appdatabase, `users/${selectedUserId}`));
+        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+        const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap, 
+               isProSnap, lastGameWinAtSnap] = await Promise.all([
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+        ]);
         
         if (!isMounted) return;
         
-        if (userSnap.exists()) {
-          const data = userSnap.val();
-          setUserData({
-            robloxUsername: data.robloxUsername || null,
-            robloxUserId: data.robloxUserId || null,
-            robloxUsernameVerified: data.robloxUsernameVerified || false,
-            isPro: data.isPro || false,
-          });
-        } else {
-          setUserData(null);
-        }
+        // ✅ Extract values only if they exist
+        setUserData({
+          robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
+          robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
+          robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+          isPro: isProSnap?.exists() ? isProSnap.val() : false,
+          lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+        });
       } catch (error) {
         console.error('Error fetching user data in BottomDrawer:', error);
         if (isMounted) setUserData(null);
@@ -328,6 +418,9 @@ const ProfileBottomDrawer = ({
       setUserPoints(null);
       setGameWins(null);
       setUserData(null); // ✅ Clear fetched user data
+      setTrades([]);
+      setLastTradeDoc(null);
+      setHasMoreTrades(false);
     }
   }, [isVisible]);
 
@@ -341,23 +434,102 @@ const ProfileBottomDrawer = ({
     const loadRatingSummary = async () => {
       setLoadingRating(true);
       try {
-        const [avgSnap, createdSnap, userSnap, reviewDocSnap] = await Promise.all([
-          get(ref(appdatabase, `averageRatings/${selectedUserId}`)),
+        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+        // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
+        const [summaryDocSnap, createdSnap, rewardPointsSnap, reviewDocSnap] = await Promise.all([
+          getDoc(doc(firestoreDB, 'user_ratings_summary', selectedUserId)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
-          get(ref(appdatabase, `users/${selectedUserId}`)),
+          get(ref(appdatabase, `users/${selectedUserId}/rewardPoints`)).catch(() => null),
           getDoc(doc(firestoreDB, 'reviews', selectedUserId)), // ✅ Load bio from Firestore
         ]);
 
         if (!isMounted) return;
 
-        if (avgSnap.exists()) {
-          const val = avgSnap.val();
+        // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
+        if (summaryDocSnap.exists) {
+          const summaryData = summaryDocSnap.data();
           setRatingSummary({
-            value: Number(val.value || 0),
-            count: Number(val.count || 0),
+            value: Number(summaryData.averageRating || 0),
+            count: Number(summaryData.count || 0),
           });
         } else {
-          setRatingSummary(null);
+          // ✅ COST-OPTIMIZED: Only recalculate if summary truly missing (one-time per user)
+          // Check RTDB first (free) before expensive Firestore query
+          const avgSnap = await get(ref(appdatabase, `averageRatings/${selectedUserId}`));
+          if (avgSnap.exists()) {
+            // ✅ RTDB has data - migrate it (cheap: 1 RTDB read + 1 Firestore write)
+            const avgData = avgSnap.val();
+            const avgValue = Number(avgData.value || 0);
+            const avgCount = Number(avgData.count || 0);
+            
+            setRatingSummary({
+              value: avgValue,
+              count: avgCount,
+            });
+            
+            if (avgValue > 0 || avgCount > 0) {
+              setDoc(
+                doc(firestoreDB, 'user_ratings_summary', selectedUserId),
+                {
+                  averageRating: avgValue,
+                  count: avgCount,
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).catch(err => console.error('Error migrating rating summary to Firestore:', err));
+            }
+          } else {
+            // ✅ Only query Firestore reviews if RTDB also has no data (expensive operation)
+            // This ensures we don't waste reads if RTDB migration is possible
+            try {
+              const reviewsQuery = query(
+                collection(firestoreDB, 'reviews'),
+                where('toUserId', '==', selectedUserId),
+                limit(100) // ✅ COST LIMIT: Max 100 reviews per calculation (prevents huge reads)
+              );
+              const reviewsSnapshot = await getDocs(reviewsQuery);
+              
+              if (!reviewsSnapshot.empty) {
+                let totalRating = 0;
+                let ratingCount = 0;
+                
+                reviewsSnapshot.docs.forEach((doc) => {
+                  const reviewData = doc.data();
+                  if (reviewData.rating && typeof reviewData.rating === 'number') {
+                    totalRating += reviewData.rating;
+                    ratingCount += 1;
+                  }
+                });
+                
+                if (ratingCount > 0) {
+                  const calculatedAverage = totalRating / ratingCount;
+                  
+                  setRatingSummary({
+                    value: parseFloat(calculatedAverage.toFixed(2)),
+                    count: ratingCount,
+                  });
+                  
+                  // ✅ Create summary (prevents future recalculations)
+                  await setDoc(
+                    doc(firestoreDB, 'user_ratings_summary', selectedUserId),
+                    {
+                      averageRating: parseFloat(calculatedAverage.toFixed(2)),
+                      count: ratingCount,
+                      updatedAt: serverTimestamp(),
+                    },
+                    { merge: true }
+                  );
+                } else {
+                  setRatingSummary(null);
+                }
+              } else {
+                setRatingSummary(null);
+              }
+            } catch (error) {
+              console.error('Error calculating summary from reviews:', error);
+              setRatingSummary(null);
+            }
+          }
         }
 
         // ✅ Load bio from Firestore reviews/{userId}
@@ -384,9 +556,9 @@ const ProfileBottomDrawer = ({
         }
 
         // ✅ Load user points (RTDB)
-        if (userSnap.exists()) {
-          const userData = userSnap.val();
-          setUserPoints(userData.rewardPoints || 0);
+        // ✅ Use rewardPointsSnap instead of full user object
+        if (rewardPointsSnap?.exists()) {
+          setUserPoints(rewardPointsSnap.val() || 0);
         } else {
           setUserPoints(0);
         }
@@ -559,6 +731,80 @@ const ProfileBottomDrawer = ({
   }, [hasMoreReviews, loadingReviews, loadReviews]);
 
   // ─────────────────────────────────────────────
+  // Load trades (paged) — ✅ Initially show 1, then load 2 by 2
+  const INITIAL_TRADES_SIZE = 1; // Show 1 trade initially
+  const LOAD_MORE_TRADES_SIZE = 2; // Load 2 trades at a time when loading more
+  
+  const loadTrades = useCallback(async (reset = false) => {
+    if (!firestoreDB || !selectedUserId) return;
+    if (loadingTrades) return;
+
+    setLoadingTrades(true);
+    try {
+      // Determine the limit based on whether it's initial load or load more
+      const limitSize = reset ? INITIAL_TRADES_SIZE : LOAD_MORE_TRADES_SIZE;
+      
+      let q;
+      if (!reset && lastTradeDoc) {
+        q = query(
+          collection(firestoreDB, 'trades_new'),
+          where('userId', '==', selectedUserId),
+          orderBy('timestamp', 'desc'),
+          startAfter(lastTradeDoc),
+          limit(limitSize + 1), // Fetch one extra to check if more exist
+        );
+      } else {
+        q = query(
+          collection(firestoreDB, 'trades_new'),
+          where('userId', '==', selectedUserId),
+          orderBy('timestamp', 'desc'),
+          limit(limitSize + 1), // Fetch one extra to check if more exist
+        );
+      }
+
+      const snap = await getDocs(q);
+
+      // Check if we got more than page size
+      const hasMoreResults = snap.docs.length > limitSize;
+      
+      // Only take limitSize documents (discard the extra one)
+      const docsToUse = snap.docs.slice(0, limitSize);
+      
+      const batch = docsToUse.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      setTrades((prev) => (reset ? batch : [...prev, ...batch]));
+
+      const newLastDoc = docsToUse[docsToUse.length - 1] || null;
+      setLastTradeDoc(newLastDoc);
+      setHasMoreTrades(hasMoreResults);
+    } catch (err) {
+      console.error('Trades load error:', err);
+      if (reset) setTrades([]);
+      setHasMoreTrades(false);
+    } finally {
+      setLoadingTrades(false);
+    }
+  }, [firestoreDB, selectedUserId, lastTradeDoc, loadingTrades]);
+
+  // Initial trades load when opening details
+  useEffect(() => {
+    if (!isVisible || !selectedUserId || !loadDetails) return;
+    setLastTradeDoc(null);
+    setHasMoreTrades(false);
+    loadTrades(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, selectedUserId, loadDetails]);
+
+  // ✅ Memoize handleLoadMoreTrades
+  const handleLoadMoreTrades = useCallback(() => {
+    if (!hasMoreTrades || loadingTrades) return;
+    loadTrades(false);
+  }, [hasMoreTrades, loadingTrades, loadTrades]);
+
+  // ─────────────────────────────────────────────
   // Helpers for rendering - ✅ Memoized
 
   const renderStars = useCallback((value) => {
@@ -669,6 +915,389 @@ const ProfileBottomDrawer = ({
       </View>
     );
   }, [isDarkMode]);
+
+  // ✅ Parse values data for image lookup
+  const parsedValuesData = useMemo(() => {
+    try {
+      const rawData = localState.isGG ? localState.ggData : localState.data;
+      if (!rawData) return [];
+
+      const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
+    } catch (error) {
+      console.error("❌ Error parsing data:", error);
+      return [];
+    }
+  }, [localState.isGG, localState.data, localState.ggData]);
+
+  // ✅ Render trade item
+  const renderTradeItem = useCallback((trade) => {
+    const { deal, tradeRatio } = getTradeDeal(trade.hasTotal, trade.wantsTotal);
+    const tradePercentage = Math.abs(((tradeRatio - 1) * 100).toFixed(0));
+    const isProfit = tradeRatio > 1;
+    const neutral = tradeRatio === 1;
+    const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : "Unknown";
+    const isGG = trade.isSharkMode === 'GG';
+
+    const groupedHasItems = groupTradeItems(trade.hasItems || []);
+    const groupedWantsItems = groupTradeItems(trade.wantsItems || []);
+
+    // Helper to get adoptme image URL (matching Trades.jsx getImageUrl)
+    const getTradeItemImageUrl = (item) => {
+      if (!item || !item.name) return '';
+      
+      const baseImgUrl = isGG ? localState.imgurlGG : localState.imgurl;
+      if (!baseImgUrl) return '';
+      
+      if (isGG) {
+        const encoded = encodeURIComponent(item.name);
+        return `${baseImgUrl.replace(/"/g, '')}/items/${encoded}.webp`;
+      }
+      
+      // Try to find item in parsedValuesData to get image path
+      if (parsedValuesData.length > 0) {
+        const foundItem = parsedValuesData.find(
+          (i) => (i?.name || i?.Name || '').toLowerCase() === item.name.toLowerCase()
+        );
+        if (foundItem?.image) {
+          const path = foundItem.image.startsWith('/') ? foundItem.image : `/${foundItem.image}`;
+          return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
+        }
+      }
+      
+      // Fallback: try item.image if available
+      if (item.image) {
+        const path = item.image.startsWith('/') ? item.image : `/${item.image}`;
+        return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
+      }
+      
+      return '';
+    };
+
+    return (
+      <View
+        key={trade.id}
+        style={{
+          backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+          borderRadius: 12,
+          padding: 10,
+          marginBottom: 10,
+          borderWidth: 1,
+          borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+        }}
+      >
+        {/* Trade Header */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              {trade.isFeatured && (
+                <View style={{
+                  backgroundColor: config.colors.hasBlockGreen,
+                  paddingVertical: 1,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  marginRight: 5,
+                  flexShrink: 0,
+                  flexGrow: 0,
+                }}>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>FEATURED</Text>
+                </View>
+              )}
+              <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                {formattedTime}
+              </Text>
+            </View>
+            {/* Status and Mode Badges - Side by side like Trades.jsx */}
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              marginTop: 4, 
+              alignSelf: 'flex-start',
+              flexShrink: 1,
+              flexGrow: 0,
+              flexWrap: 'nowrap',
+              width: undefined,
+            }}>
+              {/* Status Badge (Win/Lose/Fair) - Only show if status field exists */}
+              {trade.status && (
+                <View style={{
+                  backgroundColor: trade.status === 'w' ? '#10B981' : // Green for win
+                                  trade.status === 'f' ? config.colors.secondary : // Blue for fair
+                                  config.colors.primary, // Pink/red for lose
+                  paddingVertical: 1,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  marginRight: 5,
+                  flexShrink: 0,
+                  flexGrow: 0,
+                }}>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
+                    {trade.status === 'w' ? 'Win' : trade.status === 'f' ? 'Fair' : 'Lose'}
+                  </Text>
+                </View>
+              )}
+              {/* Shark/Frost/GG Badge */}
+              {trade.isSharkMode !== undefined && (
+                <View style={{
+                  backgroundColor: trade.isSharkMode == 'GG' ? '#5c4c49' : trade.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
+                  paddingVertical: 1,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  flexShrink: 0,
+                  flexGrow: 0,
+                }}>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
+                    {trade.isSharkMode == 'GG' ? 'GG Values' : trade.isSharkMode === true ? 'Shark' : 'Frost'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {(groupedHasItems.length > 0 && groupedWantsItems.length > 0) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={{
+                  backgroundColor: deal.color,
+                  paddingHorizontal: 4,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                  marginRight: 8,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600' }}>
+                    {t(deal.label) || deal.label}
+                  </Text>
+                </View>
+                <Text style={{
+                  fontSize: 11,
+                  color: !isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed,
+                  fontWeight: '600'
+                }}>
+                  {tradePercentage}% {!neutral && (
+                    <Icon
+                      name={isProfit ? 'arrow-down-outline' : 'arrow-up-outline'}
+                      size={10}
+                      color={isProfit ? config.colors.wantBlockRed : config.colors.hasBlockGreen}
+                    />
+                  )}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Trade Items - Matching Trades.jsx structure */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 }}>
+          {/* Has Items Grid */}
+          {trade.hasItems && trade.hasItems.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '48%' }}>
+              {Array.from({
+                length: Math.max(4, Math.ceil(trade.hasItems.length / 4) * 4)
+              }).map((_, idx) => {
+                const tradeItem = trade.hasItems[idx];
+                return (
+                  <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
+                    {tradeItem ? (
+                      <>
+                        <Image
+                          source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                          style={{ width: 30, height: 30, borderRadius: 6 }}
+                          resizeMode="contain"
+                          defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                        />
+                        <View style={{ position: 'absolute', bottom: -5, right: 0, flexDirection: 'row', gap: 1, padding: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          {tradeItem.isFly && (
+                            <Text style={{ color: 'white', backgroundColor: '#3498db', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>F</Text>
+                          )}
+                          {tradeItem.isRide && (
+                            <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
+                          )}
+                          {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                            <Text style={{ 
+                              color: 'white', 
+                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
+                              borderRadius: 10, 
+                              width: 10, 
+                              height: 10, 
+                              fontSize: 6, 
+                              textAlign: 'center', 
+                              lineHeight: 10, 
+                              fontWeight: '600', 
+                              overflow: 'hidden', 
+                              padding: 0, 
+                              margin: 0 
+                            }}>{tradeItem.valueType.toUpperCase()}</Text>
+                          )}
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={{ width: '48%', alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{
+                backgroundColor: 'black',
+                paddingVertical: 1,
+                paddingHorizontal: 6,
+                borderRadius: 6,
+                flexShrink: 0,
+                flexGrow: 0,
+              }}>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+              </View>
+            </View>
+          )}
+          
+          {/* Transfer Icon */}
+          <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+            <Image source={require('../../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
+          </View>
+          
+          {/* Wants Items Grid */}
+          {trade.wantsItems && trade.wantsItems.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '48%' }}>
+              {Array.from({
+                length: Math.max(4, Math.ceil(trade.wantsItems.length / 4) * 4)
+              }).map((_, idx) => {
+                const tradeItem = trade.wantsItems[idx];
+                return (
+                  <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
+                    {tradeItem ? (
+                      <>
+                        <Image
+                          source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                          style={{ width: 30, height: 30, borderRadius: 6 }}
+                          resizeMode="contain"
+                          defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                        />
+                        <View style={{ position: 'absolute', bottom: -5, right: 0, flexDirection: 'row', gap: 1, padding: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          {tradeItem.isFly && (
+                            <Text style={{ color: 'white', backgroundColor: '#3498db', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>F</Text>
+                          )}
+                          {tradeItem.isRide && (
+                            <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
+                          )}
+                          {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                            <Text style={{ 
+                              color: 'white', 
+                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
+                              borderRadius: 10, 
+                              width: 10, 
+                              height: 10, 
+                              fontSize: 6, 
+                              textAlign: 'center', 
+                              lineHeight: 10, 
+                              fontWeight: '600', 
+                              overflow: 'hidden', 
+                              padding: 0, 
+                              margin: 0 
+                            }}>{tradeItem.valueType.toUpperCase()}</Text>
+                          )}
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={{ width: '48%', alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{
+                backgroundColor: 'black',
+                paddingVertical: 1,
+                paddingHorizontal: 6,
+                borderRadius: 6,
+                flexShrink: 0,
+                flexGrow: 0,
+              }}>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+              </View>
+            </View>
+          )}
+        </View>
+        
+        {/* Trade Totals - Matching Trades.jsx structure */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', marginTop: 10 }}>
+          {trade.hasItems && trade.hasItems.length > 0 && (
+            <Text style={{ 
+              fontSize: 8, 
+              fontFamily: 'Lato-Bold', 
+              color: 'white', 
+              textAlign: 'center', 
+              alignSelf: 'center', 
+              marginHorizontal: 'auto', 
+              paddingHorizontal: 4, 
+              paddingVertical: 2, 
+              borderRadius: 6,
+              backgroundColor: config.colors.hasBlockGreen
+            }}>
+              ME: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
+            </Text>
+          )}
+          <View style={{ justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}>
+            {(trade.hasItems && trade.hasItems.length > 0 && trade.wantsItems && trade.wantsItems.length > 0) && (
+              <>
+                {(() => {
+                  const hasValue = typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0;
+                  const wantsValue = typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0;
+                  if (hasValue > wantsValue) {
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Icon name="arrow-up-outline" size={12} color="green" />
+                        <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: 'green', textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                          {formatTradeValue(hasValue - wantsValue)}
+                        </Text>
+                      </View>
+                    );
+                  } else if (hasValue < wantsValue) {
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Icon name="arrow-down-outline" size={12} color={config.colors.hasBlockGreen} />
+                        <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.hasBlockGreen, textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                          {formatTradeValue(wantsValue - hasValue)}
+                        </Text>
+                      </View>
+                    );
+                  } else {
+                    return <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.primary, textAlign: 'center' }}>-</Text>;
+                  }
+                })()}
+              </>
+            )}
+          </View>
+          {trade.wantsItems && trade.wantsItems.length > 0 && (
+            <Text style={{ 
+              fontSize: 8, 
+              fontFamily: 'Lato-Bold', 
+              color: 'white', 
+              textAlign: 'center', 
+              alignSelf: 'center', 
+              marginHorizontal: 'auto', 
+              paddingHorizontal: 4, 
+              paddingVertical: 2, 
+              borderRadius: 6,
+              backgroundColor: config.colors.wantBlockRed
+            }}>
+              YOU: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
+            </Text>
+          )}
+        </View>
+
+        {/* Description */}
+        {trade.description && (
+          <Text style={{
+            fontSize: 10,
+            color: isDarkMode ? '#d1d5db' : '#4b5563',
+            marginTop: 6,
+            paddingTop: 6,
+            borderTopWidth: 1,
+            borderTopColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+          }}>
+            {trade.description}
+          </Text>
+        )}
+      </View>
+    );
+  }, [isDarkMode, t, localState.isGG, localState.imgurl, localState.imgurlGG, parsedValuesData]);
 
   // ─────────────────────────────────────────────
   return (
@@ -1241,6 +1870,81 @@ const ProfileBottomDrawer = ({
                     )}
 
                     {loadingReviews && hasMoreReviews && (
+                      <ActivityIndicator
+                        size="small"
+                        color={config.colors.primary}
+                        style={{ marginTop: 6, alignSelf: 'center' }}
+                      />
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* 💼 Trades section */}
+            {loadDetails && (
+              <View
+                style={{
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
+                  marginBottom: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    marginBottom: 6,
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                  }}
+                >
+                  Recent Trades
+                </Text>
+
+                {loadingTrades && trades.length === 0 ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={config.colors.primary}
+                  />
+                ) : trades.length === 0 ? (
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: isDarkMode ? '#9ca3af' : '#6b7280',
+                    }}
+                  >
+                    No trades yet.
+                  </Text>
+                ) : (
+                  <>
+                    {trades.map((trade) => renderTradeItem(trade))}
+
+                    {hasMoreTrades && !loadingTrades && (
+                      <TouchableOpacity
+                        onPress={handleLoadMoreTrades}
+                        style={{
+                          marginTop: 8,
+                          alignSelf: 'center',
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: isDarkMode ? '#e5e7eb' : '#111827',
+                          }}
+                        >
+                          Load more trades
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {loadingTrades && hasMoreTrades && (
                       <ActivityIndicator
                         size="small"
                         color={config.colors.primary}

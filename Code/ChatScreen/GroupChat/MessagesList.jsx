@@ -10,6 +10,7 @@ import {
   Alert,
   Keyboard,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import { getStyles } from './../Style';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
@@ -61,6 +62,7 @@ const MessagesList = ({
   const [showReportPopup, setShowReportPopup] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const { triggerHapticFeedback } = useHaptic();
+  const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
 
   const { t } = useTranslation();
   const { isAdmin, api, freeTranslation } = useGlobalState();
@@ -120,8 +122,38 @@ const MessagesList = ({
         console.log('scrollToIndex error:', e);
       }
     },
-    [flatListRef, messages, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, styles, user, isAdmin, t, fruitColors, deviceLanguage],
+    [flatListRef, messages],
   );
+
+  // ✅ Scroll to bottom handler
+  const handleScrollToBottom = useCallback(() => {
+    if (!flatListRef?.current) return;
+    
+    triggerHapticFeedback('impactLight');
+    
+    try {
+      // Since FlatList is inverted, index 0 is the bottom (newest message)
+      flatListRef.current.scrollToIndex({
+        index: 0,
+        animated: true,
+        viewPosition: 0,
+      });
+      setIsAtBottom(true);
+    } catch (error) {
+      // Fallback: scroll to offset 0
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+      setIsAtBottom(true);
+    }
+  }, [flatListRef, triggerHapticFeedback, setIsAtBottom]);
+
+  // ✅ Animate scroll button visibility
+  useEffect(() => {
+    Animated.timing(scrollButtonOpacity, {
+      toValue: isAtBottom ? 0 : 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [isAtBottom, scrollButtonOpacity]);
   
   
   
@@ -679,7 +711,7 @@ const MessagesList = ({
         removeClippedSubviews={false}
         onScroll={({ nativeEvent }) => {
           const { contentOffset } = nativeEvent;
-          const atBottom = contentOffset.y <= 40;
+          const atBottom = contentOffset.y <= 60;
           // console.log("✅ isAtBottom (detected):", atBottom);
           setIsAtBottom(atBottom);
         }}
@@ -700,6 +732,37 @@ const MessagesList = ({
         onTouchStart={() => Keyboard.dismiss()}
         keyboardShouldPersistTaps="handled" // Ensures taps o
       />
+      {/* ✅ Scroll to Bottom Button */}
+      {!isAtBottom && (
+        <Animated.View
+          style={[
+            styles.scrollToBottomButton,
+            {
+              opacity: scrollButtonOpacity,
+              transform: [
+                {
+                  scale: scrollButtonOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={handleScrollToBottom}
+            activeOpacity={0.8}
+            style={styles.scrollToBottomTouchable}
+          >
+            <Icon
+              name="chevron-down-circle"
+              size={48}
+              color={config.colors.primary}
+            />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
       <ReportPopup
         visible={showReportPopup}
         message={selectedMessage}

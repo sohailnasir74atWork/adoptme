@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useGlobalState } from '../../GlobelStats';
+import { validateContent } from '../../Helper/ContentModeration';
+import { showMessage } from 'react-native-flash-message';
 
 // ✅ Move Emojies array outside component to prevent recreation
 const Emojies = [
@@ -89,6 +91,19 @@ const MessageInput = ({
     const fruits = hasFruits ? [...selectedFruits] : [];
     if (!trimmedInput && !hasFruits && !hasEmoji) return;
     if (isSending) return;
+
+    // ✅ Comprehensive content moderation check
+    if (trimmedInput) {
+      const validation = validateContent(trimmedInput);
+      if (!validation.isValid) {
+        showMessage({
+          message: validation.reason || "Inappropriate content detected.",
+          type: "danger",
+          duration: 3000,
+        });
+        return;
+      }
+    }
 
     setIsSending(true);
 
@@ -223,7 +238,7 @@ const MessageInput = ({
           onPress={() => setShowEmojiPopup(false)}
           activeOpacity={1}
         >
-          <View style={modalStyles.sheet} onStartShouldSetResponder={() => true}>
+          <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]} onStartShouldSetResponder={() => true}>
             <ScrollView 
               style={modalStyles.emojiScrollContainer}
               showsVerticalScrollIndicator={false}
@@ -260,7 +275,6 @@ const modalStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    backgroundColor: '#fff',
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

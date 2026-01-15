@@ -31,7 +31,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
 
-const INITIAL_PAGE_SIZE = 15; // ✅ Initial load: 15 messages
+const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
 
@@ -248,14 +248,17 @@ const GroupChatScreen = () => {
           // 2. Fallback: Lazy load from RTDB users node ONLY if stored data not available (OPTIMIZATION: avoid unnecessary read)
           if (displayName === 'Anonymous' && invitedUserId && onlineUsersMap === null) {
             try {
-              const userRef = ref(appdatabase, `users/${invitedUserId}`);
-              const userSnapshot = await get(userRef);
-              if (userSnapshot.exists()) {
-                const userData = userSnapshot.val() || {};
+              // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+              const [displayNameSnap, avatarSnap] = await Promise.all([
+                get(ref(appdatabase, `users/${invitedUserId}/displayName`)).catch(() => null),
+                get(ref(appdatabase, `users/${invitedUserId}/avatar`)).catch(() => null),
+              ]);
+              
+              if (displayNameSnap?.exists() || avatarSnap?.exists()) {
                 onlineUsersMap = {
                   [invitedUserId]: {
-                    displayName: userData.displayName || 'Anonymous',
-                    avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                    displayName: displayNameSnap?.exists() ? displayNameSnap.val() : 'Anonymous',
+                    avatar: avatarSnap?.exists() ? avatarSnap.val() : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                   }
                 };
               } else {
@@ -426,8 +429,9 @@ const GroupChatScreen = () => {
     }
   }, [groupId, messagesRef, loadMessages, isMember]);
 
-  // ✅ Listen to new messages in real-time (matching private chat pattern exactly)
-  // This adds new messages when someone sends them using child_added
+  // ✅ OPTIMIZED: Listen to new messages in real-time (only newest message)
+  // This prevents child_added from firing for all existing messages when listener is attached
+  // This significantly reduces Firebase read costs
   useEffect(() => {
     if (!messagesRef || !isMember) {
       // Clear messages if user is not a member
@@ -436,6 +440,10 @@ const GroupChatScreen = () => {
     }
 
     let isMounted = true;
+
+    // ✅ Use limitToLast(1) to only listen to the newest message
+    // This ensures we only get NEW messages, not all existing ones
+    const limitedRef = messagesRef.limitToLast(1);
 
     const handleChildAdded = (snapshot) => {
       if (!isMounted || !snapshot || !snapshot.key) return;
@@ -463,15 +471,14 @@ const GroupChatScreen = () => {
       });
     };
 
-    // ✅ Use same pattern as private chat - listen directly to messagesRef
-    // child_added will fire for existing messages, but we filter duplicates
-    // This ensures new messages are added in real-time when someone sends them
-    messagesRef.on('child_added', handleChildAdded);
+    // ✅ OPTIMIZED: Only listen to the last message to avoid duplicate reads
+    // This ensures new messages are added in real-time without reading all existing messages
+    const listener = limitedRef.on('child_added', handleChildAdded);
 
     return () => {
       isMounted = false;
-      if (messagesRef) {
-        messagesRef.off('child_added', handleChildAdded);
+      if (limitedRef) {
+        limitedRef.off('child_added', listener);
       }
     };
   }, [messagesRef, isMember]); // Re-run when messagesRef or isMember changes
@@ -574,7 +581,8 @@ const GroupChatScreen = () => {
   const sendMessage = useCallback(
     async (text, image, fruits, replyToMessage) => {
       const trimmedText = (text || '').trim();
-      const hasImage = !!image;
+      // Handle both single image (string) and multiple images (array)
+      const hasImage = !!image && (typeof image === 'string' || (Array.isArray(image) && image.length > 0));
       const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
       // Validate fruits count - maximum 18 fruits allowed
@@ -635,7 +643,13 @@ const GroupChatScreen = () => {
       };
 
       if (hasImage) {
-        messageData.imageUrl = image;
+        // Store as array if multiple images, single string if one image
+        if (Array.isArray(image)) {
+          messageData.imageUrls = image; // Array of image URLs
+          messageData.imageUrl = image[0]; // Keep first for backward compatibility
+        } else {
+          messageData.imageUrl = image; // Single image URL
+        }
       }
 
       if (hasFruits) {
@@ -649,6 +663,7 @@ const GroupChatScreen = () => {
           text: replyToMessage.text || '',
           sender: replyToMessage.sender || 'Anonymous',
           imageUrl: replyToMessage.imageUrl || null,
+          imageUrls: replyToMessage.imageUrls || null, // Support multiple images in reply
           hasFruits: replyToMessage.hasFruits || false,
           fruitsCount: replyToMessage.fruitsCount || 0,
         };

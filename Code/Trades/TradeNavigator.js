@@ -111,13 +111,12 @@ export const TradeStack = ({ selectedTheme }) => {
                   <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Pvt Servers</Text>
                 </TouchableOpacity> */}
 
-                <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
-                <Icon
+                <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5 }}>
+                  <Icon
                     name="notifications"
-                    size={16}
-                    color={'white'}
+                    size={24}
+                    color={config.colors.primary}
                   />
-                  <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Trade Notifier</Text>
                 </TouchableOpacity>
           
                 <TouchableOpacity onPress={() => setModalVisible(true)} style={{ marginRight: 8 }}>

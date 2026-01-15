@@ -543,12 +543,15 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       let creatorAvatar = null;
       if (createdBy) {
         try {
-          const creatorRef = ref(appdatabase, `users/${createdBy}`);
-          const creatorSnapshot = await get(creatorRef);
-          if (creatorSnapshot.exists()) {
-            const creatorData = creatorSnapshot.val() || {};
-            creatorName = creatorData.displayName || 'Unknown';
-            creatorAvatar = creatorData.avatar || null;
+          // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
+          const [displayNameSnap, avatarSnap] = await Promise.all([
+            get(ref(appdatabase, `users/${createdBy}/displayName`)).catch(() => null),
+            get(ref(appdatabase, `users/${createdBy}/avatar`)).catch(() => null),
+          ]);
+          
+          if (displayNameSnap?.exists() || avatarSnap?.exists()) {
+            creatorName = displayNameSnap?.exists() ? displayNameSnap.val() : 'Unknown';
+            creatorAvatar = avatarSnap?.exists() ? avatarSnap.val() : null;
           }
         } catch (error) {
           console.error('Error fetching creator info:', error);
@@ -822,14 +825,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
             // ✅ Fetch creator names for all groups in parallel
             const creatorIds = [...new Set(availableGroups.map(g => g.createdBy).filter(Boolean))];
+            // ✅ OPTIMIZED: Fetch only displayName instead of full user object
             const creatorPromises = creatorIds.map(async (creatorId) => {
               try {
                 const { ref, get } = await import('@react-native-firebase/database');
-                const creatorRef = ref(appdatabase, `users/${creatorId}`);
-                const snapshot = await get(creatorRef);
-                if (snapshot.exists()) {
-                  const creatorData = snapshot.val() || {};
-                  return { [creatorId]: creatorData.displayName || 'Creator' };
+                const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
+                if (displayNameSnap?.exists()) {
+                  return { [creatorId]: displayNameSnap.val() || 'Creator' };
                 }
                 return { [creatorId]: 'Creator' };
               } catch (error) {
@@ -876,14 +878,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
         // ✅ Fetch creator names for new groups
         const creatorIds = [...new Set(newGroups.map(g => g.createdBy).filter(Boolean))];
+        // ✅ OPTIMIZED: Fetch only displayName instead of full user object
         const creatorPromises = creatorIds.map(async (creatorId) => {
           try {
             const { ref, get } = await import('@react-native-firebase/database');
-            const creatorRef = ref(appdatabase, `users/${creatorId}`);
-            const snapshot = await get(creatorRef);
-            if (snapshot.exists()) {
-              const creatorData = snapshot.val() || {};
-              return { [creatorId]: creatorData.displayName || 'Creator' };
+            const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
+            if (displayNameSnap?.exists()) {
+              return { [creatorId]: displayNameSnap.val() || 'Creator' };
             }
             return { [creatorId]: 'Creator' };
           } catch (error) {

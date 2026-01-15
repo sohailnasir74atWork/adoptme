@@ -20,6 +20,7 @@ import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { onValue, ref } from '@react-native-firebase/database';
 import { showMessage } from 'react-native-flash-message';
 import RNFS from 'react-native-fs';
+import { validateContent } from '../../Helper/ContentModeration';
 
 
 const CLOUD_NAME = 'djtqw0jb5';
@@ -82,10 +83,25 @@ const pickAndCompress = useCallback(async () => {
   });
 
   if (result.assets?.length > 0) {
+    const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
     const compressed = [];
+    const rejectedCount = [];
 
     for (const asset of result.assets) {
       try {
+        // Check file size before compression
+        if (asset?.uri) {
+          const filePath = asset.uri.replace('file://', '');
+          const fileInfo = await RNFS.stat(filePath);
+          const fileSize = fileInfo.size || 0;
+
+          if (fileSize > MAX_SIZE_BYTES) {
+            rejectedCount.push(asset.fileName || 'image');
+            continue;
+          }
+        }
+
+        // Compress the image
         const uri = await CompressorImage.compress(asset.uri, {
           maxWidth: 400,
           quality: 1,
@@ -93,16 +109,44 @@ const pickAndCompress = useCallback(async () => {
         compressed.push(uri);
       } catch (error) {
         console.error('Compression failed:', error);
+        // If compression fails, still try to check if we can use original
+        // But skip if we can't determine size
+        if (asset?.uri) {
+          try {
+            const filePath = asset.uri.replace('file://', '');
+            const fileInfo = await RNFS.stat(filePath);
+            const fileSize = fileInfo.size || 0;
+            if (fileSize <= MAX_SIZE_BYTES) {
+              compressed.push(asset.uri);
+            } else {
+              rejectedCount.push(asset.fileName || 'image');
+            }
+          } catch (statError) {
+            console.warn('Could not check file size:', statError);
+            // If we can't check, skip it to be safe
+          }
+        }
       }
     }
 
-    setImageUris((prev) => {
-      if (prev.length + compressed.length > MAX_IMAGES) {
-        // Replace all if over limit
-        return compressed.slice(0, MAX_IMAGES);
-      }
-      return [...prev, ...compressed];
-    });
+    // Show alert if any images were rejected
+    if (rejectedCount.length > 0) {
+      Alert.alert(
+        'Image Too Large',
+        `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
+      );
+    }
+
+    // Only update state if we have valid compressed images
+    if (compressed.length > 0) {
+      setImageUris((prev) => {
+        if (prev.length + compressed.length > MAX_IMAGES) {
+          // Replace all if over limit
+          return compressed.slice(0, MAX_IMAGES);
+        }
+        return [...prev, ...compressed];
+      });
+    }
   }
 }, []);
 
@@ -195,6 +239,16 @@ const pickAndCompress = useCallback(async () => {
   
     if (!desc && imageUris.length === 0) {
       return Alert.alert('Missing Info', 'Please add a description or at least one image.');
+    }
+    
+    // ✅ Content moderation: Check description for inappropriate content
+    const trimmedDesc = (desc || '').trim();
+    if (trimmedDesc) {
+      const contentValidation = validateContent(trimmedDesc);
+      if (!contentValidation.isValid) {
+        Alert.alert('Content Not Allowed', contentValidation.reason || 'Your post contains inappropriate content.');
+        return;
+      }
     }
     
     // ✅ Check 1-minute cooldown (session-based, resets on app restart)

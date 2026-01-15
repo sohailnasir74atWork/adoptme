@@ -121,7 +121,7 @@ const ExploreGroupsModal = ({ visible, onClose }) => {
     const groupDescription = item.description || '';
     const groupAvatar = item.avatar || null;
     const memberCount = item.memberCount || item.memberIds?.length || 0;
-    const isFull = memberCount >= 20;
+    const isFull = memberCount >= 50;
     const isMember = item.memberIds?.includes(user?.id);
     const isCreator = item.createdBy === user?.id;
     const isSending = sendingRequests.has(groupId);
@@ -151,7 +151,7 @@ const ExploreGroupsModal = ({ visible, onClose }) => {
             </Text>
             <Text style={styles.metaSeparator}>•</Text>
             <Text style={styles.memberCount}>
-              {memberCount}/20
+              {memberCount}/50
             </Text>
           </View>
         </View>

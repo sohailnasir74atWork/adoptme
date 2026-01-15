@@ -54,7 +54,14 @@ import {
   orderBy,
   limit,
   startAfter,
+  deleteDoc,
+  writeBatch,
 } from '@react-native-firebase/firestore';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+// Initialize dayjs plugins
+dayjs.extend(relativeTime);
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
 import { launchImageLibrary } from 'react-native-image-picker';
 // Bunny avatar upload (same zone/keys as your post uploader)
@@ -65,6 +72,73 @@ const BUNNY_CDN_BASE     = 'https://pull-gag.b-cdn.net';
 
 // ~500 KB max for avatar (small, DP-friendly)
 const MAX_AVATAR_SIZE_BYTES = 500 * 1024;
+
+// Helper function to format item names
+const formatTradeName = (name) => {
+  if (!name || typeof name !== 'string') return '';
+  let formattedName = name.replace(/^\+/, '');
+  formattedName = formattedName.replace(/\s+/g, '-');
+  return formattedName;
+};
+
+// Helper function to format values
+const formatTradeValue = (value) => {
+  if (!value || typeof value !== 'number') return '0';
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(1)}B`;
+  } else if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  } else if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  } else {
+    return value.toLocaleString();
+  }
+};
+
+// Helper function to group items
+const groupTradeItems = (items) => {
+  if (!Array.isArray(items)) return [];
+  const grouped = {};
+  items.forEach(({ name, type }) => {
+    const key = `${name}-${type}`;
+    if (grouped[key]) {
+      grouped[key].count += 1;
+    } else {
+      grouped[key] = { name, type, count: 1 };
+    }
+  });
+  return Object.values(grouped);
+};
+
+// Helper function to get trade deal
+const getTradeDeal = (hasTotal, wantsTotal) => {
+  // Handle both number and object formats
+  const hasValue = typeof hasTotal === 'number' ? hasTotal : hasTotal?.value;
+  const wantsValue = typeof wantsTotal === 'number' ? wantsTotal : wantsTotal?.value;
+  
+  if (!hasValue || hasValue <= 0) {
+    return { deal: { label: "trade.unknown_deal", color: "#8E8E93" }, tradeRatio: 0 };
+  }
+
+  const tradeRatio = wantsValue ? wantsValue / hasValue : 0;
+  let deal;
+
+  if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
+    deal = { label: "trade.best_deal", color: "#34C759" };
+  } else if (tradeRatio > 0.6 && tradeRatio <= 0.75) {
+    deal = { label: "trade.great_deal", color: "#32D74B" };
+  } else if (tradeRatio > 0.75 && tradeRatio <= 1.25) {
+    deal = { label: "trade.fair_deal", color: "#FFCC00" };
+  } else if (tradeRatio > 1.25 && tradeRatio <= 1.4) {
+    deal = { label: "trade.decent_deal", color: "#FF9F0A" };
+  } else if (tradeRatio > 1.4 && tradeRatio <= 1.55) {
+    deal = { label: "trade.weak_deal", color: "#D65A31" };
+  } else {
+    deal = { label: "trade.risky_deal", color: "#7D1128" };
+  }
+
+  return { deal, tradeRatio };
+};
 
 // Modern Minimalist Edit Profile Drawer Component
 const EditProfileDrawerContent = ({
@@ -88,7 +162,7 @@ const EditProfileDrawerContent = ({
   const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  const PROFILE_EDIT_COOLDOWN_DAYS = 30;
+  const PROFILE_EDIT_COOLDOWN_DAYS = 10;
 
   // ✅ Calculate cooldown status - only checks existing cooldown from last save, not unsaved changes
   const cooldownStatus = useMemo(() => {
@@ -426,6 +500,13 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [ratingSummary, setRatingSummary] = useState(null);
   const [loadingRating, setLoadingRating] = useState(false);
   const [createdAtText, setCreatedAtText] = useState(null);
+  const [showMyTradesModal, setShowMyTradesModal] = useState(false);
+  const [modalMyTrades, setModalMyTrades] = useState([]);
+  const [modalLastTradeDoc, setModalLastTradeDoc] = useState(null);
+  const [modalHasMoreTrades, setModalHasMoreTrades] = useState(false);
+  const [loadingModalMyTrades, setLoadingModalMyTrades] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [deletingTradeId, setDeletingTradeId] = useState(null);
 
 
 
@@ -890,7 +971,7 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   }, [isDrawerVisible, user?.id]); // ✅ Only initialize when drawer opens or user ID changes
 
-  // Load bio from Firestore and rating from averageRatings node
+  // Load bio from Firestore and rating from user_ratings_summary (single source of truth)
   useEffect(() => {
     if (!user?.id || !appdatabase || !firestoreDB) {
       setBio('Hi there, I am new here');
@@ -903,8 +984,9 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const loadBioAndRating = async () => {
       setLoadingRating(true);
       try {
-        const [ratingSnap, createdSnap, reviewDocSnap] = await Promise.all([
-          get(ref(appdatabase, `averageRatings/${user.id}`)),
+        // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
+        const [summaryDocSnap, createdSnap, reviewDocSnap] = await Promise.all([
+          getDoc(doc(firestoreDB, 'user_ratings_summary', user.id)),
           get(ref(appdatabase, `users/${user.id}/createdAt`)),
           getDoc(doc(firestoreDB, 'reviews', user.id)), // ✅ Load bio from Firestore
         ]);
@@ -942,15 +1024,91 @@ const [uploadingAvatar, setUploadingAvatar] = useState(false);
           );
         }
 
-        // Load rating from RTDB averageRatings
-        if (ratingSnap.exists()) {
-          const data = ratingSnap.val();
+        // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
+        if (summaryDocSnap.exists) {
+          const summaryData = summaryDocSnap.data();
           setRatingSummary({
-            value: Number(data.value || 0),
-            count: Number(data.count || 0),
+            value: Number(summaryData.averageRating || 0),
+            count: Number(summaryData.count || 0),
           });
         } else {
-          setRatingSummary(null);
+          // ✅ COST-OPTIMIZED: Only recalculate if summary truly missing (one-time per user)
+          // Check RTDB first (free) before expensive Firestore query
+          const avgSnap = await get(ref(appdatabase, `averageRatings/${user.id}`));
+          if (avgSnap.exists()) {
+            // ✅ RTDB has data - migrate it (cheap: 1 RTDB read + 1 Firestore write)
+            const avgData = avgSnap.val();
+            const avgValue = Number(avgData.value || 0);
+            const avgCount = Number(avgData.count || 0);
+            
+            setRatingSummary({
+              value: avgValue,
+              count: avgCount,
+            });
+            
+            if (avgValue > 0 || avgCount > 0) {
+              await setDoc(
+                doc(firestoreDB, 'user_ratings_summary', user.id),
+                {
+                  averageRating: avgValue,
+                  count: avgCount,
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+          } else {
+            // ✅ Only query Firestore reviews if RTDB also has no data (expensive operation)
+            // This ensures we don't waste reads if RTDB migration is possible
+            try {
+              const reviewsQuery = query(
+                collection(firestoreDB, 'reviews'),
+                where('toUserId', '==', user.id),
+                limit(100) // ✅ COST LIMIT: Max 100 reviews per calculation (prevents huge reads)
+              );
+              const reviewsSnapshot = await getDocs(reviewsQuery);
+              
+              if (!reviewsSnapshot.empty) {
+                let totalRating = 0;
+                let ratingCount = 0;
+                
+                reviewsSnapshot.docs.forEach((doc) => {
+                  const reviewData = doc.data();
+                  if (reviewData.rating && typeof reviewData.rating === 'number') {
+                    totalRating += reviewData.rating;
+                    ratingCount += 1;
+                  }
+                });
+                
+                if (ratingCount > 0) {
+                  const calculatedAverage = totalRating / ratingCount;
+                  
+                  setRatingSummary({
+                    value: parseFloat(calculatedAverage.toFixed(2)),
+                    count: ratingCount,
+                  });
+                  
+                  // ✅ Create summary (prevents future recalculations)
+                  await setDoc(
+                    doc(firestoreDB, 'user_ratings_summary', user.id),
+                    {
+                      averageRating: parseFloat(calculatedAverage.toFixed(2)),
+                      count: ratingCount,
+                      updatedAt: serverTimestamp(),
+                    },
+                    { merge: true }
+                  );
+                } else {
+                  setRatingSummary(null);
+                }
+              } else {
+                setRatingSummary(null);
+              }
+            } catch (error) {
+              console.error('Error calculating summary from reviews:', error);
+              setRatingSummary(null);
+            }
+          }
         }
 
         // Load joined date
@@ -1429,6 +1587,573 @@ useEffect(() => {
   loadReceivedModalReviews();
 }, [showReceivedReviewsModal, user?.id, firestoreDB, appdatabase]);
 
+// Load "My Trades" modal when opens
+useEffect(() => {
+  if (!showMyTradesModal || !user?.id || !firestoreDB) {
+    return;
+  }
+
+  const loadMyTrades = async () => {
+    setLoadingModalMyTrades(true);
+    try {
+      // Load initial batch of 3 trades
+      const tradesQuery = await getDocs(query(
+        collection(firestoreDB, 'trades_new'),
+        where('userId', '==', user.id),
+        orderBy('timestamp', 'desc'),
+        limit(3)
+      ));
+
+      const tradesDocs = tradesQuery.docs;
+      const tradesData = tradesDocs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      setModalMyTrades(tradesData);
+      setModalLastTradeDoc(tradesDocs[tradesDocs.length - 1] || null);
+      setModalHasMoreTrades(tradesDocs.length === 3);
+    } catch (error) {
+      console.error('Error loading my trades:', error);
+      setModalMyTrades([]);
+      setModalHasMoreTrades(false);
+    } finally {
+      setLoadingModalMyTrades(false);
+    }
+  };
+
+  loadMyTrades();
+}, [showMyTradesModal, user?.id, firestoreDB]);
+
+// Load more "My Trades" in modal
+const loadMoreMyTrades = useCallback(async () => {
+  if (!user?.id || !firestoreDB || loadingModalMyTrades || !modalLastTradeDoc) return;
+
+  setLoadingModalMyTrades(true);
+  try {
+    const tradesQuery = await getDocs(query(
+      collection(firestoreDB, 'trades_new'),
+      where('userId', '==', user.id),
+      orderBy('timestamp', 'desc'),
+      startAfter(modalLastTradeDoc),
+      limit(10) // Load 10 at a time
+    ));
+
+    const tradesDocs = tradesQuery.docs;
+    
+    if (tradesDocs.length > 0) {
+      const newTrades = tradesDocs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      setModalMyTrades((prev) => [...prev, ...newTrades]);
+      setModalLastTradeDoc(tradesDocs[tradesDocs.length - 1]);
+      setModalHasMoreTrades(tradesDocs.length === 10);
+    } else {
+      setModalHasMoreTrades(false);
+    }
+  } catch (error) {
+    console.error('Error loading more trades:', error);
+    setModalHasMoreTrades(false);
+  } finally {
+    setLoadingModalMyTrades(false);
+  }
+}, [user?.id, firestoreDB, modalLastTradeDoc, loadingModalMyTrades]);
+
+// Delete a single trade
+const handleDeleteTrade = useCallback(async (tradeId, isFeatured) => {
+  if (!user?.id || !firestoreDB) return;
+
+  Alert.alert(
+    t("trade.delete_confirmation_title") || "Delete Trade",
+    t("trade.delete_confirmation_message") || "Are you sure you want to delete this trade?",
+    [
+      { text: t("trade.cancel") || "Cancel", style: "cancel" },
+      {
+        text: t("trade.delete") || "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setDeletingTradeId(tradeId);
+            const actualTradeId = tradeId.startsWith("featured-") ? tradeId.replace("featured-", "") : tradeId;
+            await deleteDoc(doc(firestoreDB, "trades_new", actualTradeId));
+
+            if (isFeatured) {
+              const currentFeaturedData = localState.featuredCount || { count: 0, time: null };
+              const newFeaturedCount = Math.max(0, currentFeaturedData.count - 1);
+              updateLocalState("featuredCount", {
+                count: newFeaturedCount,
+                time: currentFeaturedData.time,
+              });
+            }
+
+            setModalMyTrades((prev) => prev.filter((trade) => trade.id !== tradeId));
+            showSuccessMessage(
+              t("trade.delete_success") || "Success",
+              t("trade.delete_success_message") || "Trade deleted successfully"
+            );
+          } catch (error) {
+            console.error("Error deleting trade:", error);
+            showErrorMessage(
+              t("trade.delete_error") || "Error",
+              t("trade.delete_error_message") || "Failed to delete trade"
+            );
+          } finally {
+            setDeletingTradeId(null);
+          }
+        },
+      },
+    ]
+  );
+}, [user?.id, firestoreDB, localState.featuredCount, updateLocalState, t]);
+
+// Delete all trades
+const handleDeleteAllTrades = useCallback(async () => {
+  if (!user?.id || !firestoreDB || modalMyTrades.length === 0) return;
+
+  Alert.alert(
+    "Delete All Trades",
+    `Are you sure you want to delete all ${modalMyTrades.length} trades? This action cannot be undone.`,
+    [
+      { text: t("trade.cancel") || "Cancel", style: "cancel" },
+      {
+        text: "Delete All",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsDeletingAll(true);
+            
+            if (modalMyTrades.length === 0) {
+              setIsDeletingAll(false);
+              return;
+            }
+
+            const batch = writeBatch(firestoreDB);
+            let featuredCount = 0;
+
+            modalMyTrades.forEach((trade) => {
+              const tradeId = trade.id.startsWith("featured-") ? trade.id.replace("featured-", "") : trade.id;
+              if (trade.isFeatured) {
+                featuredCount++;
+              }
+              const tradeRef = doc(firestoreDB, "trades_new", tradeId);
+              batch.delete(tradeRef);
+            });
+
+            await batch.commit();
+
+            // Update featured count if needed
+            if (featuredCount > 0) {
+              const currentFeaturedData = localState.featuredCount || { count: 0, time: null };
+              const newFeaturedCount = Math.max(0, currentFeaturedData.count - featuredCount);
+              updateLocalState("featuredCount", {
+                count: newFeaturedCount,
+                time: currentFeaturedData.time,
+              });
+            }
+
+            setModalMyTrades([]);
+            setModalLastTradeDoc(null);
+            setModalHasMoreTrades(false);
+            showSuccessMessage("Success", "All trades deleted successfully");
+          } catch (error) {
+            console.error("Error deleting all trades:", error);
+            showErrorMessage("Error", "Failed to delete all trades");
+          } finally {
+            setIsDeletingAll(false);
+          }
+        },
+      },
+    ]
+  );
+}, [user?.id, firestoreDB, modalMyTrades, localState.featuredCount, updateLocalState, t]);
+
+// Render trade item for modal
+const renderTradeItem = useCallback((trade) => {
+  const { deal, tradeRatio } = getTradeDeal(trade.hasTotal, trade.wantsTotal);
+  const tradePercentage = Math.abs(((tradeRatio - 1) * 100).toFixed(0));
+  const isProfit = tradeRatio > 1;
+  const neutral = tradeRatio === 1;
+  const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : "Unknown";
+  const isGG = trade.isSharkMode === 'GG';
+
+  const groupedHasItems = groupTradeItems(trade.hasItems || []);
+  const groupedWantsItems = groupTradeItems(trade.wantsItems || []);
+
+  // Helper to get adoptme image URL (matching Trades.jsx getImageUrl)
+  const getTradeItemImageUrl = (item) => {
+    if (!item || !item.name) return '';
+    
+    const baseImgUrl = isGG ? localState.imgurlGG : localState.imgurl;
+    if (!baseImgUrl) return '';
+    
+    if (isGG) {
+      const encoded = encodeURIComponent(item.name);
+      return `${baseImgUrl.replace(/"/g, '')}/items/${encoded}.webp`;
+    }
+    
+    // Try to find item in parsedValuesData to get image path
+    if (parsedValuesData.length > 0) {
+      const foundItem = parsedValuesData.find(
+        (i) => (i?.name || i?.Name || '').toLowerCase() === item.name.toLowerCase()
+      );
+      if (foundItem?.image) {
+        const path = foundItem.image.startsWith('/') ? foundItem.image : `/${foundItem.image}`;
+        return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
+      }
+    }
+    
+    // Fallback: try item.image if available
+    if (item.image) {
+      const path = item.image.startsWith('/') ? item.image : `/${item.image}`;
+      return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
+    }
+    
+    return '';
+  };
+
+  return (
+    <View
+      key={trade.id}
+      style={{
+        backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+        opacity: deletingTradeId === trade.id ? 0.5 : 1,
+      }}
+    >
+      {/* Trade Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            {trade.isFeatured && (
+              <View style={{
+                backgroundColor: config.colors.hasBlockGreen,
+                paddingVertical: 1,
+                paddingHorizontal: 6,
+                borderRadius: 6,
+                marginRight: 5,
+                flexShrink: 0,
+                flexGrow: 0,
+              }}>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>FEATURED</Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+              {formattedTime}
+            </Text>
+          </View>
+            {/* Status and Mode Badges - Side by side like Trades.jsx */}
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              marginTop: 4, 
+              alignSelf: 'flex-start',
+              flexShrink: 1,
+              flexGrow: 0,
+              flexWrap: 'nowrap',
+              width: undefined,
+            }}>
+              {/* Status Badge (Win/Lose/Fair) - Only show if status field exists */}
+              {trade.status && (
+                <View style={{
+                  backgroundColor: trade.status === 'w' ? '#10B981' : // Green for win
+                                  trade.status === 'f' ? config.colors.secondary : // Blue for fair
+                                  config.colors.primary, // Pink/red for lose
+                  paddingVertical: 1,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  marginRight: 5,
+                  flexShrink: 0,
+                  flexGrow: 0,
+                }}>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
+                    {trade.status === 'w' ? 'Win' : trade.status === 'f' ? 'Fair' : 'Lose'}
+                  </Text>
+                </View>
+              )}
+              {/* Shark/Frost/GG Badge */}
+              {trade.isSharkMode !== undefined && (
+                <View style={{
+                  backgroundColor: trade.isSharkMode == 'GG' ? '#5c4c49' : trade.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
+                  paddingVertical: 1,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  flexShrink: 0,
+                  flexGrow: 0,
+                }}>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
+                    {trade.isSharkMode == 'GG' ? 'GG Values' : trade.isSharkMode === true ? 'Shark' : 'Frost'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {(groupedHasItems.length > 0 && groupedWantsItems.length > 0) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={{
+                  backgroundColor: deal.color,
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderRadius: 6,
+                  marginRight: 8,
+                }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+                    {t(deal.label) || deal.label}
+                  </Text>
+                </View>
+                <Text style={{
+                  fontSize: 12,
+                  color: 'white',
+                  fontWeight: '600'
+                }}>
+                  {tradePercentage}% {!neutral && (
+                    <Icon
+                      name={isProfit ? 'arrow-down-outline' : 'arrow-up-outline'}
+                      size={12}
+                      color={isProfit ? config.colors.wantBlockRed : config.colors.hasBlockGreen}
+                    />
+                  )}
+                </Text>
+              </View>
+            )}
+        </View>
+        <TouchableOpacity
+          onPress={() => handleDeleteTrade(trade.id, trade.isFeatured)}
+          disabled={deletingTradeId === trade.id}
+          style={{
+            padding: 6,
+            borderRadius: 6,
+            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+          }}
+        >
+          {deletingTradeId === trade.id ? (
+            <ActivityIndicator size="small" color="#EF4444" />
+          ) : (
+            <Icon name="trash-outline" size={18} color="#EF4444" />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Trade Items - Matching Trades.jsx structure */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 }}>
+        {/* Has Items Grid */}
+        {trade.hasItems && trade.hasItems.length > 0 ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '48%' }}>
+            {Array.from({
+              length: Math.max(4, Math.ceil(trade.hasItems.length / 4) * 4)
+            }).map((_, idx) => {
+              const tradeItem = trade.hasItems[idx];
+              return (
+                <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
+                  {tradeItem ? (
+                    <>
+                      <Image
+                        source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                        style={{ width: 30, height: 30, borderRadius: 6 }}
+                        resizeMode="contain"
+                        defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                      />
+                      <View style={{ position: 'absolute', bottom: -5, right: 0, flexDirection: 'row', gap: 1, padding: 1, alignItems: 'center', justifyContent: 'center' }}>
+                        {tradeItem.isFly && (
+                          <Text style={{ color: 'white', backgroundColor: '#3498db', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>F</Text>
+                        )}
+                        {tradeItem.isRide && (
+                          <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
+                        )}
+                        {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                          <Text style={{ 
+                            color: 'white', 
+                            backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
+                            borderRadius: 10, 
+                            width: 10, 
+                            height: 10, 
+                            fontSize: 6, 
+                            textAlign: 'center', 
+                            lineHeight: 10, 
+                            fontWeight: '600', 
+                            overflow: 'hidden', 
+                            padding: 0, 
+                            margin: 0 
+                          }}>{tradeItem.valueType.toUpperCase()}</Text>
+                        )}
+                      </View>
+                    </>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={{ width: '48%', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{
+              backgroundColor: 'black',
+              paddingVertical: 1,
+              paddingHorizontal: 6,
+              borderRadius: 6,
+              flexShrink: 0,
+              flexGrow: 0,
+            }}>
+              <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Transfer Icon */}
+        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+          <Image source={require('../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
+        </View>
+        
+        {/* Wants Items Grid */}
+        {trade.wantsItems && trade.wantsItems.length > 0 ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '48%' }}>
+            {Array.from({
+              length: Math.max(4, Math.ceil(trade.wantsItems.length / 4) * 4)
+            }).map((_, idx) => {
+              const tradeItem = trade.wantsItems[idx];
+              return (
+                <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
+                  {tradeItem ? (
+                    <>
+                      <Image
+                        source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                        style={{ width: 30, height: 30, borderRadius: 6 }}
+                        resizeMode="contain"
+                        defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                      />
+                      <View style={{ position: 'absolute', bottom: -5, right: 0, flexDirection: 'row', gap: 1, padding: 1, alignItems: 'center', justifyContent: 'center' }}>
+                        {tradeItem.isFly && (
+                          <Text style={{ color: 'white', backgroundColor: '#3498db', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>F</Text>
+                        )}
+                        {tradeItem.isRide && (
+                          <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
+                        )}
+                        {tradeItem.valueType && tradeItem.valueType !== 'd' && (
+                          <Text style={{ 
+                            color: 'white', 
+                            backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
+                            borderRadius: 10, 
+                            width: 10, 
+                            height: 10, 
+                            fontSize: 6, 
+                            textAlign: 'center', 
+                            lineHeight: 10, 
+                            fontWeight: '600', 
+                            overflow: 'hidden', 
+                            padding: 0, 
+                            margin: 0 
+                          }}>{tradeItem.valueType.toUpperCase()}</Text>
+                        )}
+                      </View>
+                    </>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={{ width: '48%', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{
+              backgroundColor: 'black',
+              paddingVertical: 1,
+              paddingHorizontal: 6,
+              borderRadius: 6,
+              flexShrink: 0,
+              flexGrow: 0,
+            }}>
+              <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+            </View>
+          </View>
+        )}
+      </View>
+      
+      {/* Trade Totals - Matching Trades.jsx structure */}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', marginTop: 10 }}>
+        {trade.hasItems && trade.hasItems.length > 0 && (
+          <Text style={{ 
+            fontSize: 8, 
+            fontFamily: 'Lato-Bold', 
+            color: 'white', 
+            textAlign: 'center', 
+            alignSelf: 'center', 
+            marginHorizontal: 'auto', 
+            paddingHorizontal: 4, 
+            paddingVertical: 2, 
+            borderRadius: 6,
+            backgroundColor: config.colors.hasBlockGreen
+          }}>
+            ME: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
+          </Text>
+        )}
+        <View style={{ justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}>
+          {(trade.hasItems && trade.hasItems.length > 0 && trade.wantsItems && trade.wantsItems.length > 0) && (
+            <>
+              {(() => {
+                const hasValue = typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0;
+                const wantsValue = typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0;
+                if (hasValue > wantsValue) {
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Icon name="arrow-up-outline" size={12} color="green" />
+                      <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: 'green', textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        {formatTradeValue(hasValue - wantsValue)}
+                      </Text>
+                    </View>
+                  );
+                } else if (hasValue < wantsValue) {
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Icon name="arrow-down-outline" size={12} color={config.colors.hasBlockGreen} />
+                      <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.hasBlockGreen, textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        {formatTradeValue(wantsValue - hasValue)}
+                      </Text>
+                    </View>
+                  );
+                } else {
+                  return <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.primary, textAlign: 'center' }}>-</Text>;
+                }
+              })()}
+            </>
+          )}
+        </View>
+        {trade.wantsItems && trade.wantsItems.length > 0 && (
+          <Text style={{ 
+            fontSize: 8, 
+            fontFamily: 'Lato-Bold', 
+            color: 'white', 
+            textAlign: 'center', 
+            alignSelf: 'center', 
+            marginHorizontal: 'auto', 
+            paddingHorizontal: 4, 
+            paddingVertical: 2, 
+            borderRadius: 6,
+            backgroundColor: config.colors.wantBlockRed
+          }}>
+            YOU: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
+          </Text>
+        )}
+      </View>
+
+      {/* Description */}
+      {trade.description && (
+        <Text style={{
+          fontSize: 11,
+          color: isDarkMode ? '#d1d5db' : '#4b5563',
+          marginTop: 8,
+          paddingTop: 8,
+          borderTopWidth: 1,
+          borderTopColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+        }}>
+          {trade.description}
+        </Text>
+      )}
+    </View>
+  );
+}, [isDarkMode, t, deletingTradeId, handleDeleteTrade, localState.isGG, localState.imgurl, localState.imgurlGG, parsedValuesData, firestoreDB]);
+
 // Load more "gave" reviews in modal - keeps loading until all are fetched
 const loadMoreGaveModalReviews = useCallback(async () => {
   if (!user?.id || !firestoreDB || !appdatabase || loadingModalGaveReviews || !modalLastGaveDoc) return;
@@ -1590,6 +2315,36 @@ const loadMoreReceivedModalReviews = useCallback(async () => {
         // Document ID format: toUserId_fromUserId
         const reviewDocId = `${editingReview.toUserId}_${user.id}`;
         const reviewRef = doc(firestoreDB, 'reviews', reviewDocId);
+        
+        // ✅ Get old rating before updating
+        const existingReviewSnap = await getDoc(reviewRef);
+        const oldRating = existingReviewSnap.exists ? existingReviewSnap.data()?.rating : null;
+        const newRating = editReviewRating;
+        
+        // ✅ Check if rating changed - if so, update summary
+        const ratingChanged = oldRating !== null && oldRating !== newRating;
+        
+        if (ratingChanged) {
+          // ✅ Update user_ratings_summary when rating changes
+          const summaryRef = doc(firestoreDB, 'user_ratings_summary', editingReview.toUserId);
+          const summarySnap = await getDoc(summaryRef);
+          const summaryData = summarySnap.exists ? summarySnap.data() : null;
+          const oldAverage = summaryData?.averageRating || 0;
+          const oldCount = summaryData?.count || 0;
+          
+          // ✅ Recalculate average: remove old rating, add new rating
+          const newAverage = ((oldAverage * oldCount) - oldRating + newRating) / oldCount;
+          
+          await setDoc(
+            summaryRef,
+            {
+              averageRating: parseFloat(newAverage.toFixed(2)),
+              count: oldCount, // Count stays the same (updating existing review)
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
 
         await setDoc(
           reviewRef,
@@ -2183,6 +2938,39 @@ const formatPlanName = (plan) => {
   </View>
 </View>
 
+        {/* My Trades Section - Below Reviews */}
+        <View style={styles.reviewsSection}>
+          <Text style={{ fontSize: 14, fontFamily: 'Lato-Bold', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 12 }}>
+            My Trades
+          </Text>
+
+          {!user?.id ? (
+            <Text style={styles.reviewsEmptyText}>
+              Login to see your trades
+            </Text>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setShowMyTradesModal(true)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                borderRadius: 10,
+                paddingVertical: 12,
+                paddingHorizontal: 12,
+                borderWidth: 1,
+                borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+              }}
+            >
+              <Icon name="swap-horizontal-outline" size={18} color="#FF9500" style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }}>
+                View My Trades
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
         {/* Reviews Section - Two Small Modern Buttons */}
         <View style={styles.reviewsSection}>
           <Text style={{ fontSize: 14, fontFamily: 'Lato-Bold', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 12 }}>
@@ -2909,6 +3697,113 @@ const formatPlanName = (plan) => {
             </View>
           </View>
         </ConditionalKeyboardWrapper>
+      </Modal>
+
+      {/* My Trades Modal */}
+      <Modal
+        visible={showMyTradesModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowMyTradesModal(false);
+          setModalMyTrades([]);
+          setModalLastTradeDoc(null);
+          setModalHasMoreTrades(false);
+        }}
+      >
+        <Pressable
+          style={styles.overlay}
+          onPress={() => {
+            setShowMyTradesModal(false);
+            setModalMyTrades([]);
+            setModalLastTradeDoc(null);
+            setModalHasMoreTrades(false);
+          }}
+        />
+        <View style={{ 
+          flex: 1, 
+          justifyContent: 'flex-end',
+          backgroundColor: 'rgba(0,0,0,0.5)' 
+        }}>
+          <View style={[styles.drawer, { maxHeight: '90%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={styles.drawerSubtitle}>My Trades</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {modalMyTrades.length > 0 && (
+                  <TouchableOpacity
+                    onPress={handleDeleteAllTrades}
+                    disabled={isDeletingAll}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      backgroundColor: isDeletingAll ? (isDarkMode ? '#374151' : '#9ca3af') : '#EF4444',
+                      opacity: isDeletingAll ? 0.6 : 1,
+                    }}
+                  >
+                    {isDeletingAll ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                        Delete All
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => {
+                  setShowMyTradesModal(false);
+                  setModalMyTrades([]);
+                  setModalLastTradeDoc(null);
+                  setModalHasMoreTrades(false);
+                }}>
+                  <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {loadingModalMyTrades && modalMyTrades.length === 0 ? (
+                <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
+              ) : modalMyTrades.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
+                  No trades found
+                </Text>
+              ) : (
+                <>
+                  {modalMyTrades.map((trade) => (
+                    <React.Fragment key={trade.id}>
+                      {renderTradeItem(trade)}
+                    </React.Fragment>
+                  ))}
+
+                  {modalHasMoreTrades && (
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: config.colors.primary,
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        marginTop: 8,
+                        marginBottom: 16,
+                      }}
+                      onPress={loadMoreMyTrades}
+                      disabled={loadingModalMyTrades}
+                    >
+                      {loadingModalMyTrades ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+                          Load More
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
     </View>

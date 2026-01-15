@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   Text,
   Alert,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { getStyles } from '../Style';
@@ -13,6 +15,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
+import { validateContent } from '../../Helper/ContentModeration';
 
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
@@ -74,7 +77,8 @@ const PrivateMessageInput = ({
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
-  const [imageUri, setImageUri] = useState(null); // single image only
+  const [imageUris, setImageUris] = useState([]); // Array to hold up to 3 images
+  const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
 
   const { localState } = useLocalState();
   const { theme, user } = useGlobalState();
@@ -85,15 +89,25 @@ const PrivateMessageInput = ({
   const styles = useMemo(() => getStyles(isDark), [isDark]);
 
   // ✅ Memoize handlePickImage
-  const handlePickImage = useCallback(() => {
+  const handlePickImage = useCallback(async () => {
     if (isBanned) return;
+
+    // Calculate how many more images can be selected
+    const currentCount = imageUris.length;
+    const maxImages = 3;
+    const remainingSlots = maxImages - currentCount;
+
+    if (remainingSlots <= 0) {
+      Alert.alert('Limit Reached', 'You can only select up to 3 images per message.');
+      return;
+    }
 
     launchImageLibrary(
       {
         mediaType: 'photo',
-        selectionLimit: 1,
+        selectionLimit: remainingSlots, // Allow selecting up to remaining slots
       },
-      response => {
+      async (response) => {
         if (!response || response.didCancel) return;
 
         if (response.errorCode) {
@@ -109,13 +123,53 @@ const PrivateMessageInput = ({
           return;
         }
 
-        const asset = Array.isArray(response.assets) ? response.assets[0] : null;
-        if (asset?.uri && typeof asset.uri === 'string') {
-          setImageUri(asset.uri);
+        const assets = response.assets || [];
+        if (assets.length > 0) {
+          const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+          const validUris = [];
+          const rejectedCount = [];
+
+          // Check file size for each image
+          for (const asset of assets) {
+            if (!asset?.uri || typeof asset.uri !== 'string') continue;
+
+            try {
+              const filePath = asset.uri.replace('file://', '');
+              const fileInfo = await RNFS.stat(filePath);
+              const fileSize = fileInfo.size || 0;
+
+              if (fileSize > MAX_SIZE_BYTES) {
+                rejectedCount.push(asset.fileName || 'image');
+                continue;
+              }
+
+              validUris.push(asset.uri);
+            } catch (error) {
+              console.warn('Error checking file size:', error);
+              // If we can't check size, allow it (better UX than blocking)
+              validUris.push(asset.uri);
+            }
+          }
+
+          // Show alert if any images were rejected
+          if (rejectedCount.length > 0) {
+            Alert.alert(
+              'Image Too Large',
+              `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
+            );
+          }
+
+          // Add valid images to existing ones, but cap at 3 total
+          if (validUris.length > 0) {
+            setImageUris(prev => {
+              const combined = [...prev, ...validUris];
+              return combined.slice(0, maxImages); // Ensure we never exceed 3
+            });
+          }
         }
       },
     );
-  }, [isBanned]);
+  }, [isBanned, imageUris.length]);
 
   // 🐰 Upload ONE image to Bunny (no atob)
   const uploadToBunny = useCallback(
@@ -171,12 +225,21 @@ const PrivateMessageInput = ({
   // ✅ Memoize handleSend
   const handleSend = useCallback(async () => {
     const trimmedInput = (input || '').trim();
-    const hasImage = !!imageUri;
+    const hasImages = Array.isArray(imageUris) && imageUris.length > 0;
     const hasFruits = Array.isArray(selectedFruits) && selectedFruits.length > 0;
 
     // nothing to send
-    if (!trimmedInput && !hasImage && !hasFruits) return;
+    if (!trimmedInput && !hasImages && !hasFruits) return;
     if (isSending) return;
+
+    // ✅ Comprehensive content moderation check
+    if (trimmedInput) {
+      const validation = validateContent(trimmedInput);
+      if (!validation.isValid) {
+        Alert.alert('Error', validation.reason || 'Inappropriate content detected.');
+        return;
+      }
+    }
 
     // ✅ Validate onSend callback
     if (!onSend || typeof onSend !== 'function') {
@@ -188,12 +251,12 @@ const PrivateMessageInput = ({
 
     // snapshot current data
     const textToSend = trimmedInput;
-    const imageToSend = imageUri;
+    const imagesToSend = Array.isArray(imageUris) && imageUris.length > 0 ? [...imageUris] : [];
     const fruitsToSend = Array.isArray(selectedFruits) ? [...selectedFruits] : [];
 
     // clear UI
     setInput('');
-    setImageUri(null);
+    setImageUris([]);
     if (setSelectedFruits && typeof setSelectedFruits === 'function') {
       setSelectedFruits([]);
     }
@@ -207,14 +270,21 @@ const PrivateMessageInput = ({
     });
 
     try {
-      let imageUrl = null;
+      let imageUrls = [];
 
-      if (imageToSend) {
-        imageUrl = await uploadToBunny(imageToSend);
+      // Upload all images in parallel
+      if (imagesToSend.length > 0) {
+        const uploadPromises = imagesToSend.map(uri => uploadToBunny(uri));
+        imageUrls = await Promise.all(uploadPromises);
+        // Filter out any failed uploads (null values)
+        imageUrls = imageUrls.filter(url => url !== null);
       }
 
-      // 🔺 onSend: text, imageUrl, fruits
-      await onSend(textToSend, imageUrl, fruitsToSend);
+      // Send single image URL if only one, or array if multiple
+      const imageUrlToSend = imageUrls.length === 1 ? imageUrls[0] : (imageUrls.length > 1 ? imageUrls : null);
+
+      // 🔺 onSend: text, imageUrl (single or array), fruits
+      await onSend(textToSend, imageUrlToSend, fruitsToSend);
 
       if (onCancelReply && typeof onCancelReply === 'function') {
         onCancelReply();
@@ -225,7 +295,7 @@ const PrivateMessageInput = ({
     } finally {
       setIsSending(false); // ✅ always reset
     }
-  }, [input, imageUri, selectedFruits, isSending, onSend, onCancelReply, setSelectedFruits, localState?.isPro, uploadToBunny]);
+  }, [input, imageUris, selectedFruits, isSending, onSend, onCancelReply, setSelectedFruits, localState?.isPro, uploadToBunny]);
 
   // ✅ Memoize hasFruits and hasContent
   const hasFruits = useMemo(() =>
@@ -234,9 +304,41 @@ const PrivateMessageInput = ({
   );
 
   const hasContent = useMemo(() =>
-    (input || '').trim().length > 0 || !!imageUri || hasFruits,
-    [input, imageUri, hasFruits]
+    (input || '').trim().length > 0 || (Array.isArray(imageUris) && imageUris.length > 0) || hasFruits,
+    [input, imageUris, hasFruits]
   );
+
+  // ✅ Quick message templates for Adopt Me trading (matching blox style)
+  const messageTemplates = useMemo(() => [
+    "Interested in your trade!",
+    "Can we negotiate?",
+    "What's your best offer?",
+    "I'm ready to trade!",
+    "Let me check my inventory",
+    "Deal accepted!",
+    "Can you add more?",
+    "Meet me at the trading hub",
+    "What pets do you have?",
+    "Is this still available?",
+    "I'll add more pets",
+    "Fair trade, let's do it!",
+    "Can you change something?",
+    "I'm interested, let's discuss",
+    "Thanks for the trade!",
+    "Are you online?",
+    "When can you trade?",
+    "I have what you need",
+    "Let's make a deal!",
+    "Can we do this trade?",
+  ], []);
+
+  // Handle template selection
+  const handleTemplateSelect = useCallback(async (template) => {
+    setShowTemplateDrawer(false);
+    if (onSend && typeof onSend === 'function') {
+      await onSend(template, null, []);
+    }
+  }, [onSend]);
 
   return (
     <View style={styles.inputWrapper}>
@@ -261,6 +363,19 @@ const PrivateMessageInput = ({
 
       {/* Input + Actions */}
       <View style={styles.inputContainer}>
+        {/* Message Templates Drawer Icon */}
+        <TouchableOpacity
+          style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
+          onPress={() => setShowTemplateDrawer(true)}
+          disabled={isSending || isBanned}
+        >
+          <Icon
+            name="chatbubbles-outline"
+            size={20}
+            color={isDark ? '#FFF' : '#000'}
+          />
+        </TouchableOpacity>
+
         {/* Pets drawer icon */}
         <TouchableOpacity
           style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
@@ -319,30 +434,35 @@ const PrivateMessageInput = ({
         </TouchableOpacity>
       </View>
 
-      {/* Attached image indicator */}
-      {imageUri && (
+      {/* Attached images indicator */}
+      {Array.isArray(imageUris) && imageUris.length > 0 && (
         <View
           style={{
             paddingHorizontal: 10,
             paddingTop: 4,
             flexDirection: 'row',
             alignItems: 'center',
+            flexWrap: 'wrap',
           }}
         >
-          <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>
-            1 image attached
+          <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12, marginRight: 8 }}>
+            {imageUris.length} image{imageUris.length > 1 ? 's' : ''} attached
           </Text>
-
-          <TouchableOpacity
-            onPress={() => setImageUri(null)}
-            style={{ marginLeft: 8 }}
-          >
-            <Icon
-              name="close-circle"
-              size={18}
-              color={isDark ? '#ccc' : '#555'}
-            />
-          </TouchableOpacity>
+          {imageUris.map((uri, index) => (
+            <TouchableOpacity
+              key={`${uri}-${index}`}
+              onPress={() => {
+                setImageUris(prev => prev.filter((_, i) => i !== index));
+              }}
+              style={{ marginLeft: 4 }}
+            >
+              <Icon
+                name="close-circle"
+                size={18}
+                color={isDark ? '#ccc' : '#555'}
+              />
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
@@ -376,6 +496,103 @@ const PrivateMessageInput = ({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Message Templates Drawer Modal */}
+      <Modal
+        visible={showTemplateDrawer}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTemplateDrawer(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'flex-end',
+          }}
+          activeOpacity={1}
+          onPress={() => setShowTemplateDrawer(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: '60%',
+              paddingBottom: 20,
+            }}
+          >
+            {/* Header */}
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: 20,
+                borderBottomWidth: 1,
+                borderBottomColor: isDark ? '#374151' : '#E5E7EB',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: '600',
+                  color: isDark ? '#FFF' : '#000',
+                }}
+              >
+                Quick Messages
+              </Text>
+              <TouchableOpacity onPress={() => setShowTemplateDrawer(false)}>
+                <Icon name="close" size={24} color={isDark ? '#FFF' : '#000'} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Templates List */}
+            <ScrollView
+              style={{ padding: 16 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  gap: 10,
+                }}
+              >
+                {messageTemplates.map((template, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => handleTemplateSelect(template)}
+                    disabled={isSending || isBanned}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 20,
+                      backgroundColor: isDark ? '#374151' : '#E5E7EB',
+                      borderWidth: 1,
+                      borderColor: isDark ? '#4B5563' : '#D1D5DB',
+                      minWidth: '45%',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isDark ? '#F9FAFB' : '#111827',
+                        fontSize: 14,
+                        fontWeight: '500',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {template}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
