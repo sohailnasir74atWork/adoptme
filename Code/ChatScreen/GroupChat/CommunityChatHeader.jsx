@@ -286,7 +286,7 @@ const CommunityChatHeader = ({
             onPress={() => setGameModalVisible(false)}
             style={{
               position: 'absolute',
-              top: Platform.OS === 'android' ? 0 : 20,
+              top: Platform.OS === 'android' ? 0 : 60,
               left: 5,
               zIndex: 10,
               padding: 8,

@@ -20,6 +20,7 @@ import  { get, increment, ref, update } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import BannerAdComponent from '../../Ads/bannerAds';
+import InterstitialAdManager from '../../Ads/IntAd';
 import config from '../../Helper/Environment';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
@@ -64,6 +65,8 @@ const [selectedFruits, setSelectedFruits] = useState([]);
 const [reviewText, setReviewText] = useState('');   // 👈 new
 const [startRating,setStartRating] = useState(false)
 const [isOnline, setIsOnline] = useState(false);
+const hasSentMessageRef = useRef(false); // ✅ Track if user sent a message (for exit ad)
+const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
 
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);
@@ -584,6 +587,7 @@ showSuccessMessage(
       });
   
       setReplyTo(null);
+      hasSentMessageRef.current = true; // ✅ Track that user sent a message (for exit ad)
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert("Error", "Could not send your message. Please try again.");
@@ -603,10 +607,19 @@ showSuccessMessage(
 
       setActiveChat(user.id, chatKey);
 
+      // ✅ Reset refs when entering chat (for exit ad logic)
+      hasSentMessageRef.current = false;
+      chatEnterTimeRef.current = Date.now();
+
       return () => {
         clearActiveChat(user.id);
+        // ✅ Show ad when leaving if: 10+ seconds spent AND message sent AND not Pro
+        const timeSpent = Date.now() - (chatEnterTimeRef.current || Date.now());
+        if (timeSpent >= 20000 && hasSentMessageRef.current && !localState?.isPro) {
+          InterstitialAdManager.showAd();
+        }
       };
-    }, [user?.id, selectedUserId, chatKey])
+    }, [user?.id, selectedUserId, chatKey, localState?.isPro])
   );
   // console.log(selectedUser.senderId)
 
@@ -792,6 +805,7 @@ useEffect(() => {
     canRate={canRate}
     hasRated={hasRated}
     setShowRatingModal={setShowRatingModal}
+    chatKey={chatKey}
   />
 )}
 

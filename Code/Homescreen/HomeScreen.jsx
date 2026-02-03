@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, TextInput, Image, Pressable, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, TextInput, Image, Pressable, Platform, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
 import { useGlobalState } from '../GlobelStats';
@@ -84,7 +84,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user, firestoreDB, single_offer_wall } = useGlobalState();
+  const { theme, user, firestoreDB, single_offer_wall, reload } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
 const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -128,6 +128,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
   const [factor, setFactor] = useState(null);
   const [showofferwall, setShowofferwall] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
 
   // ✅ Cleanup all timeouts and animation frames on unmount
   useEffect(() => {
@@ -186,6 +188,47 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const handleLoginSuccess = useCallback(() => {
     setIsSigninDrawerVisible(false);
   }, []);
+
+  // ✅ Format last updated time as relative string
+  const getLastUpdatedText = useCallback(() => {
+    const now = new Date();
+    const diffMs = now - lastUpdatedTime;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins === 1) return '1 min ago';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    return lastUpdatedTime.toLocaleDateString();
+  }, [lastUpdatedTime]);
+
+  // ✅ Hard refresh values - reloads data from CDN/Firebase
+  const handleRefresh = useCallback(async () => {
+    if (refreshing || !isMountedRef.current) return;
+    
+    triggerHapticFeedback('impactLight');
+    setRefreshing(true);
+
+    try {
+      await reload(); // Re-fetch values data from CDN/Firebase
+      // ✅ Check if component is still mounted before updating state
+      if (!isMountedRef.current) return;
+      // ✅ Update last refreshed time
+      setLastUpdatedTime(new Date());
+      // ✅ Show success message when values are reloaded
+      showSuccessMessage('Success', 'Values have been reloaded');
+    } catch (error) {
+      console.error('Error refreshing values:', error);
+      if (!isMountedRef.current) return;
+      showErrorMessage('Error', 'Failed to reload values. Please try again.');
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [reload, refreshing, triggerHapticFeedback]);
 
   const resetState = useCallback(() => {
     triggerHapticFeedback('impactLight');
@@ -413,18 +456,27 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
   // ✅ Optimize the mode change effect - Fixed: Only update when mode changes, not when items change
   useEffect(() => {
+    // ✅ Check if component is still mounted
+    if (!isMountedRef.current) return;
+    
     // ✅ Use functional updates to avoid dependency on hasItems/wantsItems
     setHasItems(prevItems => {
+      if (!isMountedRef.current) return prevItems; // Return previous state if unmounted
       const updated = updateItemsForMode(prevItems);
       const newTotal = updated.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
-      setHasTotal(newTotal);
+      if (isMountedRef.current) {
+        setHasTotal(newTotal);
+      }
       return updated;
     });
 
     setWantsItems(prevItems => {
+      if (!isMountedRef.current) return prevItems; // Return previous state if unmounted
       const updated = updateItemsForMode(prevItems);
       const newTotal = updated.reduce((sum, item) => sum + (item?.selectedValue || 0), 0);
-      setWantsTotal(newTotal);
+      if (isMountedRef.current) {
+        setWantsTotal(newTotal);
+      }
       return updated;
     });
   }, [isSharkMode, updateItemsForMode]); // ✅ Removed hasItems/wantsItems from deps to prevent infinite loop
@@ -774,18 +826,27 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchFactor = async () => {
       try {
         const database = getDatabase();
         const snapshot = await ref(database, 'factor').once('value');
         const factor = snapshot.val();
-        setFactor(factor);
+        // ✅ Check if component is still mounted before updating state
+        if (isMounted) {
+          setFactor(factor);
+        }
       } catch (error) {
         console.error('Error fetching factor:', error);
       }
     };
 
     fetchFactor();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // console.log(localState.isGG)
@@ -822,7 +883,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     return () => {
       isMounted = false;
     };
-  }, [localState.isGG]);
+  }, [localState.isGG, localState.data, localState.ggData]); // ✅ Added dependencies so it updates when values are refreshed
 
   // console.log(filteredData.length)
 
@@ -915,6 +976,30 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         image: item.image ? item.image : '' ,
       });
       
+      // ✅ Create indexed arrays for server-side search - OPTIMIZED: Store only full names + words (not prefixes)
+      // Prefixes are generated on search side to reduce storage costs
+      const createSearchTokens = (itemName) => {
+        const name = itemName.toLowerCase().trim();
+        const tokens = [name]; // Full name for exact match
+        
+        // Split into words and add each word as a token (for partial word matching)
+        const words = name.split(/\s+/).filter(w => w.length > 0);
+        tokens.push(...words);
+        
+        // ✅ OPTIMIZED: Don't store prefixes here - they're generated on search side
+        // This reduces storage costs significantly (from ~10-20 tokens/item to ~2-3 tokens/item)
+        
+        return [...new Set(tokens)]; // Remove duplicates
+      };
+      
+      const hasItemNames = hasItems
+        .filter(item => item && (item.name || item.Name))
+        .flatMap(item => createSearchTokens(item.name || item.Name));
+      
+      const wantsItemNames = wantsItems
+        .filter(item => item && (item.name || item.Name))
+        .flatMap(item => createSearchTokens(item.name || item.Name));
+      
       // ✅ Calculate trade status and convert to single letter: 'w' (win), 'l' (lose), 'f' (fair)
       const tradeStatus = getTradeStatus(hasTotal, wantsTotal);
       const statusLetter = tradeStatus === 'win' ? 'w' : tradeStatus === 'lose' ? 'l' : 'f';
@@ -927,6 +1012,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         isFeatured: false,
         hasItems: hasItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
         wantsItems: wantsItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
+        hasItemNames, // ✅ Indexed array for server-side search (lowercase)
+        wantsItemNames, // ✅ Indexed array for server-side search (lowercase)
         hasTotal,
         wantsTotal,
         description: description || "",
@@ -953,6 +1040,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         const timeMessage = minutesLeft > 0 
           ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
           : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
+        if (!isMountedRef.current) return;
         showErrorMessage(t("home.alert.error"), `Please wait ${timeMessage} before creating a new trade.`);
         setIsSubmitting(false);
         return;
@@ -960,6 +1048,9 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
 
 await addDoc(tradesCollection, newTrade);
+      // ✅ Check if component is still mounted before updating state
+      if (!isMountedRef.current) return;
+      
       // Step 1: Close modal first
       setModalVisible(false);
 
@@ -974,7 +1065,9 @@ await addDoc(tradesCollection, newTrade);
       };
 
       // Step 4: Update timestamp and analytics
-      setLastTradeTime(now); // ✅ Use Date.now() for cooldown tracking
+      if (isMountedRef.current) {
+        setLastTradeTime(now); // ✅ Use Date.now() for cooldown tracking
+      }
       mixpanel.track("Trade Created", { user: user?.id });
 
       // ✅ Store timeout and animation frame IDs for cleanup
@@ -1018,9 +1111,12 @@ await addDoc(tradesCollection, newTrade);
 
     } catch (error) {
       console.error("Error creating trade:", error);
+      if (!isMountedRef.current) return;
       showErrorMessage(t("home.alert.error"), "Something went wrong while posting the trade.");
     } finally {
-      setIsSubmitting(false);
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t, resetState]);
 
@@ -1116,6 +1212,8 @@ await addDoc(tradesCollection, newTrade);
                     onTouchEnd={resetState}
                   />
                 </View>
+                {/* Last Updated Section */}
+             
               </View>
                   </View>
                 </View>
@@ -1125,6 +1223,8 @@ await addDoc(tradesCollection, newTrade);
                       <Text style={styles.offerLabel}>ME</Text>
                       <Text style={styles.dividerText}></Text>
                       <Text style={styles.offerLabel}>YOU</Text>
+                      {/* ✅ Modern Refresh Button */}
+                  
                     </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <View style={styles.itemRow}>
@@ -1232,6 +1332,26 @@ await addDoc(tradesCollection, newTrade);
                   })}
                 </View>
               </View>
+              <TouchableOpacity 
+                  style={styles.lastUpdatedContainer}
+                  onPress={handleRefresh}
+                  disabled={refreshing}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.lastUpdatedContent}>
+                    {refreshing ? (
+                      <ActivityIndicator size="small" color={config.colors.primary} style={{ marginRight: 6 }} />
+                    ) : (
+                      <Icon name="time-outline" size={14} color={isDarkMode ? '#aaa' : '#888'} style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={[styles.lastUpdatedText, { color: isDarkMode ? '#aaa' : '#666' }]}>
+                      {refreshing ? 'Updating...' : `Updated ${getLastUpdatedText()}`}
+                    </Text>
+                    {!refreshing && (
+                      <Icon name="refresh-outline" size={14} color={config.colors.primary} style={{ marginLeft: 6 }} />
+                    )}
+                  </View>
+                </TouchableOpacity>
               {!localState.isGG &&
                 <View style={styles.typeContainer}>
 
@@ -1639,6 +1759,7 @@ const getStyles = (isDarkMode,isGG) =>
       // marginTop: 5,
       flex:1,
       width:'100%',
+      position: 'relative',
       // backgroundColor:'red',
 
     },
@@ -1652,6 +1773,36 @@ const getStyles = (isDarkMode,isGG) =>
       fontSize: 14,
       color: '#999',
       paddingHorizontal: 5,
+    },
+    refreshButton: {
+      position: 'absolute',
+      left: 0,
+      bottom: -2,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    lastUpdatedContainer: {
+      alignSelf: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      marginVertical: 4,
+    },
+    lastUpdatedContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    lastUpdatedText: {
+      fontSize: 12,
+      fontFamily: 'Lato-Regular',
+      // shadowColor: '#000',
+      // shadowOffset: { width: 0, height: 2 },
+      // shadowOpacity: 0.1,
+      // shadowRadius: 3,
+      // elevation: 3,
     },
     summaryBox: {
       width: '48%',
@@ -1778,7 +1929,7 @@ const getStyles = (isDarkMode,isGG) =>
       backgroundColor: '#FF9999',
     },
     categoryButtonText: {
-      fontSize: 10,
+      fontSize: 8,
       fontWeight: '600',
       color: '#666',
     },

@@ -46,7 +46,8 @@ const PrivateMessageList = ({
   canRate,
   hasRated,
   setShowRatingModal,
-  isPaginating,        // 👈 add this
+  isPaginating,
+  chatKey, // 👈 Add chatKey to construct messagePath for private messages
 }) => {
   const { theme, isAdmin, api, freeTranslation } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -104,17 +105,20 @@ const PrivateMessageList = ({
   // ✅ Memoize handleReport
   const handleReport = useCallback((message) => {
     if (!message) return;
+    triggerHapticFeedback('impactLight');
     setSelectedMessage(message);
     setShowReportPopup(true);
-  }, []);
+  }, [triggerHapticFeedback]);
 
-  // ✅ Memoize handleSubmitReport
-  const handleSubmitReport = useCallback((message, reason) => {
-    if (onReportSubmit && typeof onReportSubmit === 'function') {
-      onReportSubmit(message, reason);
+  // ✅ Memoize handleReportSuccess - called when report succeeds
+  const handleReportSuccess = useCallback((reportedMessageId) => {
+    if (!reportedMessageId) return;
+    triggerHapticFeedback('impactLight');
+    // Call parent's onReportSubmit if provided
+    if (onReportSubmit && typeof onReportSubmit === 'function' && selectedMessage) {
+      onReportSubmit(selectedMessage, 'reported');
     }
-    setShowReportPopup(false);
-  }, [onReportSubmit]);
+  }, [onReportSubmit, selectedMessage, triggerHapticFeedback]);
   // console.log(selectedUserId === userId)
  
 
@@ -453,8 +457,14 @@ const PrivateMessageList = ({
       <ReportPopup
         visible={showReportPopup}
         message={selectedMessage}
-        onClose={() => setShowReportPopup(false)}
-        onSubmit={handleSubmitReport}
+        messagePath={chatKey ? `private_messages/${chatKey}/messages` : null}
+        onClose={(success) => {
+          if (success) {
+            handleReportSuccess(selectedMessage?.id);
+          }
+          setSelectedMessage(null);
+          setShowReportPopup(false);
+        }}
       />
     </View>
   );

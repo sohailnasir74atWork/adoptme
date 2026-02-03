@@ -21,6 +21,7 @@ import HDWallpaperScreen from "./HDwallpaper";
 import NewsScreen from "./News";
 import { useGlobalState } from "../GlobelStats";
 import NewsFeedbackReport from "./AdminReport";
+import ServerScreen from "./ServerScreen";
 
 const MemoValueScreen = React.memo(ValueScreen);
 
@@ -37,6 +38,12 @@ const CustomTopTabs = ({ selectedTheme }) => {
         key: "values",
         icon: "pricetags-outline",
         iconActive: "pricetags",
+      },
+      {
+        label: "Server",
+        key: "server",
+        icon: "server-outline",
+        iconActive: "server",
       },
       {
         label: "HD Wallpaper",
@@ -210,6 +217,16 @@ const CustomTopTabs = ({ selectedTheme }) => {
             <MemoValueScreen selectedTheme={selectedTheme} />
           </View>
         )}
+         {mountedTabs.server && (
+          <View
+            style={[
+              styles.screen,
+              activeKey !== "server" && styles.hiddenScreen,
+            ]}
+          >
+            <ServerScreen selectedTheme={selectedTheme} />
+          </View>
+        )}
 
         {mountedTabs.wallpaper && (
           <View
@@ -233,7 +250,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
           </View>
         )}
 
-     
+       
 
         {/* 🔹 Admin tab content, only mounted if the tab exists & was visited */}
         {mountedTabs.Admin && isAdmin && (
@@ -256,6 +273,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     padding: 8,
+    paddingTop: 60, // ✅ Add top padding since header is hidden
   },
   container: {
     paddingBottom: 8,

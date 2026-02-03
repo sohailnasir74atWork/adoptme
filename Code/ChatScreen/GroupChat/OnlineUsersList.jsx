@@ -16,7 +16,6 @@ import { useGlobalState } from '../../GlobelStats';
 import { ref, get, query, orderByValue, equalTo, limitToFirst, startAfter } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
@@ -455,12 +454,9 @@ const OnlineUsersList = ({
       mixpanel.track("Online Users Chat");
     };
 
-    if (!localState?.isPro) {
-      InterstitialAdManager.showAd(callbackFunction);
-    } else {
-      callbackFunction();
-    }
-  }, [mode, onClose, navigation, localState?.isPro, handleToggleUserSelection, handleGameInvite]);
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callbackFunction();
+  }, [mode, onClose, navigation, handleToggleUserSelection, handleGameInvite]);
 
   // ✅ Get selected users for group creation
   const selectedUsers = useMemo(() => {

@@ -6,7 +6,6 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useGlobalState } from '../GlobelStats';
 import config from '../Helper/Environment';
 import { useNavigation } from '@react-navigation/native';
-import { FilterMenu } from './tradeHelpers';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useLocalState } from '../LocalGlobelStats';
@@ -41,6 +40,13 @@ dayjs.extend(relativeTime);
 
 const TradeList = ({ route }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInHas, setSearchInHas] = useState(true); // ✅ Search in "ME" side (hasItems)
+  const [searchInWants, setSearchInWants] = useState(true); // ✅ Search in "YOU" side (wantsItems)
+  const [isSearching, setIsSearching] = useState(false); // ✅ Loading state for search
+  const [isSearchMode, setIsSearchMode] = useState(false); // ✅ Track if we're in search mode
+  const [searchLastDoc, setSearchLastDoc] = useState(null); // ✅ Pagination cursor for search
+  const [searchHasMore, setSearchHasMore] = useState(true); // ✅ More results available for search
+  const SEARCH_PAGE_SIZE = 5; // ✅ Fetch 5 items at a time for search
   // const [isAdVisible, setIsAdVisible] = useState(true);
   const { selectedTheme } = route.params
   const { user, analytics, updateLocalStateAndDatabase, appdatabase } = useGlobalState()
@@ -91,24 +97,25 @@ const TradeList = ({ route }) => {
     setIsProStatus(localState.isPro); // ✅ Force update state and trigger re-render
   }, [localState.isPro]);
 
+  // ✅ Client-side filtering for non-search scenarios (filters, banned users)
   useEffect(() => {
-    const lowerCaseQuery = searchQuery.trim().toLowerCase();
     const bannedUsersList = Array.isArray(bannedUsers) ? bannedUsers : [];
 
     setFilteredTrades(
       trades.filter((trade) => {
-        // ✅ Filter out trades from blocked users (client-side only)
+        // ✅ Filter out trades from blocked users
         if (bannedUsersList.includes(trade.userId)) {
           return false;
         }
 
-        // If no filters selected, show all trades
-        if (selectedFilters.length === 0) return true;
+        // ✅ If no filters selected, show all trades
+        if (selectedFilters.length === 0) {
+          return true;
+        }
 
         // ✅ Separate filter types
         const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
         const hasMyTradesFilter = selectedFilters.includes("myTrades");
-        const hasSearchFilters = lowerCaseQuery && (selectedFilters.includes("has") || selectedFilters.includes("wants"));
 
         // ✅ Check status filter match
         let matchesStatus = true;
@@ -124,27 +131,11 @@ const TradeList = ({ route }) => {
           matchesMyTrades = trade.userId === user.id;
         }
 
-        // ✅ Check search filter match
-        let matchesSearch = true;
-        if (hasSearchFilters) {
-          matchesSearch = false;
-          if (selectedFilters.includes("has")) {
-            matchesSearch = matchesSearch || trade.hasItems?.some((item) =>
-              item.name.toLowerCase().includes(lowerCaseQuery)
-            );
-          }
-          if (selectedFilters.includes("wants")) {
-            matchesSearch = matchesSearch || trade.wantsItems?.some((item) =>
-              item.name.toLowerCase().includes(lowerCaseQuery)
-            );
-          }
-        }
-
         // ✅ All selected filters must match (AND logic)
-        return matchesStatus && matchesMyTrades && matchesSearch;
+        return matchesStatus && matchesMyTrades;
       })
     );
-  }, [searchQuery, trades, selectedFilters, user.id, bannedUsers]);
+  }, [trades, selectedFilters, user.id, bannedUsers]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -438,34 +429,185 @@ const TradeList = ({ route }) => {
       });
     };
 
-    try {
-      // const isOnline = await isUserOnline(item.userId)
-
-
-      if (!localState.isPro) { InterstitialAdManager.showAd(callbackfunction); }
-      else { callbackfunction() }
-
-
-    } catch (error) {
-      console.error('Error navigating to PrivateChat:', error);
-      Alert.alert('Error', 'Unable to navigate to the chat. Please try again later.');
-    }
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callbackfunction();
   };
 
 
 
 
   const handleEndReached = () => {
-    if (!hasMore || loading) return; // ✅ Prevents unnecessary calls
+    if (loading || isSearching) return; // ✅ Prevents unnecessary calls
+    
+    // ✅ Handle search pagination
+    if (isSearchMode && searchHasMore) {
+      if (!user?.id) {
+        setIsSigninDrawerVisible(true);
+      } else {
+        handleSearchTrades(true); // Load more search results
+      }
+      return;
+    }
+    
+    // ✅ Handle normal pagination
+    if (!hasMore || loading) return;
     if (!user?.id) {
       setIsSigninDrawerVisible(true);
+    } else {
+      fetchMoreTrades();
     }
-    else { fetchMoreTrades(); }
   };
 
   // console.log(trades)
 
   // import firestore from '@react-native-firebase/firestore'; // Ensure this import
+
+  // ✅ Firestore search function - server-side filtering using indexed fields (hasItemNames/wantsItemNames)
+  // ✅ Firestore search - uses indexed fields (hasItemNames/wantsItemNames) for new trades
+  const handleSearchTrades = useCallback(async (isLoadMore = false) => {
+    const searchTerm = searchQuery.trim();
+    if (!searchTerm) {
+      setIsSearchMode(false);
+      setSearchLastDoc(null);
+      setSearchHasMore(true);
+      fetchInitialTrades();
+      return;
+    }
+
+    if (!searchInHas && !searchInWants) {
+      Alert.alert('Search Error', 'Please select at least one search option (ME side or YOU side)');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const searchTermLower = searchTerm.toLowerCase().trim();
+      
+      // ✅ Get status filters
+      const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
+      const statusValues = statusFilters.length > 0 
+        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        : null;
+
+      const allResults = new Map();
+      let lastDocSnapshot = isLoadMore ? searchLastDoc : null;
+
+      // ✅ Search in ME side (hasItemNames) - SERVER-SIDE filtering
+      // Requires composite index: hasItemNames (array-contains) + timestamp (desc)
+      if (searchInHas) {
+        try {
+          const hasQuery = lastDocSnapshot
+            ? query(
+                collection(firestoreDB, 'trades_new'),
+                where('hasItemNames', 'array-contains', searchTermLower),
+                orderBy('timestamp', 'desc'),
+                startAfter(lastDocSnapshot),
+                limit(SEARCH_PAGE_SIZE)
+              )
+            : query(
+                collection(firestoreDB, 'trades_new'),
+                where('hasItemNames', 'array-contains', searchTermLower),
+                orderBy('timestamp', 'desc'),
+                limit(SEARCH_PAGE_SIZE)
+              );
+
+          const hasSnapshot = await getDocs(hasQuery);
+          hasSnapshot.docs?.forEach((docSnap) => {
+            if (!allResults.has(docSnap.id)) {
+              allResults.set(docSnap.id, { id: docSnap.id, ...docSnap.data(), _doc: docSnap });
+            }
+          });
+        } catch (error) {
+          console.error('❌ hasItemNames search error:', error.message);
+          // If index missing, show link to create it
+          if (error.message?.includes('index')) {
+            console.log('📌 Create index at:', error.message.match(/https:\/\/[^\s]+/)?.[0]);
+          }
+        }
+      }
+
+      // ✅ Search in YOU side (wantsItemNames) - SERVER-SIDE filtering
+      // Requires composite index: wantsItemNames (array-contains) + timestamp (desc)
+      if (searchInWants) {
+        try {
+          const wantsQuery = lastDocSnapshot
+            ? query(
+                collection(firestoreDB, 'trades_new'),
+                where('wantsItemNames', 'array-contains', searchTermLower),
+                orderBy('timestamp', 'desc'),
+                startAfter(lastDocSnapshot),
+                limit(SEARCH_PAGE_SIZE)
+              )
+            : query(
+                collection(firestoreDB, 'trades_new'),
+                where('wantsItemNames', 'array-contains', searchTermLower),
+                orderBy('timestamp', 'desc'),
+                limit(SEARCH_PAGE_SIZE)
+              );
+
+          const wantsSnapshot = await getDocs(wantsQuery);
+          wantsSnapshot.docs?.forEach((docSnap) => {
+            if (!allResults.has(docSnap.id)) {
+              allResults.set(docSnap.id, { id: docSnap.id, ...docSnap.data(), _doc: docSnap });
+            }
+          });
+        } catch (error) {
+          console.error('❌ wantsItemNames search error:', error.message);
+          if (error.message?.includes('index')) {
+            console.log('📌 Create index at:', error.message.match(/https:\/\/[^\s]+/)?.[0]);
+          }
+        }
+      }
+
+      // ✅ Convert to array and sort by timestamp
+      let searchedTrades = Array.from(allResults.values())
+        .sort((a, b) => {
+          const aTime = a.timestamp?.toMillis() || 0;
+          const bTime = b.timestamp?.toMillis() || 0;
+          return bTime - aTime;
+        });
+
+      // ✅ Apply status filter if needed
+      if (statusValues && statusValues.length > 0) {
+        searchedTrades = searchedTrades.filter(t => statusValues.includes(t.status));
+      }
+
+      // ✅ Get last doc for pagination
+      if (searchedTrades.length > 0) {
+        const lastTrade = searchedTrades[searchedTrades.length - 1];
+        lastDocSnapshot = lastTrade._doc || null;
+      }
+
+      // ✅ Remove _doc from trades before setting state
+      searchedTrades = searchedTrades.map(({ _doc, ...trade }) => trade);
+
+      // ✅ Update state
+      if (isLoadMore) {
+        setTrades((prev) => {
+          const combined = [...prev, ...searchedTrades];
+          const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
+          return unique.sort((a, b) => {
+            const aTime = a.timestamp?.toMillis() || 0;
+            const bTime = b.timestamp?.toMillis() || 0;
+            return bTime - aTime;
+          });
+        });
+      } else {
+        setTrades(searchedTrades);
+        setIsSearchMode(true);
+      }
+
+      // ✅ Update pagination state
+      setSearchLastDoc(lastDocSnapshot);
+      setSearchHasMore(searchedTrades.length >= SEARCH_PAGE_SIZE);
+      
+    } catch (error) {
+      console.error('❌ Error searching trades:', error);
+      Alert.alert('Search Error', 'Failed to search trades. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchQuery, searchInHas, searchInWants, selectedFilters, firestoreDB, searchLastDoc]);
 
   const fetchInitialTrades = useCallback(async () => {
     setLoading(true);
@@ -777,6 +919,13 @@ const TradeList = ({ route }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    // ✅ Reset search when refreshing
+    if (searchQuery.trim()) {
+      setSearchQuery('');
+      setIsSearchMode(false);
+      setSearchLastDoc(null);
+      setSearchHasMore(true);
+    }
     await fetchInitialTrades();
     setRefreshing(false);
   };
@@ -865,18 +1014,8 @@ const TradeList = ({ route }) => {
         });
       };
 
-      try {
-        // const isOnline = await isUserOnline(item.userId)
-
-
-        if (!localState.isPro) { InterstitialAdManager.showAd(callbackfunction); }
-        else { callbackfunction() }
-
-
-      } catch (error) {
-        console.error('Error navigating to PrivateChat:', error);
-        Alert.alert('Error', 'Unable to navigate to the chat. Please try again later.');
-      }
+      // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+      callbackfunction();
     };
 const GG = item.isSharkMode === 'GG'
     return (
@@ -991,10 +1130,7 @@ const GG = item.isSharkMode === 'GG'
                   <View key={idx} style={styles.gridCell}>
                     {tradeItem ? (
                       <>
-                        <Image
-                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
-                          style={styles.gridItemImage}
-                        />
+                        {/* ✅ Badges above image */}
                         <View style={styles.itemBadgesContainer}>
                           {tradeItem.isFly && (
                             <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
@@ -1010,6 +1146,17 @@ const GG = item.isSharkMode === 'GG'
                             ]}>{tradeItem.valueType.toUpperCase()}</Text>
                           )}
                         </View>
+                        {/* ✅ Image */}
+                        <Image
+                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
+                          style={styles.gridItemImage}
+                        />
+                        {/* ✅ Item name below image */}
+                        <Text style={styles.itemName} numberOfLines={1}>
+                          {tradeItem.name && tradeItem.name.length > 8 
+                            ? `${tradeItem.name.substring(0, 8)}...` 
+                            : tradeItem.name || ''}
+                        </Text>
                       </>
                     ) : null}
                   </View>
@@ -1036,11 +1183,7 @@ const GG = item.isSharkMode === 'GG'
                   <View key={idx} style={styles.gridCell}>
                     {tradeItem ? (
                       <>
-                        <Image
-                                                   source={{ uri: getImageUrl(tradeItem,GG,  localState.imgurl, localState.imgurlGG) }}
-
-                          style={styles.gridItemImage}
-                        />
+                        {/* ✅ Badges above image */}
                         <View style={styles.itemBadgesContainer}>
                           {tradeItem.isFly && (
                             <Text style={[styles.itemBadge, styles.itemBadgeFly]}>F</Text>
@@ -1056,6 +1199,17 @@ const GG = item.isSharkMode === 'GG'
                             ]}>{tradeItem.valueType.toUpperCase()}</Text>
                           )}
                         </View>
+                        {/* ✅ Image */}
+                        <Image
+                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
+                          style={styles.gridItemImage}
+                        />
+                        {/* ✅ Item name below image */}
+                        <Text style={styles.itemName} numberOfLines={1}>
+                          {tradeItem.name && tradeItem.name.length > 8 
+                            ? `${tradeItem.name.substring(0, 8)}...` 
+                            : tradeItem.name || ''}
+                        </Text>
                       </>
                     ) : null}
                   </View>
@@ -1169,17 +1323,108 @@ const GG = item.isSharkMode === 'GG'
 
   return (
     <View style={styles.container}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {/* ✅ Modern Search Container */}
+      <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' }]}>
+        <View style={styles.searchInputContainer}>
+          <TextInput
+            style={[styles.searchInput, { color: isDarkMode ? '#fff' : '#000' }]}
+            placeholder={t("trade.search_placeholder") || "Search items..."}
+            placeholderTextColor={isDarkMode ? '#888' : '#666'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => {
+              setSearchLastDoc(null);
+              setSearchHasMore(true);
+              handleSearchTrades(false);
+            }}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => {
+                setSearchQuery('');
+                setIsSearchMode(false);
+                setSearchLastDoc(null);
+                setSearchHasMore(true);
+                fetchInitialTrades();
+              }} 
+              style={styles.clearSearchButton}
+            >
+              <Icon name="close-circle" size={20} color={isDarkMode ? '#999' : '#666'} />
+            </TouchableOpacity>
+          )}
+          {/* ✅ Search Button - Inside input container on right side */}
+          <TouchableOpacity
+            style={[
+              styles.searchButtonInline,
+              { 
+                backgroundColor: searchQuery.trim() ? config.colors.primary : (isDarkMode ? '#333' : '#ddd'),
+                opacity: searchQuery.trim() && !isSearching ? 1 : 0.6
+              }
+            ]}
+            onPress={() => {
+              // ✅ Reset pagination for new search
+              setSearchLastDoc(null);
+              setSearchHasMore(true);
+              handleSearchTrades(false);
+            }}
+            disabled={!searchQuery.trim() || isSearching}
+            activeOpacity={0.8}
+          >
+            {isSearching ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Icon name="search" size={18} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
 
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t("trade.search_placeholder")}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor={isDarkMode ? 'white' : '#aaa'}
-        />
-        <FilterMenu selectedFilters={selectedFilters} setSelectedFilters={setSelectedFilters} analytics={analytics} platform={platform} />
+        {/* ✅ Search Options Checkboxes */}
+        {searchQuery.length > 0 && (
+          <View style={styles.searchOptionsContainer}>
+            <TouchableOpacity
+              style={[styles.checkboxContainer, !searchInHas && styles.checkboxUnchecked]}
+              onPress={() => {
+                triggerHapticFeedback('impactLight');
+                // ✅ Ensure at least one checkbox is always checked
+                if (!searchInHas && !searchInWants) {
+                  setSearchInWants(true);
+                }
+                setSearchInHas(!searchInHas);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, searchInHas && styles.checkboxChecked]}>
+                {searchInHas && <Icon name="checkmark" size={14} color="#fff" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
+                Search in ME side
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.checkboxContainer, !searchInWants && styles.checkboxUnchecked]}
+              onPress={() => {
+                triggerHapticFeedback('impactLight');
+                // ✅ Ensure at least one checkbox is always checked
+                if (!searchInHas && !searchInWants) {
+                  setSearchInHas(true);
+                }
+                setSearchInWants(!searchInWants);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, searchInWants && styles.checkboxChecked]}>
+                {searchInWants && <Icon name="checkmark" size={14} color="#fff" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
+                Search in YOU side
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
+
       <FlatList
         ref={flatListRef}
         data={filteredTrades}
@@ -1301,23 +1546,100 @@ const getStyles = (isDarkMode) =>
       borderColor: config.colors.hasBlockGreen,
     },
 
+    searchContainer: {
+      padding: 12,
+      borderRadius: 12,
+      marginVertical: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    searchInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      borderWidth: 1.5,
+      borderColor: isDarkMode ? '#444' : '#c5c5c5',
+    },
+    searchIcon: {
+      marginRight: 8,
+    },
     searchInput: {
       height: 40,
-      borderColor: isDarkMode ? config.colors.primary : 'white',
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
-
-      borderWidth: 1,
-      borderRadius: 5,
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      borderWidth: 0,
       marginVertical: 8,
       paddingHorizontal: 10,
-      color: isDarkMode ? 'white' : 'black',
       flex: 1,
-      borderRadius: 10, // Ensure smooth corners
-      // shadowColor: '#000', // Shadow color for iOS
-      // shadowOffset: { width: 0, height: 0 }, // Positioning of the shadow
-      // shadowOpacity: 0.2, // Opacity for iOS shadow
-      // shadowRadius: 2, // Spread of the shadow
-      // elevation: 2, // Elevation for Android (4-sided shadow)
+    },
+    clearSearchButton: {
+      padding: 4,
+      marginLeft: 8,
+    },
+    searchOptionsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginBottom: 10,
+      paddingVertical: 8,
+    },
+    checkboxContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: isDarkMode ? '#2a2a2a' : '#e8e8e8',
+      borderWidth: isDarkMode ? 0 : 1,
+      borderColor: isDarkMode ? 'transparent' : '#d0d0d0',
+    },
+    checkboxUnchecked: {
+      opacity: 0.6,
+    },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 4,
+      borderWidth: 2,
+      borderColor: config.colors.primary,
+      marginRight: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+    },
+    checkboxChecked: {
+      backgroundColor: config.colors.primary,
+      borderColor: config.colors.primary,
+    },
+    checkboxLabel: {
+      fontSize: 13,
+      fontFamily: 'Lato-Regular',
+    },
+    searchButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 10,
+      marginTop: 4,
+    },
+    searchButtonInline: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 8,
+    },
+    searchButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontFamily: 'Lato-Bold',
     },
     tradeHeader: {
       flexDirection: 'row',
@@ -1359,29 +1681,37 @@ const getStyles = (isDarkMode) =>
     },
     gridCell: {
       width: '22%',
-      height: 40,
-      margin: 1,
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       position: 'relative',
-      marginBottom: 10
+      marginBottom: 10,
+      minHeight: 55, // Increased to accommodate badges, image, and name
     },
     gridItemImage: {
       width: 30,
       height: 30,
       borderRadius: 6,
+      marginTop: 12, // Space for badges above
     },
     itemBadgesContainer: {
       position: 'absolute',
-      bottom: -5,
+      top: 0,
       right: 0,
       flexDirection: 'row',
       gap: 1,
       padding: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      //  backgroundColor:'red'
-
+      zIndex: 1,
+    },
+    itemName: {
+      fontSize: 7,
+      fontFamily: 'Lato-Regular',
+      color: isDarkMode ? '#ccc' : '#666',
+      marginTop: 2,
+      textAlign: 'center',
+      width: '100%',
+      paddingHorizontal: 2,
     },
     itemBadge: {
       color: 'white',

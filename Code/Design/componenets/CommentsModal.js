@@ -25,10 +25,10 @@ import {
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useNavigation } from '@react-navigation/native';
-import InterstitialAdManager from '../../Ads/IntAd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { validateContent } from '../../Helper/ContentModeration';
+import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 
 dayjs.extend(relativeTime);
 
@@ -75,17 +75,9 @@ const CommentModal = ({ visible, onClose, postId }) => {
       });
     };
 
-    try {
-      if (!localState?.isPro) {
-        InterstitialAdManager.showAd(callback);
-      } else {
-        callback();
-      }
-    } catch (error) {
-      console.error('Navigation Error:', error);
-      Alert.alert('Error', 'Failed to navigate to chat.');
-    }
-  }, [user?.id, navigation, localState?.isPro]);
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callback();
+  }, [user?.id, navigation]);
 
   const handleAddComment = useCallback(async () => {
     const text = commentText.trim();
@@ -145,47 +137,52 @@ const CommentModal = ({ visible, onClose, postId }) => {
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalBackground}>
-        {/* Backdrop */}
-        <Pressable style={styles.backdrop} onPress={onClose} />
+      <ConditionalKeyboardWrapper style={styles.keyboardAvoidingView}>
+        <View style={styles.modalBackground}>
+          {/* Backdrop */}
+          <Pressable style={styles.backdrop} onPress={onClose} />
 
-        {/* Bottom sheet */}
-        <View style={[styles.modalContent, isDarkMode && styles.darkContent]}>
-          <View style={styles.sheetHandle} />
+          {/* Bottom sheet */}
+          <View style={[styles.modalContent, isDarkMode && styles.darkContent]}>
+            <View style={styles.sheetHandle} />
 
-          <FlatList
-            data={comments}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            keyboardShouldPersistTaps="handled"
-          />
-
-          <View style={styles.inputRow}>
-            <TextInput
-              ref={inputRef}
-              placeholder="Write a comment..."
-              placeholderTextColor={isDarkMode ? '#ccc' : '#888'}
-              value={commentText}
-              onChangeText={setCommentText}
-              style={[styles.input, isDarkMode && styles.inputDark]}
-              returnKeyType="send"
-              onSubmitEditing={handleAddComment}
+            <FlatList
+              data={comments}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              keyboardShouldPersistTaps="handled"
             />
-            <TouchableOpacity onPress={handleAddComment} style={styles.sendBtn}>
-              <Text style={styles.sendText}>Send</Text>
+
+            <View style={styles.inputRow}>
+              <TextInput
+                ref={inputRef}
+                placeholder="Write a comment..."
+                placeholderTextColor={isDarkMode ? '#ccc' : '#888'}
+                value={commentText}
+                onChangeText={setCommentText}
+                style={[styles.input, isDarkMode && styles.inputDark]}
+                returnKeyType="send"
+                onSubmitEditing={handleAddComment}
+              />
+              <TouchableOpacity onPress={handleAddComment} style={styles.sendBtn}>
+                <Text style={styles.sendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <Text style={styles.sendText}>Close</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.sendText}>Close</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+      </ConditionalKeyboardWrapper>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   modalBackground: {
     flex: 1,
     justifyContent: 'flex-end',

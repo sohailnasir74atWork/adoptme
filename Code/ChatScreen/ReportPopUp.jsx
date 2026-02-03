@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { banUserwithEmail } from "./utils";
 
 
-const ReportPopup = ({ visible, message, onClose }) => {
+const ReportPopup = ({ visible, message, onClose, messagePath }) => {
   const [selectedReason, setSelectedReason] = useState("Spam");
   const [customReason, setCustomReason] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -58,7 +58,11 @@ const ReportPopup = ({ visible, message, onClose }) => {
     }
   
     setLoading(true);
-    const messageRef = ref(appdatabase, `chat_new/${sanitizedId}`);
+    // ✅ Support both group chat (chat_new) and private messages (private_messages/{chatId}/messages)
+    // If messagePath is provided, use it; otherwise default to chat_new for backward compatibility
+    const messageRef = messagePath 
+      ? ref(appdatabase, `${messagePath}/${sanitizedId}`)
+      : ref(appdatabase, `chat_new/${sanitizedId}`);
   
     get(messageRef)
       .then((snapshot) => {

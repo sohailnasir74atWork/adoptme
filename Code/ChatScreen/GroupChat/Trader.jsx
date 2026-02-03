@@ -24,7 +24,6 @@ import { useLocalState } from '../../LocalGlobelStats';
 import database, { onValue, ref, remove } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
-import InterstitialAdManager from '../../Ads/IntAd';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { logoutUser } from '../../Firebase/UserLogics';
 import { showMessage } from 'react-native-flash-message';
@@ -132,12 +131,9 @@ const startPrivateChat = useCallback(() => {
     }
     mixpanel.track("Inbox Chat");
   };
-  if (!localState?.isPro) {
-    InterstitialAdManager.showAd(callbackfunction);
-  } else {
-    callbackfunction();
-  }
-}, [selectedUser, selectedTheme,  closeProfileDrawer]);
+  // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+  callbackfunction();
+}, [selectedUser, selectedTheme, closeProfileDrawer]);
 
   const chatRef = useMemo(() => ref(appdatabase, 'chat_new'), []);
   const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);

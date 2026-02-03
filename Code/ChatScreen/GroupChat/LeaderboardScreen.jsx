@@ -13,7 +13,6 @@ import { useGlobalState } from '../../GlobelStats';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
-import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
@@ -218,13 +217,9 @@ const LeaderboardScreen = ({ route }) => {
       mixpanel.track("Leaderboard Start Chat");
     };
 
-    // ✅ Show ad for non-pro users
-    if (!localState?.isPro) {
-      InterstitialAdManager.showAd(callbackFunction);
-    } else {
-      callbackFunction();
-    }
-  }, [selectedUser, navigation, localState?.isPro]);
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callbackFunction();
+  }, [selectedUser, navigation]);
 
   // ✅ Render leaderboard item
   const renderLeaderboardItem = useCallback(({ item, index }) => {

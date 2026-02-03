@@ -23,7 +23,6 @@ import { leaveGroup, acceptGroupInvite, declineGroupInvite, updateGroupAvatar, a
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { collection, query, where, onSnapshot, doc, getDoc } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
-import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import GroupsGuideModal from './GroupsGuideModal';
 import OnlineUsersList from './OnlineUsersList';
@@ -275,12 +274,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       }
     };
 
-    if (!localState?.isPro) {
-      InterstitialAdManager.showAd(callbackFunction);
-    } else {
-      callbackFunction();
-    }
-  }, [user?.id, firestoreDB, appdatabase, navigation, localState?.isPro]);
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callbackFunction();
+  }, [user?.id, firestoreDB, appdatabase, navigation]);
 
   const handleDeclineInvitation = useCallback(async (inviteId) => {
     if (!user?.id) return;
@@ -306,21 +302,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       return;
     }
 
-    const callbackFunction = () => {
-      if (navigation && typeof navigation.navigate === 'function') {
-        navigation.navigate('GroupChatDetail', {
-          groupId,
-          groupName: groupName || 'Group',
-        });
-      }
-    };
-
-    if (!localState?.isPro) {
-      InterstitialAdManager.showAd(callbackFunction);
-    } else {
-      callbackFunction();
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    if (navigation && typeof navigation.navigate === 'function') {
+      navigation.navigate('GroupChatDetail', {
+        groupId,
+        groupName: groupName || 'Group',
+      });
     }
-  }, [navigation, localState?.isPro]);
+  }, [navigation]);
 
   // Handle delete group (Group Admin only)
   const handleDeleteGroup = useCallback((groupId, groupName) => {

@@ -124,8 +124,8 @@ const MessageInput = ({
       const newCount = messageCount + 1;
       setMessageCount(newCount);
 
-      if (!localState?.isPro && newCount % 5 === 0) {
-        // Show ad only if user is NOT pro
+      if (!localState?.isPro && newCount % 15 === 0) {
+        // Show A/B test interstitial ad only if user is NOT pro (every 15th message)
         InterstitialAdManager.showAd(adCallback);
       } else {
         setIsSending(false);

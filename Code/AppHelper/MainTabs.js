@@ -227,6 +227,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
         name="More"
         options={{
           title: 'More', // Translation applied here
+          headerShown: false,
         }}
       >
         {() => <CustomTopTabs selectedTheme={selectedTheme} />}

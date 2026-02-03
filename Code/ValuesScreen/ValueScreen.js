@@ -9,6 +9,7 @@ import {
   FlatList,
   Modal,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { debounce } from '../Helper/debounce';
@@ -25,6 +26,7 @@ import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-m
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
+import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 
 
 const VALUE_TYPES = ['D', 'N', 'M'];
@@ -520,9 +522,12 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     try {
       await reload(); // Re-fetch stock data
       if (!isMountedRef.current) return;
+      // ✅ Show success message when values are reloaded
+      showSuccessMessage('Success', 'Values have been reloaded');
     } catch (error) {
       console.error('Error refreshing data:', error);
       if (!isMountedRef.current) return;
+      showErrorMessage('Error', 'Failed to reload values. Please try again.');
     } finally {
       if (isMountedRef.current) {
         setRefreshing(false);
@@ -686,6 +691,22 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 {sortOrder === 'asc' ? '▲ High' : sortOrder === 'desc' ? '▼ LOw' : 'Filter'}
               </Text>
             </TouchableOpacity>
+            {!fromChat && !fromSetting && (
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => {
+                  triggerHapticFeedback('impactLight');
+                  handleRefresh();
+                }}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Icon name="refresh" size={18} color="white" />
+                )}
+              </TouchableOpacity>
+            )}
             {selectedFruits?.length > 0 && <TouchableOpacity
               style={[styles.filterButton, { backgroundColor: 'purple' }]}
               onPress={onRequestClose}

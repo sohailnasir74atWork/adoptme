@@ -478,7 +478,7 @@ export const GlobalStateProvider = ({ children }) => {
         const valuesNotGG = `https://adoptme.b-cdn.net?cb=${Date.now()}`;
         const valuesGG = 'https://adoptme-gg-values.b-cdn.net/adoptme_gg_values.json';
 
-        // 🔹 Fetch non-GG data
+        // 🔹 Fetch non-GG data from Bunny CDN ONLY (no Firebase fallback)
         try {
           // console.log('🌐 Fetching non-GG data from:', valuesNotGG);
           const res = await fetch(valuesNotGG, {
@@ -493,22 +493,22 @@ export const GlobalStateProvider = ({ children }) => {
           // console.log(JSON.stringify(json))
           await updateLocalState('data', JSON.stringify(json));
         } catch (err) {
-          console.warn('⚠️ Non-GG CDN failed, fallback to Firebase:', err.message);
-          // ✅ OPTIMIZED: Only fetch from Firebase if localState.data is empty or very old
-          // This prevents downloading 21.87 MB repeatedly when CDN fails
+          console.warn('⚠️ Non-GG CDN failed, using cached data:', err.message);
+          // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase xlsData
+          // This prevents downloading 12.43 MB from Firebase RTDB
+          // If no cached data exists, keep existing localState.data (empty or old)
           const hasLocalData = localState.data && Object.keys(JSON.parse(localState.data || '{}')).length > 0;
-          const isDataOld = timeElapsed > 24 * 60 * 60 * 1000; // 24 hours
           
-          if (!hasLocalData || isDataOld) {
-            const snapshot = await get(ref(appdatabase, 'xlsData'));
-            const fallbackData = snapshot.exists() ? snapshot.val() : {};
-            await updateLocalState('data', JSON.stringify(fallbackData));
+          if (!hasLocalData) {
+            console.error('❌ No CDN data and no cached data available. App may not function correctly.');
+            // Keep existing localState.data (which might be empty)
+            // Don't download from Firebase to save costs
           } else {
-            console.log('✅ Using cached data instead of downloading from Firebase');
+            console.log('✅ Using cached data instead of downloading from Firebase xlsData');
           }
         }
 
-        // 🔹 Fetch GG data
+        // 🔹 Fetch GG data from Bunny CDN ONLY (no Firebase fallback)
         try {
           // console.log('🌐 Fetching GG data from:', valuesGG);
           const res = await fetch(valuesGG, {
@@ -523,10 +523,19 @@ export const GlobalStateProvider = ({ children }) => {
           // console.log(JSON.stringify(json[0]))
           await updateLocalState('ggData', JSON.stringify(json));
         } catch (err) {
-          // console.warn('⚠️ GG CDN failed, fallback to Firebase:', err.message);
-          const snapshot = await get(ref(appdatabase, 'ggData'));
-          const fallbackData = snapshot.exists() ? snapshot.val() : {};
-          await updateLocalState('ggData', JSON.stringify(fallbackData));
+          console.warn('⚠️ GG CDN failed, using cached data:', err.message);
+          // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase ggData
+          // This prevents downloading data from Firebase RTDB
+          // If no cached data exists, keep existing localState.ggData (empty or old)
+          const hasLocalGGData = localState.ggData && Object.keys(JSON.parse(localState.ggData || '{}')).length > 0;
+          
+          if (!hasLocalGGData) {
+            console.error('❌ No GG CDN data and no cached data available. App may not function correctly.');
+            // Keep existing localState.ggData (which might be empty)
+            // Don't download from Firebase to save costs
+          } else {
+            console.log('✅ Using cached GG data instead of downloading from Firebase ggData');
+          }
         }
 
         // 🔹 Fetch shared image_url

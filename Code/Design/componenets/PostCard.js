@@ -3,7 +3,6 @@ import {
   View, Text, Image, StyleSheet, TouchableOpacity, Alert, useColorScheme,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
-import InterstitialAdManager from '../../Ads/IntAd';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useNavigation } from '@react-navigation/native';
 import CommentModal from './CommentsModal';
@@ -148,12 +147,9 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
 
 
 
-    if (!localState?.isPro) {
-      InterstitialAdManager.showAd(callback);
-    } else {
-      callback();
-    }
-  }, [userId, item, navigation, localState?.isPro]);
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callback();
+  }, [userId, item, navigation]);
 
   const themedStyles = getStyles(isDark);
   // console.log(item.createdAt)

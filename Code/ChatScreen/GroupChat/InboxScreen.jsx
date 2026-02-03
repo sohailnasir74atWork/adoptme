@@ -46,53 +46,14 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       const chatsMap = new Map(); // Track chats locally
       const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
 
-      // ✅ OPTIMIZED: Initial load with get() (one-time read)
+      // ✅ OPTIMIZED: Use child listeners from start instead of initial get()
+      // This prevents downloading all chat metadata at once (11.35 KB per user)
+      // Child listeners only download individual chats as they're added (~200-500 bytes each)
+      // This reduces Firebase RTDB download costs significantly for users with many chats
       const loadInitialChats = async () => {
-        try {
-          const snapshot = await get(userChatsRef);
-          if (!snapshot.exists()) {
-            setLocalChats([]);
-            setLocalLoading(false);
-            return;
-          }
-
-          const fetchedData = snapshot.val();
-          if (!fetchedData || typeof fetchedData !== 'object') {
-            setLocalChats([]);
-            setLocalLoading(false);
-            return;
-          }
-
-          Object.entries(fetchedData).forEach(([chatPartnerId, chatData]) => {
-            if (!chatData || typeof chatData !== 'object') return;
-            
-            const isBlocked = banned.includes(chatPartnerId);
-            const rawUnread = chatData?.unreadCount || 0;
-
-            if (isBlocked && rawUnread > 0) {
-              const blockedChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`);
-              update(blockedChatRef, { unreadCount: 0 }).catch((error) => {
-                console.error("Error resetting unread count:", error);
-              });
-            }
-
-            chatsMap.set(chatPartnerId, {
-              chatId: chatData.chatId,
-              otherUserId: chatPartnerId,
-              lastMessage: chatData.lastMessage || 'No messages yet',
-              lastMessageTimestamp: chatData.timestamp || 0,
-              unreadCount: isBlocked ? 0 : rawUnread,
-              otherUserAvatar: chatData.receiverAvatar || 'https://example.com/default-avatar.jpg',
-              otherUserName: chatData.receiverName || 'Anonymous',
-            });
-          });
-
-          updateChatsList();
-          setLocalLoading(false);
-        } catch (error) {
-          console.error("❌ Error loading initial chats:", error);
-          setLocalLoading(false);
-        }
+        // Don't fetch all chats at once - let child listeners handle it
+        // This way we only download chats as they're needed, not all at once
+        setLocalLoading(false); // Child listeners will populate chatsMap incrementally
       };
 
       // ✅ Helper function to update chats list from map
