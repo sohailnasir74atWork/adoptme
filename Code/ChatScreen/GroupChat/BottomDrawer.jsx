@@ -268,6 +268,7 @@ const ProfileBottomDrawer = ({
     if (!userData) return selectedUser;
     return {
       ...selectedUser,
+      displayName: selectedUser?.displayName || selectedUser?.sender || selectedUser?.userName || 'Unknown User', // ✅ Added displayName
       robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
       robloxUserId: selectedUser?.robloxUserId || userData.robloxUserId,
       robloxUsernameVerified: selectedUser?.robloxUsernameVerified !== undefined
@@ -537,7 +538,11 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
 
     const currentUser = auth().currentUser;
-    const success = await setUserStrike(mergedUser.email, strikeCount, currentUser?.uid);
+    const success = await setUserStrike(mergedUser.email, strikeCount, currentUser?.uid, true, {
+      id: currentUser?.uid,
+      displayName: currentUser?.displayName || 'Admin',
+      avatar: currentUser?.photoURL
+    }, mergedUser);
     if (success) setIsBanned(true);
   };
 
@@ -2525,8 +2530,8 @@ const ProfileBottomDrawer = ({
                         paddingVertical: 6,
                         paddingHorizontal: 12,
                         borderRadius: 6,
-                        alignSelf: 'flex-start',
-                        marginBottom: 4
+                        alignSelf: 'flex-end',
+                        marginBottom: 5
                       }}
                     >
                       <Icon name="checkmark-circle-outline" size={16} color="white" />

@@ -17,7 +17,7 @@ import GroupMessageList from './GroupMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
-import { get, ref, update, query as dbQuery, orderByKey, limitToLast, orderByValue, equalTo } from '@react-native-firebase/database';
+import { get, ref, update, query as dbQuery, orderByKey, limitToLast, orderByValue, equalTo, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -25,6 +25,7 @@ import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from '@rea
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import { showMessage } from 'react-native-flash-message';
 import ProfileBottomDrawer from './BottomDrawer';
 import { isUserOnline } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -63,6 +64,7 @@ const GroupChatScreen = () => {
   const [selectedFruits, setSelectedFruits] = useState([]);
   const [replyTo, setReplyTo] = useState(null); // Reply to message state
   const [highlightedMessageId, setHighlightedMessageId] = useState(null); // Highlighted message ID
+  const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
   const flatListRef = useRef(null); // Ref for FlatList in GroupMessageList
   const lastLoadedKeyRef = useRef(null); // Oldest message ID (for pagination)
   const newestMessageIdRef = useRef(null); // Newest message ID (for real-time listener)
@@ -74,6 +76,21 @@ const GroupChatScreen = () => {
 
   // ✅ Check if current user is banned
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+
+  // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
+  useEffect(() => {
+    if (!user?.email || !appdatabase) return;
+
+    const encodeEmail = (email) => email.replace(/\./g, '(dot)');
+    const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
+
+    const unsubscribe = onValue(banRef, (snapshot) => {
+      const banData = snapshot.val();
+      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
+    });
+
+    return () => unsubscribe();
+  }, [user?.email, appdatabase]);
 
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -610,7 +627,41 @@ const GroupChatScreen = () => {
 
       // ✅ Ban check
       if (isMeBanned) {
+        const reason = myBanDetails?.reason || 'Access Denied';
+        showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
         return;
+      }
+
+      // ✅ Strike/Temporal Ban Check
+      if (strikeInfo) {
+        const { strikeCount, bannedUntil } = strikeInfo;
+        const now = Date.now();
+
+        // Permanent ban
+        if (bannedUntil === 'permanent') {
+          showMessage({
+            message: '⛔ Permanently Banned',
+            description: 'You are permanently banned from sending messages.',
+            type: 'danger',
+          });
+          return;
+        }
+
+        // Temporary ban (timestamp in ms)
+        if (typeof bannedUntil === 'number' && now < bannedUntil) {
+          const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
+          const hours = Math.floor(totalMinutes / 60);
+          const minutes = totalMinutes % 60;
+          const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+          showMessage({
+            message: `⚠️ Strike ${strikeCount}`,
+            description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+            type: 'warning',
+            duration: 5000,
+          });
+          return;
+        }
       }
 
       // Block only if there's no text, no image AND no fruits
@@ -716,7 +767,7 @@ const GroupChatScreen = () => {
         Alert.alert('Error', 'Could not send your message. Please try again.');
       }
     },
-    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro]
+    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails]
   );
 
   // Handle remove member (admin action)

@@ -36,6 +36,7 @@ import {
   endAt,
   limitToFirst,
   limitToLast,
+  onValue,
 } from '@react-native-firebase/database';
 
 import {
@@ -127,6 +128,7 @@ const AdminDashboard = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [userBanStatus, setUserBanStatus] = useState({}); // ✅ Track ban status for searched users
 
   // Modal
   const [selectedUser, setSelectedUser] = useState(null);
@@ -312,6 +314,7 @@ const AdminDashboard = () => {
     setLoadingSearch(true);
     setHasSearched(true);
     setSearchResults([]);
+    setUserBanStatus({}); // ✅ Clear cached ban status on new search
 
     try {
       const lower = searchQuery.trim().toLowerCase();
@@ -359,6 +362,32 @@ const AdminDashboard = () => {
     }
   };
 
+  // ✅ Check if a user is banned directly from Firebase
+  const checkUserBanStatus = useCallback(async (email) => {
+    if (!email || !db) return null;
+
+    try {
+      const encodeEmail = (em) => em.replace(/\./g, '(dot)');
+      const encodedEmail = encodeEmail(email);
+      const banRef = ref(db, `banned_users_by_email/${encodedEmail}`);
+      const snapshot = await get(banRef);
+
+      if (snapshot.exists()) {
+        const banData = snapshot.val();
+        return {
+          isBanned: true,
+          ...banData,
+          email,
+          encodedEmail,
+        };
+      }
+      return null;
+    } catch (err) {
+      console.error('Error checking ban status:', err);
+      return null;
+    }
+  }, [db]);
+
   // ─────────────────────────────────────────────
   // Actions
   const handleUnban = async (userItem) => {
@@ -372,6 +401,12 @@ const AdminDashboard = () => {
         fetchBannedUsers(true);
         if (activeTab === 'search') {
           setSearchResults((prev) => prev.map((u) => (u.email === email ? { ...u, isBanned: false } : u)));
+          // ✅ Clear cached ban status for this user
+          setUserBanStatus((prev) => {
+            const updated = { ...prev };
+            delete updated[email];
+            return updated;
+          });
         }
       }
     } catch (err) {
@@ -404,6 +439,15 @@ const AdminDashboard = () => {
       setSelectedUser(null);
       fetchBannedUsers(true);
       setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
+      // ✅ Refresh cached ban status for this user
+      checkUserBanStatus(userItem.email).then((banData) => {
+        if (banData) {
+          setUserBanStatus((prev) => ({
+            ...prev,
+            [userItem.email]: banData,
+          }));
+        }
+      });
     }
   };
 
@@ -431,6 +475,15 @@ const AdminDashboard = () => {
       fetchBannedUsers(true);
       if (activeTab === 'search') {
         setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
+        // ✅ Refresh cached ban status for this user
+        checkUserBanStatus(userItem.email).then((banData) => {
+          if (banData) {
+            setUserBanStatus((prev) => ({
+              ...prev,
+              [userItem.email]: banData,
+            }));
+          }
+        });
       }
     }
   };
@@ -615,10 +668,18 @@ const AdminDashboard = () => {
     let banInfo = null;
 
     if (activeTab === 'search') {
-      const foundBan = bannedUsers.find((b) => b.email === item.email);
-      if (foundBan) {
+      // ✅ Check if ban status was already fetched for this user
+      const cachedBan = userBanStatus[item.email];
+      if (cachedBan) {
         isBanned = true;
-        banInfo = foundBan;
+        banInfo = cachedBan;
+      } else {
+        // Also check in bannedUsers list as fallback
+        const foundBan = bannedUsers.find((b) => b.email === item.email);
+        if (foundBan) {
+          isBanned = true;
+          banInfo = foundBan;
+        }
       }
     } else {
       banInfo = item;
@@ -626,6 +687,18 @@ const AdminDashboard = () => {
 
     const merged = { ...item, ...(banInfo || {}), isBanned };
     const avatarUri = getAvatarSafe(merged);
+
+    // ✅ If in search tab and not yet checked, check ban status
+    if (activeTab === 'search' && item.email && !userBanStatus.hasOwnProperty(item.email) && !isBanned) {
+      checkUserBanStatus(item.email).then((banData) => {
+        if (banData) {
+          setUserBanStatus((prev) => ({
+            ...prev,
+            [item.email]: banData,
+          }));
+        }
+      });
+    }
 
     return (
       <TouchableOpacity

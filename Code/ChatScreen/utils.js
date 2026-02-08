@@ -502,7 +502,7 @@ export const handleDeleteLast300Messages = async (senderId, showAlert = false) =
 
 const encodeEmailForBan = (em) => (em || '').toLowerCase().trim().replace(/\./g, '(dot)');
 
-export const banUserwithEmail = async (email, isAdmin = false, senderId = null) => {
+export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null) => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for banUserwithEmail');
@@ -534,24 +534,34 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null) 
       }
     }
 
-    await set(banRef, {
+    // ✅ Enhanced: Save displayName and user info
+    const banData = {
       strikeCount,
       bannedUntil,
-      reason: `Strike ${strikeCount}`
-    });
+      reason: `Strike ${strikeCount}`,
+      bannedAt: Date.now(),
+      userId: senderId || userInfo?.id || null,
+      displayName: userInfo?.displayName || 'Unknown User',
+      avatar: userInfo?.avatar || null,
+      email: email,
+      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannerAvatar: bannerInfo?.avatar || null,
+    };
 
-    // Delete messages if senderId provided
-    let deletedCount = 0;
-    if (senderId) {
-      const deleteResult = await handleDeleteLast300Messages(senderId, false);
-      deletedCount = deleteResult?.count || 0;
-    }
+    await set(banRef, banData);
+
+    // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
+    // let deletedCount = 0;
+    // if (senderId) {
+    //   const deleteResult = await handleDeleteLast300Messages(senderId, false);
+    //   deletedCount = deleteResult?.count || 0;
+    // }
 
     // ✅ Always show alert to admin who performed the action
     if (isAdmin) {
       Alert.alert(
         'User Banned',
-        `Strike ${strikeCount} applied (${banDuration}).${deletedCount > 0 ? `\n${deletedCount} messages deleted.` : ''}`
+        `Strike ${strikeCount} applied (${banDuration}).`
       );
     }
 
@@ -564,7 +574,7 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null) 
 };
 
 // ✅ NEW: Set specific strike count (for Admin Dashboard)
-export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true) => {
+export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null) => {
   // Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for setUserStrike');
@@ -598,24 +608,33 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
       banDuration = 'permanent';
     }
 
-    await set(banRef, {
+    // ✅ Enhanced: Save displayName and user info
+    const strikeData = {
       strikeCount,
       bannedUntil,
       reason: `Strike ${strikeCount}`,
       appliedAt: Date.now(),
-    });
+      userId: senderId || userInfo?.id || null,
+      displayName: userInfo?.displayName || 'Unknown User',
+      avatar: userInfo?.avatar || null,
+      email: email,
+      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannerAvatar: bannerInfo?.avatar || null,
+    };
 
-    // Delete messages if senderId provided
-    let deletedCount = 0;
-    if (senderId) {
-      const deleteResult = await handleDeleteLast300Messages(senderId, false);
-      deletedCount = deleteResult?.count || 0;
-    }
+    await set(banRef, strikeData);
+
+    // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
+    // let deletedCount = 0;
+    // if (senderId) {
+    //   const deleteResult = await handleDeleteLast300Messages(senderId, false);
+    //   deletedCount = deleteResult?.count || 0;
+    // }
 
     if (showAlert) {
       Alert.alert(
         'Strike Applied',
-        `Strike ${strikeCount} applied (${banDuration}).${deletedCount > 0 ? `\n${deletedCount} messages deleted.` : ''}`
+        `Strike ${strikeCount} applied (${banDuration}).`
       );
     }
 

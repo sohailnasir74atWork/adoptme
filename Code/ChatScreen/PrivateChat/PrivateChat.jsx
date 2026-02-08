@@ -16,9 +16,10 @@ import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, isUserOnline, setActiveChat, useBanStatus } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
-import { get, increment, ref, update } from '@react-native-firebase/database';
+import { get, increment, ref, update, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import { showMessage } from 'react-native-flash-message';
 import BannerAdComponent from '../../Ads/bannerAds';
 import InterstitialAdManager from '../../Ads/IntAd';
 import config from '../../Helper/Environment';
@@ -65,6 +66,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [reviewText, setReviewText] = useState('');   // 👈 new
   const [startRating, setStartRating] = useState(false)
   const [isOnline, setIsOnline] = useState(false);
+  const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
 
@@ -74,6 +76,21 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   // ✅ Check if current user is banned
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+
+  // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
+  useEffect(() => {
+    if (!user?.email || !appdatabase) return;
+
+    const encodeEmail = (email) => email.replace(/\./g, '(dot)');
+    const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
+
+    const unsubscribe = onValue(banRef, (snapshot) => {
+      const banData = snapshot.val();
+      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
+    });
+
+    return () => unsubscribe();
+  }, [user?.email, appdatabase]);
 
 
   // ✅ Fix useEffect dependency
@@ -517,6 +534,38 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       return;
     }
 
+    // ✅ Strike/Temporal Ban Check
+    if (strikeInfo) {
+      const { strikeCount, bannedUntil } = strikeInfo;
+      const now = Date.now();
+
+      // Permanent ban
+      if (bannedUntil === 'permanent') {
+        showMessage({
+          message: '⛔ Permanently Banned',
+          description: 'You are permanently banned from sending messages.',
+          type: 'danger',
+        });
+        return;
+      }
+
+      // Temporary ban (timestamp in ms)
+      if (typeof bannedUntil === 'number' && now < bannedUntil) {
+        const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+        showMessage({
+          message: `⚠️ Strike ${strikeCount}`,
+          description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+          type: 'warning',
+          duration: 5000,
+        });
+        return;
+      }
+    }
+
     // ✅ Safety checks
     if (!myUserId || !selectedUserId || !appdatabase) {
       showErrorMessage(t("home.alert.error"), t('chat.rating_missing_data'));
@@ -602,7 +651,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t]);
+  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails]);
 
 
 

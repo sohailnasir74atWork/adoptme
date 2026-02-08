@@ -68,8 +68,16 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   // ✅ Wrapper to match signature and use shared util
   const banUserwithEmail = async (email, targetUserId) => {
     if (!isAdmin && !user?.isModerator) return;
-    // Call utils function: email, isAdmin=true, senderId (to delete msgs)
-    await banUtils(email, true, targetUserId);
+    // ✅ Enhanced: Pass user info and banner info
+    await banUtils(email, true, targetUserId, {
+      id: targetUserId,
+      displayName: item.displayName || 'Unknown User',
+      avatar: item.avatar,
+    }, {
+      id: user?.id,
+      displayName: user?.displayName || user?.userName || 'Moderator',
+      avatar: user?.avatar,
+    });
   };
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);
