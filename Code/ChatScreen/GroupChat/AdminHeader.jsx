@@ -198,8 +198,8 @@ const AdminHeader = ({
             // ✅ Safety check and optimize string operations
             const msgText = msg?.text || '';
             const normalizedText = msgText.replace(/\n/g, ' ');
-            const displayText = normalizedText.length > 40 
-              ? normalizedText.substring(0, 40) + '...' 
+            const displayText = normalizedText.length > 40
+              ? normalizedText.substring(0, 40) + '...'
               : normalizedText;
 
             return (
@@ -231,17 +231,17 @@ const AdminHeader = ({
               {uniquePinnedMessages.map((msg) => {
                 // ✅ Safety check
                 if (!msg || !msg.firebaseKey) return null;
-                
+
                 return (
                   <View key={msg.firebaseKey} style={styles.singlePinnedMessageModal}>
                     {renderMessageWithLinks(msg.text || '')}
                     {isAdmin && (
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => {
                           if (onUnpinMessage && typeof onUnpinMessage === 'function') {
                             onUnpinMessage(msg.firebaseKey);
                           }
-                        }} 
+                        }}
                         style={{ backgroundColor: config.colors.primary, marginVertical: 3 }}
                       >
                         <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>Delete</Text>
@@ -272,7 +272,7 @@ const AdminHeader = ({
       />
 
       {/* Full-screen Pet Guessing Game Modal */}
-     
+
     </View>
   );
 };
@@ -294,7 +294,7 @@ export const getStyles = (isDarkMode) =>
       borderBottomColor: 'lightgrey',
     },
     stackHeader: {
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 24,
       lineHeight: 24,
       color: isDarkMode ? 'white' : 'black',
@@ -322,12 +322,12 @@ export const getStyles = (isDarkMode) =>
     pinnedTextheader: {
       fontSize: 12,
       paddingRight: 20,
-      fontFamily: 'Lato-Regular',
+
       color: config.colors.primary,
     },
     pinnedText: {
       fontSize: 12,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? 'white' : 'black'
     },
     pinIcon: {
@@ -350,7 +350,7 @@ export const getStyles = (isDarkMode) =>
     },
     modalTitle: {
       fontSize: 20,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       marginBottom: 20,
       color: isDarkMode ? 'white' : 'black',
     },
@@ -364,7 +364,7 @@ export const getStyles = (isDarkMode) =>
     closeButtonText: {
       color: '#fff',
       fontSize: 16,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     iconContainer: {
       position: 'relative',
@@ -388,7 +388,7 @@ export const getStyles = (isDarkMode) =>
     badgeText: {
       color: '#fff',
       fontSize: 8,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
   });
 

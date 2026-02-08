@@ -53,15 +53,15 @@ const PrivateMessageList = ({
   const isDarkMode = theme === 'dark';
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  
+
   const fruitColors = useMemo(
     () => ({
       wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
-      name:      isDarkMode ? '#f9fafb' : '#111827',
-      value:     isDarkMode ? '#e5e7eb' : '#4b5563',
-      divider:   isDarkMode ? '#ffffff22' : '#00000011',
-      totalLabel:isDarkMode ? '#e5e7eb' : '#4b5563',
-      totalValue:isDarkMode ? '#f97373' : '#b91c1c',
+      name: isDarkMode ? '#f9fafb' : '#111827',
+      value: isDarkMode ? '#e5e7eb' : '#4b5563',
+      divider: isDarkMode ? '#ffffff22' : '#00000011',
+      totalLabel: isDarkMode ? '#e5e7eb' : '#4b5563',
+      totalValue: isDarkMode ? '#f97373' : '#b91c1c',
     }),
     [isDarkMode],
   );
@@ -90,7 +90,7 @@ const PrivateMessageList = ({
     if (!message || !message.text) return;
     Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
-    showSuccessMessage('Success', 'Message Copied');
+    showSuccessMessage(t('chat.success'), t('chat.message_copied'));
   }, [triggerHapticFeedback]);
 
   // ✅ Memoize filteredMessages
@@ -120,7 +120,7 @@ const PrivateMessageList = ({
     }
   }, [onReportSubmit, selectedMessage, triggerHapticFeedback]);
   // console.log(selectedUserId === userId)
- 
+
 
 
   // ✅ Memoize translateText
@@ -156,7 +156,7 @@ const PrivateMessageList = ({
       Object.entries(placeholders).forEach(([placeholder, word]) => {
         translated = translated.replace(new RegExp(placeholder, 'g'), word);
       });
-      mixpanel.track("Translation", {lang:targetLang});
+      mixpanel.track("Translation", { lang: targetLang });
 
       return translated;
     } catch (err) {
@@ -168,56 +168,56 @@ const PrivateMessageList = ({
   // ✅ Memoize handleTranslate
   const handleTranslate = useCallback(async (item) => {
     if (!item || !item.text) {
-      Alert.alert('Error', 'Invalid message to translate.');
+      Alert.alert(t('chat.error'), t('chat.invalid_translation'));
       return;
     }
 
     const isUnlimited = freeTranslation || localState?.isPro;
-  
+
     if (!isUnlimited && canTranslate && typeof canTranslate === 'function' && !canTranslate()) {
-      Alert.alert('Limit Reached', 'You can only translate 20 messages per day.');
+      Alert.alert(t('chat.translation_limit_title'), t('chat.translation_limit_message'));
       return;
     }
-  
+
     const translated = await translateText(item.text, deviceLanguage);
-  
+
     if (translated) {
       if (!isUnlimited && incrementTranslationCount && typeof incrementTranslationCount === 'function') {
         incrementTranslationCount();
       }
-  
-      const remaining = isUnlimited ? 'Unlimited' : `${getRemainingTranslationTries ? getRemainingTranslationTries() : 0} remaining`;
-  
+
+      const remaining = isUnlimited ? t('chat.unlimited') : `${getRemainingTranslationTries ? getRemainingTranslationTries() : 0} remaining`;
+
       Alert.alert(
-        'Translated Message',
-        `${translated}\n\n🧠 Daily Limit: ${remaining}${isUnlimited
+        t('chat.translated_message_title'),
+        `${translated}\n\n${t('chat.daily_limit_label', { remaining })}${isUnlimited
           ? ''
-          : '\n\n🔓 Want more? Upgrade to Pro for unlimited translations.'
+          : t('chat.upgrade_pro_translation')
         }`
       );
     } else {
-      Alert.alert('Error', 'Translation failed. Please try again later.');
+      Alert.alert(t('chat.error'), t('chat.translation_failed'));
     }
   }, [freeTranslation, localState?.isPro, canTranslate, incrementTranslationCount, getRemainingTranslationTries, translateText, deviceLanguage]);
-  
+
   // ✅ Memoize renderMessage
   const renderMessage = useCallback(({ item }) => {
     // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
     const isMyMessage = item.senderId === userId;
-  
+
     const avatarUri = item.senderId !== userId
       ? selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'
       : user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-  
+
     // fruits helpers
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
     const hasFruits = fruits.length > 0;
     const totalFruitValue = hasFruits
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
-  
+
     return (
       <View
         style={
@@ -231,151 +231,152 @@ const PrivateMessageList = ({
           source={{ uri: avatarUri }}
           style={styles.profileImagePvtChat}
         />
-  
+
         {/* Message Content */}
-       
+
         <Menu>
-        {/* Images - Support multiple images */}
-        {(item.imageUrls || item.imageUrl) && (() => {
-          // Support both array (imageUrls) and single (imageUrl) for backward compatibility
-          const imageArray = Array.isArray(item.imageUrls) && item.imageUrls.length > 0
-            ? item.imageUrls
-            : (item.imageUrl ? [item.imageUrl] : []);
-          
-          if (imageArray.length === 0) return null;
-          
-          return (
-            <View style={{ marginBottom: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-              {imageArray.map((imageUri, imgIndex) => {
-                // Fixed size approach: larger for single, smaller for multiple
-                const imageSize = imageArray.length === 1 ? 250 : imageArray.length === 2 ? 150 : 110;
-                
-                return (
-                  <TouchableOpacity
-                    key={`img-${imgIndex}`}
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      navigation.navigate('ImageViewerScreenChat', {
-                        images: imageArray,
-                        initialIndex: imgIndex,
-                      })
-                    }
-                  >
-                    <Image 
-                      source={{ uri: imageUri }} 
-                      style={{ 
-                        width: imageSize,
-                        height: imageSize,
-                        borderRadius: 8,
-                        resizeMode: 'cover',
-                      }} 
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          );
-        })()}
+          {/* Images - Support multiple images */}
+          {(item.imageUrls || item.imageUrl) && (() => {
+            // Support both array (imageUrls) and single (imageUrl) for backward compatibility
+            const imageArray = Array.isArray(item.imageUrls) && item.imageUrls.length > 0
+              ? item.imageUrls
+              : (item.imageUrl ? [item.imageUrl] : []);
+
+            if (imageArray.length === 0) return null;
+
+            return (
+              <View style={{ marginBottom: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                {imageArray.map((imageUri, imgIndex) => {
+                  // Fixed size approach: larger for single, smaller for multiple
+                  const imageSize = imageArray.length === 1 ? 250 : imageArray.length === 2 ? 150 : 110;
+
+                  return (
+                    <TouchableOpacity
+                      key={`img-${imgIndex}`}
+                      activeOpacity={0.8}
+                      onPress={() =>
+                        navigation.navigate('ImageViewerScreenChat', {
+                          images: imageArray,
+                          initialIndex: imgIndex,
+                        })
+                      }
+                    >
+                      <Image
+                        source={{ uri: imageUri }}
+                        style={{
+                          width: imageSize,
+                          height: imageSize,
+                          borderRadius: 8,
+                          resizeMode: 'cover',
+                        }}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            );
+          })()}
           <MenuTrigger
             onLongPress={() => triggerHapticFeedback('impactMedium')}
             customStyles={{ triggerTouchable: { activeOpacity: 1 } }}
           >
             {/* Optional image message */}
-           
-  
+
+
             {/* 🐾 Fruits list (your selected pets) */}
-          {/* 🐾 Fruits list (your selected pets) */}
-{hasFruits && (
-  <View
-    style={[
-      fruitStyles.fruitsWrapper,
-    ]}
-  >
-    {fruits.map((fruit, index )=> {
-      const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+            {/* 🐾 Fruits list (your selected pets) */}
+            {hasFruits && (
+              <View
+                style={[
+                  fruitStyles.fruitsWrapper,
+                ]}
+              >
+                {fruits.map((fruit, index) => {
+                  const { name: nameColor, value: valueColor } = fruitColors;
+                  const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
 
-      let valueBadgeStyle = fruitStyles.badgeDefault;
-      if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
-      if (valueType === 'm') valueBadgeStyle = fruitStyles.badgeMega;
+                  let valueBadgeStyle = fruitStyles.badgeDefault;
+                  if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
+                  if (valueType === 'm') valueBadgeStyle = fruitStyles.badgeMega;
 
-      return (
-        <View
-          key={`${fruit.id || fruit.name}-${index}`}
-          style={fruitStyles.fruitCard}
-        >
-          <Image
-            source={{ uri: fruit.imageUrl }}
-            style={fruitStyles.fruitImage}
-          />
+                  return (
+                    <View
+                      key={`${fruit.id || fruit.name}-${index}`}
+                      style={fruitStyles.fruitCard}
+                    >
+                      <Image
+                        source={{ uri: fruit.imageUrl }}
+                        style={fruitStyles.fruitImage}
+                      />
 
-          <View style={fruitStyles.fruitInfo}>
-            <Text
-              style={[fruitStyles.fruitName, { color: fruitColors.name }]}
-              numberOfLines={1}
-            >
-              {`${fruit.name || fruit.Name}  `}
-            </Text>
+                      <View style={fruitStyles.fruitInfo}>
+                        <Text
+                          style={[fruitStyles.fruitName, { color: nameColor }]}
+                          numberOfLines={1}
+                        >
+                          {`${fruit.name || fruit.Name}  `}
+                        </Text>
 
-            <Text
-              style={[fruitStyles.fruitValue, { color: fruitColors.value }]}
-            >
-              · Value: {Number(fruit.value || 0).toLocaleString()}
-              {/* {fruit.category
+                        <Text
+                          style={[fruitStyles.fruitValue, { color: valueColor }]}
+                        >
+                          {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
+                          {/* {fruit.category
                 ? `  ·  ${String(fruit.category).toUpperCase()}  `
                 : ''} */}{' '}
-            </Text>
+                        </Text>
 
-            <View style={fruitStyles.badgeRow}>
-              {/* D / N / M badge */}
-              <View style={[fruitStyles.badge, valueBadgeStyle]}>
-                <Text style={fruitStyles.badgeText}>
-                  {valueType.toUpperCase()}
-                </Text>
+                        <View style={fruitStyles.badgeRow}>
+                          {/* D / N / M badge */}
+                          <View style={[fruitStyles.badge, valueBadgeStyle]}>
+                            <Text style={fruitStyles.badgeText}>
+                              {valueType.toUpperCase()}
+                            </Text>
+                          </View>
+
+                          {/* Fly badge */}
+                          {fruit.isFly && (
+                            <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
+                              <Text style={fruitStyles.badgeText}>F</Text>
+                            </View>
+                          )}
+
+                          {/* Ride badge */}
+                          {fruit.isRide && (
+                            <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
+                              <Text style={fruitStyles.badgeText}>R</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* ✅ Total row – only if more than one fruit */}
+                {fruits.length > 1 && (
+                  <View
+                    style={[
+                      fruitStyles.totalRow,
+                      { borderTopColor: fruitColors.divider },
+                    ]}
+                  >
+                    <Text
+                      style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
+                    >
+                      {t('chat.total_label')}
+                    </Text>
+                    <Text
+                      style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
+                    >
+                      {totalFruitValue.toLocaleString()}
+                    </Text>
+                  </View>
+                )}
               </View>
+            )}
 
-              {/* Fly badge */}
-              {fruit.isFly && (
-                <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
-                  <Text style={fruitStyles.badgeText}>F</Text>
-                </View>
-              )}
 
-              {/* Ride badge */}
-              {fruit.isRide && (
-                <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
-                  <Text style={fruitStyles.badgeText}>R</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-      );
-    })}
-
-    {/* ✅ Total row – only if more than one fruit */}
-    {fruits.length > 1 && (
-      <View
-        style={[
-          fruitStyles.totalRow,
-          { borderTopColor: fruitColors.divider },
-        ]}
-      >
-        <Text
-          style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
-        >
-          Total:
-        </Text>
-        <Text
-          style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
-        >
-          {totalFruitValue.toLocaleString()}
-        </Text>
-      </View>
-    )}
-  </View>
-)}
-
-  
             {/* Normal text (can be empty if only fruits) */}
             {!!item.text && (
               <Text
@@ -385,7 +386,7 @@ const PrivateMessageList = ({
               </Text>
             )}
           </MenuTrigger>
-  
+
           {/* existing menu options stay the same */}
           <MenuOptions
             customStyles={{
@@ -395,10 +396,10 @@ const PrivateMessageList = ({
             }}
           >
             <MenuOption onSelect={() => handleCopy(item)}>
-              <Text style={styles.menuOptionText}>Copy</Text>
+              <Text style={styles.menuOptionText}>{t('chat.copy')}</Text>
             </MenuOption>
             <MenuOption onSelect={() => handleTranslate(item)}>
-              <Text style={styles.menuOptionText}>Translate</Text>
+              <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
             </MenuOption>
             {!isMyMessage && (
               <MenuOption onSelect={() => handleReport(item)}>
@@ -407,7 +408,7 @@ const PrivateMessageList = ({
             )}
           </MenuOptions>
         </Menu>
-  
+
         <Text style={styles.timestamp}>
           {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {
             hour: '2-digit',
@@ -428,29 +429,29 @@ const PrivateMessageList = ({
       {loading && messages.length === 0 ? (
         <ActivityIndicator size="large" color="#1E88E5" style={styles.loader} />
       ) : (
-        <View style={{paddingBottom:140}}>  
-        <>   
-        <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} />
-     
-        <FlatList
-          data={filteredMessages}
-          removeClippedSubviews={true}
-          keyExtractor={keyExtractor}
-          renderItem={renderMessage}
-          inverted
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
-          onScroll={() => Keyboard.dismiss()}
-          onTouchStart={() => Keyboard.dismiss()}
-          keyboardShouldPersistTaps="handled"
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={15}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-        </>     
+        <View style={{ paddingBottom: 140 }}>
+          <>
+            <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} />
+
+            <FlatList
+              data={filteredMessages}
+              removeClippedSubviews={true}
+              keyExtractor={keyExtractor}
+              renderItem={renderMessage}
+              inverted
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.3}
+              onScroll={() => Keyboard.dismiss()}
+              onTouchStart={() => Keyboard.dismiss()}
+              keyboardShouldPersistTaps="handled"
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              initialNumToRender={15}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+            />
+          </>
         </View>
 
       )}
@@ -480,10 +481,10 @@ export const fruitStyles = StyleSheet.create({
   fruitCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent:'flex-start',
-    marginBottom:3,
+    justifyContent: 'flex-start',
+    marginBottom: 3,
 
-    flex:1,
+    flex: 1,
 
 
   },
@@ -495,10 +496,10 @@ export const fruitStyles = StyleSheet.create({
   },
   fruitInfo: {
     // flex: 1,
-    flexDirection:'row',
-    justifyContent:'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     // backgroundColor:'red',
-    alignItems:'center',
+    alignItems: 'center',
   },
   fruitName: {
     fontSize: 12,

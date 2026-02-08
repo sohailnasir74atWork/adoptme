@@ -37,7 +37,7 @@ export const LocalStateProvider = ({ children }) => {
     isPro: storage.getBoolean('isPro') ?? false,
     fetchDataTime: storage.getString('fetchDataTime') || null,
     data: safeParseJSON('data', {}),
-    ggData: safeParseJSON('ggData', {}),
+
     codes: safeParseJSON('codes', {}),
     normalStock: safeParseJSON('normalStock', []),
     bannedUsers: safeParseJSON('bannedUsers', []),
@@ -51,8 +51,6 @@ export const LocalStateProvider = ({ children }) => {
     translationUsage: safeParseJSON('translationUsage', { count: 0, date: new Date().toDateString() }),
     favorites: safeParseJSON('favorites', []),
     imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
-    imgurlGG: storage.getString('imgurlGG') || 'https://adoptmevalues.gg',
-    isGG: storage.getBoolean('isGG') ?? false,
     showAd1: storage.getBoolean('showAd1') ?? true,
     postsCache: safeParseJSON('postsCache', []),
     tradingServerLink: storage.getString('tradingServerLink') || null,
@@ -86,7 +84,7 @@ export const LocalStateProvider = ({ children }) => {
     if (localState.data) {
       storage.set('data', JSON.stringify(localState.data)); // Force store
     }
-  }, [localState.data, localState.ggData]);
+  }, [localState.data]);
 
   // console.log(localState.isPro)
   // ✅ Memoize updateLocalState to prevent recreation on every render
@@ -122,7 +120,7 @@ export const LocalStateProvider = ({ children }) => {
 
     return count < 20;
   }, [localState.translationUsage, updateLocalState]);
-  
+
   // ✅ Memoize toggleAd to prevent recreation on every render
   const toggleAd = useCallback(() => {
     const newAdState = !localState.showAd1;
@@ -193,7 +191,7 @@ export const LocalStateProvider = ({ children }) => {
     }
   };
 
-// console.log(packages)
+  // console.log(packages)
 
 
   const restorePurchases = async (setLoadingReStore) => {
@@ -287,7 +285,7 @@ export const LocalStateProvider = ({ children }) => {
     }
   };
 
- 
+
   // Clear a specific key
   const clearKey = (key) => {
     setLocalState((prevState) => {

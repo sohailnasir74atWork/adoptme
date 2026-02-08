@@ -11,7 +11,9 @@ import { getDatabase, ref } from '@react-native-firebase/database';
 import { useLocalState } from '../LocalGlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
-import { useLanguage } from '../Translation/LanguageProvider';
+import { isMatch } from '../Helper/searchHelper';
+import { useBanStatus } from '../ChatScreen/utils';
+// useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
@@ -32,23 +34,16 @@ const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
 const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
 
-const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true, isGG = false, factor) => {
+const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true, factor) => {
   if (!item) return 0;
-
-  // console.log(isGG, 'VALUES')
 
   // Categories that only use 'value' field
   const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'strollers', 'food', 'gifts'];
-  const simpleValueCategoriesgg = ['petWear', 'foods', 'vehicles', 'toys', 'gifts', 'strollers', 'stickers'];
 
 
   // Handle simple value categories
-  if (simpleValueCategories.includes(item.type) && !isGG) {
+  if (simpleValueCategories.includes(item.type)) {
     const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
-    return Number((isSharkMode ? value : value / factor).toFixed(2));
-  }
-  if (simpleValueCategoriesgg.includes(item.type) && isGG) {
-    const value = Number(item.value) || 0;
     return Number((isSharkMode ? value : value / factor).toFixed(2));
   }
 
@@ -87,8 +82,8 @@ const HomeScreen = ({ selectedTheme }) => {
   const { theme, user, firestoreDB, single_offer_wall, reload } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
-const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
-const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
+  const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
+  const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
 
   const [fruitRecords, setFruitRecords] = useState([]);
   const [selectedPetType, setSelectedPetType] = useState('INVENTORY');
@@ -106,13 +101,13 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const [description, setDescription] = useState('');
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { language } = useLanguage();
+  const { t, i18n } = useTranslation();
+  const language = i18n.language; // ✅ Using i18n directly instead of useLanguage
   const [lastTradeTime, setLastTradeTime] = useState(null);
   const [adShowen, setadShowen] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [type, setType] = useState(null);
   const platform = Platform.OS.toLowerCase();
-  const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
   const viewRef = useRef();
   // ✅ Add refs to track timeouts and animation frames for cleanup
@@ -130,6 +125,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const [showofferwall, setShowofferwall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
+
+
+  // ✅ Check ban status
+  const { isBanned, banDetails } = useBanStatus(user?.email);
 
   // ✅ Cleanup all timeouts and animation frames on unmount
   useEffect(() => {
@@ -152,10 +151,13 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
 
   const CATEGORIES = useMemo(() => {
-    return localState.isGG
-      ? ['INVENTORY', 'ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS']
-      : ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR','STROLLERS', 'OTHER', 'FOOD', 'GIFTS'];
-  }, [localState.isGG]);
+    return ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS'].map(cat => cat.toUpperCase());
+  }, []);
+
+  const getCategoryLabel = useCallback((category) => {
+    const key = category.toLowerCase().replace(' ', '_');
+    return t(`home.categories.${key}`, category);
+  }, [t]);
 
   const tradeStatus = useMemo(() =>
     getTradeStatus(hasTotal, wantsTotal)
@@ -195,19 +197,19 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     const diffMs = now - lastUpdatedTime;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins === 1) return '1 min ago';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours === 1) return '1 hour ago';
-    if (diffHours < 24) return `${diffHours} hours ago`;
+
+    if (diffMins < 1) return t('settings.time.just_now');
+    if (diffMins === 1) return t('settings.time.min_ago_one', { count: 1 });
+    if (diffMins < 60) return t('settings.time.min_ago_other', { count: diffMins });
+    if (diffHours === 1) return t('settings.time.hour_ago_one', { count: 1 });
+    if (diffHours < 24) return t('settings.time.hour_ago_other', { count: diffHours });
     return lastUpdatedTime.toLocaleDateString();
-  }, [lastUpdatedTime]);
+  }, [lastUpdatedTime, t]);
 
   // ✅ Hard refresh values - reloads data from CDN/Firebase
   const handleRefresh = useCallback(async () => {
     if (refreshing || !isMountedRef.current) return;
-    
+
     triggerHapticFeedback('impactLight');
     setRefreshing(true);
 
@@ -218,11 +220,11 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       // ✅ Update last refreshed time
       setLastUpdatedTime(new Date());
       // ✅ Show success message when values are reloaded
-      showSuccessMessage('Success', 'Values have been reloaded');
+      showSuccessMessage(t('home.alert.success'), t('home.alert.values_reloaded'));
     } catch (error) {
       console.error('Error refreshing values:', error);
       if (!isMountedRef.current) return;
-      showErrorMessage('Error', 'Failed to reload values. Please try again.');
+      showErrorMessage(t('home.alert.error'), t('home.alert.reload_error'));
     } finally {
       if (isMountedRef.current) {
         setRefreshing(false);
@@ -239,16 +241,11 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     setHasItems(createEmptySlots(GRID_STEPS[0]));
     setWantsItems(createEmptySlots(GRID_STEPS[0]));
   }, [triggerHapticFeedback]);
-  
+
 
   // ✅ getImageUrl - No longer needs fallback since favorites now use current data
-  const getImageUrl = useCallback((item, isGG, baseImgUrl, baseImgUrlGG) => {
+  const getImageUrl = useCallback((item, baseImgUrl) => {
     if (!item || !item.name) return '';
-
-    if (isGG) {
-      const encoded = encodeURIComponent(item.name);
-      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
-    }
 
     // For non-GG mode, check if item has image property
     if (item.image && baseImgUrl) {
@@ -285,22 +282,22 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     (nextHasItems, nextWantsItems) => {
       const currentSize = GRID_STEPS[gridStepIndex];
       const maxStepIndex = GRID_STEPS.length - 1;
-  
+
       const hasCount = nextHasItems.filter(Boolean).length;
       const wantsCount = nextWantsItems.filter(Boolean).length;
-  
+
       // Already at max (18 slots per side)
       if (gridStepIndex === maxStepIndex) {
         setHasItems(nextHasItems);
         setWantsItems(nextWantsItems);
         return;
       }
-  
+
       // If either side filled all current slots -> grow to next step
       if (hasCount >= currentSize || wantsCount >= currentSize) {
         const nextSize = GRID_STEPS[gridStepIndex + 1];
         const diff = nextSize - currentSize;
-  
+
         setGridStepIndex((prev) => prev + 1);
         setHasItems([...nextHasItems, ...createEmptySlots(diff)]);
         setWantsItems([...nextWantsItems, ...createEmptySlots(diff)]);
@@ -311,24 +308,23 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     },
     [gridStepIndex]
   );
-  
+
 
   const selectItem = useCallback(
     (item) => {
       if (!item || !selectedSection) return;
-  
+
       triggerHapticFeedback('impactLight');
-  
+
       const value = getItemValue(
         item,
         selectedValueType,
         isFlySelected,
         isRideSelected,
         isSharkMode,
-        localState.isGG,
         factor
       );
-  
+
       const selectedItem = {
         ...item,
         selectedValue: value,
@@ -336,23 +332,23 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         isFly: isFlySelected,
         isRide: isRideSelected,
       };
-  
+
       // Work on copies of both sides so we can decide expansion
       const nextHasItems = [...hasItems];
       const nextWantsItems = [...wantsItems];
-  
+
       const targetArray =
         selectedSection === 'has' ? nextHasItems : nextWantsItems;
-  
+
       let nextEmptyIndex = targetArray.indexOf(null);
-  
+
       // No empty slot left even at 18 → do nothing
       if (nextEmptyIndex === -1) {
         return;
       }
-  
+
       targetArray[nextEmptyIndex] = selectedItem;
-  
+
       // Update totals for the side we modified
       updateTotal(
         selectedItem,
@@ -360,10 +356,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         true,
         true
       );
-  
+
       // This will also expand 9→12→15→18 if needed
       maybeExpandGrid(nextHasItems, nextWantsItems);
-  
+
       setIsDrawerVisible(false);
     },
     [
@@ -374,19 +370,19 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       isFlySelected,
       isRideSelected,
       isSharkMode,
-      localState.isGG,
+      isSharkMode,
       factor,
       triggerHapticFeedback,
       updateTotal,
       maybeExpandGrid,
     ]
   );
-  
+
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
 
-    const callbackfunction = () => {};
+    const callbackfunction = () => { };
 
     if (items[index]) {
       triggerHapticFeedback('impactLight');
@@ -414,17 +410,17 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
       rafRefs.current[rafKey1] = requestAnimationFrame(() => {
         if (!isMountedRef.current) return;
-        
+
         timeoutRefs.current[timeoutKey1] = setTimeout(() => {
           if (!isMountedRef.current) return;
-          
+
           if (!adShowen && index === 1 && !localState.isPro && !isHas) {
             rafRefs.current[rafKey2] = requestAnimationFrame(() => {
               if (!isMountedRef.current) return;
-              
+
               timeoutRefs.current[timeoutKey2] = setTimeout(() => {
                 if (!isMountedRef.current) return;
-                
+
                 try {
                   callbackfunction();
                 } catch (err) {
@@ -449,16 +445,16 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
   const updateItemsForMode = useCallback((items) => {
     return items.map(item => {
       if (!item) return null;
-      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, localState.isGG, factor);
+      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, factor);
       return { ...item, selectedValue: value };
     });
-  }, [isSharkMode, localState.isGG, factor]); // ✅ Added missing dependencies
+  }, [isSharkMode, factor]); // ✅ Added missing dependencies
 
   // ✅ Optimize the mode change effect - Fixed: Only update when mode changes, not when items change
   useEffect(() => {
     // ✅ Check if component is still mounted
     if (!isMountedRef.current) return;
-    
+
     // ✅ Use functional updates to avoid dependency on hasItems/wantsItems
     setHasItems(prevItems => {
       if (!isMountedRef.current) return prevItems; // Return previous state if unmounted
@@ -491,18 +487,18 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       type: item.type,
       id: item.id,
     };
-    
+
     const isFavorite = currentFavorites.some(
-      fav => (fav.id && fav.id === item.id) || 
-             (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
+      fav => (fav.id && fav.id === item.id) ||
+        (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
     );
 
     let newFavorites;
     if (isFavorite) {
       // Remove by matching id or name+type
       newFavorites = currentFavorites.filter(
-        fav => !((fav.id && fav.id === item.id) || 
-                 (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase()))
+        fav => !((fav.id && fav.id === item.id) ||
+          (fav.name && fav.name.toLowerCase() === item.name.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase()))
       );
     } else {
       newFavorites = [...currentFavorites, favoriteIdentifier];
@@ -518,10 +514,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       if (!item) return null;
       return {
         ...item,
-        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
+        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor),
       };
     });
-  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor]); // ✅ Added missing dependencies
+  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor]); // ✅ Added missing dependencies
 
   // Step 3: Use optimized filteredData
   const filteredData = useMemo(() => {
@@ -535,10 +531,10 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
           const foundItem = memoizedFruitRecords.find(
             item => item && (
               (favIdentifier.id && item.id === favIdentifier.id) ||
-              (favIdentifier.name && item.name && 
-               item.name.toLowerCase() === favIdentifier.name.toLowerCase() &&
-               favIdentifier.type && item.type &&
-               item.type.toLowerCase() === favIdentifier.type.toLowerCase())
+              (favIdentifier.name && item.name &&
+                item.name.toLowerCase() === favIdentifier.name.toLowerCase() &&
+                favIdentifier.type && item.type &&
+                item.type.toLowerCase() === favIdentifier.type.toLowerCase())
             )
           );
           return foundItem || null;
@@ -546,15 +542,16 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         .filter(Boolean) // Remove nulls (items that no longer exist)
         .map(item => ({
           ...item,
-          cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, localState.isGG, factor),
+          cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor),
         }));
     } else {
       list = memoizedFruitRecords;
     }
+
     return list
       .filter(item => {
         if (!item?.type) return false;
-        const matchesSearch = item.name.toLowerCase().includes(debouncedSearchText.toLowerCase());
+        const matchesSearch = isMatch(item.name, debouncedSearchText);
         const matchesType = selectedPetType === 'INVENTORY' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
         return matchesSearch && matchesType;
       })
@@ -568,7 +565,6 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     isRideSelected,
     isSharkMode,
     localState.favorites,
-    localState.isGG,
     factor // ✅ Added missing dependency
   ]);
   // ✅ Handler for badge presses in favorites (N, M, D, R, F)
@@ -614,7 +610,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
   // ✅ Render favorite item in row layout (one per row) - matching ValueScreen.js
   const renderFavoriteItem = useCallback(({ item }) => {
-    const imageUrl = getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG);
+    const imageUrl = getImageUrl(item, localState.imgurl);
     const itemSelection = itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
     const currentValue = getItemValue(
       item,
@@ -622,20 +618,17 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       itemSelection.isFly,
       itemSelection.isRide,
       isSharkMode,
-      localState.isGG,
       factor
     );
 
-    const hideBadgeForType = !localState.isGG 
-      ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS']
-      : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'];
+    const hideBadgeForType = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
     const showBadges = !hideBadgeForType.includes(item.type?.toUpperCase());
 
     // Handler to add item to calculator
     const handleAddToCalculator = () => {
       if (!selectedSection) return;
       triggerHapticFeedback('impactLight');
-      
+
       const selectedItem = {
         ...item,
         selectedValue: currentValue,
@@ -670,7 +663,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
               <Image source={{ uri: imageUrl }} style={styles.favoriteItemImage} />
             ) : (
               <View style={[styles.favoriteItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
-              <Icon name="image-outline" size={18} color={isDarkMode ? '#666' : '#999'} />
+                <Icon name="image-outline" size={18} color={isDarkMode ? '#666' : '#999'} />
               </View>
             )}
           </View>
@@ -719,16 +712,16 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         </TouchableOpacity>
       </View>
     );
-  }, [itemSelections, localState.isGG, localState.imgurl, localState.imgurlGG, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, toggleFavorite, isDarkMode, getImageUrl, getItemValue, handleFavoriteBadgePress, BadgeButton]);
+  }, [itemSelections, localState.imgurl, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, toggleFavorite, isDarkMode, getImageUrl, getItemValue, handleFavoriteBadgePress, BadgeButton]);
 
   // Update renderGridItem to handle non-favorites mode
   const renderGridItem = useCallback(({ item }) => {
-    const imageUrl = getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG);
+    const imageUrl = getImageUrl(item, localState.imgurl);
     const isFavorite = (localState.favorites || []).some(
-      fav => (fav.id && fav.id === item.id) || 
-             (fav.name && fav.name.toLowerCase() === item.name?.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
+      fav => (fav.id && fav.id === item.id) ||
+        (fav.name && fav.name.toLowerCase() === item.name?.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
     );
-    
+
     return (
       <TouchableOpacity
         style={styles.gridItem}
@@ -752,34 +745,36 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
             <Icon name="image-outline" size={30} color={isDarkMode ? '#666' : '#999'} />
           </View>
         )}
-      <Text numberOfLines={1} style={styles.gridItemText}>
-        {item.name}
-      </Text>
-      {isAddingToFavorites && (
-        <TouchableOpacity
-          style={styles.favoriteButton}
-          activeOpacity={0.8}
-          onPress={() => {
-            toggleFavorite(item);
-          }}
-        >
-          <Icon
-            name={isFavorite ? "heart" : "heart-outline"}
-            size={20}
-            color={isFavorite ? "#e74c3c" : "#666"}
-          />
-        </TouchableOpacity>
-      )}
+        <Text numberOfLines={1} style={styles.gridItemText}>
+          {item.name}
+        </Text>
+        {isAddingToFavorites && (
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            activeOpacity={0.8}
+            onPress={() => {
+              toggleFavorite(item);
+            }}
+          >
+            <Icon
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={20}
+              color={isFavorite ? "#e74c3c" : "#666"}
+            />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
-  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.isGG, localState.imgurl, localState.imgurlGG, isDarkMode]);
+  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode]);
 
   // Update renderFavoritesHeader function
   const renderFavoritesHeader = useCallback(() => {
     if (selectedPetType === 'INVENTORY') {
       return (
         <View style={styles.favoritesHeader}>
-          <Text style={styles.favoritesTitle}>My Inventory</Text>
+          <View style={styles.favoritesHeader}>
+            <Text style={styles.favoritesTitle}>{t('home.my_inventory')}</Text>
+          </View>
         </View>
       );
     }
@@ -799,7 +794,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
             }}
           >
             <Icon name="add-circle" size={30} color={config.colors.hasBlockGreen} />
-            <Text style={styles.addToFavoritesText}>Add Items to Inventory</Text>
+            <Text style={styles.addToFavoritesText}>{t('home.add_items_inventory')}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -849,14 +844,14 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     };
   }, []);
 
-  // console.log(localState.isGG)
+
 
   useEffect(() => {
     let isMounted = true;
 
     const parseAndSetData = async () => {
       try {
-        const source = localState.isGG ? localState.ggData : localState.data;
+        const source = localState.data;
 
         if (!source) {
           if (isMounted) setFruitRecords([]);
@@ -883,7 +878,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
     return () => {
       isMounted = false;
     };
-  }, [localState.isGG, localState.data, localState.ggData]); // ✅ Added dependencies so it updates when values are refreshed
+  }, [localState.data]); // ✅ Added dependencies so it updates when values are refreshed
 
   // console.log(filteredData.length)
 
@@ -898,11 +893,17 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       return;
     }
 
+    if (isBanned) {
+      const reason = banDetails?.reason || 'Access Denied';
+      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
+
     // ✅ Store timeout ID for cleanup
     const timeoutKey = `createTrade_${Date.now()}`;
     timeoutRefs.current[timeoutKey] = setTimeout(() => {
       if (!isMountedRef.current) return;
-      
+
       const hasItemsCount = hasItems.filter(Boolean).length;
       const wantsItemsCount = wantsItems.filter(Boolean).length;
 
@@ -926,7 +927,7 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       // ✅ FIRESTORE ONLY: Read rating summary from user_ratings_summary (single source of truth)
       let userRating = null;
       let ratingCount = 0;
-      
+
       if (firestoreDB && user?.id) {
         const summaryDocSnap = await getDoc(doc(firestoreDB, 'user_ratings_summary', user.id));
         if (summaryDocSnap.exists) {
@@ -939,11 +940,11 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
           const database = getDatabase();
           const avgRatingSnap = await ref(database, `averageRatings/${user.id}`).once('value');
           const avgRatingData = avgRatingSnap.val();
-          
+
           if (avgRatingData) {
             userRating = avgRatingData.value || null;
             ratingCount = avgRatingData.count || 0;
-            
+
             // ✅ ONE-TIME MIGRATION: Copy to Firestore (async, don't wait)
             if (userRating || ratingCount > 0) {
               setDoc(
@@ -973,37 +974,37 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         valueType: item.valueType,
         isFly: item.isFly,
         isRide: item.isRide,
-        image: item.image ? item.image : '' ,
+        image: item.image ? item.image : '',
       });
-      
+
       // ✅ Create indexed arrays for server-side search - OPTIMIZED: Store only full names + words (not prefixes)
       // Prefixes are generated on search side to reduce storage costs
       const createSearchTokens = (itemName) => {
         const name = itemName.toLowerCase().trim();
         const tokens = [name]; // Full name for exact match
-        
+
         // Split into words and add each word as a token (for partial word matching)
         const words = name.split(/\s+/).filter(w => w.length > 0);
         tokens.push(...words);
-        
+
         // ✅ OPTIMIZED: Don't store prefixes here - they're generated on search side
         // This reduces storage costs significantly (from ~10-20 tokens/item to ~2-3 tokens/item)
-        
+
         return [...new Set(tokens)]; // Remove duplicates
       };
-      
+
       const hasItemNames = hasItems
         .filter(item => item && (item.name || item.Name))
         .flatMap(item => createSearchTokens(item.name || item.Name));
-      
+
       const wantsItemNames = wantsItems
         .filter(item => item && (item.name || item.Name))
         .flatMap(item => createSearchTokens(item.name || item.Name));
-      
+
       // ✅ Calculate trade status and convert to single letter: 'w' (win), 'l' (lose), 'f' (fair)
       const tradeStatus = getTradeStatus(hasTotal, wantsTotal);
       const statusLetter = tradeStatus === 'win' ? 'w' : tradeStatus === 'lose' ? 'l' : 'f';
-      
+
       const newTrade = {
         userId: user?.id || "Anonymous",
         traderName: user?.displayName || "Anonymous",
@@ -1021,7 +1022,8 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
         status: statusLetter, // ✅ Trade status: 'w' (win), 'l' (lose), 'f' (fair)
         rating: userRating,
         ratingCount,
-        isSharkMode: localState.isGG ? 'GG' : isSharkMode,
+        ratingCount,
+        isSharkMode: isSharkMode,
         flage: user.flage ? user.flage : null,
         robloxUsername: user?.robloxUsername || null,
         robloxUsernameVerified: user?.robloxUsernameVerified || false,
@@ -1030,14 +1032,14 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
 
 
       };
-      
+
       // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
       const COOLDOWN_MS = 120000; // 2 minutes
       if (lastTradeTime && (now - lastTradeTime) < COOLDOWN_MS) {
         const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastTradeTime)) / 1000);
         const minutesLeft = Math.floor(secondsLeft / 60);
         const remainingSeconds = secondsLeft % 60;
-        const timeMessage = minutesLeft > 0 
+        const timeMessage = minutesLeft > 0
           ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
           : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
         if (!isMountedRef.current) return;
@@ -1047,10 +1049,27 @@ const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0
       }
 
 
-await addDoc(tradesCollection, newTrade);
+      const tradeRef = await addDoc(tradesCollection, newTrade);
+
+      // ✅ Track activity for followers' feed
+      try {
+        await addDoc(collection(firestoreDB, 'user_activity'), {
+          userId: user.id,
+          type: 'trade_post',
+          referenceId: tradeRef.id,
+          displayName: user?.displayName || 'Unknown',
+          avatar: user?.avatar || null,
+          preview: description ? description.substring(0, 100) : 'Posted a new trade',
+          createdAt: serverTimestamp(),
+        });
+      } catch (activityError) {
+        console.warn('Failed to track activity:', activityError);
+        // Don't fail the trade creation if activity tracking fails
+      }
+
       // ✅ Check if component is still mounted before updating state
       if (!isMountedRef.current) return;
-      
+
       // Step 1: Close modal first
       setModalVisible(false);
 
@@ -1079,18 +1098,18 @@ await addDoc(tradesCollection, newTrade);
       // Step 5: Wait for next frame (modal animation finish) then delay for iOS
       rafRefs.current[rafKey1] = requestAnimationFrame(() => {
         if (!isMountedRef.current) return;
-        
+
         // Wait for modal animation to finish before showing ad
         timeoutRefs.current[timeoutKey1] = setTimeout(() => {
           if (!isMountedRef.current) return;
-          
+
           if (!localState.isPro) {
             rafRefs.current[rafKey2] = requestAnimationFrame(() => {
               if (!isMountedRef.current) return;
-              
+
               timeoutRefs.current[timeoutKey2] = setTimeout(() => {
                 if (!isMountedRef.current) return;
-                
+
                 try {
                   InterstitialAdManager.showAd(callbackfunction);
                 } catch (err) {
@@ -1129,6 +1148,12 @@ await addDoc(tradesCollection, newTrade);
       return;
     }
 
+    if (isBanned) {
+      const reason = banDetails?.reason || 'Access Denied';
+      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
+
     setIsShareModalVisible(true);
   }, [hasItems, wantsItems, t]);
 
@@ -1136,9 +1161,8 @@ await addDoc(tradesCollection, newTrade);
   const isProfit = profitLoss >= 0;
   const neutral = profitLoss === 0;
 
-  const  isGG = localState.isGG
 
-  const styles = useMemo(() => getStyles(isDarkMode, isGG), [isDarkMode, isGG]);
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const lastFilledIndexHas = useMemo(() =>
     hasItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
@@ -1166,21 +1190,21 @@ await addDoc(tradesCollection, newTrade);
                             ...styles.statusActive,
                             backgroundColor: config.colors.secondary // Blue for fair
                           } : styles.statusInactive
-                        ]}>FAIR</Text>
+                        ]}>{t('home.fair').toUpperCase()}</Text>
                         <Text style={[
                           styles.statusText,
                           tradeStatus === 'win' ? {
                             ...styles.statusActive,
                             backgroundColor: '#10B981' // Green for win
                           } : styles.statusInactive
-                        ]}>WIN</Text>
+                        ]}>{t('home.win').toUpperCase()}</Text>
                         <Text style={[
                           styles.statusText,
                           tradeStatus === 'lose' ? {
                             ...styles.statusActive,
                             backgroundColor: config.colors.primary // Primary color for lose
                           } : styles.statusInactive
-                        ]}>LOSE</Text>
+                        ]}>{t('home.lose').toUpperCase()}</Text>
                       </View>
                       <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
                     </View>
@@ -1200,32 +1224,32 @@ await addDoc(tradesCollection, newTrade);
                         />
                       </View>
                     </View> */}
-                   
-                     <View style={styles.profitLossBox}>
-                <Text style={[styles.bigNumber2, { color: isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
-                  {Math.abs(profitLoss).toLocaleString()}
-                </Text>
-                <View style={[styles.divider, { position: 'absolute', right: 0 , bottom:0}]}>
-                  <Image
-                    source={require('../../assets/reset.png')}
-                    style={{ width: 18, height: 18, tintColor: 'white' }}
-                    onTouchEnd={resetState}
-                  />
-                </View>
-                {/* Last Updated Section */}
-             
-              </View>
+
+                    <View style={styles.profitLossBox}>
+                      <Text style={[styles.bigNumber2, { color: isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
+                        {Math.abs(profitLoss).toLocaleString()}
+                      </Text>
+                      <View style={[styles.divider, { position: 'absolute', right: 0, bottom: 0 }]}>
+                        <Image
+                          source={require('../../assets/reset.png')}
+                          style={{ width: 18, height: 18, tintColor: 'white' }}
+                          onTouchEnd={resetState}
+                        />
+                      </View>
+                      {/* Last Updated Section */}
+
+                    </View>
                   </View>
                 </View>
               )}
-             
- <View style={styles.labelContainer}>
-                      <Text style={styles.offerLabel}>ME</Text>
-                      <Text style={styles.dividerText}></Text>
-                      <Text style={styles.offerLabel}>YOU</Text>
-                      {/* ✅ Modern Refresh Button */}
-                  
-                    </View>
+
+              <View style={styles.labelContainer}>
+                <Text style={styles.offerLabel}>ME</Text>
+                <Text style={styles.dividerText}></Text>
+                <Text style={styles.offerLabel}>YOU</Text>
+                {/* ✅ Modern Refresh Button */}
+
+              </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <View style={styles.itemRow}>
                   {hasItems?.map((item, index) => {
@@ -1245,7 +1269,7 @@ await addDoc(tradesCollection, newTrade);
                         {item ? (
                           <>
                             <Image
-                              source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+                              source={{ uri: getImageUrl(item, localState.imgurl) }}
                               style={[styles.itemImageOverlay]}
                             />
                             {!hideBadge.includes(item.type?.toUpperCase()) && (
@@ -1296,7 +1320,7 @@ await addDoc(tradesCollection, newTrade);
                         {item ? (
                           <>
                             <Image
-                              source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+                              source={{ uri: getImageUrl(item, localState.imgurl) }}
 
                               style={[styles.itemImageOverlay]}
                             />
@@ -1332,82 +1356,53 @@ await addDoc(tradesCollection, newTrade);
                   })}
                 </View>
               </View>
-              <TouchableOpacity 
-                  style={styles.lastUpdatedContainer}
-                  onPress={handleRefresh}
-                  disabled={refreshing}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.lastUpdatedContent}>
-                    {refreshing ? (
-                      <ActivityIndicator size="small" color={config.colors.primary} style={{ marginRight: 6 }} />
-                    ) : (
-                      <Icon name="time-outline" size={14} color={isDarkMode ? '#aaa' : '#888'} style={{ marginRight: 6 }} />
-                    )}
-                    <Text style={[styles.lastUpdatedText, { color: isDarkMode ? '#aaa' : '#666' }]}>
-                      {refreshing ? 'Updating...' : `Updated ${getLastUpdatedText()}`}
-                    </Text>
-                    {!refreshing && (
-                      <Icon name="refresh-outline" size={14} color={config.colors.primary} style={{ marginLeft: 6 }} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              {!localState.isGG &&
-                <View style={styles.typeContainer}>
+              <TouchableOpacity
+                style={styles.lastUpdatedContainer}
+                onPress={handleRefresh}
+                disabled={refreshing}
+                activeOpacity={0.7}
+              >
+                <View style={styles.lastUpdatedContent}>
+                  {refreshing ? (
+                    <ActivityIndicator size="small" color={config.colors.primary} style={{ marginRight: 6 }} />
+                  ) : (
+                    <Icon name="time-outline" size={14} color={isDarkMode ? '#aaa' : '#888'} style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={[styles.lastUpdatedText, { color: isDarkMode ? '#aaa' : '#666' }]}>
+                    {refreshing ? 'Updating...' : `${t('home.updated_prefix')}${getLastUpdatedText()}`}
+                  </Text>
+                  {!refreshing && (
+                    <Icon name="refresh-outline" size={14} color={config.colors.primary} style={{ marginLeft: 6 }} />
+                  )}
+                </View>
+              </TouchableOpacity>
+              <View style={styles.typeContainer}>
 
-                  <View style={styles.typeButtonsContainer}>
-                    <TouchableOpacity
-                      style={[styles.typeButton, isSharkMode && styles.typeButtonActive]}
-                      onPress={() => setIsSharkMode(true)}
-                    >
-                      <Text style={[styles.typeButtonText, isSharkMode && styles.typeButtonTextActive]}>Shark</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
-                      onPress={() => setIsSharkMode(false)}
-                    >
-                      <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
-                    </TouchableOpacity>
+                <View style={styles.typeButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.typeButton, isSharkMode && styles.typeButtonActive]}
+                    onPress={() => setIsSharkMode(true)}
+                  >
+                    <Text style={[styles.typeButtonText, isSharkMode && styles.typeButtonTextActive]}>{t('home.shark')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
+                    onPress={() => setIsSharkMode(false)}
+                  >
+                    <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>{t('home.frost')}</Text>
+                  </TouchableOpacity>
 
-                  </View>
-                  <View style={styles.recommendedContainer}>
-                    <Icon
-                      name="return-up-forward-outline"
-                      size={20}
-                      color="#666"
-                      style={styles.curvedArrow}
-                    />
-                    <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                  </View>
-                </View>}
-                {localState.isGG &&
-                <View style={[styles.typeContainer]}>
-
-                  <View style={[styles.typeButtonsContainer, {padding:0}]}>
-                    <TouchableOpacity
-                      style={[styles.typeButton, {backgroundColor:'#939992'}]}
-                      onPress={() => setIsSharkMode(true) } disabled
-                    >
-                      <Text style={[styles.typeButtonText, styles.typeButtonTextActive]}>GG Values</Text>
-                    </TouchableOpacity>
-                    {/* <TouchableOpacity
-                      style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
-                      onPress={() => setIsSharkMode(false)}
-                    >
-                      <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>Frost</Text>
-                    </TouchableOpacity> */}
-
-                  </View>
-                  {/* <View style={styles.recommendedContainer}>
-                    <Icon
-                      name="return-up-forward-outline"
-                      size={20}
-                      color="#666"
-                      style={styles.curvedArrow}
-                    />
-                    <Text style={styles.recommendedText}>RECOMMENDED</Text>
-                  </View> */}
-                </View>}
+                </View>
+                <View style={styles.recommendedContainer}>
+                  <Icon
+                    name="return-up-forward-outline"
+                    size={20}
+                    color="#666"
+                    style={styles.curvedArrow}
+                  />
+                  <Text style={styles.recommendedText}>{t('home.recommended')}</Text>
+                </View>
+              </View>
 
               {!config.isNoman && (
                 <View style={styles.summaryContainer}>
@@ -1442,32 +1437,32 @@ await addDoc(tradesCollection, newTrade);
                 <Text style={{ color: 'white' }}>{t('home.share_trade')}</Text>
               </TouchableOpacity>
             </View>
-          {!localState.isPro &&  <View style={styles.createtradeAds}>
-  <TouchableOpacity
-    style={styles.removeAdsButton}
-    activeOpacity={0.9}
-    onPress={()=>setShowofferwall(true)}
-  >
-    <View style={styles.removeAdsContent}>
-      {/* Crown icon / image */}
-      <View style={styles.crownWrapper}>
-        {/* <Icon name="trophy" size={18} color="#3b2500" /> */}
-       
-        <Image
-          source={require('../../assets/pro.png')}
-          style={{ width: 20, height: 20 }}
-          resizeMode="contain"
-        />
-        
-      </View>
+            {!localState.isPro && <View style={styles.createtradeAds}>
+              <TouchableOpacity
+                style={styles.removeAdsButton}
+                activeOpacity={0.9}
+                onPress={() => setShowofferwall(true)}
+              >
+                <View style={styles.removeAdsContent}>
+                  {/* Crown icon / image */}
+                  <View style={styles.crownWrapper}>
+                    {/* <Icon name="trophy" size={18} color="#3b2500" /> */}
 
-      <View style={styles.removeAdsTextWrapper}>
-        <Text style={styles.removeAdsTitle}>Remove Ads</Text>
-        {/* <Text style={styles.removeAdsSubtitle}>Unlock a clean experience</Text> */}
-      </View>
-    </View>
-  </TouchableOpacity>
-</View>}
+                    <Image
+                      source={require('../../assets/pro.png')}
+                      style={{ width: 20, height: 20 }}
+                      resizeMode="contain"
+                    />
+
+                  </View>
+
+                  <View style={styles.removeAdsTextWrapper}>
+                    <Text style={styles.removeAdsTitle}>{t('home.remove_ads')}</Text>
+                    {/* <Text style={styles.removeAdsSubtitle}>{t('home.unlock_clean_experience')}</Text> */}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>}
 
           </ScrollView>
           <Modal
@@ -1495,7 +1490,7 @@ await addDoc(tradesCollection, newTrade);
               </View>
 
               <View style={styles.drawerContent}>
-                <ScrollView 
+                <ScrollView
                   showsVerticalScrollIndicator={false}
                   style={styles.categoryListScroll}
                   contentContainerStyle={styles.categoryList}
@@ -1522,7 +1517,7 @@ await addDoc(tradesCollection, newTrade);
                       <Text style={[
                         styles.categoryButtonText,
                         selectedPetType === category && styles.categoryButtonTextActive
-                      ]}>{category}</Text>
+                      ]}>{getCategoryLabel(category)}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -1538,7 +1533,8 @@ await addDoc(tradesCollection, newTrade);
                     initialNumToRender={12}
                     maxToRenderPerBatch={12}
                     windowSize={5}
-                    removeClippedSubviews={true}
+                    removeClippedSubviews={false}
+                    nestedScrollEnabled={true}
                     getItemLayout={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? undefined : getItemLayout}
                   />
                   {selectedPetType === 'INVENTORY' ? renderFavoritesFooter() : (
@@ -1642,7 +1638,7 @@ await addDoc(tradesCollection, newTrade);
             message={t("home.alert.sign_in_required")}
           />
         </View>
-        <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall}/>
+        <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />
       </GestureHandlerRootView>
       {!localState.isPro && <BannerAdComponent />}
       <ShareTradeModal
@@ -1658,7 +1654,7 @@ await addDoc(tradesCollection, newTrade);
   );
 };
 
-const getStyles = (isDarkMode,isGG) =>
+const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -1667,13 +1663,13 @@ const getStyles = (isDarkMode,isGG) =>
     },
     summaryContainer: {
       width: '100%',
-      
+
     },
     summaryInner: {
       backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
       borderRadius: 15,
       marginBottom: 10,
-      
+
       padding: 10,
       shadowColor: 'rgba(255, 255, 255, 0.9)',
       shadowOffset: {
@@ -1689,7 +1685,7 @@ const getStyles = (isDarkMode,isGG) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       // marginBottom: 10,
-      
+
 
     },
     bigNumber: {
@@ -1757,8 +1753,8 @@ const getStyles = (isDarkMode,isGG) =>
       alignItems: 'center',
       justifyContent: 'space-evenly',
       // marginTop: 5,
-      flex:1,
-      width:'100%',
+      flex: 1,
+      width: '100%',
       position: 'relative',
       // backgroundColor:'red',
 
@@ -1766,7 +1762,7 @@ const getStyles = (isDarkMode,isGG) =>
     offerLabel: {
       fontSize: 12,
       color: isDarkMode ? '#999' : '#666',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       paddingBottom: 5,
     },
     dividerText: {
@@ -1797,7 +1793,7 @@ const getStyles = (isDarkMode,isGG) =>
     },
     lastUpdatedText: {
       fontSize: 12,
-      fontFamily: 'Lato-Regular',
+
       // shadowColor: '#000',
       // shadowOffset: { width: 0, height: 2 },
       // shadowOpacity: 0.1,
@@ -1825,7 +1821,7 @@ const getStyles = (isDarkMode,isGG) =>
       color: 'white',
       textAlign: 'center',
       marginTop: 5,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     itemRow: {
       flexDirection: 'row',
@@ -1835,7 +1831,7 @@ const getStyles = (isDarkMode,isGG) =>
       alignItems: 'center',
       marginBottom: 5,
       borderWidth: 1,
-      borderColor: isGG ? '#333333' : 'rgb(255, 102, 102)',
+      borderColor: 'rgb(255, 102, 102)',
       marginHorizontal: 'auto',
       borderRadius: 4,
       overflow: 'hidden',
@@ -1843,18 +1839,18 @@ const getStyles = (isDarkMode,isGG) =>
     addItemBlockNew: {
       width: '33.33%',
       height: 60,
-      backgroundColor: isDarkMode ? '#5c4c49' :  isGG ? '#939992' : '#f3d0c7',
+      backgroundColor: isDarkMode ? '#5c4c49' : '#f3d0c7',
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
       borderRightWidth: 1,
       borderBottomWidth: 1,
-      borderColor: isGG ? '#333333' : 'rgb(255, 102, 102)',
+      borderColor: 'rgb(255, 102, 102)',
     },
     itemText: {
       color: isDarkMode ? 'white' : 'black',
       textAlign: 'center',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 12
     },
     removeButton: {
@@ -2020,7 +2016,7 @@ const getStyles = (isDarkMode,isGG) =>
     closeButtonText: {
       color: 'white',
       textAlign: 'center',
-      fontFamily: 'Lato-Regular',
+
       fontSize: 12
     },
     itemImageOverlay: {
@@ -2066,13 +2062,13 @@ const getStyles = (isDarkMode,isGG) =>
       fontSize: 12,
       marginBottom: 4,
       color: isDarkMode ? 'white' : 'black',
-      fontFamily: 'Lato-Regular'
+
     },
     modalMessagefooter: {
       fontSize: 10,
       marginBottom: 10,
       color: isDarkMode ? 'grey' : 'grey',
-      fontFamily: 'Lato-Regular'
+
     },
     input: {
       width: '100%',
@@ -2083,7 +2079,7 @@ const getStyles = (isDarkMode,isGG) =>
       paddingHorizontal: 10,
       marginBottom: 20,
       color: isDarkMode ? 'white' : 'black',
-      fontFamily: 'Lato-Ragular'
+
     },
     buttonContainer: {
       flexDirection: 'row',
@@ -2106,13 +2102,13 @@ const getStyles = (isDarkMode,isGG) =>
     buttonText: {
       color: 'white',
       fontSize: 14,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
 
     text: {
       color: "white",
       fontSize: 12,
-      fontFamily: "Lato-Regular",
+
       lineHeight: 12
     },
 
@@ -2338,11 +2334,11 @@ const getStyles = (isDarkMode,isGG) =>
     createtradeAds: {
       paddingHorizontal: 16,
       paddingVertical: 8,
-      flex:1,
-      justifyContent:'center',
-      alignItems:'center',
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
-    
+
     removeAdsButton: {
       borderRadius: 999,
       paddingVertical: 5,
@@ -2354,16 +2350,16 @@ const getStyles = (isDarkMode,isGG) =>
       shadowOffset: { width: 0, height: 3 },
       elevation: 4,
       // minWidth:244
-      marginTop:20
+      marginTop: 20
 
     },
-    
+
     removeAdsContent: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    
+
     crownWrapper: {
       width: 25,
       height: 25,
@@ -2373,24 +2369,24 @@ const getStyles = (isDarkMode,isGG) =>
       alignItems: 'center',
       marginRight: 8,
     },
-    
+
     removeAdsTextWrapper: {
       flexDirection: 'column',
     },
-    
+
     removeAdsTitle: {
       color: '#1f2933',
       fontSize: 12,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
-    
+
     removeAdsSubtitle: {
       color: '#374151',
       fontSize: 10,
-      fontFamily: 'Lato-Regular',
+
       opacity: 0.9,
     },
-    
+
   });
 
 export default HomeScreen;

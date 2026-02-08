@@ -15,6 +15,9 @@ import ImageViewerScreenChat from './PrivateChat/ImageViewer';
 import { ref, update, get } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import LeaderboardScreen from './GroupChat/LeaderboardScreen';
+import AdminDashboard from '../AppHelper/AdminDashboard';
+import SocialDashboard from '../AppHelper/SocialDashboard';
+import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,6 +29,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const [loading, setLoading] = useState(false);
   const [unreadcount, setunreadcount] = useState(0);
   const { localState, updateLocalState } = useLocalState()
+  const { t } = useTranslation();
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -45,7 +49,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const headerOptions = useMemo(() => ({
     headerStyle: { backgroundColor: selectedTheme.colors.background },
     headerTintColor: selectedTheme.colors.text,
-    headerTitleStyle: { fontFamily: 'Lato-Bold', fontSize: 24 },
+    headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     headerBackTitleVisible: false,
   }), [selectedTheme]);
 
@@ -58,22 +62,22 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       setunreadcount(0);
       return;
     }
-  
+
     const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
     let totalUnread = 0;
     const unreadCounts = new Map(); // Track unread counts per chat
-    
+
     // ✅ OPTIMIZED: Use child_added and child_changed to listen to individual chats
     // This only downloads data when a specific chat changes, not the entire metadata
     const handleChildChange = (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       const chatData = snapshot.val();
       if (!chatData || typeof chatData !== 'object') return;
-      
+
       const chatPartnerId = snapshot.key;
       const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
       const rawUnread = chatData?.unreadCount || 0;
-      
+
       if (isBlocked && rawUnread > 0) {
         update(
           ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
@@ -85,19 +89,19 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       } else {
         unreadCounts.set(chatPartnerId, isBlocked ? 0 : rawUnread);
       }
-      
+
       // Recalculate total
       totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
       setunreadcount(totalUnread);
     };
-    
+
     const handleChildRemoved = (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       unreadCounts.delete(snapshot.key);
       totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
       setunreadcount(totalUnread);
     };
-    
+
     // Initial load: fetch only unreadCount fields for each chat (lighter than full data)
     const loadInitialCounts = async () => {
       try {
@@ -106,16 +110,16 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
           setunreadcount(0);
           return;
         }
-        
+
         const fetchedData = snapshot.val();
         if (!fetchedData || typeof fetchedData !== 'object') {
           setunreadcount(0);
           return;
         }
-        
+
         const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
         totalUnread = 0;
-        
+
         Object.entries(fetchedData).forEach(([chatPartnerId, chatData]) => {
           if (!chatData || typeof chatData !== 'object') return;
           const isBlocked = banned.includes(chatPartnerId);
@@ -124,21 +128,21 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
           unreadCounts.set(chatPartnerId, count);
           totalUnread += count;
         });
-        
+
         setunreadcount(totalUnread);
       } catch (error) {
         console.error("❌ Error loading initial unread counts:", error);
         setunreadcount(0);
       }
     };
-    
+
     loadInitialCounts();
-    
+
     // Listen to individual chat changes
     userChatsRef.on('child_added', handleChildChange);
     userChatsRef.on('child_changed', handleChildChange);
     userChatsRef.on('child_removed', handleChildRemoved);
-  
+
     // ✅ Proper cleanup
     return () => {
       userChatsRef.off('child_added', handleChildChange);
@@ -195,11 +199,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
           (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
         );
         setGroups(sortedGroups);
-        
+
         // ✅ Calculate total group unread count
         const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
         setGroupUnreadCount(totalGroupUnread);
-        
+
         setGroupsLoading(false);
       } catch (error) {
         console.error('❌ Error fetching groups:', error);
@@ -215,10 +219,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
 
   const getGroupChatOptions = useCallback(({ navigation }) => ({
-    title: '', // Hide title
+    // Show "Community Chat" title only when NOT logged in
+    title: user?.id ? '' : t('chat.community_chat'),
     headerTitleAlign: 'left',
-    headerTitleStyle: { 
-      fontFamily: 'Lato-Bold', 
+    headerTitleStyle: {
+      fontWeight: 'bold',
       fontSize: 24,
     },
     headerTitleContainerStyle: {
@@ -246,7 +251,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       paddingRight: 0,
       marginRight: 0,
     },
-  }), [selectedTheme, unreadcount, setunreadcount, groupUnreadCount, setGroupUnreadCount, triggerHapticFeedback]);
+  }), [selectedTheme, unreadcount, setunreadcount, groupUnreadCount, setGroupUnreadCount, triggerHapticFeedback, user?.id, t]);
 
   return (
     <Stack.Navigator screenOptions={headerOptions}>
@@ -266,7 +271,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         name="Inbox"
         options={{ title: 'Inbox' }}
       >
-        {props => <InboxScreen {...props} chats={[]} setChats={() => {}} loading={false} bannedUsers={bannedUsers} />}
+        {props => <InboxScreen {...props} chats={[]} setChats={() => { }} loading={false} bannedUsers={bannedUsers} />}
       </Stack.Screen>
 
       <Stack.Screen
@@ -300,29 +305,29 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       </Stack.Screen>
 
       <Stack.Screen
-  name="PrivateChat"
-  options={({ route }) => ({
-    headerTitle: () => (
-      <PrivateChatHeader
-        selectedUser={route.params?.selectedUser}
-        selectedTheme={selectedTheme}
-        bannedUsers={bannedUsers}
-        isDrawerVisible={isDrawerVisible}
-        setIsDrawerVisible={setIsDrawerVisible}
-      />
-    ),
-  })}
->
-  {(props) => (
-    <PrivateChatScreen
-      {...props}
-      bannedUsers={bannedUsers}
-      isDrawerVisible={isDrawerVisible}
-      setIsDrawerVisible={setIsDrawerVisible}
-    />
-  )}
-</Stack.Screen>
-        <Stack.Screen
+        name="PrivateChat"
+        options={({ route }) => ({
+          headerTitle: () => (
+            <PrivateChatHeader
+              selectedUser={route.params?.selectedUser}
+              selectedTheme={selectedTheme}
+              bannedUsers={bannedUsers}
+              isDrawerVisible={isDrawerVisible}
+              setIsDrawerVisible={setIsDrawerVisible}
+            />
+          ),
+        })}
+      >
+        {(props) => (
+          <PrivateChatScreen
+            {...props}
+            bannedUsers={bannedUsers}
+            isDrawerVisible={isDrawerVisible}
+            setIsDrawerVisible={setIsDrawerVisible}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen
         name="ImageViewerScreenChat"
         component={ImageViewerScreenChat}
         options={{ title: 'Image' }}
@@ -334,6 +339,17 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       >
         {props => <LeaderboardScreen {...props} />}
       </Stack.Screen>
+
+      <Stack.Screen
+        name="AdminDashboard"
+        component={AdminDashboard}
+        options={{ title: 'Admin Dashboard' }}
+      />
+      <Stack.Screen
+        name="SocialDashboard"
+        component={SocialDashboard}
+        options={{ title: 'Friends' }}
+      />
     </Stack.Navigator>
   );
 };

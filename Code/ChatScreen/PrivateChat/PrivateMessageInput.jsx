@@ -17,13 +17,14 @@ import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
 
+import { Image as CompressorImage } from 'react-native-compressor';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
-const BUNNY_ACCESS_KEY   = '1b7e1a85-dff7-4a98-ba701fc7f9b9-6542-46e2';
-const BUNNY_CDN_BASE     = 'https://pull-gag.b-cdn.net';
+const BUNNY_ACCESS_KEY = '1b7e1a85-dff7-4a98-ba701fc7f9b9-6542-46e2';
+const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 // ✅ Move base64ToBytes outside component (pure function)
 const base64ToBytes = (base64) => {
@@ -98,78 +99,101 @@ const PrivateMessageInput = ({
     const remainingSlots = maxImages - currentCount;
 
     if (remainingSlots <= 0) {
-      Alert.alert('Limit Reached', 'You can only select up to 3 images per message.');
+      Alert.alert(t('chat.limit_reached'), t('chat.image_limit_reached'));
       return;
     }
 
-    launchImageLibrary(
-      {
-        mediaType: 'photo',
-        selectionLimit: remainingSlots, // Allow selecting up to remaining slots
-      },
-      async (response) => {
-        if (!response || response.didCancel) return;
+    try {
+      launchImageLibrary(
+        {
+          mediaType: 'photo',
+          selectionLimit: remainingSlots, // Allow selecting up to remaining slots
+          quality: 0.8,
+          maxWidth: 1920,
+          maxHeight: 1920,
+        },
+        async (response) => {
+          try {
+            if (!response || response.didCancel) return;
 
-        if (response.errorCode) {
-          console.warn(
-            'ImagePicker Error:',
-            response.errorCode,
-            response.errorMessage,
-          );
+            if (response.errorCode) {
+              console.warn(
+                'ImagePicker Error:',
+                response.errorCode,
+                response.errorMessage,
+              );
 
-          if (response.errorCode !== 'activity') {
-            Alert.alert('Error', 'Could not open gallery.');
-          }
-          return;
-        }
+              if (response.errorCode !== 'activity') {
+                Alert.alert(t('chat.error'), t('chat.gallery_error'));
+              }
+              return;
+            }
 
-        const assets = response.assets || [];
-        if (assets.length > 0) {
-          const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
-          const validUris = [];
-          const rejectedCount = [];
+            const assets = response?.assets || [];
+            if (assets.length > 0) {
+              const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+              const validUris = [];
+              const rejectedCount = [];
 
-          // Check file size for each image
-          for (const asset of assets) {
-            if (!asset?.uri || typeof asset.uri !== 'string') continue;
+              // Check file size and compress if needed
+              for (const asset of assets) {
+                if (!asset?.uri || typeof asset.uri !== 'string') continue;
 
-            try {
-              const filePath = asset.uri.replace('file://', '');
-              const fileInfo = await RNFS.stat(filePath);
-              const fileSize = fileInfo.size || 0;
+                try {
+                  const filePath = asset.uri.replace('file://', '');
+                  const fileInfo = await RNFS.stat(filePath);
+                  const fileSize = fileInfo.size || 0;
 
-              if (fileSize > MAX_SIZE_BYTES) {
-                rejectedCount.push(asset.fileName || 'image');
-                continue;
+                  // 🟢 If image > 1MB, compress it
+                  if (fileSize > MAX_SIZE_BYTES) {
+                    try {
+                      const compressedUri = await CompressorImage.compress(asset.uri, {
+                        maxWidth: 1024, // Good resolution for chat
+                        quality: 0.7,   // Aggressive enough to get under 1MB
+                        returnableOutputType: 'uri',
+                      });
+                      validUris.push(compressedUri);
+                    } catch (compError) {
+                      console.error('Compression failed:', compError);
+                      // Fallback: If compression fails, warn user (or skip)
+                      rejectedCount.push(asset.fileName || 'image');
+                    }
+                  } else {
+                    // Image is small enough, use as is
+                    validUris.push(asset.uri);
+                  }
+                } catch (error) {
+                  console.warn('Error processing image:', error);
+                  // Best effort: try adding original if processing fails
+                  validUris.push(asset.uri);
+                }
               }
 
-              validUris.push(asset.uri);
-            } catch (error) {
-              console.warn('Error checking file size:', error);
-              // If we can't check size, allow it (better UX than blocking)
-              validUris.push(asset.uri);
+              // Show alert if any images failed compression/check
+              if (rejectedCount.length > 0) {
+                Alert.alert(
+                  t('chat.image_too_large'),
+                  t('chat.image_too_large_desc', { count: rejectedCount.length }) // You might want to update this string to 'Failed to process X images'
+                );
+              }
+
+              // Add valid images to existing ones, but cap at 3 total
+              if (validUris.length > 0) {
+                setImageUris(prev => {
+                  const combined = [...prev, ...validUris];
+                  return combined.slice(0, maxImages); // Ensure we never exceed 3
+                });
+              }
             }
+          } catch (callbackError) {
+            console.warn('Image picker callback error:', callbackError);
           }
-
-          // Show alert if any images were rejected
-          if (rejectedCount.length > 0) {
-            Alert.alert(
-              'Image Too Large',
-              `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
-            );
-          }
-
-          // Add valid images to existing ones, but cap at 3 total
-          if (validUris.length > 0) {
-            setImageUris(prev => {
-              const combined = [...prev, ...validUris];
-              return combined.slice(0, maxImages); // Ensure we never exceed 3
-            });
-          }
-        }
-      },
-    );
-  }, [isBanned, imageUris.length]);
+        },
+      );
+    } catch (launchError) {
+      console.warn('Image picker launch error:', launchError);
+    }
+  }, [isBanned, imageUris.length, t]);
 
   // 🐰 Upload ONE image to Bunny (no atob)
   const uploadToBunny = useCallback(
@@ -179,9 +203,9 @@ const PrivateMessageInput = ({
       const userId = user?.id ?? 'anon';
 
       try {
-        const filename   = `${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
+        const filename = `${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
         const remotePath = `uploads/${encodeURIComponent(userId)}/${encodeURIComponent(filename)}`;
-        const uploadUrl  = `https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`;
+        const uploadUrl = `https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`;
 
         // read file as base64
         const base64 = await RNFS.readFile(uri.replace('file://', ''), 'base64');
@@ -192,7 +216,7 @@ const PrivateMessageInput = ({
           binary = base64ToBytes(base64);
         } catch (error) {
           console.error('Error converting base64 to bytes:', error);
-          Alert.alert('Error', 'Image processing failed.');
+          Alert.alert(t('chat.error'), t('chat.image_processing_failed'));
           return null;
         }
 
@@ -208,14 +232,14 @@ const PrivateMessageInput = ({
         const txt = await res.text().catch(() => '');
         if (!res.ok) {
           console.warn('Bunny upload failed', res.status, txt);
-          Alert.alert('Error', 'Image upload failed, sending message without image.');
+          Alert.alert(t('chat.error'), t('chat.image_upload_failed'));
           return null;
         }
 
         return `${BUNNY_CDN_BASE}/${decodeURIComponent(remotePath)}`;
       } catch (e) {
         console.warn('[Bunny ERROR]', e?.message || e);
-        Alert.alert('Error', 'Image upload failed, sending message without image.');
+        Alert.alert(t('chat.error'), t('chat.image_upload_failed'));
         return null;
       }
     },
@@ -236,7 +260,7 @@ const PrivateMessageInput = ({
     if (trimmedInput) {
       const validation = validateContent(trimmedInput);
       if (!validation.isValid) {
-        Alert.alert('Error', validation.reason || 'Inappropriate content detected.');
+        Alert.alert(t('chat.error'), t('chat.inappropriate_content'));
         return;
       }
     }
@@ -263,8 +287,8 @@ const PrivateMessageInput = ({
 
     setMessageCount(prevCount => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 15 === 0) {
-        InterstitialAdManager.showAd(() => {});
+      if (!localState?.isPro && newCount % 10 === 0) {
+        InterstitialAdManager.showAd(() => { });
       }
       return newCount;
     });
@@ -291,7 +315,7 @@ const PrivateMessageInput = ({
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message.');
+      Alert.alert(t('chat.error'), t('chat.send_error'));
     } finally {
       setIsSending(false); // ✅ always reset
     }
@@ -310,27 +334,27 @@ const PrivateMessageInput = ({
 
   // ✅ Quick message templates for Adopt Me trading (matching blox style)
   const messageTemplates = useMemo(() => [
-    "Interested in your trade!",
-    "Can we negotiate?",
-    "What's your best offer?",
-    "I'm ready to trade!",
-    "Let me check my inventory",
-    "Deal accepted!",
-    "Can you add more?",
-    "Meet me at the trading hub",
-    "What pets do you have?",
-    "Is this still available?",
-    "I'll add more pets",
-    "Fair trade, let's do it!",
-    "Can you change something?",
-    "I'm interested, let's discuss",
-    "Thanks for the trade!",
-    "Are you online?",
-    "When can you trade?",
-    "I have what you need",
-    "Let's make a deal!",
-    "Can we do this trade?",
-  ], []);
+    t("chat.quick_msg_interest"),
+    t("chat.quick_msg_negotiate"),
+    t("chat.quick_msg_best_offer"),
+    t("chat.quick_msg_ready"),
+    t("chat.quick_msg_check_inv"),
+    t("chat.quick_msg_deal_accepted"),
+    t("chat.quick_msg_add_more"),
+    t("chat.quick_msg_meet_hub"),
+    t("chat.quick_msg_what_pets"),
+    t("chat.quick_msg_available"),
+    t("chat.quick_msg_add_pets"),
+    t("chat.quick_msg_fair_trade"),
+    t("chat.quick_msg_change_item"),
+    t("chat.quick_msg_discuss"),
+    t("chat.quick_msg_thanks"),
+    t("chat.quick_msg_online"),
+    t("chat.quick_msg_when"),
+    t("chat.quick_msg_have_item"),
+    t("chat.quick_msg_make_deal"),
+    t("chat.quick_msg_can_do"),
+  ], [t]);
 
   // Handle template selection
   const handleTemplateSelect = useCallback(async (template) => {
@@ -346,7 +370,7 @@ const PrivateMessageInput = ({
       {replyTo && (
         <View style={styles.replyContainer}>
           <Text style={styles.replyText}>
-            Replying to: {replyTo?.text || '[Message]'}
+            {t('chat.replying_to')} {replyTo?.text || t('chat.message_placeholder')}
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -446,7 +470,7 @@ const PrivateMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12, marginRight: 8 }}>
-            {imageUris.length} image{imageUris.length > 1 ? 's' : ''} attached
+            {t('chat.attached_images', { count: imageUris.length, suffix: imageUris.length > 1 ? 's' : '' })}
           </Text>
           {imageUris.map((uri, index) => (
             <TouchableOpacity
@@ -477,7 +501,7 @@ const PrivateMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>
-            {selectedFruits.length} pet(s) selected
+            {t('chat.pets_selected', { count: selectedFruits.length })}
           </Text>
 
           <TouchableOpacity
@@ -542,7 +566,7 @@ const PrivateMessageInput = ({
                   color: isDark ? '#FFF' : '#000',
                 }}
               >
-                Quick Messages
+                {t('chat.quick_messages')}
               </Text>
               <TouchableOpacity onPress={() => setShowTemplateDrawer(false)}>
                 <Icon name="close" size={24} color={isDark ? '#FFF' : '#000'} />

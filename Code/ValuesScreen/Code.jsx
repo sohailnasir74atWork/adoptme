@@ -34,7 +34,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
     triggerHapticFeedback('impactLight');
     Clipboard.setString(code); // Copies the code to the clipboard
     showSuccessMessage(t("value.copy"), t("value.copy_success"));
-    mixpanel.track("Code Copy", {Code:code});
+    mixpanel.track("Code Copy", { Code: code });
 
   };
 
@@ -74,7 +74,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
-          
+
       </View>
     </Modal>
   );
@@ -98,7 +98,7 @@ export const getStyles = (isDarkMode) =>
     },
     headerText: {
       fontSize: 20,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       marginBottom: 10,
       textAlign: 'center',
     },

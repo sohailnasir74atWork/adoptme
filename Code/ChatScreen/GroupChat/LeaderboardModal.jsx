@@ -26,8 +26,8 @@ import { isUserOnline } from '../utils';
 
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in milliseconds
 
-const LeaderboardModal = ({ 
-  visible, 
+const LeaderboardModal = ({
+  visible,
   onClose,
 }) => {
   const { theme, user, appdatabase, firestoreDB } = useGlobalState();
@@ -36,7 +36,7 @@ const LeaderboardModal = ({
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
-  
+
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
@@ -69,7 +69,7 @@ const LeaderboardModal = ({
       );
 
       const summarySnapshot = await getDocs(summaryQuery);
-      
+
       if (summarySnapshot.empty) {
         setLeaderboardData([]);
         setLoading(false);
@@ -159,7 +159,7 @@ const LeaderboardModal = ({
   // ✅ Handle user click - open BottomDrawer
   const handleUserClick = useCallback(async (item) => {
     triggerHapticFeedback('impactLight');
-    
+
     const selectedUserData = {
       senderId: item.userId,
       sender: item.displayName,
@@ -188,7 +188,7 @@ const LeaderboardModal = ({
     const callbackFunction = () => {
       setIsDrawerVisible(false);
       onClose();
-      
+
       if (navigation && typeof navigation.navigate === 'function') {
         navigation.navigate('PrivateChat', {
           selectedUser: {
@@ -254,8 +254,8 @@ const LeaderboardModal = ({
         transparent={true}
         onRequestClose={onClose}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={onClose}
         >
@@ -264,7 +264,7 @@ const LeaderboardModal = ({
             style={{ flex: 1, justifyContent: 'flex-end' }}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           >
-            <View 
+            <View
               style={styles.modalContent}
               onStartShouldSetResponder={() => true}
             >
@@ -343,7 +343,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#fff' : '#000',
   },
   closeButton: {
@@ -359,7 +359,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: isDarkMode ? '#999' : '#666',
-    fontFamily: 'Lato-Regular',
+
   },
   emptyContainer: {
     flex: 1,
@@ -371,7 +371,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: isDarkMode ? '#999' : '#666',
-    fontFamily: 'Lato-Regular',
+
   },
   listContent: {
     padding: 8,
@@ -396,7 +396,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   rankText: {
     color: '#fff',
     fontSize: 14,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   avatar: {
     width: 50,
@@ -411,7 +411,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   userName: {
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#fff' : '#000',
     marginBottom: 4,
   },
@@ -422,7 +422,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   ratingText: {
     fontSize: 12,
     color: isDarkMode ? '#999' : '#666',
-    fontFamily: 'Lato-Regular',
+
     marginLeft: 4,
   },
   cacheInfo: {
@@ -430,7 +430,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     color: isDarkMode ? '#666' : '#999',
     textAlign: 'center',
     padding: 8,
-    fontFamily: 'Lato-Regular',
+
   },
 });
 

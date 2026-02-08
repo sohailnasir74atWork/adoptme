@@ -6,12 +6,14 @@ import {
 import { showMessage } from 'react-native-flash-message';
 import firestore from '@react-native-firebase/firestore';
 import { useLocalState } from '../../LocalGlobelStats';
+import { useTranslation } from 'react-i18next';
 
 const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
   const [reportText, setReportText] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const {updateLocalState, localState} = useLocalState()
-// console.log(localState.bannedUsers)
+  const { updateLocalState, localState } = useLocalState()
+  const { t } = useTranslation();
+  // console.log(localState.bannedUsers)
 
   // const handleBanToggle = async () => {
   //   const action = isBlock ? t("chat.unblock") : t("chat.block");
@@ -54,16 +56,16 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
   //     ]
   //   );
   // };
-  const REPORT_THRESHOLD = 2; 
+  const REPORT_THRESHOLD = 2;
 
   const handleSubmit = async () => {
     if (submitting) return;
     if (!item || !item.id) {
-      showMessage({ message: 'Invalid post.', type: 'danger' });
+      showMessage({ message: t('feed.invalid_post'), type: 'danger' });
       return;
     }
     if (!reportText.trim()) {
-      showMessage({ message: 'Please enter a reason.', type: 'warning' });
+      showMessage({ message: t('feed.reason_required'), type: 'warning' });
       return;
     }
 
@@ -77,26 +79,26 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
         if (!snap.exists) {
           return { status: 'missing' };
         }
-  
+
         const currentCount = snap.get('reportCount') || 0;
         const nextCount = currentCount + 1;
-  
+
         // Keep legacy boolean 'report' if your UI needs it
         const updates = {
           reportCount: nextCount,
           report: true,
         };
-  
+
         // prevent double-ban by storing a flag
         const alreadyBanned = !!snap.get('banned');
         const shouldBan = !alreadyBanned && nextCount >= REPORT_THRESHOLD;
-  
+
         if (shouldBan) {
           updates.banned = true; // mark so future transactions don't re-ban
         }
-  
+
         tx.update(postRef, updates);
-  
+
         return {
           status: 'ok',
           shouldBan,
@@ -104,12 +106,12 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
           userId: snap.get('userId') || null,
         };
       });
-  
+
       if (txResult.status === 'missing') {
-        showMessage({ message: 'Post not found.', type: 'danger' });
+        showMessage({ message: t('feed.post_not_found'), type: 'danger' });
         return;
       }
-  
+
       // Side-effects OUTSIDE the transaction to avoid retries breaking things
       if (txResult.shouldBan && txResult.email && txResult.userId) {
         try {
@@ -124,7 +126,7 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
       onClose();
     } catch (e) {
       console.error('Report submit error:', e);
-      showMessage({ message: 'Could not submit report. Please try again.', type: 'danger' });
+      showMessage({ message: t('feed.failed_submit_report'), type: 'danger' });
     } finally {
       setSubmitting(false);
     }
@@ -135,10 +137,10 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.title}>Report Post</Text>
+            <Text style={styles.title}>{t('feed.report_post')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="Why are you reporting this post?"
+              placeholder={t('feed.report_placeholder')}
               placeholderTextColor="#888"
               value={reportText}
               onChangeText={setReportText}
@@ -153,10 +155,10 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
                 style={[styles.submitButton, submitting && { opacity: 0.6 }]}
                 disabled={submitting}
               >
-                <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Submit'}</Text>
+                <Text style={styles.buttonText}>{submitting ? t('feed.submitting') : t('feed.submit')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.cancelButton} disabled={submitting}>
-                <Text style={styles.buttonText}>Cancel</Text>
+                <Text style={styles.buttonText}>{t('feed.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -54,10 +54,7 @@
       ".read": true,
       ".write": true
     },
-    "banned_users_by_email_post": {
-      ".read": true,
-      ".write": true
-    },
+  
     "notifier": {
       ".read": true,
       ".write": true

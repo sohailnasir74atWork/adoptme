@@ -9,6 +9,7 @@ import config from '../Helper/Environment';
 import { showErrorMessage } from '../Helper/MessageHelper';
 import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
+import { useTranslation } from 'react-i18next';
 
 const getTradeStatus = (hasTotal, wantsTotal) => {
     if (hasTotal > 0 && wantsTotal === 0) return 'lose';
@@ -21,6 +22,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
     const { theme } = useGlobalState();
     const { localState } = useLocalState();
     const isDarkMode = theme === 'dark';
+    const { t } = useTranslation();
 
     const [showSummary, setShowSummary] = useState(true);
     const [showProfitLoss, setShowProfitLoss] = useState(true);
@@ -33,21 +35,15 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
     const tradeStatus = useMemo(() => getTradeStatus(hasTotal, wantsTotal), [hasTotal, wantsTotal]);
     const profitLoss = wantsTotal - hasTotal;
     const isProfit = profitLoss >= 0;
-    const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+    const getImageUrl = (item, baseImgUrl) => {
 
         if (!item || !item.name) return '';
-    
-        if (isGG) {
-          const encoded = encodeURIComponent(item.name);
-        //   console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
-          return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
-        }
-    
+
         if (!item.image || !baseImgUrl) return '';
         return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-      };
-    
-    
+    };
+
+
     const progressBarStyle = useMemo(() => {
         if (!hasTotal && !wantsTotal) return { left: '50%', right: '50%' };
         const total = hasTotal + wantsTotal;
@@ -70,42 +66,44 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             if (!viewRef.current) return;
             mixpanel.track("Trade Share");
             const uri = await viewRef.current.capture();
-            const callbackfunction = async ()=>{
+            const callbackfunction = async () => {
                 await Share.open({
                     url: uri,
                     type: 'image/png',
                     failOnCancel: false,
                 });
             }
-           if(Platform.OS !== 'ios'){ setTimeout(() => {
-                if (!localState.isPro) {
-                  requestAnimationFrame(() => {
-                    setTimeout(() => {
-                      try {
-                        InterstitialAdManager.showAd(callbackfunction);
-                      } catch (err) {
-                        console.warn('[AdManager] Failed to show ad:', err);
+            if (Platform.OS !== 'ios') {
+                setTimeout(() => {
+                    if (!localState.isPro) {
+                        requestAnimationFrame(() => {
+                            setTimeout(() => {
+                                try {
+                                    InterstitialAdManager.showAd(callbackfunction);
+                                } catch (err) {
+                                    console.warn('[AdManager] Failed to show ad:', err);
+                                    callbackfunction();
+                                }
+                            }, 100);
+                        });
+                    } else {
                         callbackfunction();
-                      }
-                    }, 100); 
-                  });
-                } else {
-                  callbackfunction();
-                }
-              }, 10); }
-          
-            if(Platform.OS === 'ios'){
-                 await Share.open({
+                    }
+                }, 10);
+            }
+
+            if (Platform.OS === 'ios') {
+                await Share.open({
                     url: uri,
                     type: 'image/png',
                     failOnCancel: false,
                 });
             }
             onClose();
-         
+
         } catch (error) {
             console.error('Error sharing trade screenshot:', error);
-            showErrorMessage('Error', 'Could not share the trade screenshot.');
+            showErrorMessage(t('trade.share.error_title'), t('trade.share.error_message'));
         }
     };
 
@@ -128,7 +126,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
 
     const renderBadge = useCallback((type, text) => {
         if (!showBadges) return null;
-        
+
         let backgroundColor;
         switch (type) {
             case 'fly':
@@ -146,7 +144,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             default:
                 backgroundColor = '#FF6666';
         }
-        
+
         return (
             <View style={[styles.badge, { backgroundColor }]}>
                 <Text style={styles.badgeText}>{text}</Text>
@@ -160,20 +158,20 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
             return (
                 <View style={styles.gridItem}>
                     {isLastFilledIndex && (
-                        <Icon 
-                            name="add-circle" 
-                            size={30} 
-                            color={isDarkMode ? "#fdf7e5" : '#fdf7e5'} 
+                        <Icon
+                            name="add-circle"
+                            size={30}
+                            color={isDarkMode ? "#fdf7e5" : '#fdf7e5'}
                         />
                     )}
                 </View>
             );
         }
-        
+
         return (
             <View style={styles.gridItem}>
                 <Image
-                    source={{ uri: getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG) }}
+                    source={{ uri: getImageUrl(item, localState.imgurl) }}
 
                     style={styles.gridItemImage}
                 />
@@ -233,7 +231,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                         </TouchableOpacity>
                     </View>
 
-                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }} style={{ backgroundColor: isDarkMode ? '#121212' : '#f2f2f7' , padding: 8,}}>
+                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }} style={{ backgroundColor: isDarkMode ? '#121212' : '#f2f2f7', padding: 8, }}>
                         {showSummary && showLeftGrid && showRightGrid && (
                             <View style={styles.summaryContainer}>
                                 <View style={styles.summaryInner}>
@@ -243,15 +241,15 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                                             <Text style={[
                                                 styles.statusText,
                                                 tradeStatus === 'win' ? styles.statusActive : styles.statusInactive
-                                            ]}>WIN</Text>
+                                            ]}>{t('home.win').toUpperCase()}</Text>
                                             <Text style={[
                                                 styles.statusText,
                                                 tradeStatus === 'fair' ? styles.statusActive : styles.statusInactive
-                                            ]}>FAIR</Text>
+                                            ]}>{t('home.fair').toUpperCase()}</Text>
                                             <Text style={[
                                                 styles.statusText,
                                                 tradeStatus === 'lose' ? styles.statusActive : styles.statusInactive
-                                            ]}>LOSE</Text>
+                                            ]}>{t('home.lose').toUpperCase()}</Text>
                                         </View>
                                         <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString()}</Text>
                                     </View>
@@ -262,9 +260,9 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                                         </View>
                                     </View>
                                     <View style={styles.labelContainer}>
-                                        <Text style={styles.offerLabel}>YOUR OFFER</Text>
+                                        <Text style={styles.offerLabel}>{t('trade.share.your_offer')}</Text>
                                         <Text style={styles.dividerText}>|</Text>
-                                        <Text style={styles.offerLabel}>THEIR OFFER</Text>
+                                        <Text style={styles.offerLabel}>{t('trade.share.their_offer')}</Text>
                                     </View>
                                 </View>
                             </View>
@@ -295,20 +293,20 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                     </ViewShot>
 
                     <View style={styles.toggleContainer}>
-                        {renderToggleButton('stats-chart', 'Summary', showSummary, setShowSummary, (!showLeftGrid && showRightGrid) || (showLeftGrid && !showRightGrid))}
-                        {renderToggleButton('trending-up', 'Profit/Loss', showProfitLoss, setShowProfitLoss)}
+                        {renderToggleButton('stats-chart', t('trade.share.summary'), showSummary, setShowSummary, (!showLeftGrid && showRightGrid) || (showLeftGrid && !showRightGrid))}
+                        {renderToggleButton('trending-up', t('trade.share.profit_loss'), showProfitLoss, setShowProfitLoss)}
                         {/* {renderToggleButton('grid', 'Left Grid', showLeftGrid, setShowLeftGrid)} */}
                         {/* {renderToggleButton('grid', 'Right Grid', showRightGrid, setShowRightGrid)} */}
-                        {/* {renderToggleButton('ribbon', 'Badges', showBadges, setShowBadges)} */}
+                        {/* {renderToggleButton('ribbon', t('trade.share.badges'), showBadges, setShowBadges)} */}
                         {/* {renderToggleButton('document-text', 'Notes', showNotes, setShowNotes)} */}
                     </View>
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                            <Text style={styles.buttonText}>Cancel</Text>
+                            <Text style={styles.buttonText}>{t('trade.share.button_cancel')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-                            <Text style={styles.buttonText}>Share</Text>
+                            <Text style={styles.buttonText}>{t('trade.share.button_share')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -324,8 +322,8 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
         justifyContent: 'center',
         alignItems: 'center',
-       
-        
+
+
     },
     modalContent: {
         backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
@@ -346,7 +344,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: isDarkMode ? '#f2f2f7' : '#121212',
-         padding: 8,
+        padding: 8,
     },
     summaryContainer: {
         width: '100%',
@@ -537,7 +535,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: 16,
-         padding: 8,
+        padding: 8,
     },
     cancelButton: {
         backgroundColor: config.colors.wantBlockRed,

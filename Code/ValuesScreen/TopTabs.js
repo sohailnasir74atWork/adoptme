@@ -217,7 +217,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
             <MemoValueScreen selectedTheme={selectedTheme} />
           </View>
         )}
-         {mountedTabs.server && (
+        {mountedTabs.server && (
           <View
             style={[
               styles.screen,
@@ -250,7 +250,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
           </View>
         )}
 
-       
+
 
         {/* 🔹 Admin tab content, only mounted if the tab exists & was visited */}
         {mountedTabs.Admin && isAdmin && (
@@ -294,10 +294,10 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 12,
-    fontFamily: "Lato-Regular",
+
   },
   tabTextActive: {
-    fontFamily: "Lato-Bold",
+    fontWeight: 'bold',
   },
   indicator: {
     position: "absolute",

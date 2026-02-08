@@ -10,10 +10,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
-import { ref, get, query, orderByValue, equalTo, limitToFirst, startAfter } from '@react-native-firebase/database';
+import { ref, get, query, orderByValue, equalTo, limitToFirst, startAfter, orderByChild, startAt, endAt } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -28,9 +29,9 @@ const INITIAL_LOAD = 5; // Fetch first 10 online users
 const LOAD_MORE = 5; // Load 5 more on scroll
 const MAX_GROUP_MEMBERS = 50;
 
-const OnlineUsersList = ({ 
-  visible, 
-  onClose, 
+const OnlineUsersList = ({
+  visible,
+  onClose,
   mode = 'view',
   // Game invitation props (only used when mode === 'gameInvite')
   roomId = null,
@@ -47,33 +48,41 @@ const OnlineUsersList = ({
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
-  
+
   // ✅ Store online users from RTDB (id, displayName, avatar, etc.)
   const [allOnlineUsers, setAllOnlineUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [allOnlineUserIds, setAllOnlineUserIds] = useState([]); // All online user IDs from presence
   const [loadedUserIds, setLoadedUserIds] = useState(new Set()); // Track which user IDs we've loaded
-  
+
   // ✅ Group creation state (only used in 'select' mode)
   const [isSelectionMode, setIsSelectionMode] = useState(mode === 'select');
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
-  
+
   // ✅ User's existing group state (only used in 'select' mode)
   const [userGroup, setUserGroup] = useState(null);
   const [checkingGroup, setCheckingGroup] = useState(false);
-  
+
   // ✅ Game invitation state (only used in 'gameInvite' mode)
   const [invitingIds, setInvitingIds] = useState(new Set());
   const [invitedIds, setInvitedIds] = useState(new Set());
+
+  // ✅ User search state (for finding offline users to invite)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  // ✅ Tab state: 'online' = online users, 'search' = search database
+  const [activeTab, setActiveTab] = useState('online');
 
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   // ✅ Check if user has existing group (only in 'select' mode)
   useEffect(() => {
-    if (mode !== 'select' || !visible || !appdatabase || !user?.id) {
+    if (mode !== 'select' || !visible || !firestoreDB || !user?.id) {
       setUserGroup(null);
       return;
     }
@@ -81,9 +90,8 @@ const OnlineUsersList = ({
     setCheckingGroup(true);
     const checkUserGroup = async () => {
       try {
-        // Note: getUserAdminGroup might need to be updated to use RTDB instead of Firestore
-        // For now, keeping the original call but you may need to update groupUtils.js
-        const result = await getUserAdminGroup(null, user.id); // Pass null for firestoreDB if using RTDB
+        // ✅ Pass firestoreDB to query user's existing group
+        const result = await getUserAdminGroup(firestoreDB, user.id);
         if (result.success) {
           setUserGroup({ groupId: result.groupId, groupData: result.groupData });
         } else {
@@ -98,7 +106,7 @@ const OnlineUsersList = ({
     };
 
     checkUserGroup();
-  }, [mode, visible, appdatabase, user?.id]);
+  }, [mode, visible, firestoreDB, user?.id]);
 
   // ✅ Reset game invitation state when modal closes
   useEffect(() => {
@@ -121,21 +129,22 @@ const OnlineUsersList = ({
 
         try {
           // ✅ Fetch only the fields we need (parallel requests to specific child paths)
-          const [displayNameSnap, avatarSnap, isProSnap, robloxUsernameVerifiedSnap, 
-                 lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${userId}/displayName`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/avatar`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/isPro`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/robloxUsernameVerified`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/isAdmin`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/OS`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
-          ]);
+          const [displayNameSnap, avatarSnap, isProSnap, robloxUsernameVerifiedSnap,
+            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap, isModeratorSnap] = await Promise.all([
+              get(ref(appdatabase, `users/${userId}/displayName`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/avatar`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isPro`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/robloxUsernameVerified`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isAdmin`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/OS`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isModerator`)).catch(() => null),
+            ]);
 
           // ✅ Extract values (only if snapshots exist)
           const displayName = displayNameSnap?.exists() ? displayNameSnap.val() : null;
-          
+
           // If no displayName found, user might not exist - return null
           if (!displayNameSnap || (!displayNameSnap.exists() && !avatarSnap?.exists())) {
             return null;
@@ -143,15 +152,16 @@ const OnlineUsersList = ({
 
           return {
             id: userId,
-            displayName: displayName || 'Anonymous',
-            avatar: avatarSnap?.exists() ? avatarSnap.val() : 
-                   'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+            displayName: displayName || t('chat.anonymous'),
+            avatar: avatarSnap?.exists() ? avatarSnap.val() :
+              'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
             isPro: isProSnap?.exists() ? isProSnap.val() : false,
             robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
             lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
             isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
             OS: OSSnap?.exists() ? OSSnap.val() : null,
             isPlaying: isPlayingSnap?.exists() ? isPlayingSnap.val() : false,
+            isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
           };
         } catch (error) {
           console.error(`Error fetching user ${userId}:`, error);
@@ -242,13 +252,13 @@ const OnlineUsersList = ({
   // ✅ Load more users on scroll (next 5 IDs from presence)
   const handleLoadMore = useCallback(async () => {
     if (loadingMore) return;
-    
+
     // ✅ Find next batch of user IDs that haven't been loaded
     const unloadedIds = allOnlineUserIds.filter((id) => !loadedUserIds.has(id));
     if (unloadedIds.length === 0) return; // All users loaded
 
     setLoadingMore(true);
-    
+
     // ✅ Load next batch (5 users)
     const nextBatch = unloadedIds.slice(0, LOAD_MORE);
     await loadUserBatch(nextBatch, loadedUserIds);
@@ -263,8 +273,111 @@ const OnlineUsersList = ({
       setIsSelectionMode(mode === 'select');
       setSelectedUserIds(new Set());
       setShowCreateGroupModal(false);
+      // Reset search state
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearching(false);
+      setActiveTab('online');
     }
   }, [visible, mode]);
+
+  // ✅ Search users by displayName in RTDB (for inviting offline users)
+  const searchUsers = useCallback(async (searchText) => {
+    if (!appdatabase || !searchText || searchText.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const usersRef = ref(appdatabase, 'users');
+      const searchLower = searchText.trim().toLowerCase();
+      const searchEnd = searchLower + '\uf8ff';
+
+      // Query users by displayName_lower (if indexed) or displayName
+      const searchQuery = query(
+        usersRef,
+        orderByChild('displayName_lower'),
+        startAt(searchLower),
+        endAt(searchEnd),
+        limitToFirst(20)
+      );
+
+      const snapshot = await get(searchQuery);
+
+      if (!snapshot.exists()) {
+        // Fallback: Try searching with displayName (case-sensitive)
+        const fallbackQuery = query(
+          usersRef,
+          orderByChild('displayName'),
+          startAt(searchText.trim()),
+          endAt(searchText.trim() + '\uf8ff'),
+          limitToFirst(20)
+        );
+        const fallbackSnapshot = await get(fallbackQuery);
+
+        if (!fallbackSnapshot.exists()) {
+          setSearchResults([]);
+          setSearching(false);
+          return;
+        }
+
+        const results = [];
+        fallbackSnapshot.forEach((child) => {
+          const userData = child.val();
+          // Exclude current user and already loaded online users
+          if (child.key !== user?.id) {
+            results.push({
+              id: child.key,
+              displayName: userData.displayName || t('chat.anonymous'),
+              avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+              isPro: userData.isPro || false,
+              robloxUsernameVerified: userData.robloxUsernameVerified || false,
+              isAdmin: userData.isAdmin || false,
+              isModerator: userData.isModerator || false,
+              isOnline: allOnlineUserIds.includes(child.key),
+            });
+          }
+        });
+        setSearchResults(results);
+        setSearching(false);
+        return;
+      }
+
+      const results = [];
+      snapshot.forEach((child) => {
+        const userData = child.val();
+        // Exclude current user
+        if (child.key !== user?.id) {
+          results.push({
+            id: child.key,
+            displayName: userData.displayName || t('chat.anonymous'),
+            avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+            isPro: userData.isPro || false,
+            robloxUsernameVerified: userData.robloxUsernameVerified || false,
+            isAdmin: userData.isAdmin || false,
+            isModerator: userData.isModerator || false,
+            isOnline: allOnlineUserIds.includes(child.key),
+          });
+        }
+      });
+
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, [appdatabase, user?.id, allOnlineUserIds, t]);
+
+  // ✅ Handle manual search (triggered by button)
+  const handleSearch = useCallback(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      return;
+    }
+    searchUsers(searchQuery);
+  }, [searchQuery, searchUsers]);
 
   // ✅ Handle toggle selection mode (only in 'view' mode, 'select' mode is always in selection)
   const handleToggleSelectionMode = useCallback(() => {
@@ -297,7 +410,7 @@ const OnlineUsersList = ({
   // ✅ Handle create group or add members button
   const handleCreateOrAddMembers = useCallback(async () => {
     if (selectedUserIds.size === 0) {
-      showErrorMessage('No Selection', 'Please select at least one user');
+      showErrorMessage(t('chat.no_selection_title'), t('chat.no_selection_message'));
       return;
     }
 
@@ -307,42 +420,42 @@ const OnlineUsersList = ({
     if (userGroup?.groupId) {
       const selectedIds = Array.from(selectedUserIds);
       setLoading(true);
-      
+
       try {
         // ✅ Build user data map from allOnlineUsers to avoid extra Firestore read
         const invitedUsersMap = {};
         allOnlineUsers.forEach((u) => {
           if (u.id && selectedIds.includes(u.id)) {
             invitedUsersMap[u.id] = {
-              displayName: u.displayName || 'Anonymous',
+              displayName: u.displayName || t('chat.anonymous'),
               avatar: u.avatar || null,
             };
           }
         });
 
         const result = await addMembersToGroup(
-          null, // firestoreDB - pass null if using RTDB only
+          firestoreDB,
           appdatabase,
           userGroup.groupId,
           selectedIds,
           {
             id: user.id,
-            displayName: user.displayName || 'Anonymous',
+            displayName: user.displayName || t('chat.anonymous'),
             avatar: user.avatar || null,
           },
           invitedUsersMap // ✅ Pass user data to avoid extra reads
         );
 
         if (result.success) {
-          showSuccessMessage('Success', `Invitations sent to ${result.invitedCount || selectedIds.length} user(s)!`);
+          showSuccessMessage(t('chat.success'), t('chat.invite_sent_message', { name: result.invitedCount || selectedIds.length }));
           setSelectedUserIds(new Set());
           setIsSelectionMode(false);
         } else {
-          showErrorMessage('Error', result.error || 'Failed to send invitations');
+          showErrorMessage(t('chat.error'), result.error || t('chat.group_create_error'));
         }
       } catch (error) {
         console.error('Error adding members:', error);
-        showErrorMessage('Error', 'Failed to add members. Please try again.');
+        showErrorMessage(t('chat.error'), t('chat.group_update_error'));
       } finally {
         setLoading(false);
       }
@@ -369,7 +482,7 @@ const OnlineUsersList = ({
     if (mode !== 'gameInvite' || !roomId || !firestoreDB || !appdatabase || !user?.id) {
       if (!firestoreDB) {
         console.error('FirestoreDB is required for game invitations');
-        showErrorMessage('Error', 'Unable to send invitation. Please try again.');
+        showErrorMessage(t('chat.error'), t('chat.send_error'));
       }
       return;
     }
@@ -383,7 +496,7 @@ const OnlineUsersList = ({
       // Check if user is in active game
       const isInActiveGame = await isUserInActiveGame(firestoreDB, selectedUser.id);
       if (isInActiveGame) {
-        showErrorMessage('Error', 'This user is already in a game');
+        showErrorMessage(t('chat.error'), t('chat.status_playing'));
         setInvitingIds((prev) => {
           const next = new Set(prev);
           next.delete(selectedUser.id);
@@ -398,7 +511,7 @@ const OnlineUsersList = ({
         roomId,
         {
           id: user.id,
-          displayName: user.displayName || 'Anonymous',
+          displayName: user.displayName || t('chat.anonymous'),
           avatar: user.avatar || null,
         },
         selectedUser.id
@@ -406,17 +519,17 @@ const OnlineUsersList = ({
 
       if (success) {
         setInvitedIds((prev) => new Set([...prev, selectedUser.id]));
-        showSuccessMessage('Invite Sent', `Invited ${selectedUser.displayName} to play!`);
+        showSuccessMessage(t('chat.invite_sent_title'), t('chat.invite_sent_message', { name: selectedUser.displayName }));
         // ✅ Notify parent component that invite was sent
         if (onInviteSent && typeof onInviteSent === 'function') {
           onInviteSent(selectedUser);
         }
       } else {
-        showErrorMessage('Error', 'Failed to send invite. Please try again.');
+        showErrorMessage(t('chat.error'), t('chat.send_error'));
       }
     } catch (error) {
       console.error('Error inviting user to game:', error);
-      showErrorMessage('Error', 'Failed to send invite.');
+      showErrorMessage(t('chat.error'), t('chat.send_error'));
     } finally {
       setInvitingIds((prev) => {
         const next = new Set(prev);
@@ -463,6 +576,16 @@ const OnlineUsersList = ({
     return allOnlineUsers.filter((u) => selectedUserIds.has(u.id));
   }, [allOnlineUsers, selectedUserIds]);
 
+  // ✅ Combine search results with online users based on activeTab
+  const displayUsers = useMemo(() => {
+    if (activeTab === 'search') {
+      // Search tab: show only search results
+      return searchResults;
+    }
+    // Online tab: show online users
+    return allOnlineUsers;
+  }, [activeTab, searchResults, allOnlineUsers]);
+
   // ✅ Memoize render user item
   const renderUserItem = useCallback(({ item }) => {
     if (!item || !item.id) return null;
@@ -492,14 +615,17 @@ const OnlineUsersList = ({
             style={styles.avatar}
             defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
           />
-          <View style={styles.onlineIndicator} />
+          <View style={[
+            styles.onlineIndicator,
+            item.isOnline === false && { backgroundColor: '#9CA3AF' }
+          ]} />
         </View>
         <View style={styles.userInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
             <Text style={styles.userName} numberOfLines={1}>
-              {`${item.displayName || 'Anonymous'}`}
+              {`${item.displayName || t('chat.anonymous')}`}
             </Text>
-            
+
             {/* Pro badge */}
             {item?.isPro && (
               <Image
@@ -520,10 +646,26 @@ const OnlineUsersList = ({
             {(item?.hasRecentGameWin ||
               (typeof item?.lastGameWinAt === 'number' &&
                 Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000)) && (
-              <Image
-                source={require('../../../assets/trophy.webp')}
-                style={{ width: 10, height: 10, marginLeft: 4 }}
-              />
+                <Image
+                  source={require('../../../assets/trophy.webp')}
+                  style={{ width: 10, height: 10, marginLeft: 4 }}
+                />
+              )}
+
+            {/* Admin Badge */}
+            {item?.isAdmin && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                <Icon name="shield" size={10} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
+              </View>
+            )}
+
+            {/* Moderator Badge */}
+            {!item?.isAdmin && item?.isModerator && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                <Icon name="shield-checkmark" size={10} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
+              </View>
             )}
 
             {/* Platform badge (for admins) */}
@@ -547,7 +689,7 @@ const OnlineUsersList = ({
           </View>
           {mode === 'gameInvite' && (
             <Text style={[styles.statusText, { color: isDarkMode ? '#9CA3AF' : '#6B7280' }]}>
-              {isPlaying ? 'Currently Playing' : 'Online'}
+              {isPlaying ? t('chat.status_playing') : t('chat.status_online')}
             </Text>
           )}
         </View>
@@ -590,8 +732,8 @@ const OnlineUsersList = ({
       transparent={true}
       onRequestClose={onClose}
     >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
+      <TouchableOpacity
+        style={styles.modalOverlay}
         activeOpacity={1}
         onPress={onClose}
       >
@@ -599,107 +741,239 @@ const OnlineUsersList = ({
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1, justifyContent: 'flex-end' }}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
-        <View 
-          style={styles.modalContent}
-          onStartShouldSetResponder={() => true}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
-              {mode === 'select' ? 'Select Members' : mode === 'gameInvite' ? 'Invite Friends to Play' : 'Online Users'}
-            </Text>
-            <View style={styles.headerRight}>
-              {mode === 'select' ? (
-                // Selection mode header
-                <>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={styles.headerButton}
-                  >
-                    <Text style={styles.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  {selectedUserIds.size > 0 && (
+          <View
+            style={styles.modalContent}
+            onStartShouldSetResponder={() => true}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>
+                {mode === 'select' ? t('chat.select_members') : mode === 'gameInvite' ? t('chat.invite_friends') : t('chat.online_users')}
+              </Text>
+              <View style={styles.headerRight}>
+                {mode === 'select' ? (
+                  // Selection mode header
+                  <>
                     <TouchableOpacity
-                      onPress={handleCreateOrAddMembers}
-                      style={[styles.headerButton, styles.createGroupButton]}
-                      disabled={loading}
+                      onPress={onClose}
+                      style={styles.headerButton}
                     >
-                      <Text style={styles.createGroupText}>
-                        {userGroup ? `Add (${selectedUserIds.size})` : `Create (${selectedUserIds.size})`}
-                      </Text>
+                      <Text style={styles.cancelText}>{t('chat.cancel')}</Text>
+                    </TouchableOpacity>
+                    {selectedUserIds.size > 0 && (
+                      <TouchableOpacity
+                        onPress={handleCreateOrAddMembers}
+                        style={[styles.headerButton, styles.createGroupButton]}
+                        disabled={loading}
+                      >
+                        <Text style={styles.createGroupText}>
+                          {userGroup ? `${t('chat.add')} (${selectedUserIds.size})` : `${t('chat.create')} (${selectedUserIds.size})`}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  // View mode or game invite mode header (just close button)
+                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                    <Icon name="close" size={22} color={isDarkMode ? '#FFFFFF' : '#000000'} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Tab Bar (only in select mode) */}
+            {mode === 'select' && (
+              <View style={{
+                flexDirection: 'row',
+                marginHorizontal: 16,
+                marginBottom: 12,
+                backgroundColor: isDarkMode ? '#1F2937' : '#F3F4F6',
+                borderRadius: 12,
+                padding: 4,
+              }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setActiveTab('online');
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    backgroundColor: activeTab === 'online'
+                      ? (isDarkMode ? '#374151' : '#FFFFFF')
+                      : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: activeTab === 'online' ? '600' : '400',
+                    color: activeTab === 'online'
+                      ? (isDarkMode ? '#FFFFFF' : '#000000')
+                      : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+                  }}>
+                    {t('chat.online_users')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setActiveTab('search')}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    backgroundColor: activeTab === 'search'
+                      ? (isDarkMode ? '#374151' : '#FFFFFF')
+                      : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: activeTab === 'search' ? '600' : '400',
+                    color: activeTab === 'search'
+                      ? (isDarkMode ? '#FFFFFF' : '#000000')
+                      : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+                  }}>
+                    {t('chat.search_database')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Search Input (only in search tab) */}
+            {mode === 'select' && activeTab === 'search' && (
+              <View style={{
+                paddingHorizontal: 16,
+                paddingBottom: 12,
+              }}>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: isDarkMode ? '#1F2937' : '#F3F4F6',
+                  borderRadius: 12,
+                  paddingLeft: 12,
+                  height: 44,
+                }}>
+                  <Icon name="search-outline" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder={t('chat.search_users_placeholder')}
+                    placeholderTextColor={isDarkMode ? '#6B7280' : '#9CA3AF'}
+                    style={{
+                      flex: 1,
+                      marginLeft: 8,
+                      fontSize: 14,
+                      color: isDarkMode ? '#FFFFFF' : '#000000',
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onSubmitEditing={handleSearch}
+                    returnKeyType="search"
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
+                      <Icon name="close-circle" size={20} color={isDarkMode ? '#6B7280' : '#9CA3AF'} />
                     </TouchableOpacity>
                   )}
-                </>
-              ) : (
-                // View mode or game invite mode header (just close button)
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <Icon name="close" size={22} color={isDarkMode ? '#FFFFFF' : '#000000'} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+                  <TouchableOpacity
+                    onPress={handleSearch}
+                    disabled={searchQuery.trim().length < 2 || searching}
+                    style={{
+                      backgroundColor: searchQuery.trim().length >= 2 ? config.colors.primary : (isDarkMode ? '#374151' : '#D1D5DB'),
+                      paddingHorizontal: 16,
+                      height: 44,
+                      borderTopRightRadius: 12,
+                      borderBottomRightRadius: 12,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {searching ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 13 }}>{t('chat.search')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
-          {/* Users List */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={config.colors.primary} />
-            </View>
-          ) : allOnlineUsers.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Icon 
-                name="people-outline" 
-                size={64} 
-                color={isDarkMode ? '#4B5563' : '#D1D5DB'} 
+            {/* Users List */}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={config.colors.primary} />
+              </View>
+            ) : displayUsers.length === 0 && activeTab === 'online' ? (
+              <View style={styles.emptyContainer}>
+                <Icon
+                  name="people-outline"
+                  size={64}
+                  color={isDarkMode ? '#4B5563' : '#D1D5DB'}
+                />
+                <Text style={styles.emptyText}>
+                  {t('chat.no_online_users')}
+                </Text>
+              </View>
+            ) : displayUsers.length === 0 && activeTab === 'search' ? (
+              <View style={styles.emptyContainer}>
+                <Icon
+                  name="search-outline"
+                  size={64}
+                  color={isDarkMode ? '#4B5563' : '#D1D5DB'}
+                />
+                <Text style={styles.emptyText}>
+                  {searchQuery.trim().length === 0 ? t('chat.enter_search_term') : t('chat.no_users_found')}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={displayUsers}
+                renderItem={renderUserItem}
+                keyExtractor={keyExtractor}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                initialNumToRender={5}
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                ListFooterComponent={
+                  allOnlineUserIds.length > loadedUserIds.size ? (
+                    <View style={styles.loadMoreContainer}>
+                      {loadingMore ? (
+                        <ActivityIndicator size="small" color={config.colors.primary} />
+                      ) : (
+                        <Text style={styles.loadMoreText}>
+                          {t('chat.more_users_available', { count: allOnlineUserIds.length - loadedUserIds.size })}
+                        </Text>
+                      )}
+                    </View>
+                  ) : null
+                }
               />
-              <Text style={styles.emptyText}>
-                No online users
+            )}
+
+            {/* Footer Info */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                {mode === 'select'
+                  ? selectedUserIds.size > 0
+                    ? t('chat.members_selected_count', { count: selectedUserIds.size, max: MAX_GROUP_MEMBERS - 1 })
+                    : t('chat.select_users_instruction')
+                  : t('chat.users_online_count', { count: allOnlineUserIds.length, label: allOnlineUserIds.length === 1 ? t('chat.user') : t('chat.users') }) +
+                  (allOnlineUsers.length < allOnlineUserIds.length ? t('chat.users_online_loaded', { count: allOnlineUsers.length }) : '')
+                }
               </Text>
             </View>
-          ) : (
-            <FlatList
-              data={allOnlineUsers}
-              renderItem={renderUserItem}
-              keyExtractor={keyExtractor}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={5}
-              windowSize={5}
-              initialNumToRender={5}
-              onEndReached={handleLoadMore}
-              onEndReachedThreshold={0.5}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              ListFooterComponent={
-                allOnlineUserIds.length > loadedUserIds.size ? (
-                  <View style={styles.loadMoreContainer}>
-                    {loadingMore ? (
-                      <ActivityIndicator size="small" color={config.colors.primary} />
-                    ) : (
-                      <Text style={styles.loadMoreText}>
-                        {allOnlineUserIds.length - loadedUserIds.size} more users available
-                      </Text>
-                    )}
-                  </View>
-                ) : null
-              }
-            />
-          )}
-
-          {/* Footer Info */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              {mode === 'select'
-                ? selectedUserIds.size > 0
-                  ? `${selectedUserIds.size} selected (max ${MAX_GROUP_MEMBERS - 1})`
-                  : 'Select users to create a group'
-                : `${allOnlineUserIds.length} ${allOnlineUserIds.length === 1 ? 'user' : 'users'} online${allOnlineUsers.length < allOnlineUserIds.length ? ` (loaded ${allOnlineUsers.length})` : ''}`
-              }
-            </Text>
           </View>
-        </View>
         </KeyboardAvoidingView>
       </TouchableOpacity>
 
@@ -744,7 +1018,7 @@ const getStyles = (isDark) =>
       fontSize: 18,
       fontWeight: '700',
       color: isDark ? '#FFFFFF' : '#111827',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     headerRight: {
       flexDirection: 'row',
@@ -756,7 +1030,7 @@ const getStyles = (isDark) =>
     },
     cancelText: {
       fontSize: 14,
-      fontFamily: 'Lato-SemiBold',
+      fontWeight: '500',
       color: isDark ? '#FFFFFF' : '#111827',
     },
     createGroupButton: {
@@ -767,7 +1041,7 @@ const getStyles = (isDark) =>
     },
     createGroupText: {
       fontSize: 13,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: '#FFFFFF',
     },
     closeButton: {
@@ -840,11 +1114,11 @@ const getStyles = (isDark) =>
       fontSize: 14,
       fontWeight: '600',
       color: isDark ? '#FFFFFF' : '#111827',
-      fontFamily: 'Lato-SemiBold',
+      fontWeight: '500',
     },
     statusText: {
       fontSize: 12,
-      fontFamily: 'Lato-Regular',
+
       marginTop: 2,
     },
     inviteButton: {
@@ -885,7 +1159,7 @@ const getStyles = (isDark) =>
       marginTop: 12,
       fontSize: 14,
       color: isDark ? '#9CA3AF' : '#6B7280',
-      fontFamily: 'Lato-Regular',
+
     },
     footer: {
       padding: 10,
@@ -897,7 +1171,7 @@ const getStyles = (isDark) =>
     footerText: {
       fontSize: 12,
       color: isDark ? '#9CA3AF' : '#6B7280',
-      fontFamily: 'Lato-Regular',
+
     },
     loadMoreContainer: {
       paddingVertical: 12,
@@ -907,7 +1181,7 @@ const getStyles = (isDark) =>
     loadMoreText: {
       fontSize: 12,
       color: isDark ? '#9CA3AF' : '#6B7280',
-      fontFamily: 'Lato-Regular',
+
     },
   });
 

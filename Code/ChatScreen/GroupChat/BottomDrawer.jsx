@@ -33,10 +33,14 @@ import {
   limit,
   startAfter,           // ✅ moved here
   setDoc,
+  deleteDoc,
   serverTimestamp,
+  getCountFromServer, // ✅ Added for follower count
 } from '@react-native-firebase/firestore';
-import { ref, get } from '@react-native-firebase/database';
+import { ref, get, set } from '@react-native-firebase/database';
+import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
+import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike } from '../utils';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
 dayjs.extend(relativeTime);
@@ -91,7 +95,7 @@ const getTradeDeal = (hasTotal, wantsTotal) => {
   // Handle both number and object formats
   const hasValue = typeof hasTotal === 'number' ? hasTotal : hasTotal?.value;
   const wantsValue = typeof wantsTotal === 'number' ? wantsTotal : wantsTotal?.value;
-  
+
   if (!hasValue || hasValue <= 0) {
     return { deal: { label: "trade.unknown_deal", color: "#8E8E93" }, tradeRatio: 0 };
   }
@@ -125,7 +129,7 @@ const ProfileBottomDrawer = ({
   bannedUsers,
   fromPvtChat,
 }) => {
-  const { theme, firestoreDB, appdatabase } = useGlobalState();
+  const { theme, firestoreDB, appdatabase, isAdmin, user } = useGlobalState();
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
@@ -145,6 +149,9 @@ const ProfileBottomDrawer = ({
   const [ratingSummary, setRatingSummary] = useState(null);
   const [loadingRating, setLoadingRating] = useState(false);
   const [userBio, setUserBio] = useState(null);
+
+  // 👥 Follower Count (New)
+  const [followersCount, setFollowersCount] = useState(0);
 
   // joined text
   const [createdAtText, setCreatedAtText] = useState(null);
@@ -170,46 +177,79 @@ const ProfileBottomDrawer = ({
   const [lastTradeDoc, setLastTradeDoc] = useState(null);
   const [hasMoreTrades, setHasMoreTrades] = useState(false);
 
+  // 🖼️ Posts list (from Firestore /designPosts where userId == selectedUserId)
+  const [posts, setPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [lastPostDoc, setLastPostDoc] = useState(null);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+
   // toggle details
   const [loadDetails, setLoadDetails] = useState(false);
 
   // ✅ State for fetched user data (roblox username, verified status, etc.)
   const [userData, setUserData] = useState(null);
+  const [isBanned, setIsBanned] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   // ✅ Fetch user data from Firebase if roblox data is missing
+  // ✅ Fetch user data from Firebase
   useEffect(() => {
     if (!selectedUserId || !appdatabase) return;
-    
-    // Only fetch if robloxUsername is not already in selectedUser
-    if (selectedUser?.robloxUsername || selectedUser?.robloxUserId) {
-      setUserData(null); // Clear fetched data if already in selectedUser
-      return;
-    }
 
     let isMounted = true;
 
     const fetchUserData = async () => {
       try {
         // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
-        const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap, 
-               isProSnap, lastGameWinAtSnap] = await Promise.all([
+        // Added checks for isModerator and isAdmin
+        const [
+          robloxUsernameSnap,
+          robloxUserIdSnap,
+          robloxUsernameVerifiedSnap,
+          isProSnap,
+          lastGameWinAtSnap,
+          isModeratorSnap,
+          isAdminSnap,
+          emailSnap,
+          decodedEmailSnap
+        ] = await Promise.all([
           get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/email`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/decodedEmail`)).catch(() => null),
         ]);
-        
+
         if (!isMounted) return;
-        
+
+        // Check ban status if email is available from snapshot OR selectedUser
+        const emailToCheck = emailSnap?.exists() ? emailSnap.val() : selectedUser?.email;
+        if (emailToCheck) {
+          const banStatus = await checkBanStatus(emailToCheck);
+          if (isMounted) setIsBanned(banStatus.isBanned);
+        } else {
+          if (isMounted) setIsBanned(false);
+        }
+
         // ✅ Extract values only if they exist
-        setUserData({
+        const newUserData = {
           robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
           robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
           robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
           isPro: isProSnap?.exists() ? isProSnap.val() : false,
           lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-        });
+          isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
+          isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
+          email: emailSnap?.exists() ? emailSnap.val() : null,
+          decodedEmail: decodedEmailSnap?.exists() ? decodedEmailSnap.val() : null,
+        };
+
+        setUserData(newUserData);
       } catch (error) {
         console.error('Error fetching user data in BottomDrawer:', error);
         if (isMounted) setUserData(null);
@@ -221,7 +261,7 @@ const ProfileBottomDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [selectedUserId, selectedUser?.robloxUsername, selectedUser?.robloxUserId, appdatabase]);
+  }, [selectedUserId, selectedUser, appdatabase]);
 
   // ✅ Merge selectedUser with fetched userData
   const mergedUser = useMemo(() => {
@@ -230,19 +270,97 @@ const ProfileBottomDrawer = ({
       ...selectedUser,
       robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
       robloxUserId: selectedUser?.robloxUserId || userData.robloxUserId,
-      robloxUsernameVerified: selectedUser?.robloxUsernameVerified !== undefined 
-        ? selectedUser.robloxUsernameVerified 
+      robloxUsernameVerified: selectedUser?.robloxUsernameVerified !== undefined
+        ? selectedUser.robloxUsernameVerified
         : userData.robloxUsernameVerified,
       isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
+      isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
+      isAdmin: selectedUser?.isAdmin !== undefined ? selectedUser.isAdmin : userData.isAdmin,
+      email: selectedUser?.email || selectedUser?.decodedEmail || selectedUser?.user?.email || userData.email || userData.decodedEmail,
     };
   }, [selectedUser, userData]);
+
+  // ✅ Check if current user is following this user (Firestore)
+  useEffect(() => {
+    if (!user?.id || !selectedUserId || !firestoreDB || user.id === selectedUserId) {
+      setIsFollowing(false);
+      return;
+    }
+
+    const checkFollowStatus = async () => {
+      try {
+        const followSnapshot = await getDocs(
+          query(
+            collection(firestoreDB, 'following'),
+            where('followerId', '==', user.id),
+            where('followingId', '==', selectedUserId)
+          )
+        );
+        setIsFollowing(!followSnapshot.empty);
+      } catch (err) {
+        console.error('Error checking follow status:', err);
+        setIsFollowing(false);
+      }
+    };
+
+    checkFollowStatus();
+  }, [user?.id, selectedUserId, firestoreDB]);
+
+  // ✅ Follow / Unfollow toggle (Firestore)
+  const handleFollowToggle = useCallback(async () => {
+    if (!user?.id || !selectedUserId || !firestoreDB || user.id === selectedUserId) return;
+
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        // Unfollow - find and delete the document
+        const followSnapshot = await getDocs(
+          query(
+            collection(firestoreDB, 'following'),
+            where('followerId', '==', user.id),
+            where('followingId', '==', selectedUserId)
+          )
+        );
+
+        if (!followSnapshot.empty) {
+          // Delete all matching docs (should be just one)
+          const batch = firestoreDB.batch ? firestoreDB.batch() : null;
+          if (batch) {
+            followSnapshot.docs.forEach(docSnap => batch.delete(docSnap.ref));
+            await batch.commit();
+          } else {
+            // Fallback if batch not available
+            await Promise.all(followSnapshot.docs.map(docSnap =>
+              deleteDoc(doc(firestoreDB, 'following', docSnap.id))
+            ));
+          }
+        }
+        setIsFollowing(false);
+        triggerHapticFeedback('impactLight');
+      } else {
+        // Follow - create a new document
+        await setDoc(doc(collection(firestoreDB, 'following')), {
+          followerId: user.id,
+          followingId: selectedUserId,
+          createdAt: serverTimestamp(),
+        });
+        setIsFollowing(true);
+        triggerHapticFeedback('notificationSuccess');
+      }
+    } catch (err) {
+      console.error('Error toggling follow:', err);
+      Alert.alert('Error', 'Could not update follow status.');
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [user?.id, selectedUserId, firestoreDB, isFollowing, triggerHapticFeedback]);
 
   // ─────────────────────────────────────────────
   // Clipboard
   const copyToClipboard = (code) => {
     triggerHapticFeedback('impactLight');
     Clipboard.setString(code);
-    showSuccessMessage(t('value.copy'), 'Copied to Clipboard');
+    showSuccessMessage(t('value.copy'), t('value.copy_success'));
     mixpanel.track('Code UserName', { UserName: code });
   };
 
@@ -251,7 +369,7 @@ const ProfileBottomDrawer = ({
   const handleOpenRobloxProfile = useCallback(async () => {
     const robloxUsername = mergedUser?.robloxUsername;
     const robloxUserId = mergedUser?.robloxUserId;
-    
+
     if (!robloxUsername && !robloxUserId) {
       return;
     }
@@ -267,7 +385,7 @@ const ProfileBottomDrawer = ({
         // Use userId for app deep link (most reliable)
         robloxAppUrl = `roblox://users/${robloxUserId}`;
         // Use search URL format for web (works with username)
-        robloxWebUrl = robloxUsername 
+        robloxWebUrl = robloxUsername
           ? `https://www.roblox.com/search/users?keyword=${encodeURIComponent(robloxUsername)}`
           : `https://www.roblox.com/users/${robloxUserId}`;
       } else if (robloxUsername) {
@@ -276,7 +394,7 @@ const ProfileBottomDrawer = ({
       }
 
       if (!robloxWebUrl) {
-        Alert.alert('Error', 'Could not open Roblox profile. Missing username or user ID.');
+        Alert.alert(t('home.alert.error'), t('profile.roblox_app_error'));
         return;
       }
 
@@ -297,9 +415,9 @@ const ProfileBottomDrawer = ({
       await Linking.openURL(robloxWebUrl);
     } catch (error) {
       console.error('Error opening Roblox profile:', error);
-      Alert.alert('Error', 'Could not open Roblox profile. Please try again.');
+      Alert.alert(t('home.alert.error'), t('profile.roblox_error'));
     }
-  }, [mergedUser?.robloxUsername, mergedUser?.robloxUserId, triggerHapticFeedback]);
+  }, [mergedUser?.robloxUsername, mergedUser?.robloxUserId, triggerHapticFeedback, t]);
 
   // ✅ Memoize formatCreatedAt
   const formatCreatedAt = useCallback((timestamp) => {
@@ -311,21 +429,21 @@ const ProfileBottomDrawer = ({
     if (diffMs < 0) return null;
 
     const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+    if (minutes < 1) return t('settings.time.just_now');
+    if (minutes < 60) return t(minutes === 1 ? 'settings.time.min_ago_one' : 'settings.time.min_ago_other', { count: minutes });
 
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    if (hours < 24) return t(hours === 1 ? 'settings.time.hour_ago_one' : 'settings.time.hour_ago_other', { count: hours });
 
     const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+    if (days < 30) return t(days === 1 ? 'settings.time.day_ago_one' : 'settings.time.day_ago_other', { count: days });
 
     const months = Math.floor(days / 30);
-    if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+    if (months < 12) return t(months === 1 ? 'settings.time.month_ago_one' : 'settings.time.month_ago_other', { count: months });
 
     const years = Math.floor(months / 12);
-    return `${years} year${years === 1 ? '' : 's'} ago`;
-  }, []);
+    return t(years === 1 ? 'settings.time.year_ago_one' : 'settings.time.year_ago_other', { count: years });
+  }, [t]);
 
   // ✅ Memoize getTimestampMs
   const getTimestampMs = useCallback((ts) => {
@@ -396,6 +514,123 @@ const ProfileBottomDrawer = ({
   };
 
   // ─────────────────────────────────────────────
+  // Moderator Actions
+  const handleApplyStrike = async (strikeCount) => {
+    if (!mergedUser?.email) {
+      Alert.alert("Error", "User email not found.");
+      return;
+    }
+
+    const durationLabel = strikeCount === 1 ? '3 hours' : strikeCount === 2 ? '3 days' : 'Permanent';
+
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        `Apply Strike ${strikeCount}`,
+        `Are you sure you want to apply Strike ${strikeCount} (${durationLabel}) to ${userName}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Apply", style: "destructive", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const currentUser = auth().currentUser;
+    const success = await setUserStrike(mergedUser.email, strikeCount, currentUser?.uid);
+    if (success) setIsBanned(true);
+  };
+
+  const handleBanUser = async () => {
+    if (!mergedUser?.email) {
+      Alert.alert("Error", "User email not found.");
+      return;
+    }
+
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        "Ban User",
+        `Are you sure you want to ban ${userName}? This will block them from the app.`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Ban", style: "destructive", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const currentUser = auth().currentUser;
+    const success = await banUserwithEmail(mergedUser.email, isAdmin, selectedUserId, mergedUser, {
+      id: currentUser?.uid,
+      displayName: currentUser?.displayName || 'Admin',
+      avatar: currentUser?.photoURL
+    });
+
+    if (success) setIsBanned(true);
+  };
+
+  const handleUnbanUser = async () => {
+    if (!mergedUser?.email) return;
+
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        "Unban User",
+        `Are you sure you want to unban ${userName}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Unban", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const success = await unbanUserWithEmail(mergedUser.email);
+    if (success) setIsBanned(false);
+  };
+
+  const handlePromoteModerator = async () => {
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        "Promote to Moderator",
+        `Are you sure you want to make ${userName} a Moderator?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Promote", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const success = await makeModerator(selectedUserId);
+    if (success) {
+      setUserData(prev => ({ ...prev, isModerator: true }));
+    }
+  };
+
+  const handleDemoteModerator = async () => {
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        "Remove Moderator",
+        `Are you sure you want to remove Moderator status from ${userName}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Remove", style: "destructive", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const success = await removeModerator(selectedUserId);
+    if (success) {
+      setUserData(prev => ({ ...prev, isModerator: false }));
+    }
+  };
+
+  // ─────────────────────────────────────────────
   // Start chat
   const handleStartChat = () => {
     if (startChat) startChat();
@@ -407,6 +642,7 @@ const ProfileBottomDrawer = ({
       setLoadDetails(false);
       setRatingSummary(null);
       setUserBio(null);
+      setFollowersCount(0); // ✅ Reset count
       setOwnedPets([]);
       setWishlistPets([]);
       setReviews([]);
@@ -436,14 +672,27 @@ const ProfileBottomDrawer = ({
       try {
         // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
         // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
-        const [summaryDocSnap, createdSnap, rewardPointsSnap, reviewDocSnap] = await Promise.all([
+        const [summaryDocSnap, createdSnap, rewardPointsSnap, reviewDocSnap, countSnapshot] = await Promise.all([
           getDoc(doc(firestoreDB, 'user_ratings_summary', selectedUserId)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
           get(ref(appdatabase, `users/${selectedUserId}/rewardPoints`)).catch(() => null),
           getDoc(doc(firestoreDB, 'reviews', selectedUserId)), // ✅ Load bio from Firestore
+          // ✅ Load Follower Count (Efficient Aggregation)
+          getCountFromServer(
+            query(collection(firestoreDB, 'following'), where('followingId', '==', selectedUserId))
+          ).catch(err => { console.error("Error fetching followers:", err); return { data: () => ({ count: 0 }) }; }),
         ]);
 
         if (!isMounted) return;
+
+        // ✅ Set Follower Count
+        if (countSnapshot && typeof countSnapshot.data === 'function') {
+          setFollowersCount(countSnapshot.data().count);
+        } else if (countSnapshot && countSnapshot.data) {
+          // fallback for catch return
+          setFollowersCount(0);
+        }
+
 
         // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
         if (summaryDocSnap.exists) {
@@ -461,12 +710,12 @@ const ProfileBottomDrawer = ({
             const avgData = avgSnap.val();
             const avgValue = Number(avgData.value || 0);
             const avgCount = Number(avgData.count || 0);
-            
+
             setRatingSummary({
               value: avgValue,
               count: avgCount,
             });
-            
+
             if (avgValue > 0 || avgCount > 0) {
               setDoc(
                 doc(firestoreDB, 'user_ratings_summary', selectedUserId),
@@ -488,11 +737,11 @@ const ProfileBottomDrawer = ({
                 limit(100) // ✅ COST LIMIT: Max 100 reviews per calculation (prevents huge reads)
               );
               const reviewsSnapshot = await getDocs(reviewsQuery);
-              
+
               if (!reviewsSnapshot.empty) {
                 let totalRating = 0;
                 let ratingCount = 0;
-                
+
                 reviewsSnapshot.docs.forEach((doc) => {
                   const reviewData = doc.data();
                   if (reviewData.rating && typeof reviewData.rating === 'number') {
@@ -500,15 +749,15 @@ const ProfileBottomDrawer = ({
                     ratingCount += 1;
                   }
                 });
-                
+
                 if (ratingCount > 0) {
                   const calculatedAverage = totalRating / ratingCount;
-                  
+
                   setRatingSummary({
                     value: parseFloat(calculatedAverage.toFixed(2)),
                     count: ratingCount,
                   });
-                  
+
                   // ✅ Create summary (prevents future recalculations)
                   await setDoc(
                     doc(firestoreDB, 'user_ratings_summary', selectedUserId),
@@ -541,7 +790,7 @@ const ProfileBottomDrawer = ({
           }
         }
         // ✅ Set bio value (use default if not found or empty)
-        setUserBio(bioValue || 'Hi there, I am new here');
+        setUserBio(bioValue || t('profile.bio_default'));
 
         if (createdSnap.exists()) {
           const raw = createdSnap.val();
@@ -644,10 +893,10 @@ const ProfileBottomDrawer = ({
   // ✅ Use refs to track state and avoid dependency issues
   const lastReviewDocRef = useRef(null);
   const isLoadingRef = useRef(false);
-  
+
   const loadReviews = useCallback(async (reset = false) => {
     if (!firestoreDB || !selectedUserId) return;
-    
+
     // ✅ Prevent duplicate calls using ref (avoids dependency issues)
     if (isLoadingRef.current) {
       console.log('🔄 [BottomDrawer] Already loading reviews, skipping...');
@@ -681,10 +930,10 @@ const ProfileBottomDrawer = ({
 
       // ✅ Check if we got more than page size (means there are more reviews)
       const hasMoreResults = snap.docs.length > REVIEWS_PAGE_SIZE;
-      
+
       // ✅ Only take REVIEWS_PAGE_SIZE documents (discard the extra one)
       const docsToUse = snap.docs.slice(0, REVIEWS_PAGE_SIZE);
-      
+
       const batch = docsToUse.map((d) => {
         const data = d.data();
         return {
@@ -699,7 +948,7 @@ const ProfileBottomDrawer = ({
       const newLastDoc = docsToUse[docsToUse.length - 1] || null;
       lastReviewDocRef.current = newLastDoc;
       setLastReviewDoc(newLastDoc);
-      
+
       // ✅ Fix: hasMoreReviews is true only if we got more results than page size
       // This accurately detects if there are more reviews without false positives
       setHasMoreReviews(hasMoreResults);
@@ -734,7 +983,7 @@ const ProfileBottomDrawer = ({
   // Load trades (paged) — ✅ Initially show 1, then load 2 by 2
   const INITIAL_TRADES_SIZE = 1; // Show 1 trade initially
   const LOAD_MORE_TRADES_SIZE = 2; // Load 2 trades at a time when loading more
-  
+
   const loadTrades = useCallback(async (reset = false) => {
     if (!firestoreDB || !selectedUserId) return;
     if (loadingTrades) return;
@@ -743,7 +992,7 @@ const ProfileBottomDrawer = ({
     try {
       // Determine the limit based on whether it's initial load or load more
       const limitSize = reset ? INITIAL_TRADES_SIZE : LOAD_MORE_TRADES_SIZE;
-      
+
       let q;
       if (!reset && lastTradeDoc) {
         q = query(
@@ -766,10 +1015,10 @@ const ProfileBottomDrawer = ({
 
       // Check if we got more than page size
       const hasMoreResults = snap.docs.length > limitSize;
-      
+
       // Only take limitSize documents (discard the extra one)
       const docsToUse = snap.docs.slice(0, limitSize);
-      
+
       const batch = docsToUse.map((d) => ({
         id: d.id,
         ...d.data(),
@@ -803,6 +1052,72 @@ const ProfileBottomDrawer = ({
     if (!hasMoreTrades || loadingTrades) return;
     loadTrades(false);
   }, [hasMoreTrades, loadingTrades, loadTrades]);
+
+  // ─────────────────────────────────────────────
+  // Load Posts (paged) — ✅ Initially show 3, then load 3 by 3
+  const INITIAL_POSTS_SIZE = 3;
+  const LOAD_MORE_POSTS_SIZE = 3;
+
+  const loadPosts = useCallback(async (reset = false) => {
+    if (!firestoreDB || !selectedUserId) return;
+    if (loadingPosts) return;
+
+    setLoadingPosts(true);
+    try {
+      const limitSize = reset ? INITIAL_POSTS_SIZE : LOAD_MORE_POSTS_SIZE;
+      let q;
+
+      if (!reset && lastPostDoc) {
+        q = query(
+          collection(firestoreDB, 'designPosts'),
+          where('userId', '==', selectedUserId),
+          orderBy('createdAt', 'desc'),
+          startAfter(lastPostDoc),
+          limit(limitSize + 1)
+        );
+      } else {
+        q = query(
+          collection(firestoreDB, 'designPosts'),
+          where('userId', '==', selectedUserId),
+          orderBy('createdAt', 'desc'),
+          limit(limitSize + 1)
+        );
+      }
+
+      const snap = await getDocs(q);
+      const hasMoreResults = snap.docs.length > limitSize;
+      const docsToUse = snap.docs.slice(0, limitSize);
+
+      const batch = docsToUse.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      setPosts((prev) => (reset ? batch : [...prev, ...batch]));
+      setLastPostDoc(docsToUse[docsToUse.length - 1] || null);
+      setHasMorePosts(hasMoreResults);
+    } catch (err) {
+      console.error('Posts load error:', err);
+      if (reset) setPosts([]);
+      setHasMorePosts(false);
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, [firestoreDB, selectedUserId, lastPostDoc, loadingPosts]);
+
+  // Initial posts load when opening details
+  useEffect(() => {
+    if (!isVisible || !selectedUserId || !loadDetails) return;
+    setLastPostDoc(null);
+    setHasMorePosts(false);
+    loadPosts(true);
+  }, [isVisible, selectedUserId, loadDetails]);
+
+  // Handle Load More Posts
+  const handleLoadMorePosts = useCallback(() => {
+    if (!hasMorePosts || loadingPosts) return;
+    loadPosts(false);
+  }, [hasMorePosts, loadingPosts, loadPosts]);
 
   // ─────────────────────────────────────────────
   // Helpers for rendering - ✅ Memoized
@@ -919,7 +1234,7 @@ const ProfileBottomDrawer = ({
   // ✅ Parse values data for image lookup
   const parsedValuesData = useMemo(() => {
     try {
-      const rawData = localState.isGG ? localState.ggData : localState.data;
+      const rawData = localState.data;
       if (!rawData) return [];
 
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -928,7 +1243,7 @@ const ProfileBottomDrawer = ({
       console.error("❌ Error parsing data:", error);
       return [];
     }
-  }, [localState.isGG, localState.data, localState.ggData]);
+  }, [localState.data]);
 
   // ✅ Render trade item
   const renderTradeItem = useCallback((trade) => {
@@ -937,23 +1252,18 @@ const ProfileBottomDrawer = ({
     const isProfit = tradeRatio > 1;
     const neutral = tradeRatio === 1;
     const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : "Unknown";
-    const isGG = trade.isSharkMode === 'GG';
 
     const groupedHasItems = groupTradeItems(trade.hasItems || []);
     const groupedWantsItems = groupTradeItems(trade.wantsItems || []);
 
     // Helper to get adoptme image URL (matching Trades.jsx getImageUrl)
+    // Helper to get adoptme image URL (matching Trades.jsx getImageUrl)
     const getTradeItemImageUrl = (item) => {
       if (!item || !item.name) return '';
-      
-      const baseImgUrl = isGG ? localState.imgurlGG : localState.imgurl;
+
+      const baseImgUrl = localState.imgurl;
       if (!baseImgUrl) return '';
-      
-      if (isGG) {
-        const encoded = encodeURIComponent(item.name);
-        return `${baseImgUrl.replace(/"/g, '')}/items/${encoded}.webp`;
-      }
-      
+
       // Try to find item in parsedValuesData to get image path
       if (parsedValuesData.length > 0) {
         const foundItem = parsedValuesData.find(
@@ -964,13 +1274,13 @@ const ProfileBottomDrawer = ({
           return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
         }
       }
-      
+
       // Fallback: try item.image if available
       if (item.image) {
         const path = item.image.startsWith('/') ? item.image : `/${item.image}`;
         return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}${path}`;
       }
-      
+
       return '';
     };
 
@@ -1000,7 +1310,7 @@ const ProfileBottomDrawer = ({
                   flexShrink: 0,
                   flexGrow: 0,
                 }}>
-                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>FEATURED</Text>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>{t('trade.featured_badge')}</Text>
                 </View>
               )}
               <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
@@ -1008,10 +1318,10 @@ const ProfileBottomDrawer = ({
               </Text>
             </View>
             {/* Status and Mode Badges - Side by side like Trades.jsx */}
-            <View style={{ 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              marginTop: 4, 
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: 4,
               alignSelf: 'flex-start',
               flexShrink: 1,
               flexGrow: 0,
@@ -1022,8 +1332,8 @@ const ProfileBottomDrawer = ({
               {trade.status && (
                 <View style={{
                   backgroundColor: trade.status === 'w' ? '#10B981' : // Green for win
-                                  trade.status === 'f' ? config.colors.secondary : // Blue for fair
-                                  config.colors.primary, // Pink/red for lose
+                    trade.status === 'f' ? config.colors.secondary : // Blue for fair
+                      config.colors.primary, // Pink/red for lose
                   paddingVertical: 1,
                   paddingHorizontal: 6,
                   borderRadius: 6,
@@ -1032,14 +1342,13 @@ const ProfileBottomDrawer = ({
                   flexGrow: 0,
                 }}>
                   <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
-                    {trade.status === 'w' ? 'Win' : trade.status === 'f' ? 'Fair' : 'Lose'}
+                    {trade.status === 'w' ? t('home.win') : trade.status === 'f' ? t('home.fair') : t('home.lose')}
                   </Text>
                 </View>
               )}
-              {/* Shark/Frost/GG Badge */}
               {trade.isSharkMode !== undefined && (
                 <View style={{
-                  backgroundColor: trade.isSharkMode == 'GG' ? '#5c4c49' : trade.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
+                  backgroundColor: trade.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
                   paddingVertical: 1,
                   paddingHorizontal: 6,
                   borderRadius: 6,
@@ -1047,7 +1356,7 @@ const ProfileBottomDrawer = ({
                   flexGrow: 0,
                 }}>
                   <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
-                    {trade.isSharkMode == 'GG' ? 'GG Values' : trade.isSharkMode === true ? 'Shark' : 'Frost'}
+                    {trade.isSharkMode === true ? t('home.shark') : t('home.frost')}
                   </Text>
                 </View>
               )}
@@ -1110,19 +1419,19 @@ const ProfileBottomDrawer = ({
                             <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
                           )}
                           {tradeItem.valueType && tradeItem.valueType !== 'd' && (
-                            <Text style={{ 
-                              color: 'white', 
-                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
-                              borderRadius: 10, 
-                              width: 10, 
-                              height: 10, 
-                              fontSize: 6, 
-                              textAlign: 'center', 
-                              lineHeight: 10, 
-                              fontWeight: '600', 
-                              overflow: 'hidden', 
-                              padding: 0, 
-                              margin: 0 
+                            <Text style={{
+                              color: 'white',
+                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71',
+                              borderRadius: 10,
+                              width: 10,
+                              height: 10,
+                              fontSize: 6,
+                              textAlign: 'center',
+                              lineHeight: 10,
+                              fontWeight: '600',
+                              overflow: 'hidden',
+                              padding: 0,
+                              margin: 0
                             }}>{tradeItem.valueType.toUpperCase()}</Text>
                           )}
                         </View>
@@ -1142,16 +1451,16 @@ const ProfileBottomDrawer = ({
                 flexShrink: 0,
                 flexGrow: 0,
               }}>
-                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>{t('trade.give_offer')}</Text>
               </View>
             </View>
           )}
-          
+
           {/* Transfer Icon */}
           <View style={{ justifyContent: 'center', alignItems: 'center' }}>
             <Image source={require('../../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
           </View>
-          
+
           {/* Wants Items Grid */}
           {trade.wantsItems && trade.wantsItems.length > 0 ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: '48%' }}>
@@ -1177,19 +1486,19 @@ const ProfileBottomDrawer = ({
                             <Text style={{ color: 'white', backgroundColor: '#e74c3c', borderRadius: 10, width: 10, height: 10, fontSize: 6, textAlign: 'center', lineHeight: 10, fontWeight: '600', overflow: 'hidden', padding: 0, margin: 0 }}>R</Text>
                           )}
                           {tradeItem.valueType && tradeItem.valueType !== 'd' && (
-                            <Text style={{ 
-                              color: 'white', 
-                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71', 
-                              borderRadius: 10, 
-                              width: 10, 
-                              height: 10, 
-                              fontSize: 6, 
-                              textAlign: 'center', 
-                              lineHeight: 10, 
-                              fontWeight: '600', 
-                              overflow: 'hidden', 
-                              padding: 0, 
-                              margin: 0 
+                            <Text style={{
+                              color: 'white',
+                              backgroundColor: tradeItem.valueType === 'm' ? '#9b59b6' : '#2ecc71',
+                              borderRadius: 10,
+                              width: 10,
+                              height: 10,
+                              fontSize: 6,
+                              textAlign: 'center',
+                              lineHeight: 10,
+                              fontWeight: '600',
+                              overflow: 'hidden',
+                              padding: 0,
+                              margin: 0
                             }}>{tradeItem.valueType.toUpperCase()}</Text>
                           )}
                         </View>
@@ -1209,28 +1518,28 @@ const ProfileBottomDrawer = ({
                 flexShrink: 0,
                 flexGrow: 0,
               }}>
-                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>Give offer</Text>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>{t('trade.give_offer')}</Text>
               </View>
             </View>
           )}
         </View>
-        
+
         {/* Trade Totals - Matching Trades.jsx structure */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', width: '100%', marginTop: 10 }}>
           {trade.hasItems && trade.hasItems.length > 0 && (
-            <Text style={{ 
-              fontSize: 8, 
-              fontFamily: 'Lato-Bold', 
-              color: 'white', 
-              textAlign: 'center', 
-              alignSelf: 'center', 
-              marginHorizontal: 'auto', 
-              paddingHorizontal: 4, 
-              paddingVertical: 2, 
+            <Text style={{
+              fontSize: 8,
+              fontWeight: 'bold',
+              color: 'white',
+              textAlign: 'center',
+              alignSelf: 'center',
+              marginHorizontal: 'auto',
+              paddingHorizontal: 4,
+              paddingVertical: 2,
               borderRadius: 6,
               backgroundColor: config.colors.hasBlockGreen
             }}>
-              ME: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
+              {t('trade.me')}: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
             </Text>
           )}
           <View style={{ justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}>
@@ -1243,7 +1552,7 @@ const ProfileBottomDrawer = ({
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Icon name="arrow-up-outline" size={12} color="green" />
-                        <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: 'green', textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 8, fontWeight: 'bold', color: 'green', textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
                           {formatTradeValue(hasValue - wantsValue)}
                         </Text>
                       </View>
@@ -1252,32 +1561,32 @@ const ProfileBottomDrawer = ({
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Icon name="arrow-down-outline" size={12} color={config.colors.hasBlockGreen} />
-                        <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.hasBlockGreen, textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 8, fontWeight: 'bold', color: config.colors.hasBlockGreen, textAlign: 'center', alignSelf: 'center', marginHorizontal: 'auto', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
                           {formatTradeValue(wantsValue - hasValue)}
                         </Text>
                       </View>
                     );
                   } else {
-                    return <Text style={{ fontSize: 8, fontFamily: 'Lato-Bold', color: config.colors.primary, textAlign: 'center' }}>-</Text>;
+                    return <Text style={{ fontSize: 8, fontWeight: 'bold', color: config.colors.primary, textAlign: 'center' }}>-</Text>;
                   }
                 })()}
               </>
             )}
           </View>
           {trade.wantsItems && trade.wantsItems.length > 0 && (
-            <Text style={{ 
-              fontSize: 8, 
-              fontFamily: 'Lato-Bold', 
-              color: 'white', 
-              textAlign: 'center', 
-              alignSelf: 'center', 
-              marginHorizontal: 'auto', 
-              paddingHorizontal: 4, 
-              paddingVertical: 2, 
+            <Text style={{
+              fontSize: 8,
+              fontWeight: 'bold',
+              color: 'white',
+              textAlign: 'center',
+              alignSelf: 'center',
+              marginHorizontal: 'auto',
+              paddingHorizontal: 4,
+              paddingVertical: 2,
               borderRadius: 6,
               backgroundColor: config.colors.wantBlockRed
             }}>
-              YOU: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
+              {t('trade.you')}: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
             </Text>
           )}
         </View>
@@ -1297,7 +1606,54 @@ const ProfileBottomDrawer = ({
         )}
       </View>
     );
-  }, [isDarkMode, t, localState.isGG, localState.imgurl, localState.imgurlGG, parsedValuesData]);
+  }, [isDarkMode, t, localState.imgurl, parsedValuesData]);
+
+  // ✅ Render Post Item
+  const renderPostItem = useCallback((post) => {
+    const timeLabel = post.createdAt ? dayjs(post.createdAt.toDate ? post.createdAt.toDate() : post.createdAt).fromNow() : 'Just now';
+    const imageUrl = Array.isArray(post.imageUrl) && post.imageUrl.length > 0 ? post.imageUrl[0] : (typeof post.imageUrl === 'string' ? post.imageUrl : null);
+
+    return (
+      <View
+        key={post.id}
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+          paddingVertical: 8,
+          flexDirection: 'row',
+          alignItems: 'center'
+        }}
+      >
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: '#ddd' }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="image-outline" size={20} color={isDarkMode ? '#6b7280' : '#9ca3af'} />
+          </View>
+        )}
+        <View style={{ flex: 1, marginLeft: 10, justifyContent: 'center' }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '500',
+              color: isDarkMode ? '#f3f4f6' : '#111827',
+              marginBottom: 4
+            }}
+            numberOfLines={2}
+          >
+            {post.desc || t('feed.no_description')}
+          </Text>
+          <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+            {timeLabel}
+          </Text>
+        </View>
+      </View>
+    );
+  }, [isDarkMode, t]);
 
   // ─────────────────────────────────────────────
   return (
@@ -1357,7 +1713,7 @@ const ProfileBottomDrawer = ({
                 <View style={{ justifyContent: 'center', flex: 1, marginRight: 8 }}>
                   {/* Username Row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Text 
+                    <Text
                       style={[styles.drawerSubtitleUser, { flexShrink: 1 }]}
                       numberOfLines={1}
                       ellipsizeMode="tail"
@@ -1371,6 +1727,20 @@ const ProfileBottomDrawer = ({
                       )}{' '}
                       {selectedUser?.flage ? selectedUser.flage : ''}
                     </Text>
+
+                    {/* Admin / Mod Badge */}
+                    {mergedUser?.isAdmin && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                        <Icon name="shield" size={10} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
+                      </View>
+                    )}
+                    {!mergedUser?.isAdmin && mergedUser?.isModerator && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                        <Icon name="shield-checkmark" size={10} color="#fff" />
+                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
+                      </View>
+                    )}
                     <Icon
                       name="copy-outline"
                       size={16}
@@ -1380,42 +1750,42 @@ const ProfileBottomDrawer = ({
                     />
                   </View>
                   <View style={{ alignItems: 'flex-start', justifyContent: 'center' }}>
-                  {/* Roblox Badge */}
-                  {mergedUser?.robloxUsername ? (
-                    <View style={{ 
-                      backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500', 
-                      paddingHorizontal: 6, 
-                      paddingVertical: 2, 
-                      borderRadius: 4,
-                      marginBottom: 4,
-                      marginTop: 2,
-                    }}>
-                      <Text style={{ 
-                        color: '#FFFFFF', 
-                        fontSize: 9, 
-                        fontWeight: '600' 
+                    {/* Roblox Badge */}
+                    {mergedUser?.robloxUsername ? (
+                      <View style={{
+                        backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500',
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                        marginBottom: 4,
+                        marginTop: 2,
                       }}>
-                        {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={{ 
-                      backgroundColor: '#9CA3AF', 
-                      paddingHorizontal: 6, 
-                      paddingVertical: 2, 
-                      borderRadius: 4,
-                      marginBottom: 4,
-                    }}>
-                      <Text style={{ 
-                        color: '#FFFFFF', 
-                        fontSize: 9, 
-                        fontWeight: '600' 
+                        <Text style={{
+                          color: '#FFFFFF',
+                          fontSize: 9,
+                          fontWeight: '600'
+                        }}>
+                          {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{
+                        backgroundColor: '#9CA3AF',
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                        marginVertical: 4,
                       }}>
-                        No Roblox ID
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                        <Text style={{
+                          color: '#FFFFFF',
+                          fontSize: 9,
+                          fontWeight: '600'
+                        }}>
+                          No Roblox ID
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   {/* Roblox Username Display */}
                   {/* {mergedUser?.robloxUsername && (
                     <Text
@@ -1432,12 +1802,12 @@ const ProfileBottomDrawer = ({
                     </Text>
                     
                   )} */}
-                   
-                  
+
+
                 </View>
 
                 {/* Right Side: Badges */}
-           
+
               </View>
 
               {/* Ban/Unban Icon */}
@@ -1480,8 +1850,7 @@ const ProfileBottomDrawer = ({
                         }}
                       >
                         {ratingSummary.value.toFixed(1)} / 5 ·{' '}
-                        {ratingSummary.count} rating
-                        {ratingSummary.count === 1 ? '' : 's'}
+                        {t('reviews.rating_count', { count: ratingSummary.count })}
                       </Text>
                     </>
                   ) : (
@@ -1491,7 +1860,7 @@ const ProfileBottomDrawer = ({
                         color: isDarkMode ? '#9ca3af' : '#6b7280',
                       }}
                     >
-                      Not rated yet
+                      {t('settings.not_rated')}
                     </Text>
                   )}
 
@@ -1499,7 +1868,7 @@ const ProfileBottomDrawer = ({
                     <Text
                       style={{
                         fontSize: 10,
-                        backgroundColor:  '#16A34A',
+                        backgroundColor: '#16A34A',
                         paddingHorizontal: 5,
                         borderRadius: 4,
                         paddingVertical: 1,
@@ -1507,7 +1876,7 @@ const ProfileBottomDrawer = ({
                         marginLeft: 5,
                       }}
                     >
-                      Joined {createdAtText}
+                      {t('settings.joined', { time: createdAtText })}
                     </Text>
                   )}
                 </View>
@@ -1539,12 +1908,12 @@ const ProfileBottomDrawer = ({
                         <Text
                           style={{
                             fontSize: 11,
-                            fontFamily: 'Lato-Bold',
+                            fontWeight: 'bold',
                             color: isDarkMode ? '#10B981' : '#059669',
                             marginLeft: 4,
                           }}
                         >
-                          {Number(userPoints).toLocaleString()} pts
+                          {Number(userPoints).toLocaleString()} {t('profile.pts')}
                         </Text>
                       </View>
                     )}
@@ -1565,21 +1934,46 @@ const ProfileBottomDrawer = ({
                         <Text
                           style={{
                             fontSize: 11,
-                            fontFamily: 'Lato-Bold',
+                            fontWeight: 'bold',
                             color: isDarkMode ? '#F59E0B' : '#D97706',
                             marginLeft: 4,
                           }}
                         >
-                          {gameWins}x win
+                          {gameWins}x {t('profile.win_count')}
                         </Text>
                       </View>
                     )}
+                    {/* ✅ Followers Count */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: isDarkMode ? '#1e293b' : '#e0e7ff',
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: isDarkMode ? '#334155' : '#c7d2fe',
+                      }}
+                    >
+                      <Icon name="people" size={12} color="#6366f1" />
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 'bold',
+                          color: isDarkMode ? '#a5b4fc' : '#4f46e5',
+                          marginLeft: 4,
+                        }}
+                      >
+                        {followersCount || 0} Followers
+                      </Text>
+                    </View>
                   </View>
                 )}
               </View>
             )}
-     {/* 📝 Bio Section */}
-     {loadDetails && (
+            {/* 📝 Bio Section */}
+            {loadDetails && (
               <View
                 style={{
                   borderRadius: 12,
@@ -1596,7 +1990,7 @@ const ProfileBottomDrawer = ({
                     color: isDarkMode ? '#9ca3af' : '#6b7280',
                   }}
                 >
-                  Bio
+                  {t('profile.bio')}
                 </Text>
                 <Text
                   style={{
@@ -1627,7 +2021,7 @@ const ProfileBottomDrawer = ({
                     color: isDarkMode ? '#e5e7eb' : '#111827',
                   }}
                 >
-                  Pets
+                  {t('home.categories.pets')}
                 </Text>
 
                 {loadingPets ? (
@@ -1653,7 +2047,7 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#e5e7eb' : '#111827',
                           }}
                         >
-                          Owned Pets
+                          {t('profile.pets.owned_title')}
                         </Text>
                       </View>
 
@@ -1664,7 +2058,7 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#9ca3af' : '#6b7280',
                           }}
                         >
-                          No pets listed.
+                          {t('profile.no_pets_listed')}
                         </Text>
                       ) : (
                         <ScrollView
@@ -1697,7 +2091,7 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#e5e7eb' : '#111827',
                           }}
                         >
-                          Wishlist
+                          {t('profile.pets.wishlist_title')}
                         </Text>
                       </View>
 
@@ -1708,7 +2102,7 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#9ca3af' : '#6b7280',
                           }}
                         >
-                          No wishlist pets yet.
+                          {t('profile.no_wishlist_pets')}
                         </Text>
                       ) : (
                         <ScrollView
@@ -1747,7 +2141,7 @@ const ProfileBottomDrawer = ({
                     color: isDarkMode ? '#e5e7eb' : '#111827',
                   }}
                 >
-                  Recent Reviews
+                  {t('profile.recent_reviews')}
                 </Text>
 
                 {loadingReviews && reviews.length === 0 ? (
@@ -1762,7 +2156,7 @@ const ProfileBottomDrawer = ({
                       color: isDarkMode ? '#9ca3af' : '#6b7280',
                     }}
                   >
-                    No reviews yet.
+                    {t('profile.no_reviews_yet')}
                   </Text>
                 ) : (
                   <>
@@ -1801,7 +2195,7 @@ const ProfileBottomDrawer = ({
                                   marginBottom: 2,
                                 }}
                               >
-                                {rev.userName || 'Anonymous'}
+                                {rev.userName || t('profile.anonymous')}
                               </Text>
                               {!!rev?.review && (
                                 <Text
@@ -1822,7 +2216,7 @@ const ProfileBottomDrawer = ({
                                     marginTop: 2,
                                   }}
                                 >
-                                  Edited
+                                  {t('reviews.edited')}
                                 </Text>
                               )}
                             </View>
@@ -1864,7 +2258,7 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#e5e7eb' : '#111827',
                           }}
                         >
-                          Load more reviews
+                          {t('profile.load_more_reviews')}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1899,7 +2293,7 @@ const ProfileBottomDrawer = ({
                     color: isDarkMode ? '#e5e7eb' : '#111827',
                   }}
                 >
-                  Recent Trades
+                  {t('profile.recent_trades')}
                 </Text>
 
                 {loadingTrades && trades.length === 0 ? (
@@ -1914,7 +2308,7 @@ const ProfileBottomDrawer = ({
                       color: isDarkMode ? '#9ca3af' : '#6b7280',
                     }}
                   >
-                    No trades yet.
+                    {t('profile.no_trades_yet')}
                   </Text>
                 ) : (
                   <>
@@ -1939,12 +2333,87 @@ const ProfileBottomDrawer = ({
                             color: isDarkMode ? '#e5e7eb' : '#111827',
                           }}
                         >
-                          Load more trades
+                          {t('profile.load_more_trades')}
                         </Text>
                       </TouchableOpacity>
                     )}
 
                     {loadingTrades && hasMoreTrades && (
+                      <ActivityIndicator
+                        size="small"
+                        color={config.colors.primary}
+                        style={{ marginTop: 6, alignSelf: 'center' }}
+                      />
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* 🖼️ Posts section */}
+            {loadDetails && (
+              <View
+                style={{
+                  borderRadius: 12,
+                  padding: 10,
+                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
+                  marginBottom: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    marginBottom: 6,
+                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                  }}
+                >
+                  {t('feed.recent_posts') || 'Recent Posts'}
+                </Text>
+
+                {loadingPosts && posts.length === 0 ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={config.colors.primary}
+                  />
+                ) : posts.length === 0 ? (
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: isDarkMode ? '#9ca3af' : '#6b7280',
+                    }}
+                  >
+                    {t('feed.no_posts_found') || 'No posts yet'}
+                  </Text>
+                ) : (
+                  <>
+                    {posts.map((post) => renderPostItem(post))}
+
+                    {hasMorePosts && !loadingPosts && (
+                      <TouchableOpacity
+                        onPress={handleLoadMorePosts}
+                        style={{
+                          marginTop: 8,
+                          alignSelf: 'center',
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: isDarkMode ? '#e5e7eb' : '#111827',
+                          }}
+                        >
+                          {t('feed.load_more') || 'Load More'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {loadingPosts && hasMorePosts && (
                       <ActivityIndicator
                         size="small"
                         color={config.colors.primary}
@@ -1968,32 +2437,156 @@ const ProfileBottomDrawer = ({
                     { color: isDarkMode ? 'white' : 'black' },
                   ]}
                 >
-                  View Detail Profile
+                  {t('profile.view_detail_profile')}
                 </Text>
               </TouchableOpacity>
             )}
 
             {/* Roblox Profile Button */}
             {mergedUser?.robloxUsername && (
-              <TouchableOpacity 
-                style={[styles.saveButton, { 
+              <TouchableOpacity
+                style={[styles.saveButton, {
                   backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',
                   marginBottom: 8,
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                }]} 
+                }]}
                 onPress={handleOpenRobloxProfile}
               >
-                <Icon 
-                  name="game-controller-outline" 
-                  size={16} 
-                  color="#FFFFFF" 
+                <Icon
+                  name="game-controller-outline"
+                  size={16}
+                  color="#FFFFFF"
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
-                  View Roblox Profile
+                  {t('profile.view_roblox_profile')}
                 </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* 🛡️ Moderator/Admin Actions */}
+            {(isAdmin || user?.isModerator) && (
+              <View style={{
+                marginTop: 10,
+                padding: 10,
+                backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
+                borderRadius: 8,
+                marginBottom: 10,
+                borderLeftWidth: 4,
+                borderLeftColor: config.colors.wantBlockRed
+              }}>
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  color: isDarkMode ? '#94a3b8' : '#64748b',
+                  marginBottom: 8
+                }}>
+                  {isAdmin ? "Admin Actions" : "Moderator Actions"}
+                </Text>
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {/* Strike Actions */}
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 4, fontWeight: '600' }}>
+                      Server Strikes:
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {[1, 2, 3].map((strike) => (
+                        <TouchableOpacity
+                          key={strike}
+                          onPress={() => handleApplyStrike(strike)}
+                          style={{
+                            backgroundColor: strike === 1 ? '#F97316' : strike === 2 ? '#DC2626' : '#991B1B', // Orange / Red / Dark Red
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            borderRadius: 6,
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11 }}>
+                            Strike {strike}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Unban Button (Only if banned) */}
+                  {isBanned && (
+                    <TouchableOpacity
+                      onPress={handleUnbanUser}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#10B981',
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 6,
+                        alignSelf: 'flex-start',
+                        marginBottom: 4
+                      }}
+                    >
+                      <Icon name="checkmark-circle-outline" size={16} color="white" />
+                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
+                        Unban User
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Promote/Demote Moderator (Admin Only) */}
+                  {isAdmin && (
+                    <TouchableOpacity
+                      onPress={mergedUser?.isModerator ? handleDemoteModerator : handlePromoteModerator}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        // backgroundColor: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6',
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderRadius: 6,
+                        marginLeft: 8,
+                        alignSelf: 'flex-end',
+                      }}
+                    >
+                      <Icon name={mergedUser?.isModerator ? "arrow-down-circle-outline" : "shield-outline"} size={16} color="white" />
+                      <Text style={{ color: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
+                        {mergedUser?.isModerator ? "Remove Mod" : "Make Mod"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Follow / Unfollow Button */}
+            {!fromPvtChat && user?.id !== selectedUserId && (
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  {
+                    backgroundColor: isFollowing ? '#8E8E93' : config.colors.primary,
+                    marginBottom: 10,
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                  }
+                ]}
+                onPress={handleFollowToggle}
+                disabled={followLoading}
+              >
+                {followLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Icon name={isFollowing ? "person-remove-outline" : "person-add-outline"} size={18} color="#FFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveButtonText}>
+                      {isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             )}
 

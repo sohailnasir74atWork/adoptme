@@ -14,7 +14,7 @@ import SignInDrawer from '../Firebase/SigninDrawer';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
-import {  GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { mixpanel } from './MixPenel';
 import { useLocalState } from '../LocalGlobelStats';
@@ -33,7 +33,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // const platform = Platform.OS.toLowerCase();
   const { updateLocalState, localState } = useLocalState();
-  
+
 
 
   // const languageOptions = [
@@ -67,16 +67,16 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
     // if (Platform.OS === 'ios') {
     //   onFinish();
     // } else {
-      setScreenIndex(2);
+    setScreenIndex(2);
     // }
   };
-  
+
   const handleLoginSuccess = () => {
     setOpenSignin(false);
     // if (Platform.OS === 'ios') {
     //   onFinish();
     // } else {
-      setScreenIndex(2);
+    setScreenIndex(2);
     // }
   };
 
@@ -158,14 +158,14 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
           </View>
 
         );
-        case 2:
-          // if (Platform.OS === 'ios') {
-          //   useEffect(() => {
-          //     onFinish();
-          //   }, []);
-          //   return null;
-          // }
-          return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" oneWallOnly={single_offer_wall} showoffer={!single_offer_wall}/>;
+      case 2:
+        // if (Platform.OS === 'ios') {
+        //   useEffect(() => {
+        //     onFinish();
+        //   }, []);
+        //   return null;
+        // }
+        return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />;
       default:
         return null;
     }
@@ -173,38 +173,15 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
   return (
     <GestureHandlerRootView style={{ paddingBottom: 50, flex: 1 }}>
-      <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',  }]}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7', }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#121212' : '#f2f2f7'} />
         {renderScreen()}
-        
+
 
         {screenIndex !== 2 && <View style={styles.bottomContainer}>
-        {/* {screenIndex === 0 && (
-  
-  <TouchableOpacity
-      style={!localState.isGG ? styles.buttonOutline : styles.buttonOutline}
-      onPress={() => updateLocalState('isGG', false)}
-    >
-      <Text style={!localState.isGG ? styles.buttonTextOutline : styles.buttonTextOutline}>
-      ELVEBREDD VALUES
-      </Text>
-    </TouchableOpacity>
 
 
-)} */}
- {/* {screenIndex === 0 && (
-  
-  <TouchableOpacity
-      style={localState.isGG ? styles.button : styles.buttonOutline}
-      onPress={() => updateLocalState('isGG', true)}
-    >
-      <Text style={localState.isGG ? styles.buttonText : styles.buttonTextOutline}>
-        GG VALUES
-      </Text>
-    </TouchableOpacity>
-)} */}
 
-         
           <TouchableOpacity style={styles.button} onPress={handleNext}>
             <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("first.signin") : t("first.continue")}</Text>
           </TouchableOpacity>
@@ -215,7 +192,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
           )}
         </View>}
 
-        <SignInDrawer visible={openSignin} onClose={handleLoginSuccess}  selectedTheme={selectedTheme} screen='On Boarding'/>
+        <SignInDrawer visible={openSignin} onClose={handleLoginSuccess} selectedTheme={selectedTheme} screen='On Boarding' />
         <Modal visible={languageModalVisible} animationType="slide" transparent>
           <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#121212' : '#f2f2f7' }]}>
             {/* <Text style={[styles.modalTitle, { color: isDarkMode ? 'white' : '#666' }]}>{t("settings.select_language")}</Text>
@@ -249,16 +226,16 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  slide: { width: width, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,  flex: 1, marginBottom:30 },
-  title: { fontSize: 24, fontFamily: 'Lato-Bold', marginBottom: 10, textAlign: 'center', lineHeight: 30},
-  text: { fontSize: 12, textAlign: 'center', paddingHorizontal: 20, fontFamily: 'Lato-Regular' },
-  welcomeText: { fontSize: 18, fontFamily: 'Lato-Bold', marginBottom: 10, textAlign: 'center' },
+  slide: { width: width, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, flex: 1, marginBottom: 30 },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10, textAlign: 'center', lineHeight: 30 },
+  text: { fontSize: 12, textAlign: 'center', paddingHorizontal: 20, },
+  welcomeText: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
   button: { backgroundColor: config.colors.hasBlockGreen, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, marginBottom: 10, width: '90%', alignItems: 'center', borderColor: config.colors.hasBlockGreen, borderWidth: 2, },
-  buttonText: { color: '#fff', fontSize: 14, textAlign: 'center', fontFamily: 'Lato-Bold' },
+  buttonText: { color: '#fff', fontSize: 14, textAlign: 'center', fontWeight: 'bold' },
   buttonOutline: { borderColor: config.colors.hasBlockGreen, borderWidth: 2, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, width: '90%', alignItems: 'center', marginBottom: 10 },
-  buttonTextOutline: { color: config.colors.hasBlockGreen, fontSize: 14, textAlign: 'center', fontFamily: 'Lato-Bold' },
+  buttonTextOutline: { color: config.colors.hasBlockGreen, fontSize: 14, textAlign: 'center', fontWeight: 'bold' },
   skipButton: { position: 'absolute', top: 40, right: 20, zIndex: 10 },
-  skipButtonText: { fontSize: 16, fontFamily: 'Lato-Bold' },
+  skipButtonText: { fontSize: 16, fontWeight: 'bold' },
   image: { width: 50, height: 50, margin: 10, borderRadius: 10 },
   bottomContainer: {
     position: 'absolute',
@@ -292,7 +269,7 @@ const styles = StyleSheet.create({
   benefitText: {
     fontSize: 16,
     color: '#fff',
-    fontFamily: 'Lato-Bold'
+    fontWeight: 'bold'
   },
   sliderContainer: {
     paddingVertical: 5
@@ -337,7 +314,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 22,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginVertical: 15,
     alignSelf: 'center'
   },
@@ -350,7 +327,7 @@ const styles = StyleSheet.create({
   },
   languageText: {
     fontSize: 16,
-    fontFamily: 'Lato-Bold'
+    fontWeight: 'bold'
   }
 
 });

@@ -52,7 +52,7 @@ const MessageInput = ({
   handleSendMessage,
   selectedTheme,
   replyTo,
-  selectedEmoji, 
+  selectedEmoji,
   onCancelReply,
   setPetModalVisible,
   selectedFruits,
@@ -62,7 +62,7 @@ const MessageInput = ({
   // ✅ Memoize styles
   const isDarkMode = selectedTheme?.colors?.text === 'white';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  
+
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
 
@@ -84,10 +84,10 @@ const MessageInput = ({
     triggerHapticFeedback('impactLight');
 
     const trimmedInput = (input || '').trim();
-  
+
     const emojiFromArg = typeof emojiArg === 'string' ? emojiArg : undefined;
-    const emojiToSend  = emojiFromArg || selectedEmoji || null;
-    const hasEmoji     = !!emojiToSend;
+    const emojiToSend = emojiFromArg || selectedEmoji || null;
+    const hasEmoji = !!emojiToSend;
     const fruits = hasFruits ? [...selectedFruits] : [];
     if (!trimmedInput && !hasFruits && !hasEmoji) return;
     if (isSending) return;
@@ -97,7 +97,7 @@ const MessageInput = ({
       const validation = validateContent(trimmedInput);
       if (!validation.isValid) {
         showMessage({
-          message: validation.reason || "Inappropriate content detected.",
+          message: t('chat.inappropriate_content'),
           type: "danger",
           duration: 3000,
         });
@@ -124,7 +124,7 @@ const MessageInput = ({
       const newCount = messageCount + 1;
       setMessageCount(newCount);
 
-      if (!localState?.isPro && newCount % 15 === 0) {
+      if (!localState?.isPro && newCount % 10 === 0) {
         // Show A/B test interstitial ad only if user is NOT pro (every 15th message)
         InterstitialAdManager.showAd(adCallback);
       } else {
@@ -143,7 +143,7 @@ const MessageInput = ({
     handleSend(emojiUrl);
     setShowEmojiPopup(false);
   }, [handleSend]);
-  
+
 
   // console.log(selectedFruits);
 
@@ -186,7 +186,7 @@ const MessageInput = ({
           multiline
         />
 
-<TouchableOpacity onPress={() => setShowEmojiPopup(true)} style={styles.gifButton}>
+        <TouchableOpacity onPress={() => setShowEmojiPopup(true)} style={styles.gifButton}>
           <Text style={{ fontSize: 25 }}>😊</Text>
         </TouchableOpacity>
 
@@ -217,7 +217,7 @@ const MessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>
-            {selectedFruits.length} pet(s) selected
+            {t('chat.pets_selected', { count: selectedFruits.length })}
           </Text>
 
           <TouchableOpacity
@@ -233,13 +233,13 @@ const MessageInput = ({
         </View>
       )}
       <Modal visible={showEmojiPopup} transparent animationType="slide">
-        <TouchableOpacity 
-          style={modalStyles.backdrop} 
+        <TouchableOpacity
+          style={modalStyles.backdrop}
           onPress={() => setShowEmojiPopup(false)}
           activeOpacity={1}
         >
           <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]} onStartShouldSetResponder={() => true}>
-            <ScrollView 
+            <ScrollView
               style={modalStyles.emojiScrollContainer}
               showsVerticalScrollIndicator={false}
             >

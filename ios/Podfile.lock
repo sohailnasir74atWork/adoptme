@@ -1450,11 +1450,11 @@ PODS:
   - PromisesObjC (2.4.0)
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
-  - PurchasesHybridCommon (17.21.2):
-    - RevenueCat (= 5.49.2)
-  - PurchasesHybridCommonUI (17.21.2):
-    - PurchasesHybridCommon (= 17.21.2)
-    - RevenueCatUI (= 5.49.2)
+  - PurchasesHybridCommon (17.31.0):
+    - RevenueCat (= 5.57.0)
+  - PurchasesHybridCommonUI (17.31.0):
+    - PurchasesHybridCommon (= 17.31.0)
+    - RevenueCatUI (= 5.57.0)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3807,9 +3807,9 @@ PODS:
     - React-utils (= 0.80.2)
     - SocketRocket
   - RecaptchaInterop (101.0.0)
-  - RevenueCat (5.49.2)
-  - RevenueCatUI (5.49.2):
-    - RevenueCat (= 5.49.2)
+  - RevenueCat (5.57.0)
+  - RevenueCatUI (5.57.0):
+    - RevenueCat (= 5.57.0)
   - RNAppleAuthentication (2.4.1):
     - React-Core
   - RNBootSplash (6.3.10):
@@ -4024,11 +4024,11 @@ PODS:
     - RNNotifee/NotifeeCore (= 9.1.8)
   - RNNotifee/NotifeeCore (9.1.8):
     - React-Core
-  - RNPaywalls (9.6.9):
-    - PurchasesHybridCommonUI (= 17.21.2)
+  - RNPaywalls (9.7.6):
+    - PurchasesHybridCommonUI (= 17.31.0)
     - React-Core
-  - RNPurchases (9.6.9):
-    - PurchasesHybridCommon (= 17.21.2)
+  - RNPurchases (9.7.6):
+    - PurchasesHybridCommon (= 17.31.0)
     - React-Core
   - RNReactNativeHapticFeedback (2.3.3):
     - boost
@@ -4824,8 +4824,8 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
-  PurchasesHybridCommon: 71c94158ff8985657d37d5f3be05602881227619
-  PurchasesHybridCommonUI: c490142361da500ea8fe2f75cd6d56df0f7e3152
+  PurchasesHybridCommon: 21a11c5d66c8a52cf9aede45cecc2efe1551b98b
+  PurchasesHybridCommonUI: 60fbb660ebbf224df733c90849c4f3b8f6819f4b
   RCT-Folly: 59ec0ac1f2f39672a0c6e6cecdd39383b764646f
   RCTDeprecation: 300c5eb91114d4339b0bb39505d0f4824d7299b7
   RCTRequired: e0446b01093475b7082fbeee5d1ef4ad1fe20ac4
@@ -4898,8 +4898,8 @@ SPEC CHECKSUMS:
   ReactCodegen: f8ae44cfcb65af88f409f4b094b879591232f12c
   ReactCommon: a237545f08f598b8b37dc3a9163c1c4b85817b0b
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
-  RevenueCat: d185cbff8be9425b5835042afd6889389bb756c8
-  RevenueCatUI: 3d17f9f0bf7ed299c1671552378086ceeff308fd
+  RevenueCat: 2d8aa56c68fa8e92c0d669e5e797c4a93e284f20
+  RevenueCatUI: 25c86cf10c6cb9e3e9f308c48df55b31bf7fdba5
   RNAppleAuthentication: b2d8b5ccba86b5b1e55a1a2e858f7ac6d8a21816
   RNBootSplash: cb295b78e1105e6088a3bd680c3260c612833b9a
   RNCClipboard: f09308447254536ab20b243607766796efdf210c
@@ -4916,8 +4916,8 @@ SPEC CHECKSUMS:
   RNGoogleSignin: 43b78cae5212d08c2ec631e70471d4288f6d47db
   RNLocalize: f9796910037d3ffb51a4bbdeadbc11b9d0f29d11
   RNNotifee: 4a6ee5c7deaf00e005050052d73ee6315dff7ec9
-  RNPaywalls: f16eec65af5b2d371029569731536243cf1f6c37
-  RNPurchases: 8a21795ad71f932dca9f48e9560924a3c64878c6
+  RNPaywalls: 8fa70f33e58cfea16d649750aa72e61bcc12f90b
+  RNPurchases: 7c5b4d653dcfec1ad700d04db6ceee235d822038
   RNReactNativeHapticFeedback: 8bd4a2ba7c3daeb5d2acfceb8b61743f203076d0
   RNReanimated: c1753518ec84875120858004a6c4fc340bf58179
   RNScreens: be0d2c9cc334a323239ef426a01823918e83995b

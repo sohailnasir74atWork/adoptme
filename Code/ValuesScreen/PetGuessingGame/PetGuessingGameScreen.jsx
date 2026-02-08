@@ -76,36 +76,31 @@ const PetGuessingGameScreen = () => {
   // Get pet data from localState (only PETS type)
   const petData = useMemo(() => {
     try {
-      const rawData = localState.isGG ? localState.ggData : localState.data;
+      const rawData = localState.data;
       if (!rawData) return [];
 
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
       const allItems = typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
-      
+
       // Filter only pets
-      return allItems.filter(item => 
+      return allItems.filter(item =>
         item?.type?.toLowerCase() === 'pets' || item?.type?.toLowerCase() === 'pet'
       );
     } catch (error) {
       console.error('Error parsing pet data:', error);
       return [];
     }
-  }, [localState.isGG, localState.data, localState.ggData]);
+  }, [localState.data]);
 
   // Get image URL helper
   const getImageUrl = useCallback((item) => {
     if (!item || !item.name) return '';
-    
-    const baseImgUrl = localState.isGG ? localState.imgurlGG : localState.imgurl;
-    
-    if (localState.isGG) {
-      const encoded = encodeURIComponent(item.name);
-      return `${baseImgUrl?.replace(/"/g, '')}/items/${encoded}.webp`;
-    }
-    
+
+    const baseImgUrl = localState.imgurl;
+
     if (!item.image || !baseImgUrl) return '';
     return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-  }, [localState.isGG, localState.imgurl, localState.imgurlGG]);
+  }, [localState.imgurl]);
 
   // Listen to room updates
   useEffect(() => {
@@ -113,19 +108,19 @@ const PetGuessingGameScreen = () => {
 
     const unsubscribe = listenToGameRoom(firestoreDB, currentRoomId, (data) => {
       setRoomData(data);
-      
+
       // ✅ Clear pending invites when someone joins (player count increases)
       if (data && data.currentPlayers >= 2 && pendingInvites.length > 0) {
         setPendingInvites([]);
       }
-      
+
       // ✅ Update global game state (for GlobalInviteToast)
       if (data && setIsInActiveGame) {
         setIsInActiveGame(data.status === 'playing');
       } else if (!data && setIsInActiveGame) {
         setIsInActiveGame(false);
       }
-      
+
       if (!data) {
         // Room was deleted
         setCurrentRoomId(null);
@@ -161,18 +156,18 @@ const PetGuessingGameScreen = () => {
       // Handle game finished due to timeout or player leaving
       if (data.status === 'finished' && data.gameData?.timeoutReason) {
         const gameId = data.id || currentRoomId;
-        
+
         // Only process once per timeout finish
         if (!processedGameFinishRef.current.has(`timeout-${gameId}`)) {
           processedGameFinishRef.current.add(`timeout-${gameId}`);
-          
+
           // Show timeout message
           const timeoutReason = data.gameData.timeoutReason;
           showErrorMessage(
             'Game Ended',
             timeoutReason || 'A player timed out or left the game'
           );
-          
+
           // Clear room and return to create game screen after 2 seconds
           setTimeout(() => {
             setCurrentRoomId(null);
@@ -189,11 +184,11 @@ const PetGuessingGameScreen = () => {
       if (data.status === 'finished' && data.gameData?.winner && user?.id && appdatabase) {
         const winnerId = data.gameData.winner.playerId;
         const gameId = data.id || currentRoomId;
-        
+
         // Only process once per game finish
         if (winnerId === user.id && !processedGameFinishRef.current.has(gameId)) {
           processedGameFinishRef.current.add(gameId);
-          
+
           awardGameWin(appdatabase, firestoreDB, user.id)
             .then((result) => {
               if (result) {
@@ -289,7 +284,7 @@ const PetGuessingGameScreen = () => {
 
     triggerHapticFeedback('impactLight');
     const success = await leaveGameRoom(firestoreDB, currentRoomId, user.id);
-    
+
     if (success) {
       setCurrentRoomId(null);
       setRoomData(null);
@@ -313,17 +308,17 @@ const PetGuessingGameScreen = () => {
     if (!invitedUser || !invitedUser.id) {
       return;
     }
-    
+
     const now = Date.now();
     const expiresAt = now + 60000; // 1 minute expiry
-    
+
     setPendingInvites((prev) => {
       // Check if this user is already in the list (avoid duplicates)
       const exists = prev.some(inv => inv.userId === invitedUser.id);
       if (exists) {
         return prev;
       }
-      
+
       return [
         ...prev,
         {
@@ -372,7 +367,7 @@ const PetGuessingGameScreen = () => {
 
     try {
       const success = await startGame(firestoreDB, currentRoomId, user.id);
-      
+
       if (success) {
         // Track game start in Mixpanel
         mixpanel.track('Game Started', {
@@ -412,7 +407,7 @@ const PetGuessingGameScreen = () => {
 
     try {
       const success = await recordSpinResult(firestoreDB, currentRoomId, user.id, result);
-      
+
       if (!success) {
         showErrorMessage('Error', 'Failed to record spin result');
       }
@@ -424,21 +419,21 @@ const PetGuessingGameScreen = () => {
   // Check if it's current user's turn
   const isMyTurn = useMemo(() => {
     if (!roomData || roomData.status !== 'playing' || !user?.id) return false;
-    
+
     const playerOrder = roomData.gameData?.playerOrder || [];
     const currentTurnIndex = roomData.gameData?.currentTurnIndex || 0;
-    
+
     return playerOrder[currentTurnIndex] === user.id;
   }, [roomData, user?.id]);
 
   // Get current player name for display
   const currentPlayerName = useMemo(() => {
     if (!roomData || roomData.status !== 'playing') return '';
-    
+
     const playerOrder = roomData.gameData?.playerOrder || [];
     const currentTurnIndex = roomData.gameData?.currentTurnIndex || 0;
     const currentPlayerId = playerOrder[currentTurnIndex];
-    
+
     return roomData.players?.[currentPlayerId]?.displayName || 'Player';
   }, [roomData]);
 
@@ -533,281 +528,281 @@ const PetGuessingGameScreen = () => {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-        {/* Header */}
-       {!currentRoomId && <View style={styles.header}>
-          <Text style={styles.title}>🎡 Pet Wheel Spin</Text>
-          <Text style={styles.subtitle}>
-            Spin the wheel and collect pet values! 3 rounds, highest score wins!
-          </Text>
-        </View>}
-
-        {!currentRoomId ? (
-          // No room - Show create button and instructions
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleCreateRoom}
-              disabled={loading || !user?.id}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Icon name="add-circle-outline" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>
-                    {user?.id ? 'Create Game' : 'Login to Play'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>🎮 How to Play</Text>
-              {/* Roulette illustration */}
-              <View style={styles.rouletteImageWrapper}>
-                <Image
-                  source={require('../../../assets/roulette.png')}
-                  style={styles.rouletteImage}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text style={styles.cardText}>
-                • Create a room (8 random pets are selected){'\n'}
-                • Invite 1 friend to join{'\n'}
-                • Take turns spinning the wheel{'\n'}
-                • The pet's value = your points{'\n'}
-                • 3 rounds each, highest total wins!{'\n'}
-                {'\n'}
+            {/* Header */}
+            {!currentRoomId && <View style={styles.header}>
+              <Text style={styles.title}>🎡 Pet Wheel Spin</Text>
+              <Text style={styles.subtitle}>
+                Spin the wheel and collect pet values! 3 rounds, highest score wins!
               </Text>
-              <Text style={[styles.cardText, { fontFamily: 'Lato-Bold', color: isDarkMode ? '#10B981' : '#059669', marginTop: 8 }]}>
-                🏆 Win the game and earn 100 points!
-              </Text>
-            </View>
+            </View>}
 
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>🏆 Game Rules</Text>
-              <Text style={styles.cardText}>
-                • 2 players only{'\n'}
-                • Each player spins once per round{'\n'}
-                • Pet value is added to your score{'\n'}
-                • After 3 rounds, highest score wins!
-              </Text>
-            </View>
-          </View>
-        ) : roomData ? (
-          // In a room
-          <View style={styles.section}>
-            {/* Action buttons - Top Right */}
-            <View style={styles.actionRow}>
-              {/* Music toggle */}
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => {
-                  const newValue = !musicEnabled;
-                  updateLocalState('gameMusicEnabled', newValue);
-                  triggerHapticFeedback('impactLight');
-                }}
-              >
-                <Icon
-                  name={musicEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
-                  size={16}
-                  color="#fff"
-                />
-              </TouchableOpacity>
-
-              {/* Hide invite button when 2 players have joined */}
-              {roomData.status === 'waiting' && roomData.currentPlayers < 2 && (
+            {!currentRoomId ? (
+              // No room - Show create button and instructions
+              <View style={styles.section}>
                 <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={() => setShowInviteModal(true)}
+                  style={styles.button}
+                  onPress={handleCreateRoom}
+                  disabled={loading || !user?.id}
                 >
-                  <Icon name="person-add-outline" size={16} color="#fff" />
-                </TouchableOpacity>
-              )}
-              {roomData.status !== 'playing' && (
-                  <TouchableOpacity
-                  style={[styles.iconButton, styles.leaveButton]}
-                    onPress={handleLeaveRoom}
-                  >
-                  <Icon name="exit-outline" size={16} color="#fff" />
-                  </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Player Cards - Always show */}
-            <PlayerCards
-              roomData={roomData}
-              currentUserId={user?.id}
-            />
-
-            {/* Game states */}
-            {roomData.status === 'waiting' && (
-              <View style={styles.waitingCard}>
-                {roomData.currentPlayers < 2 ? (
-                  <>
-                    <Text style={styles.waitingText}>
-                      ⏳ Waiting for 1 more player...
-                    </Text>
-                    <Text style={styles.waitingSubtext}>
-                      Players: {roomData.currentPlayers}/2
-                    </Text>
-                  </>
-                ) : roomData.hostId === user?.id ? (
-                  <>
-                    <Text style={styles.waitingText}>
-                      ✅ Ready to start!
-                    </Text>
-                    <Text style={styles.waitingSubtext}>
-                      Players: {roomData.currentPlayers}/2
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.startGameButton}
-                      onPress={handleStartGame}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <>
-                          <Icon name="play-circle" size={24} color="#fff" />
-                          <Text style={styles.startGameButtonText}>
-                            Start
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.waitingText}>
-                      ⏳ Waiting for host to start...
-                    </Text>
-                    <Text style={styles.waitingSubtext}>
-                      Players: {roomData.currentPlayers}/2
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Icon name="add-circle-outline" size={24} color="#fff" />
+                      <Text style={styles.buttonText}>
+                        {user?.id ? 'Create Game' : 'Login to Play'}
                       </Text>
-                  </>
-                )}
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>🎮 How to Play</Text>
+                  {/* Roulette illustration */}
+                  <View style={styles.rouletteImageWrapper}>
+                    <Image
+                      source={require('../../../assets/roulette.png')}
+                      style={styles.rouletteImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <Text style={styles.cardText}>
+                    • Create a room (8 random pets are selected){'\n'}
+                    • Invite 1 friend to join{'\n'}
+                    • Take turns spinning the wheel{'\n'}
+                    • The pet's value = your points{'\n'}
+                    • 3 rounds each, highest total wins!{'\n'}
+                    {'\n'}
+                  </Text>
+                  <Text style={[styles.cardText, { fontWeight: 'bold', color: isDarkMode ? '#10B981' : '#059669', marginTop: 8 }]}>
+                    🏆 Win the game and earn 100 points!
+                  </Text>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>🏆 Game Rules</Text>
+                  <Text style={styles.cardText}>
+                    • 2 players only{'\n'}
+                    • Each player spins once per round{'\n'}
+                    • Pet value is added to your score{'\n'}
+                    • After 3 rounds, highest score wins!
+                  </Text>
+                </View>
+              </View>
+            ) : roomData ? (
+              // In a room
+              <View style={styles.section}>
+                {/* Action buttons - Top Right */}
+                <View style={styles.actionRow}>
+                  {/* Music toggle */}
+                  <TouchableOpacity
+                    style={styles.iconButton}
+                    onPress={() => {
+                      const newValue = !musicEnabled;
+                      updateLocalState('gameMusicEnabled', newValue);
+                      triggerHapticFeedback('impactLight');
+                    }}
+                  >
+                    <Icon
+                      name={musicEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+                      size={16}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+
+                  {/* Hide invite button when 2 players have joined */}
+                  {roomData.status === 'waiting' && roomData.currentPlayers < 2 && (
+                    <TouchableOpacity
+                      style={styles.iconButton}
+                      onPress={() => setShowInviteModal(true)}
+                    >
+                      <Icon name="person-add-outline" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  {roomData.status !== 'playing' && (
+                    <TouchableOpacity
+                      style={[styles.iconButton, styles.leaveButton]}
+                      onPress={handleLeaveRoom}
+                    >
+                      <Icon name="exit-outline" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Player Cards - Always show */}
+                <PlayerCards
+                  roomData={roomData}
+                  currentUserId={user?.id}
+                />
+
+                {/* Game states */}
+                {roomData.status === 'waiting' && (
+                  <View style={styles.waitingCard}>
+                    {roomData.currentPlayers < 2 ? (
+                      <>
+                        <Text style={styles.waitingText}>
+                          ⏳ Waiting for 1 more player...
+                        </Text>
+                        <Text style={styles.waitingSubtext}>
+                          Players: {roomData.currentPlayers}/2
+                        </Text>
+                      </>
+                    ) : roomData.hostId === user?.id ? (
+                      <>
+                        <Text style={styles.waitingText}>
+                          ✅ Ready to start!
+                        </Text>
+                        <Text style={styles.waitingSubtext}>
+                          Players: {roomData.currentPlayers}/2
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.startGameButton}
+                          onPress={handleStartGame}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <>
+                              <Icon name="play-circle" size={24} color="#fff" />
+                              <Text style={styles.startGameButtonText}>
+                                Start
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.waitingText}>
+                          ⏳ Waiting for host to start...
+                        </Text>
+                        <Text style={styles.waitingSubtext}>
+                          Players: {roomData.currentPlayers}/2
+                        </Text>
+                      </>
+                    )}
                   </View>
                 )}
 
-            {/* ✅ Pending Invitations List - Show below waiting card */}
-            {roomData.status === 'waiting' && pendingInvites.length > 0 && (
-              <View style={styles.pendingInvitesContainer}>
-                <Text style={styles.pendingInvitesTitle}>
-                  Pending Invitations ({pendingInvites.length})
-                </Text>
-                {pendingInvites.map((invite, index) => {
-                  const now = Date.now();
-                  const timeRemaining = Math.max(0, invite.expiresAt - now);
-                  const progress = Math.max(0, Math.min(1, timeRemaining / 60000)); // 0 to 1 (1 minute)
-                  const secondsRemaining = Math.ceil(timeRemaining / 1000);
-                  const isLastItem = index === pendingInvites.length - 1;
+                {/* ✅ Pending Invitations List - Show below waiting card */}
+                {roomData.status === 'waiting' && pendingInvites.length > 0 && (
+                  <View style={styles.pendingInvitesContainer}>
+                    <Text style={styles.pendingInvitesTitle}>
+                      Pending Invitations ({pendingInvites.length})
+                    </Text>
+                    {pendingInvites.map((invite, index) => {
+                      const now = Date.now();
+                      const timeRemaining = Math.max(0, invite.expiresAt - now);
+                      const progress = Math.max(0, Math.min(1, timeRemaining / 60000)); // 0 to 1 (1 minute)
+                      const secondsRemaining = Math.ceil(timeRemaining / 1000);
+                      const isLastItem = index === pendingInvites.length - 1;
 
-                  return (
-                    <View
-                      key={invite.userId}
-                      style={[
-                        styles.pendingInviteItem,
-                        isLastItem && styles.pendingInviteItemLast,
-                      ]}
-                    >
-                      <Image
-                        source={{
-                          uri: invite.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                        }}
-                        style={styles.pendingInviteAvatar}
-                      />
-                      <View style={styles.pendingInviteInfo}>
-                        <Text style={styles.pendingInviteName} numberOfLines={1}>
-                          {invite.displayName}
-                        </Text>
-                        <View style={styles.progressBarContainer}>
-                          <View
-                            style={[
-                              styles.progressBar,
-                              {
-                                width: `${progress * 100}%`,
-                                backgroundColor: progress > 0.3 ? '#10B981' : progress > 0.1 ? '#F59E0B' : '#EF4444',
-                              },
-                            ]}
+                      return (
+                        <View
+                          key={invite.userId}
+                          style={[
+                            styles.pendingInviteItem,
+                            isLastItem && styles.pendingInviteItemLast,
+                          ]}
+                        >
+                          <Image
+                            source={{
+                              uri: invite.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                            }}
+                            style={styles.pendingInviteAvatar}
                           />
+                          <View style={styles.pendingInviteInfo}>
+                            <Text style={styles.pendingInviteName} numberOfLines={1}>
+                              {invite.displayName}
+                            </Text>
+                            <View style={styles.progressBarContainer}>
+                              <View
+                                style={[
+                                  styles.progressBar,
+                                  {
+                                    width: `${progress * 100}%`,
+                                    backgroundColor: progress > 0.3 ? '#10B981' : progress > 0.1 ? '#F59E0B' : '#EF4444',
+                                  },
+                                ]}
+                              />
+                            </View>
+                            <Text style={styles.progressBarText}>
+                              {secondsRemaining > 0 ? `${secondsRemaining}s remaining` : 'Expired'}
+                            </Text>
+                          </View>
                         </View>
-                        <Text style={styles.progressBarText}>
-                          {secondsRemaining > 0 ? `${secondsRemaining}s remaining` : 'Expired'}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
+                      );
+                    })}
+                  </View>
+                )}
 
-            {roomData.status === 'playing' && roomData.wheelPets && (
-              <FortuneWheel
-                wheelPets={roomData.wheelPets}
-                onSpinEnd={handleSpinEnd}
-                onSpinStart={handleSpinStart}
-                isMyTurn={isMyTurn}
-                isSpinning={roomData.gameData?.isSpinning || false}
-                currentPlayerName={currentPlayerName}
-                disabled={false}
-              />
-            )}
+                {roomData.status === 'playing' && roomData.wheelPets && (
+                  <FortuneWheel
+                    wheelPets={roomData.wheelPets}
+                    onSpinEnd={handleSpinEnd}
+                    onSpinStart={handleSpinStart}
+                    isMyTurn={isMyTurn}
+                    isSpinning={roomData.gameData?.isSpinning || false}
+                    currentPlayerName={currentPlayerName}
+                    disabled={false}
+                  />
+                )}
 
-            {roomData.status === 'finished' && (
-              <View style={styles.finishedCard}>
-                <Text style={styles.finishedTitle}>🏆 Game Over!</Text>
+                {roomData.status === 'finished' && (
+                  <View style={styles.finishedCard}>
+                    <Text style={styles.finishedTitle}>🏆 Game Over!</Text>
                     <GameResults
                       roomData={roomData}
                       currentUser={{
                         id: user?.id,
                         displayName: user?.displayName || 'Anonymous',
-                  }}
-                />
-                <TouchableOpacity
-                  style={[styles.button, { marginTop: 16 }]}
-                  onPress={handleLeaveRoom}
-                >
-                  <Icon name="refresh-outline" size={20} color="#fff" />
-                  <Text style={styles.buttonText}>Play Again</Text>
-                </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-        ) : (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#8B5CF6" />
-            <Text style={styles.loadingText}>Loading room...</Text>
-          </View>
-        )}
-      </ScrollView>
+                      }}
+                    />
+                    <TouchableOpacity
+                      style={[styles.button, { marginTop: 16 }]}
+                      onPress={handleLeaveRoom}
+                    >
+                      <Icon name="refresh-outline" size={20} color="#fff" />
+                      <Text style={styles.buttonText}>Play Again</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#8B5CF6" />
+                <Text style={styles.loadingText}>Loading room...</Text>
+              </View>
+            )}
+          </ScrollView>
 
-      {/* Invite Modal - Using shared OnlineUsersList component */}
-      {currentRoomId && (
-        <OnlineUsersList
-          visible={showInviteModal}
-          onClose={() => {
-            setShowInviteModal(false);
-            // ✅ Don't clear pending invites when modal closes - keep them visible
-          }}
-          mode="gameInvite"
-          roomId={currentRoomId}
-          onInviteSent={handleInviteSent} // ✅ Callback when invite is sent
-        />
-      )}
+          {/* Invite Modal - Using shared OnlineUsersList component */}
+          {currentRoomId && (
+            <OnlineUsersList
+              visible={showInviteModal}
+              onClose={() => {
+                setShowInviteModal(false);
+                // ✅ Don't clear pending invites when modal closes - keep them visible
+              }}
+              mode="gameInvite"
+              roomId={currentRoomId}
+              onInviteSent={handleInviteSent} // ✅ Callback when invite is sent
+            />
+          )}
 
-      {/* Incoming Invite Notifications */}
-      {user?.id && (
-        <InviteNotification
-          currentUser={{
-            id: user.id,
-            displayName: user.displayName || 'Anonymous',
-            avatar: user.avatar || null,
-          }}
-          onAccept={handleJoinRoom}
-          isInActiveGame={roomData?.status === 'playing'}
-        />
-      )}
+          {/* Incoming Invite Notifications */}
+          {user?.id && (
+            <InviteNotification
+              currentUser={{
+                id: user.id,
+                displayName: user.displayName || 'Anonymous',
+                avatar: user.avatar || null,
+              }}
+              onAccept={handleJoinRoom}
+              isInActiveGame={roomData?.status === 'playing'}
+            />
+          )}
         </View>
       </SafeAreaView>
     </>
@@ -829,18 +824,18 @@ const getStyles = (isDarkMode) =>
     },
     title: {
       fontSize: 28,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#000',
       marginBottom: 8,
     },
     subtitle: {
       fontSize: 14,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#9ca3af' : '#6b7280',
     },
     section: {
       marginBottom: 20,
-      justifyContent:'center'
+      justifyContent: 'center'
     },
     button: {
       backgroundColor: '#8B5CF6',
@@ -855,7 +850,7 @@ const getStyles = (isDarkMode) =>
     buttonText: {
       color: '#fff',
       fontSize: 16,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       marginLeft: 8,
     },
     card: {
@@ -868,13 +863,13 @@ const getStyles = (isDarkMode) =>
     },
     cardTitle: {
       fontSize: 16,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#000',
       marginBottom: 8,
     },
     cardText: {
       fontSize: 14,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#9ca3af' : '#6b7280',
       lineHeight: 22,
     },
@@ -894,7 +889,7 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       gap: 8,
       // zIndex: 10,
-      justifyContent:'flex-end'
+      justifyContent: 'flex-end'
     },
     iconButton: {
       width: 30,
@@ -921,14 +916,14 @@ const getStyles = (isDarkMode) =>
     },
     waitingText: {
       fontSize: 16,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#000',
       textAlign: 'center',
       marginBottom: 8,
     },
     waitingSubtext: {
       fontSize: 14,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#9ca3af' : '#6b7280',
       marginBottom: 12,
     },
@@ -945,7 +940,7 @@ const getStyles = (isDarkMode) =>
     startGameButtonText: {
       color: '#fff',
       fontSize: 16,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       marginLeft: 8,
     },
     finishedCard: {
@@ -959,7 +954,7 @@ const getStyles = (isDarkMode) =>
     },
     finishedTitle: {
       fontSize: 24,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: '#F59E0B',
       marginBottom: 16,
     },
@@ -972,7 +967,7 @@ const getStyles = (isDarkMode) =>
     loadingText: {
       marginTop: 12,
       fontSize: 14,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#9ca3af' : '#6b7280',
     },
     pendingInvitesContainer: {
@@ -985,7 +980,7 @@ const getStyles = (isDarkMode) =>
     },
     pendingInvitesTitle: {
       fontSize: 14,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#000',
       marginBottom: 12,
     },
@@ -1014,7 +1009,7 @@ const getStyles = (isDarkMode) =>
     },
     pendingInviteName: {
       fontSize: 14,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#000',
       marginBottom: 6,
     },
@@ -1032,7 +1027,7 @@ const getStyles = (isDarkMode) =>
     },
     progressBarText: {
       fontSize: 11,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#9ca3af' : '#6b7280',
     },
   });

@@ -30,7 +30,7 @@ export const DesignStack = ({ selectedTheme }) => {
   const headerOptions = useMemo(() => ({
     headerStyle: { backgroundColor: selectedTheme.colors.background },
     headerTintColor: selectedTheme.colors.text,
-    headerTitleStyle: { fontFamily: 'Lato-Bold', fontSize: 24 },
+    headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
   }), [selectedTheme]);
 
   const sharedParams = useMemo(() => ({
@@ -51,7 +51,7 @@ export const DesignStack = ({ selectedTheme }) => {
             setBannedUsers={setBannedUsers}
             triggerHapticFeedback={triggerHapticFeedback}
             setIsDrawerVisible={setIsDrawerVisible}
-            
+
             openDrawer={openDrawer}   // ✅ add this
           />
         ),
@@ -62,37 +62,37 @@ export const DesignStack = ({ selectedTheme }) => {
 
   return (
     <Stack.Navigator screenOptions={headerOptions}>
-    <Stack.Screen
-      name="DesignScreen"
-      component={DesignFeedScreen}
-      initialParams={sharedParams}
-      options={{ title: 'Feed' }}
-    />
+      <Stack.Screen
+        name="DesignScreen"
+        component={DesignFeedScreen}
+        initialParams={sharedParams}
+        options={{ title: 'Feed' }}
+      />
 
-    <Stack.Screen name="PrivateChatDesign" options={getPrivateChatOptions}>
-      {(props) => (
-        <PrivateChatScreen
-          {...props}
-          bannedUsers={bannedUsers}
-          isDrawerVisible={isDrawerVisible}
-          setIsDrawerVisible={setIsDrawerVisible}
-          closeProfileDrawer={closeDrawer} // ✅ optional convenience prop
-        />
-      )}
-    </Stack.Screen>
+      <Stack.Screen name="PrivateChatDesign" options={getPrivateChatOptions}>
+        {(props) => (
+          <PrivateChatScreen
+            {...props}
+            bannedUsers={bannedUsers}
+            isDrawerVisible={isDrawerVisible}
+            setIsDrawerVisible={setIsDrawerVisible}
+            closeProfileDrawer={closeDrawer} // ✅ optional convenience prop
+          />
+        )}
+      </Stack.Screen>
 
-    <Stack.Screen
-      name="ImageViewerScreen"
-      component={ImageViewerScreen}
-      options={{ title: 'Image' }}
-    />
-  </Stack.Navigator>
+      <Stack.Screen
+        name="ImageViewerScreen"
+        component={ImageViewerScreen}
+        options={{ title: 'Image' }}
+      />
+    </Stack.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
   highlightedText: {
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: config.colors.primary,
   },
 });

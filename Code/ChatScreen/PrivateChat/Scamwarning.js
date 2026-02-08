@@ -4,6 +4,7 @@ import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
 import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { useTranslation } from 'react-i18next';
 
 export default function ScamSafetyBox({
   setShowRatingModal,
@@ -13,19 +14,20 @@ export default function ScamSafetyBox({
   const { theme, tradingServerLink } = useGlobalState();
   const { localState } = useLocalState();
   const isDarkMode = theme === 'dark';
+  const { t } = useTranslation();
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   // ✅ Memoize handleOpenServer
   const handleOpenServer = useCallback(() => {
     if (!tradingServerLink || typeof tradingServerLink !== 'string' || tradingServerLink.trim().length === 0) {
-      Alert.alert('Error', 'Server link not available');
+      Alert.alert(t('chat.error'), t('chat.server_error'));
       return;
     }
 
     const openLink = () => {
       Linking.openURL(tradingServerLink).catch(err => {
         console.warn('Failed to open server link:', err);
-        Alert.alert('Error', 'Failed to open server link');
+        Alert.alert(t('chat.error'), t('chat.server_open_failed'));
       });
     };
 
@@ -49,11 +51,10 @@ export default function ScamSafetyBox({
       {/* LEFT: safety tips as a "pill" */}
       <View style={styles.leftColumn}>
         <View style={styles.warningBox}>
-          <Text style={styles.title}>⚠️ Trade Safety</Text>
-          <Text style={styles.item}>• Too good = scam.</Text>
-<Text style={styles.item}>• Don’t share login.</Text>
-<Text style={styles.item}>• Use trusted servers.</Text>
-
+          <Text style={styles.title}>{t('chat.safety_title')}</Text>
+          <Text style={styles.item}>{t('chat.safety_too_good')}</Text>
+          <Text style={styles.item}>{t('chat.safety_no_login')}</Text>
+          <Text style={styles.item}>{t('chat.safety_trusted_servers')}</Text>
         </View>
       </View>
 
@@ -66,10 +67,10 @@ export default function ScamSafetyBox({
             onPress={handleOpenServer}
           >
             <Text style={[styles.buttonTitle, styles.serverButtonTitle]}>
-              Join Server
+              {t('chat.join_server')}
             </Text>
             <Text style={[styles.buttonSub, styles.serverButtonSub]}>
-              Trade using a trusted link
+              {t('chat.join_server_desc')}
             </Text>
           </TouchableOpacity>
 
@@ -79,12 +80,12 @@ export default function ScamSafetyBox({
             onPress={handleOpenRating}
           >
             <Text style={[styles.buttonTitle, styles.rateButtonTitle]}>
-              {hasRated ? 'Edit Rating' : 'Rate Trader'}
+              {hasRated ? t('chat.rating_edit') : t('chat.rating_btn')}
             </Text>
             <Text style={[styles.buttonSub, styles.rateButtonSub]}>
               {hasRated
-                ? 'Update your review'
-                : 'Help other players stay safe'}
+                ? t('chat.rating_update_desc')
+                : t('chat.rating_help_desc')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -130,13 +131,13 @@ const getStyles = (isDark) =>
       fontSize: 11,
       color: isDark ? '#FCD34D' : '#92400E',
       marginBottom: 6,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     item: {
       fontSize: 9,
       color: isDark ? '#E5E7EB' : '#4B5563',
       marginBottom: 5,
-      fontFamily:'Lato-Regular'
+
     },
 
     // shared button base (same size)
@@ -161,7 +162,7 @@ const getStyles = (isDark) =>
 
     buttonTitle: {
       fontSize: 11,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     buttonSub: {
       fontSize: 8,
@@ -171,17 +172,17 @@ const getStyles = (isDark) =>
     // color overrides
     serverButtonTitle: {
       color: config.colors.primary,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     serverButtonSub: {
       color: isDark ? '#CBD5F5' : '#6B7280',
     },
     rateButtonTitle: {
       color: '#ffffff',
-      fontFamily: 'Lato-Regular',
+
     },
     rateButtonSub: {
       color: 'rgba(255,255,255,0.9)',
-      fontFamily: 'Lato-Regular',
+
     },
   });

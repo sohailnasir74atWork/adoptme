@@ -186,7 +186,7 @@ const GroupMessageList = ({
             )}
 
             {/* Username with badges - shown for ALL messages (including current user) */}
-           
+
 
             <Menu>
               <MenuTrigger
@@ -197,92 +197,92 @@ const GroupMessageList = ({
                 <View style={[
                   isMyMessage ? styles.myMessageText : styles.otherMessageText,
                 ]}>
-                   <TouchableOpacity
-              onPress={() => {
-                if (onUserPress && item.senderId) {
-                  onUserPress({
-                    senderId: item.senderId,
-                    sender: senderName,
-                    avatar: senderAvatar,
-                  });
-                }
-              }}
-              disabled={!onUserPress}
-              activeOpacity={0.7}
-              style={{ alignSelf: 'flex-start' }}
-            >
-              <View style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                flexWrap: 'nowrap',
-              }}>
-                <Text 
-                  style={[styles.userNameText, { 
-                    flexShrink: 1,
-                  }]} 
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {senderName}
-                </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (onUserPress && item.senderId) {
+                        onUserPress({
+                          senderId: item.senderId,
+                          sender: senderName,
+                          avatar: senderAvatar,
+                        });
+                      }
+                    }}
+                    disabled={!onUserPress}
+                    activeOpacity={0.7}
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      flexWrap: 'nowrap',
+                    }}>
+                      <Text
+                        style={[styles.userNameText, {
+                          flexShrink: 1,
+                        }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {senderName}
+                      </Text>
 
-                {/* Pro badge */}
-                {item?.isPro && (
-                  <Image
-                    source={require('../../../assets/pro.png')}
-                    style={{ width: 16, height: 16, marginLeft: 4 }}
-                  />
-                )}
+                      {/* Pro badge */}
+                      {item?.isPro && (
+                        <Image
+                          source={require('../../../assets/pro.png')}
+                          style={{ width: 16, height: 16, marginLeft: 4 }}
+                        />
+                      )}
 
-                {/* Verified badge */}
-                {item?.robloxUsernameVerified && (
-                  <Image
-                    source={require('../../../assets/verification.png')}
-                    style={{ width: 16, height: 16, marginLeft: 4 }}
-                  />
-                )}
+                      {/* Verified badge */}
+                      {item?.robloxUsernameVerified && (
+                        <Image
+                          source={require('../../../assets/verification.png')}
+                          style={{ width: 16, height: 16, marginLeft: 4 }}
+                        />
+                      )}
 
-                {/* Trophy badge (recent win) */}
-                {hasRecentWin && (
-                  <Image
-                    source={require('../../../assets/trophy.webp')}
-                    style={{ width: 10, height: 10, marginLeft: 4 }}
-                  />
-                )}
+                      {/* Trophy badge (recent win) */}
+                      {hasRecentWin && (
+                        <Image
+                          source={require('../../../assets/trophy.webp')}
+                          style={{ width: 10, height: 10, marginLeft: 4 }}
+                        />
+                      )}
 
-                {/* Creator badge */}
-                {item?.isCreator && (
-                  <View style={{
-                    backgroundColor: '#8B5CF6',
-                    paddingHorizontal: 4,
-                    paddingVertical: 1,
-                    borderRadius: 3,
-                    marginLeft: 4,
-                  }}>
-                    <Text style={{
-                      color: '#FFF',
-                      fontSize: 9,
-                      fontWeight: '600',
-                    }}>Creator</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity> 
+                      {/* Creator badge */}
+                      {item?.isCreator && (
+                        <View style={{
+                          backgroundColor: '#8B5CF6',
+                          paddingHorizontal: 4,
+                          paddingVertical: 1,
+                          borderRadius: 3,
+                          marginLeft: 4,
+                        }}>
+                          <Text style={{
+                            color: '#FFF',
+                            fontSize: 9,
+                            fontWeight: '600',
+                          }}>Creator</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
                   {/* Images - Support multiple images */}
                   {(item.imageUrls || item.imageUrl) && (() => {
                     // Support both array (imageUrls) and single (imageUrl) for backward compatibility
                     const imageArray = Array.isArray(item.imageUrls) && item.imageUrls.length > 0
                       ? item.imageUrls
                       : (item.imageUrl ? [item.imageUrl] : []);
-                    
+
                     if (imageArray.length === 0) return null;
-                    
+
                     return (
                       <View style={{ marginBottom: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
                         {imageArray.map((imageUri, imgIndex) => {
                           // Fixed size approach: larger for single, smaller for multiple
                           const imageSize = imageArray.length === 1 ? 250 : imageArray.length === 2 ? 150 : 110;
-                          
+
                           return (
                             <TouchableOpacity
                               key={`img-${imgIndex}`}
@@ -294,14 +294,14 @@ const GroupMessageList = ({
                                 })
                               }
                             >
-                              <Image 
-                                source={{ uri: imageUri }} 
-                                style={{ 
+                              <Image
+                                source={{ uri: imageUri }}
+                                style={{
                                   width: imageSize,
                                   height: imageSize,
                                   borderRadius: 8,
                                   resizeMode: 'cover',
-                                }} 
+                                }}
                               />
                             </TouchableOpacity>
                           );
@@ -314,9 +314,10 @@ const GroupMessageList = ({
                   {hasFruits && (
                     <View
                       style={[
-                        fruitStyles.fruitsWrapper,                     ]}
+                        fruitStyles.fruitsWrapper,]}
                     >
                       {fruits.map((fruit, index) => {
+                        const { name: nameColor, value: valueColor } = fruitColors;
                         const valueType = (fruit.valueType || 'd').toLowerCase();
 
                         let valueBadgeStyle = fruitStyles.badgeDefault;
@@ -335,14 +336,14 @@ const GroupMessageList = ({
 
                             <View style={fruitStyles.fruitInfo}>
                               <Text
-                                style={[fruitStyles.fruitName, { color: fruitColors.name }]}
+                                style={[fruitStyles.fruitName, { color: nameColor }]}
                                 numberOfLines={1}
                               >
                                 {`${fruit.name || fruit.Name}  `}
                               </Text>
 
                               <Text
-                                style={[fruitStyles.fruitValue, { color: fruitColors.value }]}
+                                style={[fruitStyles.fruitValue, { color: valueColor }]}
                               >
                                 · Value: {Number(fruit.value || 0).toLocaleString()}
                               </Text>
@@ -406,31 +407,31 @@ const GroupMessageList = ({
                 </View>
               </MenuTrigger>
 
-            <MenuOptions
-              customStyles={{
-                optionsContainer: styles.menuoptions,
-                optionWrapper: styles.menuOption,
-                optionText: styles.menuOptionText,
-              }}
-            >
-              <MenuOption onSelect={() => handleCopy(item)}>
-                <Text style={styles.menuOptionText}>Copy</Text>
-              </MenuOption>
-              {userId && onReply && (
-                <MenuOption onSelect={() => onReply(item)}>
-                  <Text style={styles.menuOptionText}>{t('chat.reply')}</Text>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: styles.menuoptions,
+                  optionWrapper: styles.menuOption,
+                  optionText: styles.menuOptionText,
+                }}
+              >
+                <MenuOption onSelect={() => handleCopy(item)}>
+                  <Text style={styles.menuOptionText}>Copy</Text>
                 </MenuOption>
-              )}
-            </MenuOptions>
-          </Menu>
+                {userId && onReply && (
+                  <MenuOption onSelect={() => onReply(item)}>
+                    <Text style={styles.menuOptionText}>{t('chat.reply')}</Text>
+                  </MenuOption>
+                )}
+              </MenuOptions>
+            </Menu>
           </View>
 
           <Text style={styles.timestamp}>
             {item.timestamp
               ? new Date(item.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
+                hour: '2-digit',
+                minute: '2-digit',
+              })
               : ''}
           </Text>
         </View>

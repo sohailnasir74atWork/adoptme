@@ -12,6 +12,7 @@ import {
 import { useGlobalState } from "../GlobelStats";
 import config from "../Helper/Environment";
 import { ref, push } from "@react-native-firebase/database";
+import { useTranslation } from "react-i18next";
 
 const ReportTradePopup = ({ visible, trade, onClose }) => {
   const [selectedReason, setSelectedReason] = useState("Inappropriate");
@@ -19,22 +20,23 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const { theme, user, appdatabase } = useGlobalState();
+  const { t } = useTranslation();
   const isDarkMode = theme === "dark";
 
   const handleSubmit = () => {
     if (showCustomInput && !customReason.trim()) {
-      Alert.alert("Error", "Please enter a reason for reporting.");
+      Alert.alert(t("home.alert.error"), t("trade.report.reason_required"));
       return;
     }
 
     if (!trade?.id) {
-      Alert.alert("Error", "Invalid trade. Unable to report.");
+      Alert.alert(t("home.alert.error"), t("trade.report.invalid_trade"));
       return;
     }
 
     setLoading(true);
 
-    
+
     const reportsRef = ref(appdatabase, "tradeReports"); // New node for trade reports
     const reportData = {
       tradeId: trade.id,
@@ -47,16 +49,16 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
       .then(() => {
         setLoading(false); // Stop loader
         Alert.alert(
-          "Report Submitted",
-          `Trade ID: ${trade.id}\nReason: ${showCustomInput ? customReason : selectedReason
-          }\nThank you for reporting this trade.`
+          t("trade.report.success_title"),
+          `${t("trade.report.trade_id_label")}${trade.id}\n${t("trade.report.reason_label") || "Reason"}: ${showCustomInput ? customReason : selectedReason
+          }\n${t("trade.report.success_message")}`
         );
         onClose(true); // Indicate success
       })
       .catch((error) => {
         console.error("Error reporting trade:", error);
         setLoading(false); // Stop loader
-        Alert.alert("Error", "Failed to submit the report. Please try again.");
+        Alert.alert(t("home.alert.error"), t("trade.report.submit_error"));
       });
   };
 
@@ -66,33 +68,36 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.popup}>
-          <Text style={styles.title}>Report Trade</Text>
-          <Text style={styles.messageText}>{`Trade ID: ${trade?.id || "Anonymous"}`}</Text>
-          <Text style={styles.messageText}>{`Trader: ${trade?.traderName || "Anonymous"}`}</Text>
+          <Text style={styles.title}>{t("trade.report.title")}</Text>
+          <Text style={styles.messageText}>{`${t("trade.report.trade_id_label")}${trade?.id || t("profile.anonymous")}`}</Text>
+          <Text style={styles.messageText}>{`${t("trade.report.trader_label")}${trade?.traderName || t("profile.anonymous")}`}</Text>
 
           <View style={styles.optionsContainer}>
-            {["Inappropriate", "Fraud"].map((reason) => (
-              <TouchableOpacity
-                key={reason}
-                style={[
-                  styles.option,
-                  selectedReason === reason && styles.selectedOption,
-                ]}
-                onPress={() => {
-                  setSelectedReason(reason);
-                  setShowCustomInput(false);
-                }}
-              >
-                <Text
+            {["Inappropriate", "Fraud"].map((reason) => {
+              const reasonKey = reason === "Inappropriate" ? "trade.report.reason_inappropriate" : "trade.report.reason_fraud";
+              return (
+                <TouchableOpacity
+                  key={reason}
                   style={[
-                    styles.optionText,
-                    selectedReason === reason && styles.selectedOptionText,
+                    styles.option,
+                    selectedReason === reason && styles.selectedOption,
                   ]}
+                  onPress={() => {
+                    setSelectedReason(reason);
+                    setShowCustomInput(false);
+                  }}
                 >
-                  {reason}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      selectedReason === reason && styles.selectedOptionText,
+                    ]}
+                  >
+                    {t(reasonKey)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
 
             <TouchableOpacity
               style={[
@@ -107,7 +112,7 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
                   showCustomInput && styles.selectedOptionText,
                 ]}
               >
-                Other
+                {t("trade.report.reason_other")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -115,7 +120,7 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
           {showCustomInput && (
             <TextInput
               style={styles.input}
-              placeholder="Enter custom reason"
+              placeholder={t("trade.report.custom_reason_placeholder")}
               placeholderTextColor="#888"
               value={customReason}
               onChangeText={setCustomReason}
@@ -124,7 +129,7 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.button} onPress={onClose}>
-              <Text style={styles.buttonText}>Cancel</Text>
+              <Text style={styles.buttonText}>{t("trade.report.button_cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -137,7 +142,7 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Submit</Text>
+                <Text style={styles.buttonText}>{t("trade.report.button_submit")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -164,7 +169,7 @@ const getStyles = (isDarkMode) =>
     },
     title: {
       fontSize: 18,
-      fontFamily: "Lato-Bold",
+      fontWeight: 'bold',
       marginBottom: 10,
       color: isDarkMode ? "white" : "black",
     },

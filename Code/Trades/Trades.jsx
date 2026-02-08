@@ -244,11 +244,11 @@ const TradeList = ({ route }) => {
           where("featuredUntil", ">", oneDayAgo)
         )
       );
-  
+
       if (featuredSnapshot.size >= 2) {
         Alert.alert(
-          "Limit Reached",
-          "You can only feature 2 trades every 24 hours."
+          t("trade.limit_reached_title"),
+          t("trade.limit_reached_message")
         );
         return;
       }
@@ -301,7 +301,7 @@ const TradeList = ({ route }) => {
       );
     } catch (err) {
       console.error("❌ Error checking featured trades:", err);
-      Alert.alert("Error", "Unable to verify your featured trades. Try again later.");
+      Alert.alert(t("home.alert.error"), t("trade.verify_error_message"));
     }
   };
 
@@ -311,11 +311,11 @@ const TradeList = ({ route }) => {
 
   const formatValue = (value) => {
     if (value >= 1_000_000_000) {
-      return `${(value / 1_000_000_000).toFixed(1)}B`; // Billions
+      return `${(value / 1_000_000_000).toFixed(1)}${t("trade.num_b")}`; // Billions
     } else if (value >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}M`; // Millions
+      return `${(value / 1_000_000).toFixed(1)}${t("trade.num_m")}`; // Millions
     } else if (value >= 1_000) {
-      return `${(value / 1_000).toFixed(1)}K`; // Thousands
+      return `${(value / 1_000).toFixed(1)}${t("trade.num_k")}`; // Thousands
     } else {
       return value?.toLocaleString(); // Default formatting
     }
@@ -326,7 +326,7 @@ const TradeList = ({ route }) => {
     try {
       // ✅ Get status filters and map to status values
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
-      const statusValues = statusFilters.length > 0 
+      const statusValues = statusFilters.length > 0
         ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
         : null;
 
@@ -352,12 +352,12 @@ const TradeList = ({ route }) => {
       }
 
       const normalTradesQuerySnap = await getDocs(normalQuery);
-  
+
       const newNormalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       }));
-  
+
       if (newNormalTrades.length === 0) {
         setHasMore(false);
         return;
@@ -372,7 +372,7 @@ const TradeList = ({ route }) => {
       setTrades((prevTrades) => [...prevTrades, ...mergedTrades]);
       setLastDoc(
         normalTradesQuerySnap.docs[normalTradesQuerySnap.docs.length - 1]
-      );      
+      );
       setHasMore(newNormalTrades.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ Error fetching more trades:', error);
@@ -418,14 +418,14 @@ const TradeList = ({ route }) => {
     robloxUsernameVerified: selectedTrade?.robloxUsernameVerified || false,
   }
   const handleChatNavigation2 = async () => {
-    
+
 
     const callbackfunction = () => {
       mixpanel.track("Inbox Trade");
       navigation.navigate('PrivateChatTrade', {
         selectedUser: selectedUser,
-        item:selectedTrade,
-        
+        item: selectedTrade,
+
       });
     };
 
@@ -438,7 +438,7 @@ const TradeList = ({ route }) => {
 
   const handleEndReached = () => {
     if (loading || isSearching) return; // ✅ Prevents unnecessary calls
-    
+
     // ✅ Handle search pagination
     if (isSearchMode && searchHasMore) {
       if (!user?.id) {
@@ -448,7 +448,7 @@ const TradeList = ({ route }) => {
       }
       return;
     }
-    
+
     // ✅ Handle normal pagination
     if (!hasMore || loading) return;
     if (!user?.id) {
@@ -475,17 +475,17 @@ const TradeList = ({ route }) => {
     }
 
     if (!searchInHas && !searchInWants) {
-      Alert.alert('Search Error', 'Please select at least one search option (ME side or YOU side)');
+      Alert.alert(t("trade.search_error_title"), t("trade.search_options_error"));
       return;
     }
 
     setIsSearching(true);
     try {
       const searchTermLower = searchTerm.toLowerCase().trim();
-      
+
       // ✅ Get status filters
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
-      const statusValues = statusFilters.length > 0 
+      const statusValues = statusFilters.length > 0
         ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
         : null;
 
@@ -498,18 +498,18 @@ const TradeList = ({ route }) => {
         try {
           const hasQuery = lastDocSnapshot
             ? query(
-                collection(firestoreDB, 'trades_new'),
-                where('hasItemNames', 'array-contains', searchTermLower),
-                orderBy('timestamp', 'desc'),
-                startAfter(lastDocSnapshot),
-                limit(SEARCH_PAGE_SIZE)
-              )
+              collection(firestoreDB, 'trades_new'),
+              where('hasItemNames', 'array-contains', searchTermLower),
+              orderBy('timestamp', 'desc'),
+              startAfter(lastDocSnapshot),
+              limit(SEARCH_PAGE_SIZE)
+            )
             : query(
-                collection(firestoreDB, 'trades_new'),
-                where('hasItemNames', 'array-contains', searchTermLower),
-                orderBy('timestamp', 'desc'),
-                limit(SEARCH_PAGE_SIZE)
-              );
+              collection(firestoreDB, 'trades_new'),
+              where('hasItemNames', 'array-contains', searchTermLower),
+              orderBy('timestamp', 'desc'),
+              limit(SEARCH_PAGE_SIZE)
+            );
 
           const hasSnapshot = await getDocs(hasQuery);
           hasSnapshot.docs?.forEach((docSnap) => {
@@ -532,18 +532,18 @@ const TradeList = ({ route }) => {
         try {
           const wantsQuery = lastDocSnapshot
             ? query(
-                collection(firestoreDB, 'trades_new'),
-                where('wantsItemNames', 'array-contains', searchTermLower),
-                orderBy('timestamp', 'desc'),
-                startAfter(lastDocSnapshot),
-                limit(SEARCH_PAGE_SIZE)
-              )
+              collection(firestoreDB, 'trades_new'),
+              where('wantsItemNames', 'array-contains', searchTermLower),
+              orderBy('timestamp', 'desc'),
+              startAfter(lastDocSnapshot),
+              limit(SEARCH_PAGE_SIZE)
+            )
             : query(
-                collection(firestoreDB, 'trades_new'),
-                where('wantsItemNames', 'array-contains', searchTermLower),
-                orderBy('timestamp', 'desc'),
-                limit(SEARCH_PAGE_SIZE)
-              );
+              collection(firestoreDB, 'trades_new'),
+              where('wantsItemNames', 'array-contains', searchTermLower),
+              orderBy('timestamp', 'desc'),
+              limit(SEARCH_PAGE_SIZE)
+            );
 
           const wantsSnapshot = await getDocs(wantsQuery);
           wantsSnapshot.docs?.forEach((docSnap) => {
@@ -600,10 +600,10 @@ const TradeList = ({ route }) => {
       // ✅ Update pagination state
       setSearchLastDoc(lastDocSnapshot);
       setSearchHasMore(searchedTrades.length >= SEARCH_PAGE_SIZE);
-      
+
     } catch (error) {
       console.error('❌ Error searching trades:', error);
-      Alert.alert('Search Error', 'Failed to search trades. Please try again.');
+      Alert.alert(t("trade.search_error_title"), t("trade.search_failed"));
     } finally {
       setIsSearching(false);
     }
@@ -614,7 +614,7 @@ const TradeList = ({ route }) => {
     try {
       // ✅ Get status filters (win, lose, fair) and map to status values (w, l, f)
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
-      const statusValues = statusFilters.length > 0 
+      const statusValues = statusFilters.length > 0
         ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
         : null;
 
@@ -638,12 +638,12 @@ const TradeList = ({ route }) => {
       }
 
       const normalTradesQuerySnap = await getDocs(normalQuery);
-  
+
       const normalTrades = normalTradesQuerySnap.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       }));
-  
+
 
       // ✅ Build query for featured trades
       let featuredQuery = query(
@@ -665,7 +665,7 @@ const TradeList = ({ route }) => {
       }
 
       const featuredQuerySnapshot = await getDocs(featuredQuery);
-  
+
       let featuredTrades = [];
       if (!featuredQuerySnapshot.empty) {
         featuredTrades = featuredQuerySnapshot.docs.map((docSnap) => ({
@@ -845,7 +845,7 @@ const TradeList = ({ route }) => {
   useEffect(() => {
     // Skip refetch on initial mount (user?.id effect handles that)
     if (isInitialMountRef.current) return;
-    
+
     // Refetch when status filters change to apply database-level filtering
     if (user?.id) {
       fetchInitialTrades();
@@ -856,7 +856,7 @@ const TradeList = ({ route }) => {
   const closeProfileDrawer = async () => {
     setIsDrawerVisible(false);
   };
-  const handleOpenProfile = async(item)=>{
+  const handleOpenProfile = async (item) => {
     if (!user?.id) {
       setIsSigninDrawerVisible(true);
       return;
@@ -873,7 +873,22 @@ const TradeList = ({ route }) => {
     }
     setIsDrawerVisible(true);
   }
-  
+
+  // ✅ Parse values data for image lookup
+  const parsedValuesData = useMemo(() => {
+    try {
+      const rawData = localState.data;
+      if (!rawData) return [];
+
+      const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
+    } catch (error) {
+      console.error("❌ Error parsing data:", error);
+      return [];
+    }
+  }, [localState.data]);
+
+
   const renderTextWithUsername = (description) => {
     const parts = description.split(/(@\w+)/g); // Split text by @username pattern
 
@@ -901,15 +916,9 @@ const TradeList = ({ route }) => {
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+  const getImageUrl = (item, baseImgUrl) => {
 
     if (!item || !item.name) return '';
-
-    if (isGG) {
-      const encoded = encodeURIComponent(item.name);
-      //   console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
-      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
-    }
 
     if (!item.image || !baseImgUrl) return '';
     return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
@@ -933,9 +942,9 @@ const TradeList = ({ route }) => {
   // ✅ Scroll to top handler
   const handleScrollToTop = useCallback(() => {
     if (!flatListRef?.current) return;
-    
+
     triggerHapticFeedback('impactLight');
-    
+
     try {
       // Scroll to index 0 (top of list)
       flatListRef.current.scrollToIndex({
@@ -970,8 +979,7 @@ const TradeList = ({ route }) => {
 
     const isProfit = item.hasTotal > item.wantsTotal; // Profit if trade ratio > 1
     const neutral = item.hasTotal === item.wantsTotal // Exactly 1:1 trade
-    const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : "Anonymous";
-
+    const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : "Unknown";
     // if ((index + 1) % 10 === 0 && !isProStatus) {
     //   return <MyNativeAdComponent />;
     // }
@@ -1017,14 +1025,13 @@ const TradeList = ({ route }) => {
       // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
       callbackfunction();
     };
-const GG = item.isSharkMode === 'GG'
     return (
       <View style={[styles.tradeItem, item.isFeatured && { backgroundColor: isDarkMode ? '#34495E' : 'rgba(245, 222, 179, 0.6)' }]}>
         {item.isFeatured && <View style={styles.tag}></View>}
 
 
         <View style={styles.tradeHeader}>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={()=>handleOpenProfile(item)}>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => handleOpenProfile(item)}>
             <Image source={{ uri: item.avatar }} style={styles.itemImageUser} />
 
             <View style={{ justifyContent: 'center', marginLeft: 10 }}>
@@ -1032,14 +1039,14 @@ const GG = item.isSharkMode === 'GG'
                 {item.traderName}{' '}
                 {item.isPro && (
                   <Image
-                    source={require('../../assets/pro.png')} 
+                    source={require('../../assets/pro.png')}
                     style={{ width: 10, height: 10 }}
                   />
                 )}{' '}
                 {item.robloxUsernameVerified && (
                   <Image
-                    source={require('../../assets/verification.png')} 
-                    style={{ width: 10, height: 10 }} 
+                    source={require('../../assets/verification.png')}
+                    style={{ width: 10, height: 10 }}
                   />
                 )}{' '}
                 {(() => {
@@ -1080,32 +1087,36 @@ const GG = item.isSharkMode === 'GG'
             {/* Status Badge (Win/Lose/Fair) - Only show if status field exists */}
             {item.status && (
               <View style={[
-                styles.dealContainer, 
-                { 
+                styles.dealContainer,
+                {
                   backgroundColor: item.status === 'w' ? '#10B981' : // Green for win
-                                  item.status === 'f' ? config.colors.secondary : // Blue for fair
-                                  config.colors.primary, // Pink/red for lose
+                    item.status === 'f' ? config.colors.secondary : // Blue for fair
+                      config.colors.primary, // Pink/red for lose
                   marginRight: 5,
                 }
               ]}>
                 <Text style={styles.dealText}>
-                  {item.status === 'w' ? 'Win' : item.status === 'f' ? 'Fair' : 'Lose'}
+                  {item.status === 'w' ? t('trade.status_win') : item.status === 'f' ? t('trade.status_fair') : t('trade.status_lose')}
                 </Text>
               </View>
             )}
-            {/* Shark/Frost/GG Badge */}
-            <View style={[styles.dealContainer, { backgroundColor: item.isSharkMode == 'GG' ? '#5c4c49' : item.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen }]}>
-              <Text style={styles.dealText}>
-
-                {item.isSharkMode == 'GG' ? 'GG Values' : item.isSharkMode === true ? 'Shark' : 'Frost'}
-              </Text>
-
-            </View>
+            {item.isSharkMode !== undefined && (
+              <View style={[styles.dealContainer, {
+                backgroundColor: item.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
+                paddingVertical: 1,
+                paddingHorizontal: 6,
+                borderRadius: 6,
+              }]}>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
+                  {item.isSharkMode === true ? t('home.shark') : t('home.frost')}
+                </Text>
+              </View>
+            )}
             <FontAwesome
               name='message'
               size={18}
               color={config.colors.primary}
-              onPress={()=>handleOpenProfile(item)}
+              onPress={() => handleOpenProfile(item)}
               solid={false}
             />
             {/* <Icon
@@ -1148,13 +1159,13 @@ const GG = item.isSharkMode === 'GG'
                         </View>
                         {/* ✅ Image */}
                         <Image
-                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
+                          source={{ uri: getImageUrl(tradeItem, localState.imgurl) }}
                           style={styles.gridItemImage}
                         />
                         {/* ✅ Item name below image */}
                         <Text style={styles.itemName} numberOfLines={1}>
-                          {tradeItem.name && tradeItem.name.length > 8 
-                            ? `${tradeItem.name.substring(0, 8)}...` 
+                          {tradeItem.name && tradeItem.name.length > 8
+                            ? `${tradeItem.name.substring(0, 8)}...`
                             : tradeItem.name || ''}
                         </Text>
                       </>
@@ -1164,8 +1175,8 @@ const GG = item.isSharkMode === 'GG'
               })}
             </View>
           ) : (
-            <TouchableOpacity style={styles.dealContainerSingle} onPress={()=>handleOpenProfile(item)}>
-              <Text style={styles.dealText}>Give offer</Text>
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={() => handleOpenProfile(item)}>
+              <Text style={styles.dealText}>{t('trade.give_offer')}</Text>
             </TouchableOpacity>
           )}
           {/* Transfer Icon */}
@@ -1201,13 +1212,13 @@ const GG = item.isSharkMode === 'GG'
                         </View>
                         {/* ✅ Image */}
                         <Image
-                          source={{ uri: getImageUrl(tradeItem, GG, localState.imgurl, localState.imgurlGG) }}
+                          source={{ uri: getImageUrl(tradeItem, localState.imgurl) }}
                           style={styles.gridItemImage}
                         />
                         {/* ✅ Item name below image */}
                         <Text style={styles.itemName} numberOfLines={1}>
-                          {tradeItem.name && tradeItem.name.length > 8 
-                            ? `${tradeItem.name.substring(0, 8)}...` 
+                          {tradeItem.name && tradeItem.name.length > 8
+                            ? `${tradeItem.name.substring(0, 8)}...`
                             : tradeItem.name || ''}
                         </Text>
                       </>
@@ -1217,15 +1228,15 @@ const GG = item.isSharkMode === 'GG'
               })}
             </View>
           ) : (
-            <TouchableOpacity style={styles.dealContainerSingle} onPress={()=>handleOpenProfile(item)}>
-              <Text style={styles.dealText}>Give offer</Text>
+            <TouchableOpacity style={styles.dealContainerSingle} onPress={() => handleOpenProfile(item)}>
+              <Text style={styles.dealText}>{t('trade.give_offer')}</Text>
             </TouchableOpacity>
           )}
         </View>
         <View style={styles.tradeTotals}>
           {item.hasItems && item.hasItems.length > 0 && (
             <Text style={[styles.priceText, styles.hasBackground]}>
-              ME: {formatValue(item.hasTotal)}
+              {t('trade.me')}: {formatValue(item.hasTotal)}
             </Text>
           )}
           <View style={styles.transfer}>
@@ -1265,7 +1276,7 @@ const GG = item.isSharkMode === 'GG'
           </View>
           {item.wantsItems && item.wantsItems.length > 0 && (
             <Text style={[styles.priceText, styles.wantBackground]}>
-              YOU: {formatValue(item.wantsTotal)}
+              {t('trade.you')}: {formatValue(item.wantsTotal)}
             </Text>
           )}
         </View>
@@ -1274,24 +1285,24 @@ const GG = item.isSharkMode === 'GG'
         {item.description && <Text style={styles.description}>{renderTextWithUsername(item.description)}
         </Text>}
         {item.userId === user.id && (<View style={styles.footer}>
-          {!item.isFeatured && 
-          <TouchableOpacity  onPress={() => handleMakeFeatureTrade(item)} style={[styles.boost, {backgroundColor:'purple'}]}>
-          <Text
-           
-           
-            
-           
-            style={{  color:'white', fontFamily:'Lato-Regular' }}
-          >BOOST IT</Text>
-          </TouchableOpacity>}
- <TouchableOpacity  onPress={() => handleDelete(item)} style={[styles.boost, {backgroundColor:'black'}]}>
- <Text
-           
-           
-           color={config.colors.secondary}
-          
-           style={{ color:'white', fontFamily:'Lato-Regular' }}
-         >DELETE IT</Text>
+          {!item.isFeatured &&
+            <TouchableOpacity onPress={() => handleMakeFeatureTrade(item)} style={[styles.boost, { backgroundColor: 'purple' }]}>
+              <Text
+
+
+
+
+                style={{ color: 'white', }}
+              >{t('trade.boost_it')}</Text>
+            </TouchableOpacity>}
+          <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.boost, { backgroundColor: 'black' }]}>
+            <Text
+
+
+              color={config.colors.secondary}
+
+              style={{ color: 'white', }}
+            >{t('trade.delete_it')}</Text>
           </TouchableOpacity>
           {/* <Icon
             name="share-social"
@@ -1311,7 +1322,7 @@ const GG = item.isSharkMode === 'GG'
           onClose={() => setOpenShareModel(false)}
           tradeData={selectedTrade}
         /> */}
- 
+
       </View>
     );
   };
@@ -1324,106 +1335,116 @@ const GG = item.isSharkMode === 'GG'
   return (
     <View style={styles.container}>
       {/* ✅ Modern Search Container */}
-      <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' }]}>
-        <View style={styles.searchInputContainer}>
-          <TextInput
-            style={[styles.searchInput, { color: isDarkMode ? '#fff' : '#000' }]}
-            placeholder={t("trade.search_placeholder") || "Search items..."}
-            placeholderTextColor={isDarkMode ? '#888' : '#666'}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => {
-              setSearchLastDoc(null);
-              setSearchHasMore(true);
-              handleSearchTrades(false);
-            }}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              onPress={() => {
-                setSearchQuery('');
-                setIsSearchMode(false);
-                setSearchLastDoc(null);
-                setSearchHasMore(true);
-                fetchInitialTrades();
-              }} 
-              style={styles.clearSearchButton}
-            >
-              <Icon name="close-circle" size={20} color={isDarkMode ? '#999' : '#666'} />
-            </TouchableOpacity>
+      {/* ✅ Modern Search Container (Compact) */}
+      <View style={{ flexDirection: 'row', marginBottom: 10, marginTop: 10 }}>
+        <TextInput
+          style={{
+            flex: 1,
+            height: 44,
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            fontSize: 16,
+            backgroundColor: isDarkMode ? '#1C1C1E' : '#FFF',
+            color: isDarkMode ? '#FFF' : '#000',
+            borderWidth: 1,
+            borderColor: isDarkMode ? '#333' : '#E5E5EA'
+          }}
+          placeholder={t("trade.search_placeholder") || "Search items..."}
+          placeholderTextColor={isDarkMode ? '#888' : '#666'}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={() => {
+            setSearchLastDoc(null);
+            setSearchHasMore(true);
+            handleSearchTrades(false);
+          }}
+          returnKeyType="search"
+        />
+        <TouchableOpacity
+          style={{
+            width: 44,
+            height: 44,
+            backgroundColor: config.colors.primary,
+            borderRadius: 10,
+            marginLeft: 8,
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+          onPress={() => {
+            setSearchLastDoc(null);
+            setSearchHasMore(true);
+            handleSearchTrades(false);
+          }}
+          disabled={isSearching}
+        >
+          {isSearching ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Icon name="search" size={20} color="#fff" />
           )}
-          {/* ✅ Search Button - Inside input container on right side */}
+        </TouchableOpacity>
+      </View>
+
+      {/* ✅ Search Options Checkboxes (Below Search Bar) */}
+      {(searchQuery.length > 0) && (
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' }}>
           <TouchableOpacity
-            style={[
-              styles.searchButtonInline,
-              { 
-                backgroundColor: searchQuery.trim() ? config.colors.primary : (isDarkMode ? '#333' : '#ddd'),
-                opacity: searchQuery.trim() && !isSearching ? 1 : 0.6
-              }
-            ]}
+            style={[styles.checkboxContainer, !searchInHas && styles.checkboxUnchecked]}
             onPress={() => {
-              // ✅ Reset pagination for new search
+              triggerHapticFeedback('impactLight');
+              if (!searchInHas && !searchInWants) {
+                setSearchInWants(true);
+              }
+              setSearchInHas(!searchInHas);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, searchInHas && styles.checkboxChecked]}>
+              {searchInHas && <Icon name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
+              {t("trade.search_in_me") || "Me (Has)"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.checkboxContainer, !searchInWants && styles.checkboxUnchecked, { marginLeft: 15 }]}
+            onPress={() => {
+              triggerHapticFeedback('impactLight');
+              if (!searchInHas && !searchInWants) {
+                setSearchInHas(true);
+              }
+              setSearchInWants(!searchInWants);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, searchInWants && styles.checkboxChecked]}>
+              {searchInWants && <Icon name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
+              {t("trade.search_in_you") || "Them (Wants)"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setSearchQuery('');
+              setIsSearchMode(false);
               setSearchLastDoc(null);
               setSearchHasMore(true);
-              handleSearchTrades(false);
+              fetchInitialTrades();
             }}
-            disabled={!searchQuery.trim() || isSearching}
-            activeOpacity={0.8}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginLeft: 'auto',
+              padding: 5
+            }}
           >
-            {isSearching ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Icon name="search" size={18} color="#fff" />
-            )}
+            <Text style={{ color: isDarkMode ? '#999' : '#666', fontSize: 12, marginRight: 4 }}>Clear</Text>
+            <Icon name="close-circle" size={16} color={isDarkMode ? '#999' : '#666'} />
           </TouchableOpacity>
         </View>
-
-        {/* ✅ Search Options Checkboxes */}
-        {searchQuery.length > 0 && (
-          <View style={styles.searchOptionsContainer}>
-            <TouchableOpacity
-              style={[styles.checkboxContainer, !searchInHas && styles.checkboxUnchecked]}
-              onPress={() => {
-                triggerHapticFeedback('impactLight');
-                // ✅ Ensure at least one checkbox is always checked
-                if (!searchInHas && !searchInWants) {
-                  setSearchInWants(true);
-                }
-                setSearchInHas(!searchInHas);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.checkbox, searchInHas && styles.checkboxChecked]}>
-                {searchInHas && <Icon name="checkmark" size={14} color="#fff" />}
-              </View>
-              <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
-                Search in ME side
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.checkboxContainer, !searchInWants && styles.checkboxUnchecked]}
-              onPress={() => {
-                triggerHapticFeedback('impactLight');
-                // ✅ Ensure at least one checkbox is always checked
-                if (!searchInHas && !searchInWants) {
-                  setSearchInHas(true);
-                }
-                setSearchInWants(!searchInWants);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.checkbox, searchInWants && styles.checkboxChecked]}>
-                {searchInWants && <Icon name="checkmark" size={14} color="#fff" />}
-              </View>
-              <Text style={[styles.checkboxLabel, { color: isDarkMode ? '#fff' : '#000' }]}>
-                Search in YOU side
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      )}
 
       <FlatList
         ref={flatListRef}
@@ -1484,15 +1505,15 @@ const GG = item.isSharkMode === 'GG'
         )}
       </View>} */}
       <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Trade' />
-     
+
       <ProfileBottomDrawer
-          isVisible={isDrawerVisible}
-          toggleModal={closeProfileDrawer}  
-          startChat={handleChatNavigation2}
-          selectedUser={selectedUser}
-          isOnline={isOnline}
-          bannedUsers={bannedUsers}
-        />
+        isVisible={isDrawerVisible}
+        toggleModal={closeProfileDrawer}
+        startChat={handleChatNavigation2}
+        selectedUser={selectedUser}
+        isOnline={isOnline}
+        bannedUsers={bannedUsers}
+      />
 
       {/* ✅ Scroll to Top Button */}
       {!isAtTop && (
@@ -1617,7 +1638,7 @@ const getStyles = (isDarkMode) =>
     },
     checkboxLabel: {
       fontSize: 13,
-      fontFamily: 'Lato-Regular',
+
     },
     searchButton: {
       flexDirection: 'row',
@@ -1639,7 +1660,7 @@ const getStyles = (isDarkMode) =>
     searchButtonText: {
       color: '#fff',
       fontSize: 15,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
     tradeHeader: {
       flexDirection: 'row',
@@ -1652,7 +1673,7 @@ const getStyles = (isDarkMode) =>
       color: isDarkMode ? 'white' : "black",
     },
     traderName: {
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 8,
       color: isDarkMode ? 'white' : "black",
 
@@ -1706,7 +1727,7 @@ const getStyles = (isDarkMode) =>
     },
     itemName: {
       fontSize: 7,
-      fontFamily: 'Lato-Regular',
+
       color: isDarkMode ? '#ccc' : '#666',
       marginTop: 2,
       textAlign: 'center',
@@ -1773,7 +1794,7 @@ const getStyles = (isDarkMode) =>
     },
     priceText: {
       fontSize: 8,
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       color: '#007BFF',
       // width: '40%',
       textAlign: 'center', // Centers text within its own width
@@ -1787,7 +1808,7 @@ const getStyles = (isDarkMode) =>
     priceTextProfit: {
       fontSize: 10,
       lineHeight: 14,
-      fontFamily: 'Lato-Regular',
+
       // color: '#007BFF',
       // width: '40%',
       textAlign: 'center', // Centers text within its own width
@@ -1820,14 +1841,14 @@ const getStyles = (isDarkMode) =>
     },
     description: {
       color: isDarkMode ? 'lightgrey' : "grey",
-      fontFamily: 'Lato-Regular',
+
       fontSize: 10,
       marginTop: 5,
       lineHeight: 12
     },
     descriptionclick: {
       color: config.colors.secondary,
-      fontFamily: 'Lato-Regular',
+
       fontSize: 10,
       // marginTop: 5,
       // lineHeight:12
@@ -1858,7 +1879,7 @@ const getStyles = (isDarkMode) =>
     },
     dealText: {
       color: 'white',
-      fontWeight: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 8,
       textAlign: 'center',
       // alignItems: 'center',
@@ -1867,7 +1888,7 @@ const getStyles = (isDarkMode) =>
 
     },
     names: {
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 8,
       color: isDarkMode ? 'white' : "black",
       marginTop: -3
@@ -1884,18 +1905,18 @@ const getStyles = (isDarkMode) =>
     },
     tagcounttext: {
       color: 'white',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
       fontSize: 10
     },
     footer: {
       flexDirection: 'row',
       justifyContent: 'flex-start',
       borderTopWidth: 1,
-      backgroundColor:'#F5A327',
+      backgroundColor: '#F5A327',
       // paddingHorizontal: 30,
       paddingTop: 5,
       marginTop: 10,
-      borderTopColor:config.colors.hasBlockGreen
+      borderTopColor: config.colors.hasBlockGreen
     },
     tag: {
       backgroundColor: config.colors.hasBlockGreen,
@@ -1911,8 +1932,8 @@ const getStyles = (isDarkMode) =>
       // marginRight: 1,
       fontSize: 12,
     },
-    boost:{
-      justifyContent:'flex-start', paddingVertical:2, paddingHorizontal:5, borderRadius:3, alignItems:'center', margin:4
+    boost: {
+      justifyContent: 'flex-start', paddingVertical: 2, paddingHorizontal: 5, borderRadius: 3, alignItems: 'center', margin: 4
     },
     scrollToTopButton: {
       position: 'absolute',

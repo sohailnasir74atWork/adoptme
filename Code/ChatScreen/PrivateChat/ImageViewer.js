@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
+import { useTranslation } from 'react-i18next';
 
 const { width, height } = Dimensions.get('window');
 
@@ -16,9 +17,10 @@ const ImageViewerScreenChat = ({ route }) => {
   const routeParams = route?.params || {};
   const images = Array.isArray(routeParams.images) ? routeParams.images : [];
   const initialIndex = Math.max(0, Math.min(routeParams.initialIndex || 0, images.length - 1));
-  
+
   const listRef = useRef(null);
   const { theme } = useGlobalState();
+  const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
 
   // ✅ Memoize backgroundColor
@@ -32,7 +34,7 @@ const ImageViewerScreenChat = ({ route }) => {
         return (
           <View style={[styles.slide, { backgroundColor }]}>
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>Invalid image</Text>
+              <Text style={styles.errorText}>{t('chat.invalid_image')}</Text>
             </View>
           </View>
         );
@@ -40,8 +42,8 @@ const ImageViewerScreenChat = ({ route }) => {
 
       return (
         <View style={[styles.slide, { backgroundColor }]}>
-          <Image 
-            source={{ uri: item }} 
+          <Image
+            source={{ uri: item }}
             style={styles.image}
             resizeMode="contain"
             onError={(error) => {
@@ -80,7 +82,7 @@ const ImageViewerScreenChat = ({ route }) => {
     return (
       <View style={[styles.slide, { backgroundColor }]}>
         <Text style={[styles.errorText, { color: isDarkMode ? '#fff' : '#000' }]}>
-          No images to display
+          {t('chat.no_images')}
         </Text>
       </View>
     );

@@ -12,7 +12,7 @@ import {
   Pressable,
 } from 'react-native';
 import {
-   collection,
+  collection,
   doc,
   query,
   orderBy,
@@ -21,7 +21,7 @@ import {
   updateDoc,
   serverTimestamp,
   increment,
-  } from '@react-native-firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useNavigation } from '@react-navigation/native';
@@ -29,6 +29,8 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { validateContent } from '../../Helper/ContentModeration';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
+import { useTranslation } from 'react-i18next';
+import { useBanStatus } from '../../ChatScreen/utils';
 
 dayjs.extend(relativeTime);
 
@@ -39,7 +41,11 @@ const CommentModal = ({ visible, onClose, postId }) => {
   const { user, theme, firestoreDB } = useGlobalState();
   const { localState } = useLocalState();
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
+
+  // ✅ Check if current user is banned
+  const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
   // console.log('[CommentModal] firestoreDB:', !!firestoreDB);
 
   useEffect(() => {
@@ -62,7 +68,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
   const handleChatNavigation = useCallback((comment) => {
     const callback = () => {
       if (!user?.id) {
-        Alert.alert('Sign In Required', 'Please sign in to message');
+        Alert.alert(t('chat.sign_in_required_title'), t('feed.signin_message'));
         return;
       }
 
@@ -84,19 +90,27 @@ const CommentModal = ({ visible, onClose, postId }) => {
     if (!text || !firestoreDB) return;
     if (!firestoreDB || !postId) {
       console.error('Missing firestoreDB or postId', { firestoreDB, postId });
-      Alert.alert('Error', 'Cannot post comment right now. Please try again.');
+      Alert.alert(t('chat.error'), t('feed.cannot_post_comment'));
+      Alert.alert(t('chat.error'), t('feed.cannot_post_comment'));
+      return;
+    }
+
+    // ✅ Ban check
+    if (isMeBanned) {
+      const reason = myBanDetails?.reason || 'Access Denied';
+      Alert.alert(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
       return;
     }
 
     // ✅ Content moderation: Check comment for inappropriate content
     const contentValidation = validateContent(text);
     if (!contentValidation.isValid) {
-      Alert.alert('Content Not Allowed', contentValidation.reason || 'Your comment contains inappropriate content.');
+      Alert.alert(t('feed.content_not_allowed'), contentValidation.reason || t('feed.inappropriate_comment'));
       return;
     }
     const comment = {
       userId: user.id,
-      displayName: user.displayName || 'Guest User',
+      displayName: user.displayName || t('feed.guest_user'),
       avatar: user.avatar,
       text,
       createdAt: serverTimestamp(),
@@ -116,14 +130,14 @@ const CommentModal = ({ visible, onClose, postId }) => {
       inputRef.current?.focus();
     } catch (error) {
       console.error('Add Comment Error:', error);
-      Alert.alert('Error', 'Failed to post comment. Please try again.');
+      Alert.alert(t('chat.error'), t('feed.failed_post_comment'));
     }
   }, [commentText, user, postId, firestoreDB]);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity onPress={() => handleChatNavigation(item)} style={styles.comment}>
       <Image source={{ uri: item.avatar }} style={styles.avatar} />
-      <View style={{flex:1}}>
+      <View style={{ flex: 1 }}>
         <Text style={[styles.name, isDarkMode && styles.textDark]}>{item.displayName}</Text>
         {item.createdAt?.seconds && (
           <Text style={[styles.timestamp, isDarkMode && styles.textDark]}>
@@ -156,7 +170,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
             <View style={styles.inputRow}>
               <TextInput
                 ref={inputRef}
-                placeholder="Write a comment..."
+                placeholder={t('feed.write_comment')}
                 placeholderTextColor={isDarkMode ? '#ccc' : '#888'}
                 value={commentText}
                 onChangeText={setCommentText}
@@ -165,12 +179,12 @@ const CommentModal = ({ visible, onClose, postId }) => {
                 onSubmitEditing={handleAddComment}
               />
               <TouchableOpacity onPress={handleAddComment} style={styles.sendBtn}>
-                <Text style={styles.sendText}>Send</Text>
+                <Text style={styles.sendText}>{t('feed.send')}</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.sendText}>Close</Text>
+              <Text style={styles.sendText}>{t('feed.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -213,7 +227,7 @@ const styles = StyleSheet.create({
   comment: {
     flexDirection: 'row',
     marginBottom: 10,
-    
+
   },
   avatar: {
     width: 30,
@@ -222,21 +236,21 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   name: {
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     fontSize: 14,
     color: '#000',
   },
   text: {
-    fontFamily: 'Lato-Regular',
+
     fontSize: 13,
     color: '#333',
-    flex:1,
-    flexWrap:'wrap'
+    flex: 1,
+    flexWrap: 'wrap'
   },
   timestamp: {
     fontSize: 10,
     color: 'gray',
-    fontFamily: 'Lato-Regular',
+
   },
   inputRow: {
     flexDirection: 'row',
@@ -250,7 +264,7 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 5,
     color: '#000',
-    fontFamily: 'Lato-Regular',
+
   },
   inputDark: {
     borderColor: '#555',
@@ -273,7 +287,7 @@ const styles = StyleSheet.create({
   sendText: {
     color: '#fff',
     fontWeight: '600',
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   textDark: {
     color: '#fff',

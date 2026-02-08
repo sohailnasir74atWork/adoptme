@@ -184,6 +184,8 @@ export const createNewUser = (
   lastactivity: null,
   online: false,
   isPro: false,
+  email: loggedInUser.email || null,
+  decodedEmail: loggedInUser.email ? loggedInUser.email.replace(/\./g, '(dot)') : null,
 });
 
 export const resetUserState = (setUser) => {

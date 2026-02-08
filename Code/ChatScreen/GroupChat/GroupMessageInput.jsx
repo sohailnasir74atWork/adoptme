@@ -7,6 +7,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
+import { Image as CompressorImage } from 'react-native-compressor';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 
@@ -114,65 +115,86 @@ const GroupMessageInput = ({
       return;
     }
 
-    launchImageLibrary(
-      {
-        mediaType: 'photo',
-        selectionLimit: remainingSlots, // Allow selecting up to remaining slots
-      },
-      async (response) => {
-        if (!response || response.didCancel) return;
+    try {
+      launchImageLibrary(
+        {
+          mediaType: 'photo',
+          selectionLimit: remainingSlots, // Allow selecting up to remaining slots
+          quality: 0.8,
+          maxWidth: 1920,
+          maxHeight: 1920,
+        },
+        async (response) => {
+          try {
+            if (!response || response.didCancel) return;
 
-        if (response.errorCode) {
-          console.warn('ImagePicker error:', response.errorMessage);
-          return;
-        }
+            if (response.errorCode) {
+              console.warn('ImagePicker error:', response.errorMessage);
+              return;
+            }
 
-        const assets = response.assets || [];
-        if (assets.length > 0) {
-          const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
-          const validUris = [];
-          const rejectedCount = [];
+            const assets = response?.assets || [];
+            if (assets.length > 0) {
+              const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+              const validUris = [];
+              const rejectedCount = [];
 
-          // Check file size for each image
-          for (const asset of assets) {
-            if (!asset?.uri || typeof asset.uri !== 'string') continue;
+              // Check file size loop
+              for (const asset of assets) {
+                if (!asset?.uri || typeof asset.uri !== 'string') continue;
 
-            try {
-              const filePath = asset.uri.replace('file://', '');
-              const fileInfo = await RNFS.stat(filePath);
-              const fileSize = fileInfo.size || 0;
+                try {
+                  const filePath = asset.uri.replace('file://', '');
+                  const fileInfo = await RNFS.stat(filePath);
+                  const fileSize = fileInfo.size || 0;
 
-              if (fileSize > MAX_SIZE_BYTES) {
-                rejectedCount.push(asset.fileName || 'image');
-                continue;
+                  // 🟢 Compression Logic
+                  if (fileSize > MAX_SIZE_BYTES) {
+                    try {
+                      const compressedUri = await CompressorImage.compress(asset.uri, {
+                        maxWidth: 1024,
+                        quality: 0.7,
+                        returnableOutputType: 'uri',
+                      });
+                      validUris.push(compressedUri);
+                    } catch (compError) {
+                      console.error('Compression failed:', compError);
+                      rejectedCount.push(asset.fileName || 'image');
+                    }
+                  } else {
+                    validUris.push(asset.uri);
+                  }
+                } catch (error) {
+                  console.warn('Error checking file size:', error);
+                  // Best effort
+                  validUris.push(asset.uri);
+                }
               }
 
-              validUris.push(asset.uri);
-            } catch (error) {
-              console.warn('Error checking file size:', error);
-              // If we can't check size, allow it (better UX than blocking)
-              validUris.push(asset.uri);
+              // Show alert if any images were rejected
+              if (rejectedCount.length > 0) {
+                Alert.alert(
+                  'Image Processing Failed',
+                  `${rejectedCount.length} image(s) could not be processed.`
+                );
+              }
+
+              // Add valid images to existing ones, but cap at 3 total
+              if (validUris.length > 0) {
+                setImageUris(prev => {
+                  const combined = [...prev, ...validUris];
+                  return combined.slice(0, maxImages); // Ensure we never exceed 3
+                });
+              }
             }
-          }
-
-          // Show alert if any images were rejected
-          if (rejectedCount.length > 0) {
-            Alert.alert(
-              'Image Too Large',
-              `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
-            );
-          }
-
-          // Add valid images to existing ones, but cap at 3 total
-          if (validUris.length > 0) {
-            setImageUris(prev => {
-              const combined = [...prev, ...validUris];
-              return combined.slice(0, maxImages); // Ensure we never exceed 3
-            });
+          } catch (callbackError) {
+            console.warn('Image picker callback error:', callbackError);
           }
         }
-      }
-    );
+      );
+    } catch (launchError) {
+      console.warn('Image picker launch error:', launchError);
+    }
   }, [isBanned, imageUris.length]);
 
   const handleSend = useCallback(async () => {
@@ -197,7 +219,7 @@ const GroupMessageInput = ({
       const newCount = prevCount + 1;
       if (!localState?.isPro && newCount % 15 === 0) {
         // Show A/B test interstitial ad every 15th message for non-pro users
-        InterstitialAdManager.showAd(() => {});
+        InterstitialAdManager.showAd(() => { });
       }
       return newCount;
     });
@@ -217,7 +239,7 @@ const GroupMessageInput = ({
       const imageUrlToSend = imageUrls.length === 1 ? imageUrls[0] : (imageUrls.length > 1 ? imageUrls : null);
 
       await onSend(textToSend, imageUrlToSend, fruitsToSend, replyTo);
-      
+
       // Clear reply after successful send
       if (onCancelReply) {
         onCancelReply();
@@ -271,7 +293,7 @@ const GroupMessageInput = ({
     <View style={styles.inputWrapper}>
       {/* Reply context UI */}
       {replyTo && (
-        <View style={[styles.replyContainer, { 
+        <View style={[styles.replyContainer, {
           backgroundColor: isDark ? '#374151' : '#E5E7EB',
           flexDirection: 'row',
           alignItems: 'center',

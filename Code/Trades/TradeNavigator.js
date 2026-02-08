@@ -1,11 +1,11 @@
-import React, {  useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, Image } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TradeList from './Trades';
 import { useHaptic } from '../Helper/HepticFeedBack';
+import { useTranslation } from 'react-i18next';
 import PrivateChatScreen from '../ChatScreen/PrivateChat/PrivateChat';
 import PrivateChatHeader from '../ChatScreen/PrivateChat/PrivateChatHeader';
-import { useTranslation } from 'react-i18next';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
@@ -22,6 +22,7 @@ const HighlightedText = ({ text }) => {
 
 const TradeRulesModal = ({ visible, onClose }) => {
   const { theme } = useGlobalState();
+  const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
 
 
@@ -31,7 +32,7 @@ const TradeRulesModal = ({ visible, onClose }) => {
         <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#222' : 'white' }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: isDarkMode ? 'white' : 'black' }]}>
-              How Trading Works in Adopt Me
+              {t("trade.rules.title")}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Icon name="close-circle" size={28} color={isDarkMode ? '#bbb' : '#333'} />
@@ -39,19 +40,19 @@ const TradeRulesModal = ({ visible, onClose }) => {
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={[styles.modalText, { color: isDarkMode ? '#ccc' : '#333' }]}>
-              1. <HighlightedText text="Basics:" /> Players trade pets, items, and vehicles using the in-game trading system.{"\n"}{"\n"}
-              2. <HighlightedText text="Trade Window:" /> Each player can offer up to 9 items per trade.{"\n"}{"\n"}
-              3. <HighlightedText text="Two-Step Confirmation:" /> Players must first select items, then confirm again to finalize the trade.{"\n"}{"\n"}
-              4. <HighlightedText text="Trade License:" /> Required for trading ultra-rare or legendary items (obtained by passing a short test).{"\n"}{"\n"}
-              5. <HighlightedText text="Safe Trading:" /> Warnings appear for unfair trades; players should review offers carefully.{"\n"}{"\n"}
-              6. <HighlightedText text="Report Feature:" /> Suspicious trades can be reported directly from the trade window.{"\n"}
+              1. <HighlightedText text={t("trade.rules.basics_title")} />{t("trade.rules.basics_text")}{"\n"}{"\n"}
+              2. <HighlightedText text={t("trade.rules.window_title")} />{t("trade.rules.window_text")}{"\n"}{"\n"}
+              3. <HighlightedText text={t("trade.rules.confirmation_title")} />{t("trade.rules.confirmation_text")}{"\n"}{"\n"}
+              4. <HighlightedText text={t("trade.rules.license_title")} />{t("trade.rules.license_text")}{"\n"}{"\n"}
+              5. <HighlightedText text={t("trade.rules.safe_title")} />{t("trade.rules.safe_text")}{"\n"}{"\n"}
+              6. <HighlightedText text={t("trade.rules.report_title")} />{t("trade.rules.report_text")}{"\n"}
             </Text>
           </ScrollView>
           <TouchableOpacity
             style={[styles.closeButton, { backgroundColor: config.colors.primary }]}
             onPress={onClose}
           >
-            <Text style={[styles.closeButtonText, { color: isDarkMode ? 'white' : 'white' }]}>Close</Text>
+            <Text style={[styles.closeButtonText, { color: isDarkMode ? 'white' : 'white' }]}>{t("trade.rules.close")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -74,7 +75,7 @@ export const TradeStack = ({ selectedTheme }) => {
     () => ({
       headerStyle: { backgroundColor: selectedTheme.colors.background },
       headerTintColor: selectedTheme.colors.text,
-      headerTitleStyle: { fontFamily: 'Lato-Bold', fontSize: 24 },
+      headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     }),
     [selectedTheme]
   );
@@ -108,7 +109,7 @@ export const TradeStack = ({ selectedTheme }) => {
                     }}
                     resizeMode="contain"
                   />
-                  <Text style={{color:'white', fontFamily:'Lato-Bold' }}>Pvt Servers</Text>
+                  <Text style={{color:'white', fontWeight:'bold' }}>Pvt Servers</Text>
                 </TouchableOpacity> */}
 
                 <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5 }}>
@@ -118,7 +119,7 @@ export const TradeStack = ({ selectedTheme }) => {
                     color={config.colors.primary}
                   />
                 </TouchableOpacity>
-          
+
                 <TouchableOpacity onPress={() => setModalVisible(true)} style={{ marginRight: 8 }}>
                   <Icon
                     name="information-circle-outline"
@@ -129,40 +130,40 @@ export const TradeStack = ({ selectedTheme }) => {
               </View>
             ),
           })}
-          
+
         />
 
         {/* Private Chat Screen */}
         <Stack.Screen
-  name="PrivateChatTrade"
-  options={({ route }) => ({
-    headerTitle: () => (
-      <PrivateChatHeader
-        selectedUser={route.params?.selectedUser}
-        selectedTheme={selectedTheme}
-        bannedUsers={bannedUsers}
-        isDrawerVisible={isDrawerVisible}
-        setIsDrawerVisible={setIsDrawerVisible}
-      />
-    ),
-  })}
->
-  {(props) => (
-    <PrivateChatScreen
-      {...props}
-      bannedUsers={bannedUsers}
-      isDrawerVisible={isDrawerVisible}
-      setIsDrawerVisible={setIsDrawerVisible}
-    />
-  )}
-</Stack.Screen>
+          name="PrivateChatTrade"
+          options={({ route }) => ({
+            headerTitle: () => (
+              <PrivateChatHeader
+                selectedUser={route.params?.selectedUser}
+                selectedTheme={selectedTheme}
+                bannedUsers={bannedUsers}
+                isDrawerVisible={isDrawerVisible}
+                setIsDrawerVisible={setIsDrawerVisible}
+              />
+            ),
+          })}
+        >
+          {(props) => (
+            <PrivateChatScreen
+              {...props}
+              bannedUsers={bannedUsers}
+              isDrawerVisible={isDrawerVisible}
+              setIsDrawerVisible={setIsDrawerVisible}
+            />
+          )}
+        </Stack.Screen>
         <Stack.Screen
           name="Trade Notifier"
           component={NotifierDrawer}
-         
+          options={{ title: t("trade.notifier.title") }}
         />
       </Stack.Navigator>
-      
+
 
       {/* Trade Rules Modal */}
       <TradeRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} />
@@ -195,17 +196,17 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
 
   modalText: {
     fontSize: 14,
     textAlign: 'left',
-    fontFamily: 'Lato-Regular',
+
     lineHeight: 24,
   },
   highlightedText: {
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: config.colors.primary,
   },
   closeButton: {
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
 });
 

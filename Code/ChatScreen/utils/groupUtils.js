@@ -15,6 +15,8 @@ import {
   orderBy,
   limit,
   startAfter,
+  startAt,
+  endAt,
 } from '@react-native-firebase/firestore';
 
 const MAX_GROUP_MEMBERS = 50; // Maximum members per group
@@ -171,7 +173,7 @@ export const createGroup = async (firestoreDB, appdatabase, creatorData, memberI
     const uniqueMemberIds = (memberIds || []).filter(
       (id) => id !== creatorData.id
     );
-    
+
     if (!invitedUsersMap && uniqueMemberIds.length > 0 && appdatabase) {
       // Only fetch if not provided and we have members to invite
       try {
@@ -194,7 +196,7 @@ export const createGroup = async (firestoreDB, appdatabase, creatorData, memberI
             return null;
           }
         });
-        
+
         const userResults = await Promise.all(userPromises);
         userResults.forEach((result) => {
           if (result) {
@@ -300,7 +302,7 @@ export const sendGroupInvite = async (firestoreDB, groupId, invitedUserId, invit
     // ✅ Fetch invited user data if not provided
     let invitedUserDisplayName = 'Anonymous';
     let invitedUserAvatar = null;
-    
+
     if (invitedUserData) {
       invitedUserDisplayName = invitedUserData.displayName || 'Anonymous';
       invitedUserAvatar = invitedUserData.avatar || null;
@@ -811,7 +813,7 @@ export const addMembersToGroup = async (firestoreDB, appdatabase, groupId, newMe
   try {
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
-    
+
     if (!groupSnap.exists) {
       return { success: false, error: 'Group not found' };
     }
@@ -828,7 +830,7 @@ export const addMembersToGroup = async (firestoreDB, appdatabase, groupId, newMe
 
     // Filter out users already in group
     const uniqueNewMembers = newMemberIds.filter(id => !currentMemberIds.includes(id));
-    
+
     if (uniqueNewMembers.length === 0) {
       return { success: false, error: 'All selected users are already in the group' };
     }
@@ -863,7 +865,7 @@ export const addMembersToGroup = async (firestoreDB, appdatabase, groupId, newMe
             return null;
           }
         });
-        
+
         const userResults = await Promise.all(userPromises);
         userResults.forEach((result) => {
           if (result) {
@@ -1403,7 +1405,7 @@ export const sendJoinRequest = async (firestoreDB, groupId, requesterData) => {
       groupName: groupData.groupName || 'Group',
       creatorId: groupData.createdBy,
     };
-    
+
     const requestRef = await addDoc(collection(firestoreDB, 'group_join_requests'), requestData);
     console.log('✅ Join request created:', requestRef.id, 'for group:', groupId, 'creator:', groupData.createdBy);
 
@@ -1625,8 +1627,8 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
         if (rtdbGroupData) {
           // Try different possible structures
           if (rtdbGroupData.memberIds) {
-            rtdbMemberIds = Array.isArray(rtdbGroupData.memberIds) 
-              ? rtdbGroupData.memberIds 
+            rtdbMemberIds = Array.isArray(rtdbGroupData.memberIds)
+              ? rtdbGroupData.memberIds
               : Object.keys(rtdbGroupData.memberIds || {});
           } else if (rtdbGroupData.members) {
             // If members is an object, get the keys
@@ -1641,7 +1643,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
         console.warn('Could not fetch group data from RTDB:', rtdbFetchError.message || rtdbFetchError);
       }
     }
-    
+
     // Try to get memberIds from group_invitations as additional fallback
     let invitationMemberIds = [];
     if (memberIds.length === 0 && rtdbMemberIds.length === 0) {
@@ -1661,7 +1663,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
 
     // Combine memberIds from all sources (remove duplicates and filter out invalid values)
     const allMemberIds = [...new Set([...memberIds, ...rtdbMemberIds, ...invitationMemberIds].filter(id => id && typeof id === 'string' && id.length > 0))];
-    
+
     if (allMemberIds.length === 0) {
       console.warn(`⚠️ Warning: Could not find any memberIds for group ${groupId}. Metadata may not be fully cleaned up.`);
     } else {
@@ -1705,16 +1707,16 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
     try {
       let deletedCount = 0;
       let failedCount = 0;
-      
+
       const deleteMetaPromises = allMemberIds.map(async (memberId) => {
         if (!memberId || typeof memberId !== 'string') {
           console.warn(`⚠️ Skipping invalid memberId: ${memberId}`);
           return { success: false, memberId, reason: 'invalid_id' };
         }
-        
+
         try {
           const metaRef = ref(appdatabase, `group_meta_data/${memberId}/${groupId}`);
-          
+
           // First, verify it exists (skip if permission denied)
           let exists = true;
           try {
@@ -1732,10 +1734,10 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
               throw checkError;
             }
           }
-          
+
           // Use remove() to explicitly delete the node
           await remove(metaRef);
-          
+
           // Verify deletion was successful (skip if permission denied)
           try {
             const verifySnapshot = await get(metaRef);
@@ -1743,7 +1745,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
               // Still exists, try fallback
               console.warn(`⚠️ Remove() didn't delete metadata for ${memberId}, trying fallback...`);
               await set(metaRef, null);
-              
+
               // Verify again
               try {
                 const verifySnapshot2 = await get(metaRef);
@@ -1768,7 +1770,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
             }
             throw verifyError;
           }
-          
+
           return { success: true, memberId };
         } catch (metaError) {
           // Handle permission errors gracefully
@@ -1776,13 +1778,13 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
             console.warn(`⚠️ Permission denied when deleting metadata for ${memberId}. User may not have write access.`);
             return { success: false, memberId, reason: 'permission_denied' };
           }
-          
+
           console.error(`❌ Error deleting group metadata for member ${memberId}:`, metaError.message || metaError);
           // Fallback: try setting to null if remove fails
           try {
             const metaRef = ref(appdatabase, `group_meta_data/${memberId}/${groupId}`);
             await set(metaRef, null);
-            
+
             // Verify fallback worked (skip if permission denied)
             try {
               const verifySnapshot = await get(metaRef);
@@ -1808,14 +1810,14 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
           }
         }
       });
-      
+
       // Wait for all metadata deletions to complete and track results
       const results = await Promise.all(deleteMetaPromises);
       deletedCount = results.filter(r => r.success).length;
       failedCount = results.filter(r => !r.success).length;
-      
+
       // console.log(`✅ Deleted group metadata: ${deletedCount} successful, ${failedCount} failed out of ${allMemberIds.length} total`);
-      
+
       if (failedCount > 0) {
         const failedMembers = results.filter(r => !r.success).map(r => r.memberId);
         console.error(`❌ Failed to delete metadata for members:`, failedMembers);
@@ -1859,6 +1861,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
   }
 };
 
+// ✅ Optimize getAllGroups with Firestore search
 export const getAllGroups = async (firestoreDB, filter = 'all', searchQuery = '', limitCount = 100, lastDoc = null) => {
   if (!firestoreDB) {
     return { success: false, error: 'Missing Firestore database' };
@@ -1866,39 +1869,52 @@ export const getAllGroups = async (firestoreDB, filter = 'all', searchQuery = ''
 
   try {
     let groupsQuery;
+    const groupsRef = collection(firestoreDB, 'groups');
 
-    if (filter === 'recent') {
-      // Get recent groups (created in last 7 days) - client-side filter since Firestore timestamp comparison is complex
+    // Base constraints: group must be active
+    const baseConstraints = [where('isActive', '==', true)];
+
+    // Handle Search Query (Prefix Search)
+    if (searchQuery && searchQuery.trim()) {
+      const searchTerm = searchQuery.trim();
+      // Note: Firestore string search is case-sensitive. 
+      // For case-insensitive search, we'd need a separate lowercase field in the DB.
+      // Using 'groupName' for ordering and range query
+
       if (lastDoc) {
         groupsQuery = query(
-          collection(firestoreDB, 'groups'),
-          where('isActive', '==', true),
-          orderBy('createdAt', 'desc'),
+          groupsRef,
+          ...baseConstraints,
+          orderBy('groupName'),
+          startAt(searchTerm),
+          endAt(searchTerm + '\uf8ff'),
           startAfter(lastDoc),
           limit(limitCount)
         );
       } else {
         groupsQuery = query(
-          collection(firestoreDB, 'groups'),
-          where('isActive', '==', true),
-          orderBy('createdAt', 'desc'),
+          groupsRef,
+          ...baseConstraints,
+          orderBy('groupName'),
+          startAt(searchTerm),
+          endAt(searchTerm + '\uf8ff'),
           limit(limitCount)
         );
       }
     } else {
-      // Get all active groups
+      // No search query: Order by createdAt (Recent or All)
       if (lastDoc) {
         groupsQuery = query(
-          collection(firestoreDB, 'groups'),
-          where('isActive', '==', true),
+          groupsRef,
+          ...baseConstraints,
           orderBy('createdAt', 'desc'),
           startAfter(lastDoc),
           limit(limitCount)
         );
       } else {
         groupsQuery = query(
-          collection(firestoreDB, 'groups'),
-          where('isActive', '==', true),
+          groupsRef,
+          ...baseConstraints,
           orderBy('createdAt', 'desc'),
           limit(limitCount)
         );
@@ -1916,33 +1932,26 @@ export const getAllGroups = async (firestoreDB, filter = 'all', searchQuery = ''
       };
     });
 
-    // Filter by recent (last 7 days) if needed
-    if (filter === 'recent') {
+    // Filter by recent (last 7 days) if needed AND no search query was performed (search uses name order)
+    if (filter === 'recent' && !searchQuery) {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       groups = groups.filter(group => group.createdAtTimestamp >= sevenDaysAgo);
-    }
-
-    // Filter by search query if provided
-    if (searchQuery && searchQuery.trim()) {
-      const queryLower = searchQuery.toLowerCase().trim();
-      groups = groups.filter(group => {
-        const groupName = (group.groupName || '').toLowerCase();
-        return groupName.includes(queryLower);
-      });
     }
 
     // Check if there are more groups to load
     const hasMore = snapshot.docs.length === limitCount;
     const lastDocument = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       groups,
       hasMore,
       lastDoc: lastDocument
     };
   } catch (error) {
     console.error('Error getting all groups:', error);
+    // Fallback? Or just return error. 
+    // If index is missing, Firestore will throw an error with a link to create it.
     return { success: false, error: error.message || 'Failed to get groups' };
   }
 };

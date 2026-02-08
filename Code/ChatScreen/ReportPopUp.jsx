@@ -51,30 +51,30 @@ const ReportPopup = ({ visible, message, onClose, messagePath }) => {
     const sanitizedId = messageId.startsWith("chat-")
       ? messageId.replace("chat-", "")
       : messageId;
-  
+
     if (!sanitizedId || sanitizedId.trim().length === 0) {
       Alert.alert("Error", "Invalid message. Unable to report.");
       return;
     }
-  
+
     setLoading(true);
     // ✅ Support both group chat (chat_new) and private messages (private_messages/{chatId}/messages)
     // If messagePath is provided, use it; otherwise default to chat_new for backward compatibility
-    const messageRef = messagePath 
+    const messageRef = messagePath
       ? ref(appdatabase, `${messagePath}/${sanitizedId}`)
       : ref(appdatabase, `chat_new/${sanitizedId}`);
-  
+
     get(messageRef)
       .then((snapshot) => {
         if (!snapshot.exists()) throw new Error("Message not found");
-  
+
         const data = snapshot.val();
         if (!data || typeof data !== 'object') {
           throw new Error("Invalid message data");
         }
 
         const reportCount = Number(data?.reportCount || 0);
-  
+
         if (reportCount >= 1) {
           // ✅ Second report: delete the message
           // ✅ Await banUserwithEmail to ensure it completes
@@ -153,7 +153,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath }) => {
                   showCustomInput && styles.selectedOptionText,
                 ]}
               >
-                { t("chat.other")}
+                {t("chat.other")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -212,7 +212,7 @@ const getStyles = (isDarkMode) =>
     },
     title: {
       fontSize: 18,
-      fontFamily: "Lato-Bold",
+      fontWeight: 'bold',
       marginBottom: 10,
       color: isDarkMode ? "white" : "black",
     },

@@ -39,8 +39,8 @@ const BlockedUsersScreen = () => {
       }
 
       try {
-        const bannedUserIds = Array.isArray(localState?.bannedUsers) 
-          ? localState.bannedUsers 
+        const bannedUserIds = Array.isArray(localState?.bannedUsers)
+          ? localState.bannedUsers
           : [];
 
         if (bannedUserIds.length === 0) {
@@ -68,9 +68,9 @@ const BlockedUsersScreen = () => {
 
             return {
               id,
-              displayName: displayNameSnap?.exists() ? (displayNameSnap.val()?.trim() || 'Anonymous') : 'Anonymous',
-              avatar: avatarSnap?.exists() ? (avatarSnap.val()?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png') 
-                     : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+              displayName: displayNameSnap?.exists() ? (displayNameSnap.val()?.trim() || t('chat.anonymous')) : t('chat.anonymous'),
+              avatar: avatarSnap?.exists() ? (avatarSnap.val()?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
+                : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
             };
           } catch (error) {
             console.error(`❌ Error fetching user ${id}:`, error);
@@ -134,7 +134,7 @@ const BlockedUsersScreen = () => {
     if (!item || typeof item !== 'object') return null;
 
     const avatar = item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-    const displayName = item.displayName || 'Anonymous';
+    const displayName = item.displayName || t('chat.anonymous');
     const userId = item.id;
 
     if (!userId) return null;

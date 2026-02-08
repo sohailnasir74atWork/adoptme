@@ -73,7 +73,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     return appleAuth.onCredentialRevoked(async () => {
       try {
         await signOut(auth);
-        showWarningMessage('Session Expired', 'Please sign in again.');
+        showWarningMessage(t('signin.session_expired_title'), t('signin.session_expired_message'));
       } catch (e) {
         console.error('Error during signOut on Apple revoke:', e);
       }
@@ -82,7 +82,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
   const handleForgotPassword = async () => {
     if (!email) {
-      Alert.alert(t('home.alert.error'), 'Enter valid email address');
+      Alert.alert(t('home.alert.error'), t('signin.enter_valid_email'));
       return;
     }
 
@@ -160,8 +160,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
           await signOut(auth);
 
           Alert.alert(
-            '✅ Account Created',
-            "Please check your inbox to verify your email. If you don't see it, check the Spam or Promotions folder."
+            t('signin.account_created_title'),
+            t('signin.account_created_message')
           );
           return;
         }
@@ -175,8 +175,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
           await signOut(auth);
 
           Alert.alert(
-            '📩 Email Not Verified',
-            'A new verification link has been sent to your email. Please check your inbox or spam folder before signing in.'
+            t('signin.email_not_verified_title'),
+            t('signin.email_not_verified_message')
           );
           return;
         }
@@ -195,10 +195,12 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       else if (error?.code === 'auth/user-disabled') errorMessage = t('signin.error_user_disabled');
       else if (error?.code === 'auth/user-not-found') errorMessage = t('signin.error_user_not_found');
       else if (error?.code === 'auth/wrong-password') errorMessage = t('signin.error_wrong_password');
+      else if (error?.code === 'auth/invalid-credential') errorMessage = t('signin.error_invalid_credential');
       else if (error?.code === 'auth/email-already-in-use') errorMessage = t('signin.error_email_in_use');
       else if (error?.code === 'auth/weak-password') errorMessage = t('signin.error_weak_password');
+      else if (error?.code === 'auth/too-many-requests') errorMessage = t('signin.error_too_many_requests'); // Optional if you have it, else fallback
 
-      Alert.alert(t('signin.error_signin_message'), errorMessage);
+      Alert.alert(t('signin.error_auth'), errorMessage);
     } finally {
       setIsLoadingSecondary(false);
     }
@@ -235,14 +237,14 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose} />
       <ConditionalKeyboardWrapper>
-        <Pressable onPress={() => {}}>
+        <Pressable onPress={() => { }}>
           <View style={[styles.drawer, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
             <Text style={[styles.title, { color: selectedTheme.colors.text }]}>
               {isRegisterMode
                 ? t('signin.title_register')
                 : isForgotPasswordMode
-                ? 'Forget Password'
-                : t('signin.title_signin')}
+                  ? t('signin.title_forget_password')
+                  : t('signin.title_signin')}
             </Text>
 
             <View>
@@ -290,7 +292,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               onPress={() => setIsForgotPasswordMode(!isForgotPasswordMode)}
             >
               <Text style={styles.secondaryButtonText}>
-                {isForgotPasswordMode ? 'Signin Mode' : 'Forgetpassword Mode'}
+                {isForgotPasswordMode ? t('signin.mode_signin') : t('signin.mode_forget_password')}
               </Text>
             </TouchableOpacity>
 
@@ -303,7 +305,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 {isLoading ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Send Reset Link</Text>
+                  <Text style={styles.primaryButtonText}>{t('signin.button_send_reset_link')}</Text>
                 )}
               </TouchableOpacity>
             ) : (
@@ -322,13 +324,13 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               </TouchableOpacity>
             )}
 
-<View style={styles.container}>
-  <View style={styles.line} />
-  <Text style={[styles.textoR, { color: selectedTheme.colors.text }]}>
-    {t('signin.or')}
-  </Text>
-  <View style={styles.line} />
-</View>
+            <View style={styles.container}>
+              <View style={styles.line} />
+              <Text style={[styles.textoR, { color: selectedTheme.colors.text }]}>
+                {t('signin.or')}
+              </Text>
+              <View style={styles.line} />
+            </View>
 
             <TouchableOpacity
               style={styles.googleButton}
@@ -398,7 +400,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     textAlign: 'center',
   },
   input: {
@@ -418,7 +420,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: 'white',
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   secondaryButton: {
     padding: 10,
@@ -448,7 +450,7 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: 'white',
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   text: {
     alignSelf: 'center',
@@ -469,7 +471,7 @@ const styles = StyleSheet.create({
   textoR: {
     marginHorizontal: 10,
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   errorText: {
     fontSize: 12,

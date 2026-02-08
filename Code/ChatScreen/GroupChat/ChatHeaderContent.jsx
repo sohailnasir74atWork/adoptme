@@ -33,12 +33,12 @@ const ChatHeaderContent = ({
   const isDarkMode = theme === 'dark';
   const { t } = useTranslation();
   const [pinMessageOpen, setPinMessageOpen] = useState(false);
-  
+
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const renderMessageWithLinks = useCallback((message) => {
     if (!message || typeof message !== 'string') {
-      return <Text style={styles.pinnedText}>Invalid message</Text>;
+      return <Text style={styles.pinnedText}>{t('chat.invalid_message')}</Text>;
     }
 
     const parts = message.split(URL_REGEX);
@@ -51,7 +51,7 @@ const ChatHeaderContent = ({
             onPress={() => {
               Linking.openURL(part).catch((error) => {
                 console.error('Failed to open URL:', error);
-                Alert.alert('Error', 'Could not open the link.');
+                Alert.alert(t('chat.error'), t('chat.link_error'));
               });
             }}
           >
@@ -78,7 +78,7 @@ const ChatHeaderContent = ({
         flexDirection: 'row', justifyContent: 'space-between', padding: 10, alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
       }}>
         <Text style={{ fontSize: 12, color: isDarkMode ? 'white' : 'black' }}>
-          🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
+          {t('chat.no_spamming')}
         </Text>
         <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
           <Icon name="information-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
@@ -91,14 +91,14 @@ const ChatHeaderContent = ({
           {uniquePinnedMessages.slice(0, 1).map((msg) => {
             const msgText = msg?.text || '';
             const normalizedText = msgText.replace(/\n/g, ' ');
-            const displayText = normalizedText.length > 40 
-              ? normalizedText.substring(0, 40) + '...' 
+            const displayText = normalizedText.length > 40
+              ? normalizedText.substring(0, 40) + '...'
               : normalizedText;
 
             return (
               <View key={msg?.firebaseKey || 'unknown'} style={styles.singlePinnedMessage}>
                 <View>
-                  <Text style={styles.pinnedTextheader}>Pin Message</Text>
+                  <Text style={styles.pinnedTextheader}>{t('chat.pin_message')}</Text>
                   <Text style={styles.pinnedText}>{displayText}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setPinMessageOpen(true)} style={{ justifyContent: 'center' }}>
@@ -120,23 +120,23 @@ const ChatHeaderContent = ({
         <View style={styles.modalContainer}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', minWidth: 320 }}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Pin Messages</Text>
+              <Text style={styles.modalTitle}>{t('chat.pin_messages')}</Text>
               {uniquePinnedMessages.map((msg) => {
                 if (!msg || !msg.firebaseKey) return null;
-                
+
                 return (
                   <View key={msg.firebaseKey} style={styles.singlePinnedMessageModal}>
                     {renderMessageWithLinks(msg.text || '')}
                     {isAdmin && (
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => {
                           if (onUnpinMessage && typeof onUnpinMessage === 'function') {
                             onUnpinMessage(msg.firebaseKey);
                           }
-                        }} 
+                        }}
                         style={{ backgroundColor: config.colors.primary, marginVertical: 3 }}
                       >
-                        <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>Delete</Text>
+                        <Text style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5, color: 'white' }}>{t('chat.delete')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -171,7 +171,7 @@ const ChatHeaderContent = ({
 const getStyles = (isDarkMode) => StyleSheet.create({
   pinnedText: {
     fontSize: 12,
-    fontFamily: 'Lato-Regular',
+
     color: isDarkMode ? '#fff' : '#000',
   },
   modalContent: {
@@ -182,7 +182,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginBottom: 20,
     color: isDarkMode ? '#fff' : '#000',
   },
@@ -206,7 +206,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   pinnedTextheader: {
     fontSize: 12,
     paddingRight: 20,
-    fontFamily: 'Lato-Regular',
+
     color: config.colors.primary,
   },
   pinIcon: {
@@ -229,7 +229,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   closeButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
 });
 

@@ -27,6 +27,7 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
+import { isMatch } from '../Helper/searchHelper';
 
 
 const VALUE_TYPES = ['D', 'N', 'M'];
@@ -94,7 +95,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const [codesData, setCodesData] = useState([]);
   const { t } = useTranslation();
   const [filters, setFilters] = useState(['All']);
-  const displayedFilter = selectedFilter === 'PREMIUM' ? 'GAME PASS' : selectedFilter;
+  const displayedFilter = selectedFilter === 'PREMIUM' ? t('categories.GAME PASS') : t(`categories.${selectedFilter.toUpperCase()}`, { defaultValue: selectedFilter });
   const formatName = (name) => name.replace(/^\+/, '').replace(/\s+/g, '-');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [hasAdBeenShown, setHasAdBeenShown] = useState(false);
@@ -108,23 +109,21 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [showAd1, setShowAd1] = useState(localState?.showAd1);
   const [sortOrder, setSortOrder] = useState('none'); // 'asc', 'desc', or 'none'
-  
+
   // ✅ Add refs to track mounted state and debounce cleanup
   const isMountedRef = useRef(true);
   const debounceTimeoutRef = useRef(null);
 
 
   // ✅ Memoize categories to prevent recreation
-  const hideBadge = useMemo(() => 
-    !localState.isGG ? ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'] : ['PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
-    [localState.isGG]
+  const hideBadge = useMemo(() =>
+    ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'],
+    []
   );
-  
-  const CATEGORIES = useMemo(() => 
-    !localState.isGG 
-      ? ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'] 
-      : ['ALL', 'PETS', 'PETWEAR', 'FOODS', 'VEHICLES', 'TOYS', 'GIFTS', 'STROLLERS', 'STICKERS'],
-    [localState.isGG]
+
+  const CATEGORIES = useMemo(() =>
+    ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'],
+    []
   );
 
   // console.log(selectedFruits)
@@ -158,14 +157,14 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
         <View style={styles.imageContainer}>
           <ItemImage
-            uri={getImageUrl(item, localState.isGG, localState.imgurl, localState.imgurlGG)}
+            uri={getImageUrl(item, localState.imgurl)}
             badges={badges}
             styles={styles}
           />
           <View style={styles.itemInfo}>
             <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.value}>Value: {Number(currentValue).toLocaleString()}</Text>
-            <Text style={styles.rarity}>{item.rarity}</Text>
+            <Text style={styles.value}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
+            <Text style={styles.rarity}>{t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}</Text>
           </View>
         </View>
 
@@ -201,10 +200,10 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   });
   // ✅ Cleanup on unmount - Fixed: Use ref to track if ad was toggled to prevent infinite loop
   const hasToggledAdRef = useRef(false);
-  
+
   useEffect(() => {
     isMountedRef.current = true;
-    
+
     // ✅ Only toggle ad once on mount, not on every render
     if (!hasToggledAdRef.current) {
       hasToggledAdRef.current = true;
@@ -213,7 +212,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
         setShowAd1(newAdState);
       }
     }
-    
+
     return () => {
       isMountedRef.current = false;
       // ✅ Cleanup debounce timeout
@@ -231,14 +230,14 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           style={styles.adIcon}
         />
         <View>
-          <Text style={styles.adTitle}>Blox Fruits Values</Text>
-          <Text style={styles.tryNowText}>Try Our other app</Text>
+          <Text style={styles.adTitle}>{t('value.blox_fruits_values')}</Text>
+          <Text style={styles.tryNowText}>{t('value.try_other_app')}</Text>
         </View>
       </View>
       <TouchableOpacity style={styles.downloadButton} onPress={() => {
         handleBloxFruit(); triggerHapticFeedback('impactLight');
       }}>
-        <Text style={styles.downloadButtonText}>Download</Text>
+        <Text style={styles.downloadButtonText}>{t('value.download')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -251,14 +250,14 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           style={styles.adIcon}
         />
         <View>
-          <Text style={styles.adTitle}>MM2 Values</Text>
-          <Text style={styles.tryNowText}>Try Our other app</Text>
+          <Text style={styles.adTitle}>{t('value.mm2_values')}</Text>
+          <Text style={styles.tryNowText}>{t('value.try_other_app')}</Text>
         </View>
       </View>
       <TouchableOpacity style={styles.downloadButton} onPress={() => {
         handleadoptme(); triggerHapticFeedback('impactLight');
       }}>
-        <Text style={styles.downloadButtonText}>Download</Text>
+        <Text style={styles.downloadButtonText}>{t('value.download')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -267,7 +266,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   // Memoize the parsed data to prevent unnecessary re-parsing
   const parsedValuesData = useMemo(() => {
     try {
-      const rawData = localState.isGG ? localState.ggData : localState.data;
+      const rawData = localState.data;
       if (!rawData) return [];
 
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -276,16 +275,10 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       console.error("❌ Error parsing data:", error);
       return [];
     }
-  }, [localState.isGG, localState.data, localState.ggData]);
+  }, [localState.data]);
 
-  const getImageUrl = (item, isGG, baseImgUrl, baseImgUrlGG) => {
+  const getImageUrl = (item, baseImgUrl) => {
     if (!item || !item.name) return '';
-
-    if (isGG) {
-      const encoded = encodeURIComponent(item.name);
-      // console.log(`${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`)
-      return `${baseImgUrlGG.replace(/"/g, '')}/items/${encoded}.webp`;
-    }
 
     if (!item.image || !baseImgUrl) return '';
     return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
@@ -312,15 +305,11 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   // Optimize the search and filter logic
 
-  // useEffect(() => {
-  //   if (localState.isGG) {
-  //     const types = new Set(parsedValuesData.map(i => (i.type || '').toUpperCase()));
-  //     // console.log("🧪 GG Types:", Array.from(types));
-  //   }
-  // }, [parsedValuesData]);
+
 
 
   // Optimize the getItemValue function
+  // NOTE: Use exact property keys from data (English), NOT translated strings - data lookup keys must match
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
 
@@ -338,7 +327,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       isFlySelected ? ' - fly' :
         isRideSelected ? ' - ride' : ' - nopotion';
 
-    return Number((item[valueKey + modifierSuffix] || 0)).toFixed(2);
+    const value = Number(item[valueKey + modifierSuffix]) || 0;
+    return Number(value).toFixed(2);
   }, []);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
@@ -349,7 +339,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     let filtered = parsedValuesData.filter((item) => {
       if (!item?.name) return false;
 
-      const matchesSearch = item.name.toLowerCase().includes(searchLower);
+      const matchesSearch = isMatch(item.name, searchText);
       const matchesFilter = filterUpper === 'ALL' ||
         (CATEGORIES.includes(filterUpper) ?
           item.type?.toUpperCase() === filterUpper :
@@ -433,14 +423,12 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       // image url for this item
       const imageUrl = getImageUrl(
         item,
-        localState.isGG,
         localState.imgurl,
-        localState.imgurlGG
       );
 
       const handlePress = () => {
         if (!isMountedRef.current) return;
-        
+
         const fruitObj = {
           Name: item.Name ?? item.name,
           name: item.name,
@@ -488,14 +476,6 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       handleItemBadgePress,
       getItemValue,
       styles,
-      localState.isGG,
-      localState.imgurl,
-      localState.imgurlGG,
-      fromChat,
-      fromSetting,
-      owned,
-      setSelectedFruits,
-      setOwnedPets,
       setWishlistPets
     ]
   );
@@ -516,18 +496,18 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   const handleRefresh = useCallback(async () => {
     if (!isMountedRef.current) return;
-    
+
     setRefreshing(true);
 
     try {
       await reload(); // Re-fetch stock data
       if (!isMountedRef.current) return;
       // ✅ Show success message when values are reloaded
-      showSuccessMessage('Success', 'Values have been reloaded');
+      showSuccessMessage(t('chat.success'), t('value.values_reloaded'));
     } catch (error) {
       console.error('Error refreshing data:', error);
       if (!isMountedRef.current) return;
-      showErrorMessage('Error', 'Failed to reload values. Please try again.');
+      showErrorMessage(t('chat.error'), t('value.failed_reload'));
     } finally {
       if (isMountedRef.current) {
         setRefreshing(false);
@@ -537,7 +517,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   const toggleDrawer = useCallback(() => {
     if (!isMountedRef.current) return;
-    
+
     triggerHapticFeedback('impactLight');
     const callbackfunction = () => {
       if (!isMountedRef.current) return;
@@ -567,7 +547,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
-    
+
     // Set new timeout
     debounceTimeoutRef.current = setTimeout(() => {
       if (isMountedRef.current) {
@@ -602,10 +582,10 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
               <View style={styles.selectedPetsHeader}>
                 <Text style={styles.selectedPetsTitle}>
                   {fromChat
-                    ? 'Selected pets'
+                    ? t('value.selected_pets')
                     : owned
-                      ? 'Owned pets'
-                      : 'Wishlist'}
+                      ? t('value.owned_pets')
+                      : t('value.wishlist')}
                 </Text>
 
                 <Text style={styles.selectedPetsCount}>
@@ -651,7 +631,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
             <TextInput
               style={styles.searchInput}
-              placeholder="Search"
+              placeholder={t('value.search')}
               placeholderTextColor="#888"
               onChangeText={handleSearchChange}
             />
@@ -672,7 +652,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                     onSelect={() => applyFilter(filter)}
                   >
                     <Text style={[styles.filterOptionText, selectedFilter === filter && styles.selectedOption]}>
-                      {filter}
+                      {t(`categories.${filter.toUpperCase()}`, { defaultValue: filter.toUpperCase() })}
                     </Text>
                   </MenuOption>
                 ))}
@@ -688,7 +668,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
               }}
             >
               <Text style={styles.filterText}>
-                {sortOrder === 'asc' ? '▲ High' : sortOrder === 'desc' ? '▼ LOw' : 'Filter'}
+                {sortOrder === 'asc' ? t('value.sort_high') : sortOrder === 'desc' ? t('value.sort_low') : t('value.filter')}
               </Text>
             </TouchableOpacity>
             {!fromChat && !fromSetting && (
@@ -712,7 +692,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
               onPress={onRequestClose}
             >
               <Text style={styles.filterText}>
-                Done
+                {t('value.done')}
               </Text>
             </TouchableOpacity>}
           </View>
@@ -946,7 +926,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginBottom: 10,
   },
   input: {
@@ -1014,7 +994,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   filterText: {
     color: "white",
     fontSize: 14,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginRight: 5,
   },
   // filterOptionText: {
@@ -1023,7 +1003,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   //   color: "#333",
   // },
   selectedOption: {
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: "#34C759",
   },
   badgesContainer: {
@@ -1175,13 +1155,13 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   adTitle: {
     fontSize: 18,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#bbb' : '#333',
     // marginBottom: 5, // Adds space below the title
   },
   tryNowText: {
     fontSize: 14,
-    fontFamily: 'Lato-Regular',
+
     color: '#6A5ACD', // Adds a distinct color for the "Try Now" text
     // marginTop: 5, // Adds space between the title and the "Try Now" text
   },
@@ -1195,7 +1175,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   downloadButtonText: {
     color: 'white',
     fontSize: 14,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
   },
   selectedPetsSection: {
     paddingHorizontal: 8,

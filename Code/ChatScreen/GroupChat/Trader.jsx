@@ -58,10 +58,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const isFocused = useIsFocused();
   const [strikeInfo, setStrikeInfo] = useState(null);
   const [petModalVisible, setPetModalVisible] = useState(false);
-const [selectedFruits, setSelectedFruits] = useState([]); 
-const [device, setDevice] = useState(null)
+  const [selectedFruits, setSelectedFruits] = useState([]);
+  const [device, setDevice] = useState(null)
 
-const [selectedEmoji, setSelectedEmoji] = useState(null);
+  const [selectedEmoji, setSelectedEmoji] = useState(null);
 
   // ✅ Track last sent message to prevent duplicates (session-based, no Firebase cost)
   const lastSentMessageRef = useRef(null);
@@ -83,57 +83,57 @@ const [selectedEmoji, setSelectedEmoji] = useState(null);
   const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
   const navigation = useNavigation()
-// ✅ Memoize openProfileDrawer
-const openProfileDrawer = useCallback(async (userData) => {
-  if (!userData || !userData.senderId) return;
+  // ✅ Memoize openProfileDrawer
+  const openProfileDrawer = useCallback(async (userData) => {
+    if (!userData || !userData.senderId) return;
 
-  setSelectedUser(userData);
-  setIsDrawerVisible(true);
+    setSelectedUser(userData);
+    setIsDrawerVisible(true);
 
-  try {
-    const online = await isUserOnline(userData.senderId);
-    setIsOnline(online);
-  } catch (error) {
-    console.error('🔥 Error checking online status:', error);
-    setIsOnline(false);
-  }
-}, []);
-
-// ✅ Memoize closeProfileDrawer
-const closeProfileDrawer = useCallback(() => {
-  setIsDrawerVisible(false);
-}, []);
-
-// ✅ Memoize toggleDrawer
-const toggleDrawer = useCallback(async (userData = null) => {
-  setSelectedUser(userData);
-  setIsDrawerVisible((prev) => !prev);
-
-  if (userData?.senderId) {
     try {
       const online = await isUserOnline(userData.senderId);
       setIsOnline(online);
     } catch (error) {
-      console.error("🔥 Error checking online status:", error);
+      console.error('🔥 Error checking online status:', error);
       setIsOnline(false);
     }
-  } else {
-    setIsOnline(false);
-  }
-}, []);
+  }, []);
 
-// ✅ Memoize startPrivateChat
-const startPrivateChat = useCallback(() => {
-  const callbackfunction = () => {
-    closeProfileDrawer();
-    if (navigation && typeof navigation.navigate === 'function') {
-      navigation.navigate('PrivateChat', { selectedUser, selectedTheme });
+  // ✅ Memoize closeProfileDrawer
+  const closeProfileDrawer = useCallback(() => {
+    setIsDrawerVisible(false);
+  }, []);
+
+  // ✅ Memoize toggleDrawer
+  const toggleDrawer = useCallback(async (userData = null) => {
+    setSelectedUser(userData);
+    setIsDrawerVisible((prev) => !prev);
+
+    if (userData?.senderId) {
+      try {
+        const online = await isUserOnline(userData.senderId);
+        setIsOnline(online);
+      } catch (error) {
+        console.error("🔥 Error checking online status:", error);
+        setIsOnline(false);
+      }
+    } else {
+      setIsOnline(false);
     }
-    mixpanel.track("Inbox Chat");
-  };
-  // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
-  callbackfunction();
-}, [selectedUser, selectedTheme, closeProfileDrawer]);
+  }, []);
+
+  // ✅ Memoize startPrivateChat
+  const startPrivateChat = useCallback(() => {
+    const callbackfunction = () => {
+      closeProfileDrawer();
+      if (navigation && typeof navigation.navigate === 'function') {
+        navigation.navigate('PrivateChat', { selectedUser, selectedTheme });
+      }
+      mixpanel.track("Inbox Chat");
+    };
+    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
+    callbackfunction();
+  }, [selectedUser, selectedTheme, closeProfileDrawer]);
 
   const chatRef = useMemo(() => ref(appdatabase, 'chat_new'), []);
   const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);
@@ -148,15 +148,15 @@ const startPrivateChat = useCallback(() => {
   const validateMessage = useCallback((message) => {
     const text = (message?.text ?? "").toString();
     const trimmed = text.trim();
-  
+
     const hasFruits = Array.isArray(message?.fruits) && message.fruits.length > 0;
     const hasGif = !!message?.gif;
-  
+
     const hasContent = trimmed.length > 0 || hasFruits || hasGif;
-  
+
     return {
       ...message,
-      sender: (message?.sender ?? "Anonymous").toString().trim() || "Anonymous",
+      sender: (message?.sender ?? t("chat.anonymous")).toString().trim() || t("chat.anonymous"),
       text: trimmed, // keep trimmed text, but don't force empty for fruits-only
       // ✅ do NOT invent fake timestamps
       timestamp:
@@ -167,7 +167,7 @@ const startPrivateChat = useCallback(() => {
       _invalid: !hasContent,
     };
   }, []);
-  
+
 
   const loadMessages = useCallback(
     async (reset = false) => {
@@ -201,16 +201,16 @@ const startPrivateChat = useCallback(() => {
 
         // ✅ Safety check for bannedUsers array
         const bannedIds = Array.isArray(bannedUsers)
-        ? bannedUsers.map(u => (typeof u === "string" ? u : u?.id)).filter(Boolean)
-        : [];
-                const parsedMessages = Object.entries(data)
+          ? bannedUsers.map(u => (typeof u === "string" ? u : u?.id)).filter(Boolean)
+          : [];
+        const parsedMessages = Object.entries(data)
           .map(([key, value]) => {
             if (!key || !value || typeof value !== 'object') return null;
             return validateMessage({ id: key, ...value });
           })
           .filter(Boolean)
           .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId)).sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-  
+
         // console.log('Parsed Messages:', parsedMessages);
 
         if (parsedMessages.length === 0 && !reset) {
@@ -247,7 +247,7 @@ const startPrivateChat = useCallback(() => {
       try {
         const snapshot = await pinnedMessagesRef.once('value');
         const pinnedMessagesData = snapshot.val() || {};
-  
+
         // ✅ Safety check and transform data into an array
         const pinnedMessagesArray = Object.entries(pinnedMessagesData)
           .map(([key, value]) => {
@@ -258,15 +258,15 @@ const startPrivateChat = useCallback(() => {
             };
           })
           .filter(Boolean);
-  
+
         setPinnedMessages(pinnedMessagesArray);
       } catch (error) {
         console.error('Error loading pinned messages:', error);
       }
     };
-  
+
     fetchPinnedMessages();  // Fetch pinned messages initially
-  
+
     // Listen to real-time updates on pinned messages
     const listener = pinnedMessagesRef.on('child_added', (snapshot) => {
       if (!snapshot || !snapshot.key) return;
@@ -279,24 +279,24 @@ const startPrivateChat = useCallback(() => {
         return exists ? prev : [...prev, newPinnedMessage];
       });
     });
-  
+
     return () => {
       if (pinnedMessagesRef) {
         pinnedMessagesRef.off('child_added', listener);
       }
     };
   }, []);
-  
+
   useEffect(() => {
     const platform = Platform.OS; // "ios" or "android"
-  
+
     // console.log('Initial loading of messages.');
     loadMessages(true); // Reset and load the latest messages
     if (setChatFocused && typeof setChatFocused === 'function') {
       setChatFocused(false);
     }
     setDevice(platform);
-  }, [ setChatFocused]);
+  }, [setChatFocused]);
 
   // const bannedUserIds = bannedUsers.map((user) => user.id); // Extract IDs from bannedUsers
 
@@ -354,7 +354,7 @@ const startPrivateChat = useCallback(() => {
       Alert.alert(
         t('misc.loginToStartChat'),
         t('misc.loginRequired'),
-        [{ text: 'OK', onPress: () => setIsSigninDrawerVisible(true) }]
+        [{ text: t('chat.ok'), onPress: () => setIsSigninDrawerVisible(true) }]
       );
       setSigninMessage(true);
       return;
@@ -374,7 +374,7 @@ const startPrivateChat = useCallback(() => {
     try {
       const pinnedMessage = { ...message, pinnedAt: Date.now() };
       const newRef = await pinnedMessagesRef.push(pinnedMessage);
-  
+
       // Use the Firebase key for tracking the message
       setPinnedMessages((prev) => [
         ...prev,
@@ -382,17 +382,17 @@ const startPrivateChat = useCallback(() => {
       ]);
     } catch (error) {
       console.error('Error pinning message:', error);
-      Alert.alert(t('home.alert.error'), 'Could not pin the message. Please try again.');
+      Alert.alert(t('home.alert.error'), t('chat.pin_error'));
     }
   };
-  
+
 
 
   const unpinSingleMessage = async (firebaseKey) => {
     try {
       const messageRef = pinnedMessagesRef.child(firebaseKey);
       await messageRef.remove();  // Remove from Firebase
-  
+
       // Update local state by filtering out the removed message
       setPinnedMessages((prev) => {
         const updatedMessages = prev.filter((msg) => msg.firebaseKey !== firebaseKey);
@@ -400,10 +400,10 @@ const startPrivateChat = useCallback(() => {
       });
     } catch (error) {
       console.error('Error unpinning message:', error);
-      Alert.alert(t('home.alert.error'), 'Could not unpin the message. Please try again.');
+      Alert.alert(t('home.alert.error'), t('chat.unpin_error'));
     }
   };
-  
+
 
 
 
@@ -414,7 +414,7 @@ const startPrivateChat = useCallback(() => {
       setPinnedMessages([]);
     } catch (error) {
       console.error('Error clearing pinned messages:', error);
-      Alert.alert(t('home.alert.error'), 'Could not clear pinned messages. Please try again.');
+      Alert.alert(t('home.alert.error'), t('chat.clear_pins_error'));
     }
   };
 
@@ -427,7 +427,7 @@ const startPrivateChat = useCallback(() => {
   useEffect(() => {
     if (!currentUserEmail || !appdatabase) return;
 
-    const encodedEmail = currentUserEmail.replace(/\./g, '(dot)');
+    const encodedEmail = currentUserEmail.toLowerCase().trim().replace(/\./g, '(dot)');
     const banRef = ref(appdatabase, `banned_users_by_email/${encodedEmail}`);
 
     const unsubscribe = onValue(banRef, (snapshot) => {
@@ -447,183 +447,183 @@ const startPrivateChat = useCallback(() => {
   };
 
   // expects to be called like:
-// await handleSendMessage(replyTo, trimmedInput, fruits);
+  // await handleSendMessage(replyTo, trimmedInput, fruits);
 
-const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) => {
-  const hasEmoji  = !!emojiUrl;
+  const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) => {
+    const hasEmoji = !!emojiUrl;
 
-  // console.log(emojiUrl)
-  const hasFruits = Array.isArray(fruits) && fruits.length > 0;
+    // console.log(emojiUrl)
+    const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
-  const MAX_CHARACTERS = 250;
-  const MESSAGE_COOLDOWN = 100; // ms
-  const LINK_REGEX = /(https?:\/\/[^\s]+)/i; // no "g" flag
+    const MAX_CHARACTERS = 250;
+    const MESSAGE_COOLDOWN = 100; // ms
+    const LINK_REGEX = /(https?:\/\/[^\s]+)/i; // no "g" flag
 
-  // Must be logged in
-  if (!user?.id || !currentUserEmail) {
-    showMessage({
-      message: 'You are not loggedin',
-      description: 'You must be logged in to send Messages',
-      type: 'danger',
-    });
-    return;
-  }
-
-  // ---- Strike / ban checks ----
-  if (strikeInfo) {
-    const { strikeCount, bannedUntil } = strikeInfo;
-    const now = Date.now();
-
-    // Permanent ban
-    if (bannedUntil === 'permanent') {
+    // Must be logged in
+    if (!user?.id || !currentUserEmail) {
       showMessage({
-        message: '⛔ Permanently Banned',
-        description: 'You are permanently banned from sending messages.',
+        message: t('chat.not_logged_in'),
+        description: t('chat.must_be_logged_in_to_send'),
         type: 'danger',
       });
       return;
     }
 
-    // Temporary ban (timestamp in ms)
-    if (typeof bannedUntil === 'number' && now < bannedUntil) {
-      const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      const timeLeftText =
-        hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    // ---- Strike / ban checks ----
+    if (strikeInfo) {
+      const { strikeCount, bannedUntil } = strikeInfo;
+      const now = Date.now();
 
-      showMessage({
-        message: `⚠️ Strike ${strikeCount}`,
-        description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
-        type: 'warning',
-        duration: 5000,
-      });
+      // Permanent ban
+      if (bannedUntil === 'permanent') {
+        showMessage({
+          message: t('chat.permanently_banned_title'),
+          description: t('chat.permanently_banned_message'),
+          type: 'danger',
+        });
+        return;
+      }
+
+      // Temporary ban (timestamp in ms)
+      if (typeof bannedUntil === 'number' && now < bannedUntil) {
+        const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const timeLeftText =
+          hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+        showMessage({
+          message: t('chat.strike_title', { count: strikeCount }),
+          description: t('chat.strike_message', { time: timeLeftText }),
+          type: 'warning',
+          duration: 5000,
+        });
+        return;
+      }
+    }
+
+    // Use the argument, not external state
+    const trimmedInput = (trimmedInputArg || '').trim();
+
+    // ✅ Validate fruits count - maximum 18 fruits allowed
+    if (hasFruits && fruits.length > 18) {
+      Alert.alert(t('home.alert.error'), t('chat.max_pets_error'));
       return;
     }
-  }
 
-  // Use the argument, not external state
-  const trimmedInput = (trimmedInputArg || '').trim();
+    // Disallow empty text + no fruits
+    if (!trimmedInput && !hasFruits && !emojiUrl) {
+      Alert.alert(t('home.alert.error'), t('chat.cannot_empty'));
+      return;
+    }
 
-  // ✅ Validate fruits count - maximum 18 fruits allowed
-  if (hasFruits && fruits.length > 18) {
-    Alert.alert(t('home.alert.error'), 'You can only send up to 18 pets in a message.');
-    return;
-  }
+    // Profanity check
+    if (trimmedInput && leoProfanity.check(trimmedInput)) {
+      Alert.alert(t('home.alert.error'), t('misc.inappropriateLanguage'));
+      return;
+    }
 
-  // Disallow empty text + no fruits
-  if (!trimmedInput && !hasFruits && !emojiUrl) {
-    Alert.alert(t('home.alert.error'), 'Message cannot be empty.');
-    return;
-  }
+    // Length check
+    if (trimmedInput.length > MAX_CHARACTERS) {
+      Alert.alert(t('home.alert.error'), t('misc.messageTooLong'));
+      return;
+    }
 
-  // Profanity check
-  if (trimmedInput && leoProfanity.check(trimmedInput)) {
-    Alert.alert(t('home.alert.error'), t('misc.inappropriateLanguage'));
-    return;
-  }
+    // Cooldown check
+    if (isCooldown) {
+      Alert.alert(t('home.alert.error'), t('misc.sendingTooQuickly'));
+      return;
+    }
 
-  // Length check
-  if (trimmedInput.length > MAX_CHARACTERS) {
-    Alert.alert(t('home.alert.error'), t('misc.messageTooLong'));
-    return;
-  }
+    // ✅ Duplicate message check - prevent copy-paste spam (no Firebase cost, client-side only)
+    const currentMessage = {
+      text: trimmedInput,
+      fruits: hasFruits ? JSON.stringify(fruits.sort((a, b) => (a?.id || '').localeCompare(b?.id || ''))) : null,
+      emoji: emojiUrl || null,
+    };
 
-  // Cooldown check
-  if (isCooldown) {
-    Alert.alert(t('home.alert.error'), t('misc.sendingTooQuickly'));
-    return;
-  }
+    if (lastSentMessageRef.current) {
+      const lastMessage = lastSentMessageRef.current;
+      const isDuplicate =
+        lastMessage.text === currentMessage.text &&
+        lastMessage.fruits === currentMessage.fruits &&
+        lastMessage.emoji === currentMessage.emoji;
 
-  // ✅ Duplicate message check - prevent copy-paste spam (no Firebase cost, client-side only)
-  const currentMessage = {
-    text: trimmedInput,
-    fruits: hasFruits ? JSON.stringify(fruits.sort((a, b) => (a?.id || '').localeCompare(b?.id || ''))) : null,
-    emoji: emojiUrl || null,
-  };
-  
-  if (lastSentMessageRef.current) {
-    const lastMessage = lastSentMessageRef.current;
-    const isDuplicate = 
-      lastMessage.text === currentMessage.text &&
-      lastMessage.fruits === currentMessage.fruits &&
-      lastMessage.emoji === currentMessage.emoji;
-    
-    if (isDuplicate) {
+      if (isDuplicate) {
+        Alert.alert(
+          t('home.alert.error'),
+          t('chat.cannot_send_duplicate'),
+        );
+        return;
+      }
+    }
+
+    // Link check (only for non-pro & non-admin)
+    const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
+    if (containsLink && !localState?.isPro && !isAdmin) {
+      Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
+      return;
+    }
+
+    try {
+      // ✅ Use chatRef instead of creating new ref
+      if (!chatRef) {
+        console.error('❌ Chat ref not available');
+        return;
+      }
+
+      // Push to Firebase Realtime Database
+      const now = Date.now();
+      const hasRecentWin =
+        typeof user?.lastGameWinAt === 'number' &&
+        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+
+      await chatRef.push({
+        text: trimmedInput || null, // allow fruits-only messages
+        timestamp: database.ServerValue.TIMESTAMP,
+        sender: user.displayName || t('chat.anonymous'),
+        senderId: user.id,
+        avatar:
+          user.avatar ||
+          'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+        replyTo: replyToArg
+          ? { id: replyToArg.id, text: replyToArg.text }
+          : null,
+        reportCount: 0,
+        containsLink,
+        isPro: !!localState?.isPro,
+        isAdmin: !!isAdmin,
+        isModerator: !!user?.isModerator,
+        strikeCount: strikeInfo?.strikeCount ?? null,
+        fruits: hasFruits ? fruits : [],
+        gif: hasEmoji ? emojiUrl : null,
+        flage: user.flage ? user.flage : null,
+        OS: Platform.OS, // ✅ Store platform (Android/iOS) - only visible to admins
+        robloxUsername: user?.robloxUsername || null,
+        robloxUsernameVerified: user?.robloxUsernameVerified || false,
+        robloxUserId: user?.robloxUserId || null, // ✅ Store userId for profile link
+        hasRecentGameWin: hasRecentWin,
+        lastGameWinAt: user?.lastGameWinAt || null,
+      });
+
+      // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
+      lastSentMessageRef.current = currentMessage;
+
+      // Reset local input state
+      setInput('');
+      setReplyTo(null);
+
+      // Start cooldown
+      setIsCooldown(true);
+      setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
+    } catch (error) {
+      console.error('Error sending message:', error);
       Alert.alert(
         t('home.alert.error'),
-        'You cannot send the same message twice. Please modify your message.',
+        t('chat.send_error'),
       );
-      return;
     }
-  }
-
-  // Link check (only for non-pro & non-admin)
-  const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
-  if (containsLink && !localState?.isPro && !isAdmin) {
-    Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
-    return;
-  }
-
-  try {
-    // ✅ Use chatRef instead of creating new ref
-    if (!chatRef) {
-      console.error('❌ Chat ref not available');
-      return;
-    }
-
-    // Push to Firebase Realtime Database
-    const now = Date.now();
-    const hasRecentWin =
-      typeof user?.lastGameWinAt === 'number' &&
-      now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
-
-    await chatRef.push({
-      text: trimmedInput || null, // allow fruits-only messages
-      timestamp: database.ServerValue.TIMESTAMP,
-      sender: user.displayName || 'Anonymous',
-      senderId: user.id,
-      avatar:
-        user.avatar ||
-        'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-      replyTo: replyToArg
-        ? { id: replyToArg.id, text: replyToArg.text }
-        : null,
-      reportCount: 0,
-      containsLink,
-      isPro: !!localState?.isPro,
-      isAdmin: !!isAdmin,
-      strikeCount: strikeInfo?.strikeCount ?? null,
-      currentUserEmail,
-      fruits: hasFruits ? fruits : [],
-      gif: hasEmoji ? emojiUrl : null,
-      flage: user.flage ? user.flage : null,
-      OS: Platform.OS, // ✅ Store platform (Android/iOS) - only visible to admins
-      robloxUsername: user?.robloxUsername || null,
-      robloxUsernameVerified: user?.robloxUsernameVerified || false,
-      robloxUserId: user?.robloxUserId || null, // ✅ Store userId for profile link
-      hasRecentGameWin: hasRecentWin,
-      lastGameWinAt: user?.lastGameWinAt || null,
-    });
-
-    // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
-    lastSentMessageRef.current = currentMessage;
-
-    // Reset local input state
-    setInput('');
-    setReplyTo(null);
-
-    // Start cooldown
-    setIsCooldown(true);
-    setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
-  } catch (error) {
-    console.error('Error sending message:', error);
-    Alert.alert(
-      t('home.alert.error'),
-      'Could not send your message. Please try again.',
-    );
-  }
-};
+  };
 
 
   // console.log(isPro)
@@ -672,7 +672,7 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
                 setMessages={setMessages}
                 isAdmin={isAdmin}
                 toggleDrawer={openProfileDrawer}
-                
+
               />
             )}
             {!localState.isPro && <BannerAdComponent />}
@@ -700,19 +700,19 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
               >
                 <Text style={styles.loginText}>{t('misc.loginToStartChat')}</Text>
               </TouchableOpacity>
-              
+
             )}
-             <PetModal
-               fromChat={true}
-      visible={petModalVisible}
-      onClose={() => setPetModalVisible(false)}
-        selectedFruits={selectedFruits}
-        setSelectedFruits={setSelectedFruits}
+            <PetModal
+              fromChat={true}
+              visible={petModalVisible}
+              onClose={() => setPetModalVisible(false)}
+              selectedFruits={selectedFruits}
+              setSelectedFruits={setSelectedFruits}
 
 
 
-      
-    />
+
+            />
           </ConditionalKeyboardWrapper>
 
           <SignInDrawer
@@ -726,14 +726,14 @@ const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) 
         </View>
         <ProfileBottomDrawer
           isVisible={isDrawerVisible}
-          toggleModal={closeProfileDrawer}  
+          toggleModal={closeProfileDrawer}
           startChat={startPrivateChat}
           selectedUser={selectedUser}
           isOnline={isOnline}
           bannedUsers={bannedUsers}
         />
       </GestureHandlerRootView>
-      
+
 
       {/* {!localState.isPro && <View style={{ alignSelf: 'center' }}>
         {isAdVisible && (

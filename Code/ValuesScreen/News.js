@@ -314,327 +314,327 @@ const NewsScreen = () => {
     return (
         <ConditionalKeyboardWrapper style={{ flex: 1 }} >
 
-        <ScrollView
-            style={[styles.container, { backgroundColor: palette.background }]}
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-        >
-            {/* Updates section */}
-            {newsItems.length > 0 && (
-                <>
-                    <View style={styles.sectionHeaderRow}>
-                        <View>
-                            <Text
-                                style={[
-                                    styles.sectionTitle,
-                                    { color: palette.textPrimary },
-                                ]}
-                            >
-                                Updates
-                            </Text>
-                            <Text
-                                style={[
-                                    styles.sectionSubtitle,
-                                    { color: palette.textSecondary },
-                                ]}
-                            >
-                                What’s new in the app right now.
-                            </Text>
-                        </View>
-                    </View>
-
-                    {newsItems.map((item) => (
-                        <View
-                            key={item.id}
-                            style={[
-                                styles.newsCard,
-                                {
-                                    backgroundColor: palette.card,
-                                    borderColor: palette.border,
-                                },
-                            ]}
-                        >
-                            <View style={styles.newsHeaderRow}>
+            <ScrollView
+                style={[styles.container, { backgroundColor: palette.background }]}
+                contentContainerStyle={styles.contentContainer}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Updates section */}
+                {newsItems.length > 0 && (
+                    <>
+                        <View style={styles.sectionHeaderRow}>
+                            <View>
                                 <Text
                                     style={[
-                                        styles.newsTitle,
+                                        styles.sectionTitle,
                                         { color: palette.textPrimary },
                                     ]}
                                 >
-                                    {item.title}
+                                    Updates
                                 </Text>
-                                {!!item.tag && (
-                                    <View
-                                        style={[
-                                            styles.tagChip,
-                                            { backgroundColor: config.colors.hasBlockGreen },
-                                        ]}
-                                    >
-                                        <Text style={styles.tagText}>{item.tag}</Text>
-                                    </View>
-                                )}
-                            </View>
-                            <Text
-                                style={[
-                                    styles.newsBody,
-                                    { color: palette.textSecondary },
-                                ]}
-                            >
-                                {item.body}
-                            </Text>
-                        </View>
-                    ))}
-
-                    <View style={styles.sectionSpacing} />
-                </>
-            )}
-
-            {/* Polls section */}
-            {polls.length > 0 && (
-                <>
-                    <Text
-                        style={[
-                            styles.sectionTitle,
-                            { color: palette.textPrimary },
-                        ]}
-                    >
-                        What’s next?
-                    </Text>
-                    <Text
-                        style={[
-                            styles.sectionSubtitle,
-                            { color: palette.textSecondary },
-                        ]}
-                    >
-                        Vote and help decide the roadmap.
-                    </Text>
-
-                    {polls.map((poll) => {
-                        const selected = pollAnswers[poll.id];
-                        const loading = sendingPollId === poll.id;
-
-                        return (
-                            <View
-                                key={poll.id}
-                                style={[
-                                    styles.pollCard,
-                                    {
-                                        backgroundColor: palette.subtleCard,
-                                        borderColor: palette.border,
-                                    },
-                                ]}
-                            >
                                 <Text
                                     style={[
-                                        styles.pollQuestion,
-                                        { color: palette.textPrimary },
-                                    ]}
-                                >
-                                    {poll.question}
-                                </Text>
-                                {poll.options.map((opt) => {
-                                    const isSelected = selected === opt.label;
-                                    return (
-                                        <TouchableOpacity
-                                            key={opt.id}
-                                            style={[
-                                                styles.pollOption,
-                                                {
-                                                    backgroundColor: isSelected
-                                                        ? config.colors.hasBlockGreen
-                                                        : palette.card,
-                                                    borderColor: isSelected
-                                                        ? config.colors.hasBlockGreen
-                                                        : palette.border,
-                                                },
-                                            ]}
-                                            activeOpacity={0.7}
-                                            onPress={() => handlePollVote(poll.id, opt.label)}
-                                            disabled={loading}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.pollOptionText,
-                                                    {
-                                                        color: isSelected
-                                                            ? "#02120b"
-                                                            : palette.textSecondary,
-                                                        fontFamily: isSelected
-                                                            ? "Lato-Bold"
-                                                            : "Lato-Regular",
-                                                    },
-                                                ]}
-                                            >
-                                                {opt.label}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                                {loading && (
-                                    <View style={styles.pollLoadingRow}>
-                                        <ActivityIndicator
-                                            size="small"
-                                            color={config.colors.hasBlockGreen}
-                                        />
-                                        <Text
-                                            style={[
-                                                styles.pollLoadingText,
-                                                { color: palette.textSecondary },
-                                            ]}
-                                        >
-                                            Sending vote...
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                        );
-                    })}
-
-                    <View style={styles.sectionSpacing} />
-                </>
-            )}
-
-            {/* Quick suggestions section */}
-            {quickSuggestions.length > 0 && (
-                <>
-                    <Text
-                        style={[
-                            styles.sectionTitle,
-                            { color: palette.textPrimary },
-                        ]}
-                    >
-                        Quick suggestions
-                    </Text>
-                    <Text
-                        style={[
-                            styles.helperText,
-                            { color: palette.textSecondary },
-                        ]}
-                    >
-                        Tap one of these if you don’t feel like typing.
-                    </Text>
-
-                    <View className="chipsRow" style={styles.chipsRow}>
-                        {quickSuggestions.map((s) => (
-                            <TouchableOpacity
-                                key={s.id}
-                                style={[
-                                    styles.chip,
-                                    {
-                                        backgroundColor: palette.chipBg,
-                                        borderColor: palette.border,
-                                    },
-                                ]}
-                                activeOpacity={0.7}
-                                onPress={() => handleQuickSuggestion(s.text)}
-                                disabled={quickSending}
-                            >
-                                <Text
-                                    style={[
-                                        styles.chipText,
+                                        styles.sectionSubtitle,
                                         { color: palette.textSecondary },
                                     ]}
                                 >
-                                    {s.text}
+                                    What’s new in the app right now.
                                 </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                            </View>
+                        </View>
 
-                    {quickSending && (
-                        <View style={styles.pollLoadingRow}>
-                            <ActivityIndicator
-                                size="small"
-                                color={config.colors.hasBlockGreen}
-                            />
-                            <Text
+                        {newsItems.map((item) => (
+                            <View
+                                key={item.id}
                                 style={[
-                                    styles.pollLoadingText,
-                                    { color: palette.textSecondary },
+                                    styles.newsCard,
+                                    {
+                                        backgroundColor: palette.card,
+                                        borderColor: palette.border,
+                                    },
                                 ]}
                             >
-                                Sending suggestion...
-                            </Text>
+                                <View style={styles.newsHeaderRow}>
+                                    <Text
+                                        style={[
+                                            styles.newsTitle,
+                                            { color: palette.textPrimary },
+                                        ]}
+                                    >
+                                        {item.title}
+                                    </Text>
+                                    {!!item.tag && (
+                                        <View
+                                            style={[
+                                                styles.tagChip,
+                                                { backgroundColor: config.colors.hasBlockGreen },
+                                            ]}
+                                        >
+                                            <Text style={styles.tagText}>{item.tag}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <Text
+                                    style={[
+                                        styles.newsBody,
+                                        { color: palette.textSecondary },
+                                    ]}
+                                >
+                                    {item.body}
+                                </Text>
+                            </View>
+                        ))}
+
+                        <View style={styles.sectionSpacing} />
+                    </>
+                )}
+
+                {/* Polls section */}
+                {polls.length > 0 && (
+                    <>
+                        <Text
+                            style={[
+                                styles.sectionTitle,
+                                { color: palette.textPrimary },
+                            ]}
+                        >
+                            What’s next?
+                        </Text>
+                        <Text
+                            style={[
+                                styles.sectionSubtitle,
+                                { color: palette.textSecondary },
+                            ]}
+                        >
+                            Vote and help decide the roadmap.
+                        </Text>
+
+                        {polls.map((poll) => {
+                            const selected = pollAnswers[poll.id];
+                            const loading = sendingPollId === poll.id;
+
+                            return (
+                                <View
+                                    key={poll.id}
+                                    style={[
+                                        styles.pollCard,
+                                        {
+                                            backgroundColor: palette.subtleCard,
+                                            borderColor: palette.border,
+                                        },
+                                    ]}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.pollQuestion,
+                                            { color: palette.textPrimary },
+                                        ]}
+                                    >
+                                        {poll.question}
+                                    </Text>
+                                    {poll.options.map((opt) => {
+                                        const isSelected = selected === opt.label;
+                                        return (
+                                            <TouchableOpacity
+                                                key={opt.id}
+                                                style={[
+                                                    styles.pollOption,
+                                                    {
+                                                        backgroundColor: isSelected
+                                                            ? config.colors.hasBlockGreen
+                                                            : palette.card,
+                                                        borderColor: isSelected
+                                                            ? config.colors.hasBlockGreen
+                                                            : palette.border,
+                                                    },
+                                                ]}
+                                                activeOpacity={0.7}
+                                                onPress={() => handlePollVote(poll.id, opt.label)}
+                                                disabled={loading}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.pollOptionText,
+                                                        {
+                                                            color: isSelected
+                                                                ? "#02120b"
+                                                                : palette.textSecondary,
+                                                            fontWeight: isSelected
+                                                                ? "bold"
+                                                                : "narmal",
+                                                        },
+                                                    ]}
+                                                >
+                                                    {opt.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                    {loading && (
+                                        <View style={styles.pollLoadingRow}>
+                                            <ActivityIndicator
+                                                size="small"
+                                                color={config.colors.hasBlockGreen}
+                                            />
+                                            <Text
+                                                style={[
+                                                    styles.pollLoadingText,
+                                                    { color: palette.textSecondary },
+                                                ]}
+                                            >
+                                                Sending vote...
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        })}
+
+                        <View style={styles.sectionSpacing} />
+                    </>
+                )}
+
+                {/* Quick suggestions section */}
+                {quickSuggestions.length > 0 && (
+                    <>
+                        <Text
+                            style={[
+                                styles.sectionTitle,
+                                { color: palette.textPrimary },
+                            ]}
+                        >
+                            Quick suggestions
+                        </Text>
+                        <Text
+                            style={[
+                                styles.helperText,
+                                { color: palette.textSecondary },
+                            ]}
+                        >
+                            Tap one of these if you don’t feel like typing.
+                        </Text>
+
+                        <View className="chipsRow" style={styles.chipsRow}>
+                            {quickSuggestions.map((s) => (
+                                <TouchableOpacity
+                                    key={s.id}
+                                    style={[
+                                        styles.chip,
+                                        {
+                                            backgroundColor: palette.chipBg,
+                                            borderColor: palette.border,
+                                        },
+                                    ]}
+                                    activeOpacity={0.7}
+                                    onPress={() => handleQuickSuggestion(s.text)}
+                                    disabled={quickSending}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.chipText,
+                                            { color: palette.textSecondary },
+                                        ]}
+                                    >
+                                        {s.text}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
-                    )}
 
-                    <View style={styles.sectionSpacing} />
-                </>
-            )}
+                        {quickSending && (
+                            <View style={styles.pollLoadingRow}>
+                                <ActivityIndicator
+                                    size="small"
+                                    color={config.colors.hasBlockGreen}
+                                />
+                                <Text
+                                    style={[
+                                        styles.pollLoadingText,
+                                        { color: palette.textSecondary },
+                                    ]}
+                                >
+                                    Sending suggestion...
+                                </Text>
+                            </View>
+                        )}
 
-            {/* Question template / free text feedback */}
-            <Text
-                style={[
-                    styles.sectionTitle,
-                    { color: palette.textPrimary },
-                ]}
-            >
-                Tell us in your own words
-            </Text>
-            <Text
-                style={[
-                    styles.sectionSubtitle,
-                    { color: palette.textSecondary },
-                ]}
-            >
-                What should we build next? Which app or feature do you want to see?
-            </Text>
-         
-            <View/>
+                        <View style={styles.sectionSpacing} />
+                    </>
+                )}
 
-<View
-    style={[
-        styles.feedbackCard,
-        {
-            backgroundColor: palette.card,
-            borderColor: palette.border,
-        },
-    ]}
->
-    <Text
-        style={[
-            styles.feedbackLabel,
-            { color: palette.textSecondary },
-        ]}
-    >
-        Your idea
-    </Text>
-    <TextInput
-        style={[
-            styles.textInput,
-            {
-                backgroundColor: palette.inputBg,
-                borderColor: palette.inputBorder,
-                color: palette.textPrimary,
-            },
-        ]}
-        placeholder="Example: Make a separate trading app, or add a raid planner next..."
-        placeholderTextColor={palette.textSecondary + "99"}
-        value={customFeedback}
-        onChangeText={setCustomFeedback}
-        multiline
-    />
-    <TouchableOpacity
-        style={[
-            styles.submitButton,
-            {
-                backgroundColor: config.colors.hasBlockGreen,
-                opacity: sendingCustom ? 0.7 : 1,
-            },
-        ]}
-        activeOpacity={0.8}
-        onPress={handleCustomFeedbackSubmit}
-        disabled={sendingCustom}
-    >
-        {sendingCustom ? (
-            <ActivityIndicator size="small" color="#02120b" />
-        ) : (
-            <Text style={styles.submitButtonText}>Send feedback</Text>
-        )}
-    </TouchableOpacity>
-</View>
+                {/* Question template / free text feedback */}
+                <Text
+                    style={[
+                        styles.sectionTitle,
+                        { color: palette.textPrimary },
+                    ]}
+                >
+                    Tell us in your own words
+                </Text>
+                <Text
+                    style={[
+                        styles.sectionSubtitle,
+                        { color: palette.textSecondary },
+                    ]}
+                >
+                    What should we build next? Which app or feature do you want to see?
+                </Text>
 
-        </ScrollView>
+                <View />
+
+                <View
+                    style={[
+                        styles.feedbackCard,
+                        {
+                            backgroundColor: palette.card,
+                            borderColor: palette.border,
+                        },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            styles.feedbackLabel,
+                            { color: palette.textSecondary },
+                        ]}
+                    >
+                        Your idea
+                    </Text>
+                    <TextInput
+                        style={[
+                            styles.textInput,
+                            {
+                                backgroundColor: palette.inputBg,
+                                borderColor: palette.inputBorder,
+                                color: palette.textPrimary,
+                            },
+                        ]}
+                        placeholder="Example: Make a separate trading app, or add a raid planner next..."
+                        placeholderTextColor={palette.textSecondary + "99"}
+                        value={customFeedback}
+                        onChangeText={setCustomFeedback}
+                        multiline
+                    />
+                    <TouchableOpacity
+                        style={[
+                            styles.submitButton,
+                            {
+                                backgroundColor: config.colors.hasBlockGreen,
+                                opacity: sendingCustom ? 0.7 : 1,
+                            },
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={handleCustomFeedbackSubmit}
+                        disabled={sendingCustom}
+                    >
+                        {sendingCustom ? (
+                            <ActivityIndicator size="small" color="#02120b" />
+                        ) : (
+                            <Text style={styles.submitButtonText}>Send feedback</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+            </ScrollView>
         </ConditionalKeyboardWrapper>
 
     );
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 8,
         fontSize: 14,
-        fontFamily: "Lato-Regular",
+
     },
 
     sectionHeaderRow: {
@@ -670,12 +670,12 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 18,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
         marginBottom: 2,
     },
     sectionSubtitle: {
         fontSize: 13,
-        fontFamily: "Lato-Regular",
+
     },
     sectionSpacing: {
         height: 20,
@@ -693,13 +693,13 @@ const styles = StyleSheet.create({
     },
     newsTitle: {
         fontSize: 16,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
         flex: 1,
         paddingRight: 8,
     },
     newsBody: {
         fontSize: 14,
-        fontFamily: "Lato-Regular",
+
         marginTop: 4,
         lineHeight: 20,
     },
@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
     tagText: {
         color: "#02120b",
         fontSize: 11,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
     },
 
     pollCard: {
@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
     },
     pollQuestion: {
         fontSize: 15,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
         marginBottom: 8,
     },
     pollOption: {
@@ -743,13 +743,13 @@ const styles = StyleSheet.create({
     },
     pollLoadingText: {
         fontSize: 13,
-        fontFamily: "Lato-Regular",
+
         marginLeft: 6,
     },
 
     helperText: {
         fontSize: 13,
-        fontFamily: "Lato-Regular",
+
         marginBottom: 6,
     },
     chipsRow: {
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
     },
     chipText: {
         fontSize: 13,
-        fontFamily: "Lato-Regular",
+
     },
 
     feedbackCard: {
@@ -777,7 +777,7 @@ const styles = StyleSheet.create({
     },
     feedbackLabel: {
         fontSize: 13,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
         marginBottom: 6,
     },
     textInput: {
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 8,
         fontSize: 14,
-        fontFamily: "Lato-Regular",
+
         minHeight: 80,
         textAlignVertical: "top",
         marginBottom: 10,
@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
     submitButtonText: {
         color: "white",
         fontSize: 14,
-        fontFamily: "Lato-Bold",
+        fontWeight: 'bold',
     },
 });
 

@@ -14,7 +14,8 @@ import ReportModal from './ReportModal';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
-import { isUserOnline } from '../../ChatScreen/utils';
+import { isUserOnline, banUserwithEmail as banUtils } from '../../ChatScreen/utils';
+import { useTranslation } from 'react-i18next';
 
 const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onDeleteAll }) => {
   const navigation = useNavigation();
@@ -23,6 +24,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   const [showComments, setShowComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const { t } = useTranslation();
   const [bannedUsers, setBannedUsers] = useState([]);
   const [isOnline, setIsOnline] = useState(false);
   // const [selectedUser, setSelectedUser] = useState(null);
@@ -31,12 +33,12 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
     // if (!user?.id) return;
     setBannedUsers(localState.bannedUsers)
 
-  }, [ localState.bannedUsers]);
+  }, [localState.bannedUsers]);
   // const report = !!item.likes?.[userId];
 
   // console.log(item)
 
-  const { theme, isAdmin } = useGlobalState();
+  const { theme, isAdmin, user } = useGlobalState();
   const isDark = theme === 'dark';
   const getTagColor = (tag) => {
     switch (tag.toLowerCase()) {
@@ -50,47 +52,24 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         return '#AF52DE'; // Purple
       case 'need help':
         return '#FF9500'; // Orange
+      case 'misc':
       case 'misc.':
         return '#8E8E93'; // Neutral gray
       default:
         return config.colors.primary; // Fallback
     }
   };
-  const banUserwithEmail = async (email, userId) => {
-    const encodeEmail = (email) => email.replace(/\./g, '(dot)');
-  
-    try {
-      const db = getDatabase();
-      const banRef = ref(db, `banned_users_by_email_post/${encodeEmail(email)}`);
-      const snap = await get(banRef);
-  
-      let strikeCount = 1;
-      let bannedUntil = Date.now() + 24 * 60 * 60 * 1000; // 1 day
-      // let bannedUntil = Date.now() +  1 * 60 * 1000; // 1 day
-  
-      
-  
-      if (snap.exists()) {
-        const data = snap.val();
-        if(!isAdmin){strikeCount = data.strikeCount;}
-        if(isAdmin){strikeCount = data.strikeCount + 1;}
-  
-        if (strikeCount === 2) bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
-        //  if (strikeCount === 2) bannedUntil = Date.now() + 2  * 60 * 1000; // 3 days
-        else if (strikeCount >= 3) bannedUntil = "permanent";
-      }
-  
-      await set(banRef, {
-        strikeCount,
-        bannedUntil,
-        reason: `Strike ${strikeCount}`
-      });
-      await onDeleteAll(userId)
-      if(isAdmin){Alert.alert('User Banned', `Strike ${strikeCount} applied.`);}
-    } catch (err) {
-      console.error('Ban error:', err);
-     if(isAdmin){ Alert.alert('Error', 'Could not ban user.');}
-    }
+
+  const getTranslatedTag = (tag) => {
+    const tagKey = tag.toLowerCase().replace(/\s+/g, '_').replace(/\.+/g, '');
+    return t(`feed.tags.${tagKey}`, { defaultValue: tag });
+  };
+
+  // ✅ Wrapper to match signature and use shared util
+  const banUserwithEmail = async (email, targetUserId) => {
+    if (!isAdmin && !user?.isModerator) return;
+    // Call utils function: email, isAdmin=true, senderId (to delete msgs)
+    await banUtils(email, true, targetUserId);
   };
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);
@@ -98,7 +77,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   const openProfileDrawer = async () => {
     if (!userId) {
       showMessage({
-        message: 'Please sign in to message',
+        message: t('feed.signin_message'),
         type: 'warning',
       });
       return;
@@ -114,28 +93,28 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
     }
     setIsDrawerVisible(true);
   };
-  
- const selectedUser = {
-  senderId: item.userId,
-  sender: item.displayName,
-  avatar: item.avatar,
-  flage: item.flage ? item.flage : null,
-  robloxUsername: item?.robloxUsername || null,
-  robloxUsernameVerified: item?.robloxUsernameVerified || false,
-}
+
+  const selectedUser = {
+    senderId: item.userId,
+    sender: item.displayName,
+    avatar: item.avatar,
+    flage: item.flage ? item.flage : null,
+    robloxUsername: item?.robloxUsername || null,
+    robloxUsernameVerified: item?.robloxUsernameVerified || false,
+  }
 
   const handleChatNavigation = useCallback(() => {
     const callback = () => {
       if (!userId) {
         showMessage({
-          message: 'Please sign in to message',
+          message: t('feed.signin_message'),
           type: 'warning',
         });
         return;
       }
 
-     
-      
+
+
       mixpanel.track('Design Screen');
       navigation.navigate('PrivateChatDesign', {
         selectedUser: selectedUser,
@@ -153,106 +132,101 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
 
   const themedStyles = getStyles(isDark);
   // console.log(item.createdAt)
-  const formattedTime = item.createdAt ? dayjs(item.createdAt.toDate()).fromNow() : 'Anonymous';
+  const formattedTime = item.createdAt ? dayjs(item.createdAt.toDate()).fromNow() : t('chat.anonymous');
 
 
 
   return (
     <View style={themedStyles.card}>
-     <View style={themedStyles.header}>
-      <TouchableOpacity  onPress={openProfileDrawer}>
-  <Image source={{ uri: item.avatar }} style={themedStyles.avatar}/></TouchableOpacity>
-  <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer}>
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <Text style={themedStyles.name}>{item.displayName}</Text>
-      {item.isPro && (
-        <Image
-          source={require('../../../assets/pro.png')}
-          style={{ width: 14, height: 14, marginLeft: 4 }}
-        />
-      )}
-      {item.robloxUsernameVerified && (
-        <Image
-          source={require('../../../assets/verification.png')}
-          style={{ width: 14, height: 14, marginLeft: 4 }}
-        />
-      )}
-      {(() => {
-        const hasRecentWin =
-          !!item?.hasRecentGameWin ||
-          (typeof item?.lastGameWinAt === 'number' &&
-            Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
-        return hasRecentWin ? (
-          <Image
-            source={require('../../../assets/trophy.webp')}
-            style={{ width: 12, height: 12, marginLeft: 4 }}
-          />
-        ) : null;
-      })()}
-    </View>
-    <Text style={themedStyles.time}>
-      {formattedTime}
-    </Text>
-  </TouchableOpacity>
+      <View style={themedStyles.header}>
+        <TouchableOpacity onPress={openProfileDrawer}>
+          <Image source={{ uri: item.avatar }} style={themedStyles.avatar} /></TouchableOpacity>
+        <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={themedStyles.name}>{item.displayName}</Text>
+            {item.isPro && (
+              <Image
+                source={require('../../../assets/pro.png')}
+                style={{ width: 14, height: 14, marginLeft: 4 }}
+              />
+            )}
+            {item.robloxUsernameVerified && (
+              <Image
+                source={require('../../../assets/verification.png')}
+                style={{ width: 14, height: 14, marginLeft: 4 }}
+              />
+            )}
+            {(() => {
+              const hasRecentWin =
+                !!item?.hasRecentGameWin ||
+                (typeof item?.lastGameWinAt === 'number' &&
+                  Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+              return hasRecentWin ? (
+                <Image
+                  source={require('../../../assets/trophy.webp')}
+                  style={{ width: 12, height: 12, marginLeft: 4 }}
+                />
+              ) : null;
+            })()}
+          </View>
+          <Text style={themedStyles.time}>
+            {formattedTime}
+          </Text>
+        </TouchableOpacity>
 
-  <Menu>
-    <MenuTrigger>
-      <Icon name="ellipsis-v" size={18} color={isDark ? 'lightgrey' : 'grey'} style={{marginRight:5}}/>
-    </MenuTrigger>
-    <MenuOptions>
-      <View>
-  <MenuOption onSelect={() => setShowReportModal(true)} text="Report" style={{marginVertical: 5,}} /></View>
-    {/* {console.log(isAdmin)} */}
-  {(userId === item.userId || isAdmin) && (
- <MenuOption
- onSelect={() => {
-   Alert.alert(
-     'Delete Post',
-     'Are you sure you want to delete this post?',
-     [
-       { text: 'Cancel', style: 'cancel' },
-       { text: 'Delete', onPress: () => onDelete(item.id), style: 'destructive' },
-     ]
-   );
- }}
->
- <View style={[ {  borderTopWidth:1 }]}>
-   <Text style={[themedStyles.tagText,{marginVertical: 15,}  ]}>Delete</Text>
- </View>
-</MenuOption>
+        <Menu>
+          <MenuTrigger>
+            <Icon name="ellipsis-v" size={18} color={isDark ? 'lightgrey' : 'grey'} style={{ marginRight: 5 }} />
+          </MenuTrigger>
+          <MenuOptions>
+            <View>
+              <MenuOption onSelect={() => setShowReportModal(true)} text={t('feed.report_post')} style={{ marginVertical: 5, }} /></View>
+            {/* {console.log(isAdmin)} */}
+            {(userId === item.userId || isAdmin || user?.isModerator) && (
+              <MenuOption
+                onSelect={() => {
+                  Alert.alert(
+                    t('feed.delete_post'),
+                    t('feed.delete_confirmation'),
+                    [
+                      { text: t('feed.cancel'), style: 'cancel' },
+                      { text: t('feed.submit'), onPress: () => onDelete(item.id), style: 'destructive' },
+                    ]
+                  );
+                }}
+              >
+                <View style={[{ borderTopWidth: 1 }]}>
+                  <Text style={[themedStyles.tagText, { marginVertical: 15, }]}>{t('feed.submit', { defaultValue: 'Delete' })}</Text>
+                </View>
+              </MenuOption>
 
 
-  )}
-{isAdmin && 
- 
- <MenuOption onSelect={()=>banUserwithEmail(item.email, item.userId)}>
-    <Text>Ban User</Text>
-  
-  </MenuOption>}
-  {isAdmin &&  <MenuOption
- onSelect={() => {
-   Alert.alert(
-     'Delete Post',
-     'Are you sure you want to delete this post?',
-     [
-       { text: 'Cancel', style: 'cancel' },
-       { text: 'Delete', onPress: () => onDeleteAll(item.userId), style: 'destructive' },
-     ]
-   );
- }}
->
- <View style={[ {  borderTopWidth:1 }]}>
-   <Text style={[themedStyles.tagText,{marginVertical: 15,}  ]}>Delete All</Text>
- </View>
-</MenuOption>}
-</MenuOptions>
+            )}
 
-  </Menu>
-</View>
+            {(isAdmin || user?.isModerator) && <MenuOption
+              onSelect={() => {
+                Alert.alert(
+                  t('feed.delete_post'),
+                  t('feed.delete_confirmation'),
+                  [
+                    { text: t('feed.cancel'), style: 'cancel' },
+                    { text: t('feed.submit'), onPress: () => onDeleteAll(item.userId), style: 'destructive' },
+                  ]
+                );
+              }}
+            >
+              <View style={[{ borderTopWidth: 1 }]}>
+                <Text style={[themedStyles.tagText, { marginVertical: 15, }]}>{t('feed.delete_all')}</Text>
+              </View>
+            </MenuOption>}
+          </MenuOptions>
+
+        </Menu>
+      </View>
 
 
       <Text style={themedStyles.desc}>{item?.desc}</Text>
-      {Array.isArray(item.imageUrl) && item.imageUrl.length < 1  && <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} /> }
+      {Array.isArray(item.imageUrl) && item.imageUrl.length < 1 && <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />}
 
       {/* {(item.selectedTags?.length > 0 || item.budget) && (
         <View style={themedStyles.metaInfoRow}>
@@ -267,74 +241,74 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         </View>
       )} */}
 
-{Array.isArray(item.imageUrl) && item.imageUrl.length > 0 && (
-  <View style={themedStyles.imageWrapper}>
-    {/* Tags positioned above the image container */}
-    <View style={themedStyles.tagOverlayAbove}>
-      {item.selectedTags?.map((tag, idx) => (
-       <View key={idx} style={[themedStyles.overlayTag, { backgroundColor: getTagColor(tag) }]}>
-       <Text style={themedStyles.overlayTagText}>{tag}</Text>
-     </View>
-     
-      ))}
-    </View>
+      {Array.isArray(item.imageUrl) && item.imageUrl.length > 0 && (
+        <View style={themedStyles.imageWrapper}>
+          {/* Tags positioned above the image container */}
+          <View style={themedStyles.tagOverlayAbove}>
+            {item.selectedTags?.map((tag, idx) => (
+              <View key={idx} style={[themedStyles.overlayTag, { backgroundColor: getTagColor(tag) }]}>
+                <Text style={themedStyles.overlayTagText}>{getTranslatedTag(tag)}</Text>
+              </View>
 
-    {/* Image block as-is */}
-    <View style={themedStyles.shadowWrapper}>
-    <View style={themedStyles.imageContainer}>
-      {item?.imageUrl.length === 1 ? (
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate('ImageViewerScreen', {
-              images: item.imageUrl,
-              initialIndex: 0,
-            })
-          }
-        >
-          <Image source={{ uri: item?.imageUrl[0] }} style={themedStyles.singleImage} />
-        </TouchableOpacity>
-      ) : (
-        <View style={themedStyles.multiImageGrid}>
-          {item?.imageUrl.slice(0, 4).map((url, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={themedStyles.gridImage}
-              onPress={() =>
-                navigation.navigate('ImageViewerScreen', {
-                  images: item?.imageUrl,
-                  initialIndex: idx,
-                })
-              }
-            >
-              <Image source={{ uri: url }} style={themedStyles.gridImageInner} />
-            </TouchableOpacity>
-          ))}
+            ))}
+          </View>
+
+          {/* Image block as-is */}
+          <View style={themedStyles.shadowWrapper}>
+            <View style={themedStyles.imageContainer}>
+              {item?.imageUrl.length === 1 ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('ImageViewerScreen', {
+                      images: item.imageUrl,
+                      initialIndex: 0,
+                    })
+                  }
+                >
+                  <Image source={{ uri: item?.imageUrl[0] }} style={themedStyles.singleImage} />
+                </TouchableOpacity>
+              ) : (
+                <View style={themedStyles.multiImageGrid}>
+                  {item?.imageUrl.slice(0, 4).map((url, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={themedStyles.gridImage}
+                      onPress={() =>
+                        navigation.navigate('ImageViewerScreen', {
+                          images: item?.imageUrl,
+                          initialIndex: idx,
+                        })
+                      }
+                    >
+                      <Image source={{ uri: url }} style={themedStyles.gridImageInner} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+          <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />
+
         </View>
       )}
-    </View>
-    </View>
-    <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />
-
-  </View>
-)}
 
       <View style={themedStyles.actionsRow}>
-        <View style={{flexDirection:'row'}}>
-        <TouchableOpacity onPress={() => onLike(item)} style={themedStyles.actionBtn}>
-          <Icon name={liked ? 'heart' : 'heart-o'} size={20} color={liked ? 'red' : 'gray'} />
-          <Text style={themedStyles.likeCount}>{likeCount} likes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowComments(true)} style={themedStyles.commentssection}>
-        <Icon name="comment" size={18} color={config.colors.primary} />
-        <Text style={themedStyles.sendText}>
-          {item.commentCount ? `${item.commentCount} comments` : '0 Comments'}
-        </Text>
-      </TouchableOpacity>
-      </View>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity onPress={() => onLike(item)} style={themedStyles.actionBtn}>
+            <Icon name={liked ? 'heart' : 'heart-o'} size={20} color={liked ? 'red' : 'gray'} />
+            <Text style={themedStyles.likeCount}>{t('feed.likes_count', { count: likeCount })}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowComments(true)} style={themedStyles.commentssection}>
+            <Icon name="comment" size={18} color={config.colors.primary} />
+            <Text style={themedStyles.sendText}>
+              {item.commentCount ? t('feed.comments_count', { count: item.commentCount }) : t('feed.no_comments')}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity onPress={openProfileDrawer} style={themedStyles.sendBtn}>
           <Icon name="paper-plane" size={16} color={config.colors.primary} />
-          <Text style={themedStyles.sendText}>Chat</Text>
+          <Text style={themedStyles.sendText}>{t('feed.chat')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -345,14 +319,14 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         appdatabase={appdatabase}
       />
 
-<ProfileBottomDrawer
-          isVisible={isDrawerVisible}
-          toggleModal={closeProfileDrawer}  
-          startChat={handleChatNavigation}
-          selectedUser={selectedUser}
-          isOnline={isOnline}
-          bannedUsers={bannedUsers}
-        />
+      <ProfileBottomDrawer
+        isVisible={isDrawerVisible}
+        toggleModal={closeProfileDrawer}
+        startChat={handleChatNavigation}
+        selectedUser={selectedUser}
+        isOnline={isOnline}
+        bannedUsers={bannedUsers}
+      />
     </View>
   );
 };
@@ -367,25 +341,25 @@ const getStyles = (isDark) =>
     },
     header: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
     avatar: { width: 40, height: 40, borderRadius: 20 },
-    name: { fontFamily: 'Lato-Bold', color: isDark ? '#fff' : '#000' },
-    time: { fontSize: 10, color: 'gray', fontFamily: 'Lato-Regular' },
-    desc: { marginVertical: 5, fontSize: 14, color: isDark ? '#ccc' : '#333', fontFamily: 'Lato-Regular' },
+    name: { fontWeight: 'bold', color: isDark ? '#fff' : '#000' },
+    time: { fontSize: 10, color: 'gray', },
+    desc: { marginVertical: 5, fontSize: 14, color: isDark ? '#ccc' : '#333', },
 
     shadowWrapper: {
       // backgroundColor: '#fff', // needed for shadow contrast
       borderRadius: 8,
       // marginTop: 10,
-    
+
       // iOS Shadow
       // shadowColor: '#000',
       // shadowOffset: { width: 0, height: 2 },
       // shadowOpacity: 0.1,
       // shadowRadius: 8,
-    
+
       // // Android
       // elevation: 5,
     },
-    
+
     imageContainer: {
       borderRadius: 8,
       // overflow: 'hidden', // Move it here if you want to clip images inside
@@ -393,14 +367,14 @@ const getStyles = (isDark) =>
       // shadowOffset: { width: 0, height: 2 },
       // shadowOpacity: 0.1,
       // shadowRadius: 8,
-    
+
       // Android
       // elevation: 1,
-      borderWidth:.5,
+      borderWidth: .5,
       borderColor: isDark ? 'grey' : 'lightgrey'
 
     },
-    
+
     singleImage: { width: '100%', height: 220, borderRadius: 8 },
 
     multiImageGrid: {
@@ -410,20 +384,20 @@ const getStyles = (isDark) =>
       gap: 6,
       width: '100%',
       borderRadius: 6,
-    
+
       // Shadow for iOS
       // shadowColor: '#000',
       // shadowOffset: { width: 4, height: 4 },
       // shadowOpacity: 0.5,
       // shadowRadius: 6,
-    
+
       // Elevation for Android
       // elevation: 3,
       // backgroundColor: '#fff',
     },
-    
-    gridImage: { width: '49%', height: 120, marginBottom: 2, borderRadius: 6},
-    gridImageInner: { width: '100%', height: '100%', borderRadius: 8},
+
+    gridImage: { width: '49%', height: 120, marginBottom: 2, borderRadius: 6 },
+    gridImageInner: { width: '100%', height: '100%', borderRadius: 8 },
 
     actionsRow: {
       flexDirection: 'row',
@@ -432,7 +406,7 @@ const getStyles = (isDark) =>
       justifyContent: 'space-between',
     },
     actionBtn: { flexDirection: 'row', alignItems: 'center' },
-    likeCount: { marginLeft: 5, fontSize: 14, color: isDark ? '#ccc' : config.colors.primary, fontFamily: 'Lato-Bold' },
+    likeCount: { marginLeft: 5, fontSize: 14, color: isDark ? '#ccc' : config.colors.primary, fontWeight: 'bold' },
 
     sendBtn: {
       flexDirection: 'row',
@@ -449,13 +423,13 @@ const getStyles = (isDark) =>
       // backgroundColor: isDark ? '#333' : '#f7e7e4',
       borderRadius: 6,
       // marginTop: 6,
-      marginLeft:10
+      marginLeft: 10
     },
     sendText: {
       marginLeft: 6,
       color: config.colors.primary,
       fontWeight: '600',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
 
     metaInfoRow: {
@@ -478,31 +452,31 @@ const getStyles = (isDark) =>
       fontSize: 12,
       color: isDark ? '#eee' : '#333',
       textTransform: 'capitalize',
-      fontFamily: 'Lato-Regular',
+
     },
     budgetText: {
       fontSize: 13,
       fontStyle: 'italic',
       color: isDark ? '#aaa' : 'gray',
       marginTop: 4,
-      fontFamily: 'Lato-Regular',
+
     },
     imageWrapper: {
       marginTop: 10,
       position: 'relative',
     },
-    
+
     tagOverlayAbove: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 6,
       // marginBottom: 6,
-      position:'absolute',
-      top:5,
-      right:5,
-      zIndex:1000
+      position: 'absolute',
+      top: 5,
+      right: 5,
+      zIndex: 1000
     },
-    
+
     overlayTag: {
       paddingHorizontal: 10,
       paddingVertical: 4,
@@ -511,10 +485,10 @@ const getStyles = (isDark) =>
     overlayTagText: {
       fontSize: 12,
       color: '#fff',
-      fontFamily: 'Lato-Bold',
+      fontWeight: 'bold',
     },
-    
-    
+
+
   });
 
 export default memo(PostCard, (prevProps, nextProps) => {

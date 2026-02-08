@@ -102,7 +102,7 @@ export const GlobalStateProvider = ({ children }) => {
         }
 
         const updatedUser = { ...prev, ...updates };
-        
+
         // ✅ Update Firebase only if user is logged in and there are actual changes
         // ✅ Exclude 'online' field from user data (it's stored in presence/{uid} node)
         if (prev?.id && appdatabase && hasChanges) {
@@ -113,7 +113,7 @@ export const GlobalStateProvider = ({ children }) => {
             // Silently handle Firebase errors
           });
         }
-        
+
         return updatedUser;
       });
     } catch (error) {
@@ -126,19 +126,19 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ Use ref to track if flag has been set for current user (prevents infinite loop)
   const flagSetForUserRef = useRef(null);
   const updateLocalStateAndDatabaseRef = useRef(updateLocalStateAndDatabase);
-  
+
   // ✅ Keep ref updated with latest function
   useEffect(() => {
     updateLocalStateAndDatabaseRef.current = updateLocalStateAndDatabase;
   }, [updateLocalStateAndDatabase]);
-  
+
   // ✅ Handle flag setting based on user preference (saves Firebase data costs)
   useEffect(() => {
     if (!isAdmin && user?.id && appdatabase) {
       // ✅ Only set flag once per user.id to prevent infinite loop
       if (flagSetForUserRef.current !== user.id) {
         flagSetForUserRef.current = user.id;
-        
+
         // ✅ Only store flag if user wants to show it (saves Firebase data costs)
         if (localState?.showFlag !== false) {
           // User wants to show flag - store it
@@ -150,13 +150,13 @@ export const GlobalStateProvider = ({ children }) => {
         if (localState?.showFlag === false && user?.flage) {
           // ✅ User toggled flag off - remove it from Firebase to save data
           const userRef = ref(appdatabase, `users/${user.id}`);
-          update(userRef, { flage: null }).catch(() => {});
+          update(userRef, { flage: null }).catch(() => { });
           setUser((prev) => ({ ...prev, flage: null }));
         } else if (localState?.showFlag !== false && !user?.flage) {
           // ✅ User toggled flag on - add it
           const flagValue = getFlag();
           const userRef = ref(appdatabase, `users/${user.id}`);
-          update(userRef, { flage: flagValue }).catch(() => {});
+          update(userRef, { flage: flagValue }).catch(() => { });
           setUser((prev) => ({ ...prev, flage: flagValue }));
         }
       }
@@ -204,6 +204,18 @@ export const GlobalStateProvider = ({ children }) => {
       if (snapshot.exists()) {
         // ⏳ USER EXISTS → Keep existing createdAt
         const existing = snapshot.val();
+
+        // ✅ SELF-HEALING: Update email if missing or changed
+        if (loggedInUser.email && (!existing.email || existing.email !== loggedInUser.email)) {
+          const emailUpdates = {
+            email: loggedInUser.email,
+            decodedEmail: loggedInUser.email.replace(/\./g, '(dot)'),
+          };
+          await update(userRef, emailUpdates).catch(err => console.log("Email update error:", err));
+          // Merge updates into existing object so local state is correct immediately
+          Object.assign(existing, emailUpdates);
+        }
+
         userData = {
           ...existing,
           id: userId,
@@ -332,7 +344,7 @@ export const GlobalStateProvider = ({ children }) => {
             const serverData = snapshot.val();
             // Convert to array and get first server link
             const serverList = Object.entries(serverData).map(([id, value]) => ({ id, ...value }));
-            
+
             // Get the first server link (or you can filter by name if needed)
             const firstServer = serverList.length > 0 ? serverList[0] : null;
             const serverLink = firstServer?.link || null;
@@ -466,17 +478,14 @@ export const GlobalStateProvider = ({ children }) => {
         timeElapsed > EXPIRY_LIMIT ||
         !localState.data ||
         !Object.keys(localState.data).length ||
-        !localState.imgurl || !localState.ggData ||
-        !Object.keys(localState.ggData).length || !localState.imgurlGG;
+        !localState.imgurl;
 
 
       if (shouldFetch) {
         let image = '';
-        let imageGG = ''
         // console.log(shouldFetch, 'shouldfetch')
 
         const valuesNotGG = `https://adoptme.b-cdn.net?cb=${Date.now()}`;
-        const valuesGG = 'https://adoptme-gg-values.b-cdn.net/adoptme_gg_values.json';
 
         // 🔹 Fetch non-GG data from Bunny CDN ONLY (no Firebase fallback)
         try {
@@ -491,14 +500,15 @@ export const GlobalStateProvider = ({ children }) => {
             throw new Error('Non-GG CDN returned invalid data');
           }
           // console.log(JSON.stringify(json))
-          await updateLocalState('data', JSON.stringify(json));
+          await updateLocalState('data', json);
         } catch (err) {
           console.warn('⚠️ Non-GG CDN failed, using cached data:', err.message);
           // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase xlsData
           // This prevents downloading 12.43 MB from Firebase RTDB
           // If no cached data exists, keep existing localState.data (empty or old)
-          const hasLocalData = localState.data && Object.keys(JSON.parse(localState.data || '{}')).length > 0;
-          
+          const localDataObj = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
+          const hasLocalData = localDataObj && Object.keys(localDataObj || {}).length > 0;
+
           if (!hasLocalData) {
             console.error('❌ No CDN data and no cached data available. App may not function correctly.');
             // Keep existing localState.data (which might be empty)
@@ -508,43 +518,12 @@ export const GlobalStateProvider = ({ children }) => {
           }
         }
 
-        // 🔹 Fetch GG data from Bunny CDN ONLY (no Firebase fallback)
-        try {
-          // console.log('🌐 Fetching GG data from:', valuesGG);
-          const res = await fetch(valuesGG, {
-            method: 'GET',
-            cache: 'no-store',
-          });
-          const json = await res.json();
 
-          if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
-            throw new Error('GG CDN returned invalid data');
-          }
-          // console.log(JSON.stringify(json[0]))
-          await updateLocalState('ggData', JSON.stringify(json));
-        } catch (err) {
-          console.warn('⚠️ GG CDN failed, using cached data:', err.message);
-          // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase ggData
-          // This prevents downloading data from Firebase RTDB
-          // If no cached data exists, keep existing localState.ggData (empty or old)
-          const hasLocalGGData = localState.ggData && Object.keys(JSON.parse(localState.ggData || '{}')).length > 0;
-          
-          if (!hasLocalGGData) {
-            console.error('❌ No GG CDN data and no cached data available. App may not function correctly.');
-            // Keep existing localState.ggData (which might be empty)
-            // Don't download from Firebase to save costs
-          } else {
-            console.log('✅ Using cached GG data instead of downloading from Firebase ggData');
-          }
-        }
 
         // 🔹 Fetch shared image_url
         const imageSnapShot = await get(ref(appdatabase, 'image_url'));
-        const imageSnapShotgg = await get(ref(appdatabase, 'image_url_gg'));
         image = imageSnapShot.exists() ? imageSnapShot.val() : '';
-        imageGG = imageSnapShotgg.exists() ? imageSnapShotgg.val() : '';
-        await updateLocalState('imgurl', JSON.stringify(image));
-        await updateLocalState('imgurlGG', JSON.stringify(imageGG));
+        await updateLocalState('imgurl', image);
         // console.log('updated everything')
       }
     } catch (error) {
@@ -553,7 +532,6 @@ export const GlobalStateProvider = ({ children }) => {
       setLoading(false);
     }
   };
-
 
 
 
@@ -572,11 +550,12 @@ export const GlobalStateProvider = ({ children }) => {
     fetchStockData(true);
   };
 
-  
+
 
   // ✅ Set up online status tracking using separate presence node (RTDB-only, optimized for scale)
   // ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
   // ✅ Uses presence/{uid} instead of users/{uid}/online for better scalability
+  // ✅ FIXED: Added throttling to prevent RejectedExecutionException from thread pool exhaustion
   useEffect(() => {
     if (!user?.id || !appdatabase) return;
 
@@ -587,6 +566,8 @@ export const GlobalStateProvider = ({ children }) => {
     let isConnected = false;
     let currentAppState = AppState.currentState; // 'active' | 'background' | 'inactive'
     let armedOnDisconnect = false;
+    let lastUpdateTime = 0; // ✅ For throttling
+    const THROTTLE_MS = 500; // ✅ Minimum 500ms between presence updates
 
     const setLocalOnline = (val) => {
       setUser((prev) => (prev?.id ? { ...prev, online: val } : prev));
@@ -602,7 +583,7 @@ export const GlobalStateProvider = ({ children }) => {
     };
 
     let onDisconnectHandler = null;
-    
+
     const armOnDisconnect = async () => {
       if (armedOnDisconnect) return;
       try {
@@ -616,61 +597,88 @@ export const GlobalStateProvider = ({ children }) => {
 
     let running = false;
     let pending = false;
-  
+
     const updatePresence = async () => {
+      // ✅ THROTTLE: Prevent rapid-fire updates that cause thread pool exhaustion
+      const now = Date.now();
+      if (now - lastUpdateTime < THROTTLE_MS) {
+        // Schedule a delayed update instead of firing immediately
+        if (!pending) {
+          pending = true;
+          setTimeout(() => {
+            pending = false;
+            lastUpdateTime = Date.now();
+            updatePresence();
+          }, THROTTLE_MS);
+        }
+        return;
+      }
+      lastUpdateTime = now;
+
       if (running) {
         pending = true;
         return;
       }
       running = true;
-  
+
       try {
         if (localState?.showOnlineStatus === false) {
-          try { 
+          try {
             if (onDisconnectHandler) {
-              await onDisconnectHandler.cancel(); 
+              await onDisconnectHandler.cancel();
             }
-          } catch {}
+          } catch { }
           armedOnDisconnect = false;
           await forceOffline();
           return;
         }
-  
+
         if (!isConnected || currentAppState !== "active") {
           await forceOffline();
           return;
         }
-  
+
         await armOnDisconnect();
         await set(presenceRef, true);
         setLocalOnline(true);
-  
+
       } catch (e) {
         // console.log("updatePresence error", e);
       } finally {
         running = false;
-  
+
         // ✅ if something changed while we were running, apply latest state once more
         if (pending) {
           pending = false;
-          updatePresence();
+          // ✅ Use setTimeout to prevent synchronous recursion (thread pool issue)
+          setTimeout(updatePresence, 100);
         }
       }
     };
-  
-  
 
-    // Listen to RTDB connection state
+
+
+    // Listen to RTDB connection state - wrapped in try-catch to prevent crashes
     const unsubConnected = onValue(connectedRef, (snap) => {
-      isConnected = snap.val() === true;
-      updatePresence();
+      try {
+        isConnected = snap.val() === true;
+        updatePresence();
+      } catch (e) {
+        // ✅ FIXED: Catch errors to prevent RejectedExecutionException crash
+        console.warn('Presence update error (ignored):', e?.message || e);
+      }
     });
 
     // Listen to AppState changes
     const sub = AppState.addEventListener("change", (nextState) => {
-      currentAppState = nextState;
-      // immediately offline when background/inactive
-      updatePresence();
+      try {
+        currentAppState = nextState;
+        // immediately offline when background/inactive
+        updatePresence();
+      } catch (e) {
+        // ✅ FIXED: Catch errors to prevent crash
+        console.warn('AppState presence error (ignored):', e?.message || e);
+      }
     });
 
     // Initial sync
@@ -683,12 +691,12 @@ export const GlobalStateProvider = ({ children }) => {
 
       // ✅ Cancel onDisconnect handler if it exists
       if (onDisconnectHandler) {
-        onDisconnectHandler.cancel().catch(() => {});
+        onDisconnectHandler.cancel().catch(() => { });
       }
 
       // ✅ Mark offline in RTDB (using closure to capture the old uid)
       // This ensures when user.id changes to null (logout), the previous user is marked offline
-      set(presenceRef, false).catch(() => {});
+      set(presenceRef, false).catch(() => { });
       setLocalOnline(false);
     };
   }, [user?.id, appdatabase, localState?.showOnlineStatus]);

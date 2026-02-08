@@ -13,37 +13,41 @@ import {
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
+import database from '@react-native-firebase/database';
 
 const ServerScreen = ({ selectedTheme }) => {
   const { theme } = useGlobalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
-  
+
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ✅ Fetch server data
+  // ✅ Fetch server data from Firebase RTDB
   useEffect(() => {
     const fetchServers = async () => {
       try {
         setLoading(true);
-        const response = await fetch('https://blox-api.b-cdn.net/server.json', {
-          method: 'GET',
-          cache: 'no-store',
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        const serverRef = database().ref('server');
+        const snapshot = await serverRef.once('value');
+
+        if (!snapshot.exists()) {
+          setServers([]);
+          setError(null);
+          return;
         }
-        
-        const data = await response.json();
-        
-        if (!Array.isArray(data)) {
-          throw new Error('Invalid data format');
-        }
-        
-        setServers(data);
+
+        const serverData = snapshot.val();
+
+        // ✅ Convert Firebase object format to array
+        // Format: { "-ON15YX7Hp402i2zC2Aw": { link: "...", name: "..." }, ... }
+        const serverList = Object.entries(serverData).map(([id, value]) => ({
+          id,
+          ...value,
+        }));
+
+        setServers(serverList);
         setError(null);
       } catch (err) {
         console.error('Error fetching servers:', err);
@@ -56,26 +60,7 @@ const ServerScreen = ({ selectedTheme }) => {
     fetchServers();
   }, []);
 
-  // ✅ Group servers by name
-  const groupedServers = useMemo(() => {
-    if (!Array.isArray(servers) || servers.length === 0) return {};
-    
-    const groups = {};
-    servers.forEach((server, index) => {
-      const name = server.name || 'Unknown';
-      if (!groups[name]) {
-        groups[name] = [];
-      }
-      groups[name].push({
-        ...server,
-        serverNumber: groups[name].length + 1, // Server 1, Server 2, etc.
-      });
-    });
-    
-    return groups;
-  }, [servers]);
-
-  // ✅ Handle server click - same logic as Server.js
+  // ✅ Handle server click
   const handleServerPress = useCallback((server) => {
     if (!server?.link) {
       Alert.alert('Error', 'Server link not available');
@@ -83,21 +68,20 @@ const ServerScreen = ({ selectedTheme }) => {
     }
 
     triggerHapticFeedback('impactLight');
-    
+
     const trimmedUrl = server.link?.trim();
     if (!trimmedUrl) {
       Alert.alert('Error', 'Invalid server link');
       return;
     }
 
-    // ✅ Same pattern as Server.js - use .catch() instead of try/catch
     Linking.openURL(trimmedUrl).catch(err => {
       console.warn('Failed to open link:', err);
       Alert.alert('Error', 'Failed to open link');
     });
   }, [triggerHapticFeedback]);
 
-  // ✅ Get background color based on server number/index
+  // ✅ Get background color based on server index
   const getBackgroundColor = useCallback((index) => {
     const colors = [
       '#FF6B6B', // Red
@@ -136,9 +120,7 @@ const ServerScreen = ({ selectedTheme }) => {
     );
   }
 
-  const groupNames = Object.keys(groupedServers);
-
-  if (groupNames.length === 0) {
+  if (servers.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="server-outline" size={48} color={isDarkMode ? '#666' : '#999'} />
@@ -148,47 +130,38 @@ const ServerScreen = ({ selectedTheme }) => {
   }
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {groupNames.map((groupName) => {
-        const groupServers = groupedServers[groupName];
-        
-        return (
-          <View key={groupName} style={styles.groupContainer}>
-            {/* Group Header */}
-            <Text style={styles.groupTitle}>{groupName}</Text>
-            
-            {/* Server Pills - 2 Column Layout */}
-            <View style={styles.serversRow}>
-              {groupServers.map((server, index) => (
-                <TouchableOpacity
-                  key={`${server.link}-${index}`}
-                  style={styles.serverPill}
-                  onPress={() => handleServerPress(server)}
-                  activeOpacity={0.8}
-                >
-                  {/* Icon with background color */}
-                  <View style={[styles.iconContainer, { backgroundColor: getBackgroundColor(index) }]}>
-                    <Image
-                      source={require('../../assets/splashscreen.webp')}
-                      style={styles.icon}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  
-                  {/* Server Label */}
-                  <Text style={styles.serverLabel} numberOfLines={1}>
-                    Server {server.serverNumber}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+      <Text style={styles.headerTitle}>Available Servers</Text>
+
+      {/* Server Cards - Display each server from Firebase */}
+      <View style={styles.serversRow}>
+        {servers.map((server, index) => (
+          <TouchableOpacity
+            key={server.id || `server-${index}`}
+            style={styles.serverPill}
+            onPress={() => handleServerPress(server)}
+            activeOpacity={0.8}
+          >
+            {/* Icon with background color */}
+            <View style={[styles.iconContainer, { backgroundColor: getBackgroundColor(index) }]}>
+              <Image
+                source={require('../../assets/splashscreen.webp')}
+                style={styles.icon}
+                resizeMode="contain"
+              />
             </View>
-          </View>
-        );
-      })}
+
+            {/* Server Name from Firebase */}
+            <Text style={styles.serverLabel} numberOfLines={1}>
+              {server.name || 'Server'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </ScrollView>
   );
 };
@@ -212,7 +185,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: isDarkMode ? '#fff' : '#000',
-    fontFamily: 'Lato-Regular',
+
   },
   errorContainer: {
     flex: 1,
@@ -224,13 +197,13 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   errorText: {
     marginTop: 16,
     fontSize: 16,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#fff' : '#000',
   },
   errorSubtext: {
     marginTop: 8,
     fontSize: 12,
-    fontFamily: 'Lato-Regular',
+
     color: isDarkMode ? '#999' : '#666',
     textAlign: 'center',
   },
@@ -244,14 +217,10 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: isDarkMode ? '#999' : '#666',
-    fontFamily: 'Lato-Regular',
   },
-  groupContainer: {
-    marginBottom: 32,
-  },
-  groupTitle: {
+  headerTitle: {
     fontSize: 20,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#fff' : '#000',
     marginBottom: 16,
     textAlign: 'center',
@@ -297,7 +266,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   serverLabel: {
     fontSize: 14,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     color: isDarkMode ? '#fff' : '#000',
     flex: 1,
   },

@@ -8,7 +8,7 @@ import {
   Text,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { 
+import {
   collection,
   doc,
   getDoc,
@@ -30,6 +30,7 @@ import {
 
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
+import { useTranslation } from 'react-i18next';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import PostCard from './componenets/PostCard';
 import UploadModal from './componenets/UploadModal';
@@ -42,6 +43,7 @@ import { showMessage } from 'react-native-flash-message';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
+import { useBanStatus } from '../ChatScreen/utils';
 
 
 const DesignFeedScreen = ({ route }) => {
@@ -50,6 +52,10 @@ const DesignFeedScreen = ({ route }) => {
   const { localState } = useLocalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
+  const { t } = useTranslation();
+
+  // ✅ Check if current user is banned
+  const { isBanned: isMeBanned } = useBanStatus(user?.email);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSigninDrawerVisible, setSigninDrawerVisible] = useState(false);
@@ -74,18 +80,18 @@ const DesignFeedScreen = ({ route }) => {
   }, [localState.bannedUsers]);
 
   function interleaveAds(items, showAds) {
-     if (!showAds) return items;
-      const out = [];
-     let real = 0;
+    if (!showAds) return items;
+    const out = [];
+    let real = 0;
     for (let i = 0; i < items.length; i++) {
-       out.push(items[i]);
-        real++;
-        if (real > 0 && real % AD_FREQUENCY === 0) {
-          out.push({ __type: 'ad', id: `ad-${i}` });
-        }
-     }
+      out.push(items[i]);
+      real++;
+      if (real > 0 && real % AD_FREQUENCY === 0) {
+        out.push({ __type: 'ad', id: `ad-${i}` });
+      }
+    }
     return out;
-     }
+  }
   // console.log('mainscreen')
   const fetchMyPosts = async (tag = null) => {
     if (!user?.id) return;
@@ -97,8 +103,8 @@ const DesignFeedScreen = ({ route }) => {
         where('userId', '==', user.id),
         orderBy('createdAt', 'desc')
       );
-      
-  
+
+
       if (tag) {
         q = query(
           collection(firestoreDB, 'designPosts'),
@@ -106,49 +112,49 @@ const DesignFeedScreen = ({ route }) => {
           where('selectedTags', 'array-contains', tag),
           orderBy('createdAt', 'desc')
         );
-        
+
       }
-  
+
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      
+
       // console.log('✅ My Posts fetched:', data.length);
       setMyPosts(data);
       setHasMore(snapshot.docs.length > 0);
     } catch (err) {
       console.error('❌ Error fetching my posts:', err);
-      showMessage({ message: 'Failed to fetch your posts', type: 'danger' });
+      showMessage({ message: t('feed.failed_fetch_my_posts'), type: 'danger' });
     } finally {
       setInitialLoading(false);
       setRefreshing(false);
     }
   };
-  
+
   const deleteUsersLatestPosts = async (userId, n = 15) => {
     if (!userId) throw new Error('userId is required');
-  
+
     const q = query(
       collection(firestoreDB, 'designPosts'),
       where('userId', '==', userId),
       orderBy('createdAt', 'desc'),
       limit(n)
     );
-  
+
     const snap = await getDocs(q);
     if (snap.empty) return [];
-  
+
     const batch = writeBatch(firestoreDB);
     const ids = [];
-  
+
     snap.docs.forEach(d => {
       batch.delete(d.ref);
       ids.push(d.id);
     });
-  
+
     await batch.commit();
     return ids;
   };
-  
+
   // useEffect(() => {
   //   nativeAdPool.fillIfNeeded();
   //   return () => nativeAdPool.destroyAll();
@@ -165,9 +171,9 @@ const DesignFeedScreen = ({ route }) => {
         orderBy('createdAt', 'desc'),
         limit(5)
       );
-      
+
       const snapshot = await getDocs(q);
-      
+
 
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPosts(data);
@@ -175,7 +181,7 @@ const DesignFeedScreen = ({ route }) => {
       setHasMore(snapshot.docs.length === 5);
     } catch (err) {
       console.error('Error fetching posts by tag:', err);
-      showMessage({ message: 'Failed to fetch posts', type: 'danger' });
+      showMessage({ message: t('feed.failed_fetch_posts'), type: 'danger' });
     } finally {
       setInitialLoading(false);
     }
@@ -183,16 +189,16 @@ const DesignFeedScreen = ({ route }) => {
 
 
   const skeletonArray = useMemo(() => Array.from({ length: 5 }), []);
-    const handleDeletePost = async (postId) => {
-      try {
-        await deleteDoc(doc(firestoreDB, 'designPosts', postId));
-        setPosts(prev => prev.filter(p => p.id !== postId));
-        showMessage({ message: 'Post deleted', type: 'success' });
-      } catch (err) {
-        showMessage({ message: 'Failed to delete post', type: 'danger' });
-      }
-    };
-    
+  const handleDeletePost = async (postId) => {
+    try {
+      await deleteDoc(doc(firestoreDB, 'designPosts', postId));
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      showMessage({ message: t('feed.post_deleted'), type: 'success' });
+    } catch (err) {
+      showMessage({ message: t('feed.failed_delete_post'), type: 'danger' });
+    }
+  };
+
 
 
 
@@ -203,9 +209,9 @@ const DesignFeedScreen = ({ route }) => {
         orderBy('createdAt', 'desc'),
         limit(5)
       );
-      
+
       const snapshot = await getDocs(q);
-      
+
 
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPosts(data);
@@ -218,7 +224,7 @@ const DesignFeedScreen = ({ route }) => {
       setRefreshing(false);
     }
   };
-// console.log(posts)
+  // console.log(posts)
   useEffect(() => {
     fetchInitialPosts();
   }, []);
@@ -241,18 +247,18 @@ const DesignFeedScreen = ({ route }) => {
   }, [navigation, selectedTag, filterMyPosts, fetchInitialPosts, fetchMyPosts, fetchPostsByTag]);
   useEffect(() => {
     if (posts.length === 0) return;
-  
+
     const unsubscribers = posts.map(post =>
       onSnapshot(doc(firestoreDB, 'designPosts', post.id), snap => {
         if (!snap.exists) return;   // 👈 modular API uses exists()
-  
+
         const updatedPost = { id: snap.id, ...snap.data() };
         setPosts(prev =>
           prev.map(p => (p.id === updatedPost.id ? updatedPost : p))
         );
       })
     );
-  
+
     return () => {
       unsubscribers.forEach(unsub => {
         if (typeof unsub === 'function') {
@@ -261,8 +267,8 @@ const DesignFeedScreen = ({ route }) => {
       });
     };
   }, [JSON.stringify(posts.map(p => p.id))]);
-  
-  
+
+
 
   const loadMorePosts = async () => {
     if (loadingMore || !hasMore || !lastVisibleDoc) return;
@@ -303,6 +309,20 @@ const DesignFeedScreen = ({ route }) => {
   };
 
   const handleLike = async (post) => {
+    // ✅ Ban check
+    if (isMeBanned) {
+      // Optional: Show alert or just return silently. 
+      // User didn't explicitly ask for alert on like, but consistent with other actions.
+      // But for likes, often silent failure or simple toast is better to avoid spamming alerts.
+      // Given other implementations use Alert/showMessage, let's use showMessage for less intrusion than Alert.
+      showMessage({
+        message: t("chat.access_denied", { defaultValue: 'Access Denied' }),
+        description: t("chat.banned_message_simple", { defaultValue: "You are banned." }),
+        type: 'danger',
+      });
+      return;
+    }
+
     const postRef = doc(firestoreDB, 'designPosts', post.id);
     const alreadyLiked = !!post.likes?.[user.id];
 
@@ -316,12 +336,12 @@ const DesignFeedScreen = ({ route }) => {
     if (isSubmittingPost) {
       return;
     }
-    
+
     if (!user?.id) return;
-    
+
     // ✅ Set submitting state IMMEDIATELY to prevent duplicate submissions
     setIsSubmittingPost(true);
-    
+
     try {
       // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
       const now = Date.now();
@@ -330,11 +350,11 @@ const DesignFeedScreen = ({ route }) => {
         const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastPostTime)) / 1000);
         const minutesLeft = Math.floor(secondsLeft / 60);
         const remainingSeconds = secondsLeft % 60;
-        const timeMessage = minutesLeft > 0 
-          ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
-          : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
-        showMessage({ 
-          message: `Please wait ${timeMessage} before posting again.`, 
+        const timeMessage = minutesLeft > 0
+          ? `${minutesLeft} ${t('value.num_m')} and ${remainingSeconds} ${t('value.num_s', { defaultValue: 's' })}`
+          : `${secondsLeft} ${t('value.num_s', { defaultValue: 's' })}`;
+        showMessage({
+          message: t('feed.cooldown_message', { time: timeMessage }),
           type: 'danger',
           duration: 3000
         });
@@ -344,36 +364,36 @@ const DesignFeedScreen = ({ route }) => {
       // ✅ Tags are mandatory
       if (!selectedTags || (Array.isArray(selectedTags) && selectedTags.length === 0)) {
         showMessage({
-          message: 'Missing Tag',
-          description: 'Please select at least one tag.',
+          message: t('feed.missing_tag'),
+          description: t('feed.select_tag_instruction'),
           type: 'danger',
         });
         setIsSubmittingPost(false);
         throw new Error('Missing tags'); // ✅ Throw error to prevent clearing form
       }
-      
+
       // Ensure imageUrls is an array (PostCard expects imageUrl as array)
-      const imageUrlArray = Array.isArray(imageUrls) 
+      const imageUrlArray = Array.isArray(imageUrls)
         ? imageUrls.filter(url => url && typeof url === 'string' && url.trim().length > 0)
         : (imageUrls && typeof imageUrls === 'string' && imageUrls.trim().length > 0 ? [imageUrls] : []);
-      
+
       // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
       const hasRecentWin =
         typeof user?.lastGameWinAt === 'number' &&
         now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
-      
+
       // ✅ Images are optional - posts can have text only, images only, or both
       // ✅ Tags are always required and must be saved to database
       const post = {
         imageUrl: imageUrlArray.length > 0 ? imageUrlArray : [], // PostCard expects imageUrl as array
         desc: (desc && desc.trim()) || "",
-        userId: user?.id || "Anonymous",
-        displayName: user?.displayName || "Anonymous",
+        userId: user?.id || t('feed.guest_user'),
+        displayName: user?.displayName || t('feed.guest_user'),
         avatar: user?.avatar || null,
         createdAt: serverTimestamp(),
         likes: {},
-        selectedTags: Array.isArray(selectedTags) && selectedTags.length > 0 
-          ? selectedTags 
+        selectedTags: Array.isArray(selectedTags) && selectedTags.length > 0
+          ? selectedTags
           : (selectedTags ? [selectedTags] : ['Discussion']), // ✅ Always ensure tags exist
         email: currentUserEmail || null,
         report: false,
@@ -383,19 +403,36 @@ const DesignFeedScreen = ({ route }) => {
         hasRecentGameWin: hasRecentWin, // ✅ Game win info
         lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
       };
-      
-      await addDoc(collection(firestoreDB, 'designPosts'), post);
-      
+
+      const postRef = await addDoc(collection(firestoreDB, 'designPosts'), post);
+
+      // ✅ Track activity for followers' feed
+      try {
+        await addDoc(collection(firestoreDB, 'user_activity'), {
+          userId: user.id,
+          type: 'design_post',
+          referenceId: postRef.id,
+          displayName: user?.displayName || 'Unknown',
+          avatar: user?.avatar || null,
+          preview: (desc && desc.trim()) ? desc.substring(0, 100) : 'New design post',
+          imagePreview: imageUrlArray.length > 0 ? imageUrlArray[0] : null,
+          createdAt: serverTimestamp(),
+        });
+      } catch (activityError) {
+        console.warn('Failed to track activity:', activityError);
+        // Don't fail the post creation if activity tracking fails
+      }
+
       // ✅ Update last post time after successful upload
       setLastPostTime(now);
-      
+
       // ✅ Refresh feed after posting
       setRefreshing(true);
       await fetchInitialPosts();
-      
+
       showMessage({
-        message: 'Success',
-        description: 'Post created successfully',
+        message: t('chat.success'),
+        description: t('feed.post_created_success'),
         type: 'success',
       });
     } catch (error) {
@@ -403,8 +440,8 @@ const DesignFeedScreen = ({ route }) => {
       // ✅ Only show error message if it's not a validation error (cooldown/tags)
       if (!error.message || (!error.message.includes('Cooldown') && !error.message.includes('tags'))) {
         showMessage({
-          message: 'Upload Failed',
-          description: 'Something went wrong. Please try again.',
+          message: t('feed.upload_failed'),
+          description: t('feed.failed_submit_report'),
           type: 'danger',
         });
       }
@@ -415,17 +452,17 @@ const DesignFeedScreen = ({ route }) => {
       setIsSubmittingPost(false);
     }
   };
-  
+
   const renderItem = ({ item, index }) => {
     if (initialLoading) {
       return <View style={[styles.skeletonPost, isDarkMode && { backgroundColor: '#444' }]} />;
     }
-      // if (item?.__type === 'ad') {
-      //    return <NativeFeedAd mediaHeight={220} />;
-      //  }
-      //  if (item?.__type === 'ad') {
-      //    return <View style={{flex:1}}><SingleNativeAd  /></View>;
-      //  }
+    // if (item?.__type === 'ad') {
+    //    return <NativeFeedAd mediaHeight={220} />;
+    //  }
+    //  if (item?.__type === 'ad') {
+    //    return <View style={{flex:1}}><SingleNativeAd  /></View>;
+    //  }
 
     return (
       <PostCard
@@ -457,18 +494,18 @@ const DesignFeedScreen = ({ route }) => {
       item?.__type === 'ad' || !bannedUsers.includes(item?.userId)
     );
   }, [initialLoading, baseList, bannedUsers, skeletonArray]);
-  
+
   const dataToRender = initialLoading
     ? skeletonArray
     : interleaveAds(filteredBase, false);
 
   const keyExtractor = (item, index) =>
     // initialLoading ? `skeleton-${index}` : item?.id || `post-${index}`;
-   initialLoading
-  ? `skeleton-${index}`
-   : item?.__type === 'ad'
-      ? item.id
-      : `${item?.id}_${index}}` || `post-${index}`;
+    initialLoading
+      ? `skeleton-${index}`
+      : item?.__type === 'ad'
+        ? item.id
+        : `${item?.id}_${index}}` || `post-${index}`;
 
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
@@ -492,8 +529,8 @@ const DesignFeedScreen = ({ route }) => {
           !initialLoading && (
             <Text style={{ textAlign: 'center', padding: 20, color: isDarkMode ? '#ccc' : '#666' }}>
               {filterMyPosts
-                ? "You don't have any posts in the loaded data."
-                : "No posts found."}
+                ? t('feed.no_my_posts')
+                : t('feed.no_posts_found')}
             </Text>
           )
         }
@@ -526,7 +563,7 @@ const DesignFeedScreen = ({ route }) => {
         onClose={() => setSigninDrawerVisible(false)}
         selectedTheme={selectedTheme}
         screen="Design"
-        message="Sign in to upload designs"
+        message={t('feed.signin_upload')}
       />
       {!localState.isPro && <BannerAdComponent />}
 
@@ -561,12 +598,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
     borderRadius: 10,
   },
-  latoText: {
-    fontFamily: 'Lato-Regular',
-  },
-  latoBold: {
-    fontFamily: 'Lato-Bold',
-  },
+
 
 
 });

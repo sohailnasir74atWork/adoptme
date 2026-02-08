@@ -21,7 +21,7 @@ const GameChallenge = ({ roomData, currentUser, onAnswer, roomId }) => {
   // Get pet data
   const petData = useMemo(() => {
     try {
-      const rawData = localState.isGG ? localState.ggData : localState.data;
+      const rawData = localState.data;
       if (!rawData) return [];
 
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -30,23 +30,18 @@ const GameChallenge = ({ roomData, currentUser, onAnswer, roomId }) => {
       console.error('Error parsing pet data:', error);
       return [];
     }
-  }, [localState.isGG, localState.data, localState.ggData]);
+  }, [localState.data]);
 
   // Get image URL helper
   const getImageUrl = useMemo(() => {
-    const baseImgUrl = localState.isGG ? localState.imgurlGG : localState.imgurl;
+    const baseImgUrl = localState.imgurl;
     return (item) => {
       if (!item || !item.name) return '';
-      
-      if (localState.isGG) {
-        const encoded = encodeURIComponent(item.name);
-        return `${baseImgUrl?.replace(/"/g, '')}/items/${encoded}.webp`;
-      }
-      
+
       if (!item.image || !baseImgUrl) return '';
       return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
     };
-  }, [localState.isGG, localState.imgurl, localState.imgurlGG]);
+  }, [localState.imgurl]);
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [hasAnswered, setHasAnswered] = useState(false);
@@ -153,40 +148,40 @@ const GameChallenge = ({ roomData, currentUser, onAnswer, roomId }) => {
   const generateNameOptions = (correctPet, allPets) => {
     const options = [correctPet.name];
     const otherPets = allPets.filter((p) => p.name !== correctPet.name);
-    
+
     // Add 3 random wrong answers
     for (let i = 0; i < 3 && otherPets.length > 0; i++) {
       const randomIndex = Math.floor(Math.random() * otherPets.length);
       options.push(otherPets[randomIndex].name);
       otherPets.splice(randomIndex, 1);
     }
-    
+
     return options;
   };
 
   const generateRarityOptions = (correctRarity) => {
     const rarities = ['Common', 'Uncommon', 'Rare', 'Ultra-Rare', 'Legendary', 'Mythic'];
     const options = [correctRarity || 'Common'];
-    
+
     rarities.forEach((rarity) => {
       if (rarity !== correctRarity && options.length < 4) {
         options.push(rarity);
       }
     });
-    
+
     return options;
   };
 
   const generateTypeOptions = (correctType, allPets) => {
     const types = [...new Set(allPets.map((p) => p.type).filter(Boolean))];
     const options = [correctType || 'Pet'];
-    
+
     types.forEach((type) => {
       if (type !== correctType && options.length < 4) {
         options.push(type);
       }
     });
-    
+
     return options;
   };
 
@@ -334,7 +329,7 @@ const styles = StyleSheet.create({
   },
   roundText: {
     fontSize: 14,
-    fontFamily: 'Lato-Regular',
+
   },
   resultBadge: {
     flexDirection: 'row',
@@ -352,7 +347,7 @@ const styles = StyleSheet.create({
   resultText: {
     color: '#fff',
     fontSize: 12,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginLeft: 4,
   },
   imageContainer: {
@@ -366,7 +361,7 @@ const styles = StyleSheet.create({
   },
   question: {
     fontSize: 18,
-    fontFamily: 'Lato-Bold',
+    fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -397,7 +392,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    fontFamily: 'Lato-Regular',
+
     flex: 1,
   },
   optionIcon: {
@@ -411,13 +406,13 @@ const styles = StyleSheet.create({
   },
   feedbackText: {
     fontSize: 14,
-    fontFamily: 'Lato-Regular',
+
     textAlign: 'center',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    fontFamily: 'Lato-Regular',
+
     textAlign: 'center',
   },
 });
