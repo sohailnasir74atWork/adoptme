@@ -15,6 +15,7 @@ import DesignUploader from '../Design/DesignMainScreen';
 import DesignStack from '../Design/DesignNavigation';
 import CustomTopTabs from '../ValuesScreen/TopTabs';
 import { setAppLanguage, loadLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
+import { useNavigation } from '@react-navigation/native';
 
 
 
@@ -68,6 +69,32 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   // ✅ Memoize headerRight component to prevent re-renders
   const headerRight = useCallback((navigation) => (
     <>
+      {/* Analytics Button with NEW badge */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('Analytics')}
+        style={{
+          marginRight: 12,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          position: 'relative',
+        }}
+      >
+        <FontAwesome name="chart-line" size={18} color={config.colors.primary} solid />
+        <View style={{
+          position: 'absolute',
+          top: -6,
+          right: -10,
+          backgroundColor: '#EF4444',
+          borderRadius: 6,
+          // paddingHorizontal: 1,
+          paddingVertical: 1,
+          minWidth: 30,
+          alignItems: 'center',
+        }}>
+          <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'bold' }}>NEW</Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Language Selector Button */}
       <TouchableOpacity
         onPress={() => setShowLanguageModal(true)}

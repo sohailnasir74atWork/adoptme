@@ -275,6 +275,75 @@ firebase deploy --only functions:clearPresenceNode
 - If the presence node is already empty, the function logs a message and continues (no error)
 - Users who are actively using the app will immediately re-establish their presence after the cleanup
 
+### aggregateTradeAnalytics
+
+Scheduled Cloud Function that runs **every 12 hours** to aggregate trade analytics.
+
+**Data sources:**
+- `trades_new` collection (last 7 days, paginated — fetches ALL trades)
+- `reviews` collection (last 30 days, paginated — fetches ALL user wishlists & owned pets)
+
+**Analytics computed:**
+- **Top 20 most traded items** (24h appearance count, both sides)
+- **Top 20 most wanted** (demand = trade wants + wishlist data, weighted 0.5x)
+- **Top 20 most offered** (supply = trade has + owned pets, weighted 0.5x)
+- **Top 20 wishlisted** (pure wishlist ranking)
+- **Top 10 movers** (rising demand, first half vs second half of week)
+- **Top 10 losers** (falling demand)
+- **Trade volume** (today, 24h, week)
+- **Win/Lose/Fair distribution** (24h)
+- **Hourly activity chart** (24h) + peak hour
+- **Demand/Supply ratios** with signals (rising/falling/stable)
+- **Predictions** with confidence scores
+
+**Architecture:**
+```
+Cloud Function (every 12h) → Firestore (trade_analytics/latest)
+                                ↓ (you manually copy JSON)
+                           Bunny CDN (trade_analytics.json)
+                                ↓
+                           App reads from CDN (zero Firestore reads)
+                                ↓
+                           MMKV cache (3hr TTL, no re-fetch on every open)
+```
+
+**Data stored in Firestore:**
+- `trade_analytics/latest` — Current snapshot
+- `trade_analytics/history_{YYYY-MM-DD}` — Daily snapshot
+
+**Firestore Indexes Required:**
+```
+Collection: trades_new — Fields: timestamp (DESC)
+Collection: reviews — Fields: updatedAt (DESC)
+```
+
+**Deployment:**
+```bash
+firebase deploy --only functions:aggregateTradeAnalytics
+```
+
+**After deployment workflow:**
+1. Function runs automatically every 12 hours
+2. Go to Firebase Console → Firestore → `trade_analytics/latest`
+3. Copy the JSON data
+4. Upload to Bunny CDN as `trade_analytics.json`
+5. App automatically picks it up (with 3hr MMKV cache)
+
+### Value Changes (Manual CDN File)
+
+Separate from the cloud function. You manually maintain `value_changes.json` on Bunny CDN.
+
+**JSON structure supports all value types:**
+- `d` (default), `n` (neon), `m` (mega)
+- `nopotion`, `fly`, `ride`, `flyride`
+- Combined as keys: `d_nopotion`, `d_fly`, `n_flyride`, `m_nopotion`, etc.
+
+**Template:** See `value_changes_template.json` in project root.
+
+**CDN URLs:**
+- Analytics: `https://adoptme.b-cdn.net/trade_analytics.json`
+- Value Changes: `https://adoptme.b-cdn.net/value_changes.json`
+
 ## Notes
 
 - Invitations expire after 7 days (as set in `groupUtils.js`)

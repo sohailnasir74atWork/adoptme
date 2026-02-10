@@ -34,6 +34,7 @@ import { checkForUpdate } from './Code/AppHelper/InAppUpdateChecker';
 import AdminUnbanScreen from './Code/AppHelper/AdminDashboard';
 import Icon from 'react-native-vector-icons/Ionicons';
 import SubscriptionScreen from './Code/SettingScreen/OfferWall';
+import AnalyticsScreen from './Code/Analytics/AnalyticsScreen';
 
 
 
@@ -237,8 +238,17 @@ function App() {
               {() => <AdminUnbanScreen selectedTheme={selectedTheme} />}
             </Stack.Screen>
 
-            {/* Move this outside of <Stack.Navigator> */}
-
+            <Stack.Screen
+              name="Analytics"
+              options={{
+                title: 'Market Analytics',
+                headerStyle: { backgroundColor: selectedTheme.colors.background },
+                headerTintColor: selectedTheme.colors.text,
+                headerTitleStyle: { fontWeight: 'bold' },
+              }}
+            >
+              {() => <AnalyticsScreen />}
+            </Stack.Screen>
 
             <Stack.Screen
               name="Setting"

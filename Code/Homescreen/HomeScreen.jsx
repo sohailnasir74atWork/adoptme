@@ -381,6 +381,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
+    console.log(items);
 
     const callbackfunction = () => { };
 
@@ -1682,9 +1683,10 @@ const getStyles = (isDarkMode) =>
     },
     topSection: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      justifyContent: 'space-evenly',
       alignItems: 'center',
       // marginBottom: 10,
+      // backgroundColor:'blue'
 
 
     },
@@ -1694,7 +1696,7 @@ const getStyles = (isDarkMode) =>
       color: '#333',
       textAlign: 'center',
       color: isDarkMode ? 'white' : '#333',
-      minWidth: 100
+      // minWidth: 100
 
     },
     bigNumber2: {
@@ -1707,12 +1709,13 @@ const getStyles = (isDarkMode) =>
     },
     statusContainer: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.05)',
       borderRadius: 20,
       padding: 5,
       paddingHorizontal: 8,
+      // backgroundColor:'red'
     },
     statusText: {
       fontSize: 12,

@@ -1,0 +1,53 @@
+{
+  "lastUpdated": "2025-02-10T12:00:00Z",
+  "note": "February 2025 value update",
+  "changes": [
+    {
+      "name": "Shadow Dragon",
+      "type": "pets",
+      "image": "Shadow Dragon.webp",
+      "date": "2025-02-10",
+      "primary": "d_nopotion",
+      "values": {
+        "d_nopotion":  { "oldVal": 850000, "newVal": 920000 },
+        "d_fly":       { "oldVal": 870000, "newVal": 940000 },
+        "d_ride":      { "oldVal": 860000, "newVal": 930000 },
+        "d_flyride":   { "oldVal": 900000, "newVal": 970000 },
+        "n_nopotion":  { "oldVal": 1200000, "newVal": 1300000 },
+        "n_fly":       { "oldVal": 1220000, "newVal": 1320000 },
+        "n_ride":      { "oldVal": 1210000, "newVal": 1310000 },
+        "n_flyride":   { "oldVal": 1250000, "newVal": 1350000 },
+        "m_nopotion":  { "oldVal": 2500000, "newVal": 2700000 },
+        "m_fly":       { "oldVal": 2520000, "newVal": 2720000 },
+        "m_ride":      { "oldVal": 2510000, "newVal": 2710000 },
+        "m_flyride":   { "oldVal": 2550000, "newVal": 2750000 }
+      }
+    },
+    {
+      "name": "Frost Dragon",
+      "type": "pets",
+      "image": "Frost Dragon.webp",
+      "date": "2025-02-10",
+      "primary": "d_nopotion",
+      "values": {
+        "d_nopotion":  { "oldVal": 500000, "newVal": 480000 },
+        "d_fly":       { "oldVal": 520000, "newVal": 500000 },
+        "d_ride":      { "oldVal": 510000, "newVal": 490000 },
+        "d_flyride":   { "oldVal": 540000, "newVal": 520000 },
+        "n_nopotion":  { "oldVal": 800000, "newVal": 780000 },
+        "n_flyride":   { "oldVal": 850000, "newVal": 830000 }
+      }
+    },
+    {
+      "name": "Bat Dragon",
+      "type": "pets",
+      "image": "Bat Dragon.webp",
+      "date": "2025-02-08",
+      "primary": "d_nopotion",
+      "values": {
+        "d_nopotion":  { "oldVal": 700000, "newVal": 750000 },
+        "d_flyride":   { "oldVal": 750000, "newVal": 800000 }
+      }
+    }
+  ]
+}
