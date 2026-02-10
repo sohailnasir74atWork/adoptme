@@ -91,7 +91,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           minWidth: 30,
           alignItems: 'center',
         }}>
-          <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'bold' }}>NEW</Text>
+          <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'semi-bold' }}>NEW</Text>
         </View>
       </TouchableOpacity>
 
