@@ -6,7 +6,7 @@ import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore'
 import { createNewUser, registerForNotifications } from './Globelhelper';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
-import { useColorScheme, InteractionManager, AppState } from 'react-native';
+import { useColorScheme, InteractionManager, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 
 
@@ -25,10 +25,12 @@ export const useGlobalState = () => useContext(GlobalStateContext);
 export const GlobalStateProvider = ({ children }) => {
   const { localState, updateLocalState } = useLocalState()
 
-  const colorScheme = useColorScheme(); // 'light' or 'dark'
+  const colorScheme = useColorScheme(); // 'light' or 'dark' or null
 
-  const resolvedTheme = localState.theme === 'system' ? colorScheme : localState.theme;
-  const [theme, setTheme] = useState(resolvedTheme);
+  const resolveTheme = (userPref, systemScheme) =>
+    userPref === 'system' ? (systemScheme || 'light') : userPref;
+
+  const [theme, setTheme] = useState(() => resolveTheme(localState.theme, colorScheme));
   const [api, setApi] = useState(null);
   const [freeTranslation, setFreeTranslation] = useState(null);
   const [currentUserEmail, setCurrentuserEmail] = useState('')
@@ -61,11 +63,25 @@ export const GlobalStateProvider = ({ children }) => {
   // const [robloxUsername, setRobloxUsername] = useState('');
   const robloxUsernameRef = useRef('');
 
+  // Keep localState.theme in a ref so the Appearance listener can read it without stale closures
+  const themeSettingRef = useRef(localState.theme);
+  useEffect(() => { themeSettingRef.current = localState.theme; }, [localState.theme]);
 
-  // Track theme changes
+  // Track theme changes from useColorScheme
   useEffect(() => {
-    setTheme(localState.theme === 'system' ? colorScheme : localState.theme);
+    setTheme(resolveTheme(localState.theme, colorScheme));
   }, [localState.theme, colorScheme]);
+
+  // Robust fallback: Appearance.addChangeListener catches system theme changes
+  // even when useColorScheme hook doesn't re-trigger (known RN issue on some devices)
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme: newScheme }) => {
+      if (themeSettingRef.current === 'system') {
+        setTheme(newScheme || 'light');
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // const isAdmin = user?.id  ? user?.id == '3CAAolfaX3UE3BLTZ7ghFbNnY513' : false
 

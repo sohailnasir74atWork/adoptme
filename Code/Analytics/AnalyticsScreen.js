@@ -55,8 +55,8 @@ const normalizeFirestoreDocPayload = (payload) => {
 const analyticsCache = new MMKV({ id: 'analytics-cache' });
 
 // Cache durations
-const ANALYTICS_CACHE_MS = 1000; // 3 hours
-const CHANGES_CACHE_MS = 1000;   // 1 hour
+const ANALYTICS_CACHE_MS = 60 * 60 * 1000; // 3 hours
+const CHANGES_CACHE_MS = 10000;   // 1 hour
 
 // CDN URLs — you push data here after cloud function runs
 const ANALYTICS_CDN_URL = 'https://analytics.b-cdn.net';
