@@ -5,6 +5,27 @@ import { mixpanel } from '../AppHelper/MixPenel';
 
 const ENTITLEMENT_ID = 'pro';
 
+// ── Offerings cache for instant paywall ──
+let cachedOfferings = null;
+
+export const preloadOfferings = async () => {
+  try {
+    const offerings = await Purchases.getOfferings();
+    if (offerings?.all) {
+      cachedOfferings = offerings.all;
+    }
+  } catch (e) {
+    // Silent fail — will fetch on demand as fallback
+  }
+};
+
+const getOfferings = async () => {
+  if (cachedOfferings) return cachedOfferings;
+  const offerings = await Purchases.getOfferings();
+  cachedOfferings = offerings?.all || {};
+  return cachedOfferings;
+};
+
 const userHasEntitlement = async () => {
   try {
     const customerInfo = await Purchases.getCustomerInfo();
@@ -53,8 +74,7 @@ const openAndCheck = async (offering, offeringId, source, showoffer) => {
 // ✅ added: forceSecondOnly
 export const handleOpenPaywall = async (source, showoffer, forceSecondOnly = false) => {
   try {
-    const offerings = await Purchases.getOfferings();
-    const all = offerings.all || {};
+    const all = await getOfferings();
 
     const simpleOffering = all['default'];
     const secondOffering = all['paywallrc'];

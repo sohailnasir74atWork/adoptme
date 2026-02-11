@@ -1670,7 +1670,8 @@ export default function SettingsScreen({ selectedTheme }) {
     }
   }, [user?.id, firestoreDB, modalLastTradeDoc, loadingModalMyTrades]);
 
-  // Load Followers modal when opens (2 by 2 like trades)
+  // Load Followers modal when opens
+  const FOLLOWERS_PAGE_SIZE = 10;
   useEffect(() => {
     if (!showFollowersModal || !user?.id || !firestoreDB || !appdatabase) return;
 
@@ -1684,7 +1685,7 @@ export default function SettingsScreen({ selectedTheme }) {
             collection(firestoreDB, 'following'),
             where('followingId', '==', user.id),
             orderBy('createdAt', 'desc'),
-            limit(2)
+            limit(FOLLOWERS_PAGE_SIZE + 1)
           );
           followersSnapshot = await getDocs(q);
         } catch (idxErr) {
@@ -1692,12 +1693,14 @@ export default function SettingsScreen({ selectedTheme }) {
           const fallbackQuery = query(
             collection(firestoreDB, 'following'),
             where('followingId', '==', user.id),
-            limit(2)
+            limit(FOLLOWERS_PAGE_SIZE + 1)
           );
           followersSnapshot = await getDocs(fallbackQuery);
         }
         const docs = followersSnapshot.docs;
-        const followerIds = docs.map(d => d.data().followerId).filter(Boolean);
+        const hasMore = usedOrderBy && docs.length > FOLLOWERS_PAGE_SIZE;
+        const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
+        const followerIds = displayDocs.map(d => d.data().followerId).filter(Boolean);
 
         const followersWithDetails = await Promise.all(
           followerIds.map(async (followerId) => {
@@ -1718,8 +1721,8 @@ export default function SettingsScreen({ selectedTheme }) {
         );
 
         setModalFollowers(followersWithDetails);
-        setModalLastFollowerDoc(usedOrderBy ? (docs[docs.length - 1] || null) : null);
-        setModalHasMoreFollowers(usedOrderBy && docs.length === 2);
+        setModalLastFollowerDoc(usedOrderBy ? (displayDocs[displayDocs.length - 1] || null) : null);
+        setModalHasMoreFollowers(hasMore);
       } catch (error) {
         console.error('Error loading followers:', error);
         setModalFollowers([]);
@@ -1732,7 +1735,7 @@ export default function SettingsScreen({ selectedTheme }) {
     loadFollowers();
   }, [showFollowersModal, user?.id, firestoreDB, appdatabase]);
 
-  // Load more Followers (2 at a time)
+  // Load more Followers
   const loadMoreFollowers = useCallback(async () => {
     if (!user?.id || !firestoreDB || !appdatabase || loadingModalFollowers || !modalLastFollowerDoc) return;
 
@@ -1743,11 +1746,13 @@ export default function SettingsScreen({ selectedTheme }) {
         where('followingId', '==', user.id),
         orderBy('createdAt', 'desc'),
         startAfter(modalLastFollowerDoc),
-        limit(2)
+        limit(FOLLOWERS_PAGE_SIZE + 1)
       );
       const followersSnapshot = await getDocs(followersQuery);
       const docs = followersSnapshot.docs;
-      const followerIds = docs.map(d => d.data().followerId).filter(Boolean);
+      const hasMore = docs.length > FOLLOWERS_PAGE_SIZE;
+      const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
+      const followerIds = displayDocs.map(d => d.data().followerId).filter(Boolean);
 
       const newFollowers = await Promise.all(
         followerIds.map(async (followerId) => {
@@ -1768,8 +1773,8 @@ export default function SettingsScreen({ selectedTheme }) {
       );
 
       setModalFollowers(prev => [...prev, ...newFollowers]);
-      setModalLastFollowerDoc(docs[docs.length - 1] || null);
-      setModalHasMoreFollowers(docs.length === 2);
+      setModalLastFollowerDoc(displayDocs[displayDocs.length - 1] || null);
+      setModalHasMoreFollowers(hasMore);
     } catch (error) {
       console.error('Error loading more followers:', error);
       setModalHasMoreFollowers(false);

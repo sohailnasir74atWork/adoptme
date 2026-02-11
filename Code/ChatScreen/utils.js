@@ -332,6 +332,37 @@ export const isUserOnline = async (userId) => {
   }
 };
 
+/**
+ * Real-time online status hook — uses onValue listener on presence/{userId}.
+ * Unlike isUserOnline() which is a one-shot get(), this updates live
+ * when the user goes online/offline. Use in components that stay on screen
+ * (BottomDrawer, PrivateChatHeader, PrivateChat).
+ */
+export const useOnlineStatus = (userId) => {
+  const [isOnline, setIsOnline] = useState(false);
+
+  useEffect(() => {
+    if (!userId) {
+      setIsOnline(false);
+      return;
+    }
+
+    const presenceRef = ref(getDatabase(), `presence/${userId}`);
+    const unsubscribe = onValue(presenceRef, (snapshot) => {
+      setIsOnline(snapshot.val() === true);
+    }, (error) => {
+      console.error('useOnlineStatus listener error:', error);
+      setIsOnline(false);
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [userId]);
+
+  return isOnline;
+};
+
 export const setActiveChat = async (userId, chatId) => {
   // ✅ Safety checks
   if (!userId || !chatId) {
@@ -642,6 +673,59 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
   } catch (err) {
     console.error('Set strike error:', err);
     if (showAlert) Alert.alert('Error', 'Could not apply strike.');
+    return false;
+  }
+};
+
+/**
+ * Mute a user for a specified number of minutes.
+ * Uses the SAME DB structure as bans (banned_users_by_email) — just a short bannedUntil.
+ * Does NOT increment strikeCount — mutes are temporary silences, not strikes.
+ * Existing useBanStatus/checkBanStatus already handle time-based expiry.
+ */
+export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true) => {
+  if (!email || typeof email !== 'string' || email.trim().length === 0) {
+    console.error('❌ Invalid email for muteUser');
+    if (showAlert) Alert.alert('Error', 'Invalid email address.');
+    return false;
+  }
+
+  if (!minutes || minutes < 1) {
+    if (showAlert) Alert.alert('Error', 'Mute duration must be at least 1 minute.');
+    return false;
+  }
+
+  try {
+    const db = getDatabase();
+    const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
+    const snap = await get(banRef);
+
+    // Preserve existing strikeCount if user was previously banned
+    const existingStrikeCount = snap.exists() ? (snap.val()?.strikeCount || 0) : 0;
+
+    const muteData = {
+      strikeCount: existingStrikeCount,
+      bannedUntil: Date.now() + minutes * 60 * 1000,
+      reason: `Muted for ${minutes} min`,
+      bannedAt: Date.now(),
+      userId: userInfo?.id || null,
+      displayName: userInfo?.displayName || 'Unknown User',
+      avatar: userInfo?.avatar || null,
+      email: email,
+      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannerAvatar: bannerInfo?.avatar || null,
+    };
+
+    await set(banRef, muteData);
+
+    if (showAlert) {
+      Alert.alert('User Muted', `Muted for ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Mute error:', err);
+    if (showAlert) Alert.alert('Error', 'Could not mute user.');
     return false;
   }
 };

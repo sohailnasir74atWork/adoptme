@@ -40,7 +40,7 @@ import {
 import { ref, get, set } from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
-import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike } from '../utils';
+import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus } from '../utils';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
 dayjs.extend(relativeTime);
@@ -125,7 +125,7 @@ const ProfileBottomDrawer = ({
   toggleModal,
   startChat,
   selectedUser,
-  isOnline,
+  isOnline: isOnlineProp, // kept for backward compat, overridden by real-time hook
   bannedUsers,
   fromPvtChat,
 }) => {
@@ -139,6 +139,9 @@ const ProfileBottomDrawer = ({
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
+
+  // ✅ FIXED: Real-time online status listener instead of stale one-shot prop
+  const isOnline = useOnlineStatus(isVisible ? selectedUserId : null);
   const userName = selectedUser?.sender || null;
   const avatar = selectedUser?.avatar || null;
 
@@ -633,6 +636,34 @@ const ProfileBottomDrawer = ({
     if (success) {
       setUserData(prev => ({ ...prev, isModerator: false }));
     }
+  };
+
+  const handleMuteUser = async (minutes) => {
+    if (!mergedUser?.email) {
+      Alert.alert("Error", "User email not found.");
+      return;
+    }
+
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        `Mute for ${minutes} min`,
+        `Mute ${userName} for ${minutes} minute${minutes !== 1 ? 's' : ''}? (no strike added)`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Mute", style: "destructive", onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    if (!confirm) return;
+
+    const currentUser = auth().currentUser;
+    const success = await muteUser(mergedUser.email, minutes, mergedUser, {
+      id: currentUser?.uid,
+      displayName: currentUser?.displayName || 'Moderator',
+      avatar: currentUser?.photoURL
+    }, true);
+    if (success) setIsBanned(true);
   };
 
   // ─────────────────────────────────────────────
@@ -2513,6 +2544,33 @@ const ProfileBottomDrawer = ({
                         >
                           <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11 }}>
                             Strike {strike}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Mute Actions */}
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 4, fontWeight: '600' }}>
+                      Mute (no strike):
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {[5, 10, 30].map((mins) => (
+                        <TouchableOpacity
+                          key={mins}
+                          onPress={() => handleMuteUser(mins)}
+                          style={{
+                            backgroundColor: '#7C3AED',
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            borderRadius: 6,
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11 }}>
+                            {mins} min
                           </Text>
                         </TouchableOpacity>
                       ))}

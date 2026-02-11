@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,19 +16,20 @@ import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
 import database, { ref, get, update } from '@react-native-firebase/database';
-import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import { showSuccessMessage } from '../../Helper/MessageHelper';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
 const INITIAL_LOAD = 15; // ✅ Initial chats to display
 const LOAD_MORE = 10; // ✅ Load 10 more on scroll
 
-const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
+const InboxScreen = ({ bannedUsers }) => {
   const navigation = useNavigation();
   const { user, theme, appdatabase } = useGlobalState();
   const { t } = useTranslation();
   const [localLoading, setLocalLoading] = useState(false);
   const [localChats, setLocalChats] = useState([]);
   const [displayedChatsCount, setDisplayedChatsCount] = useState(INITIAL_LOAD); // ✅ Start with 15 chats
+  const debounceTimerRef = useRef(null); // ✅ Debounce updateChatsList
 
   // ✅ OPTIMIZED: Use get() for initial load + child listeners for updates
   // This prevents re-downloading entire chat_meta_data on every change
@@ -56,17 +57,17 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
         setLocalLoading(false); // Child listeners will populate chatsMap incrementally
       };
 
-      // ✅ Helper function to update chats list from map
+      // ✅ FIXED: Debounced helper to batch rapid child_changed events
+      // Without this, every single message in any chat triggers sort + 2x setState
       const updateChatsList = () => {
-        const updatedChats = Array.from(chatsMap.values())
-          .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = setTimeout(() => {
+          const updatedChats = Array.from(chatsMap.values())
+            .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
 
-        setLocalChats(updatedChats);
-        setDisplayedChatsCount(INITIAL_LOAD);
-
-        if (setChats && typeof setChats === 'function') {
-          setChats(updatedChats);
-        }
+          setLocalChats(updatedChats);
+          setDisplayedChatsCount(INITIAL_LOAD);
+        }, 300); // 300ms debounce — batches rapid updates
       };
 
       // ✅ OPTIMIZED: Use child listeners for updates (only downloads changed chats)
@@ -113,19 +114,19 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       userChatsRef.on('child_changed', handleChildChange);
       userChatsRef.on('child_removed', handleChildRemoved);
 
-      // ✅ Cleanup listeners when screen loses focus
+      // ✅ Cleanup listeners + debounce timer when screen loses focus
       return () => {
         userChatsRef.off('child_added', handleChildChange);
         userChatsRef.off('child_changed', handleChildChange);
         userChatsRef.off('child_removed', handleChildRemoved);
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         setDisplayedChatsCount(INITIAL_LOAD);
       };
-    }, [user?.id, appdatabase, bannedUsers, setChats])
+    }, [user?.id, appdatabase, bannedUsers])
   );
 
-  // ✅ Use local chats if available, fallback to props for backward compatibility
-  const allChats = localChats.length > 0 ? localChats : (chats || []);
-  const displayLoading = localLoading || loading;
+  const allChats = localChats;
+  const displayLoading = localLoading;
 
   // ✅ Safety check for bannedUsers array and filter
   const filteredChats = useMemo(() => {
@@ -213,13 +214,6 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
                 return prevChats.filter((chat) => chat?.chatId !== chatId);
               });
 
-              if (setChats && typeof setChats === 'function') {
-                setChats((prevChats) => {
-                  if (!Array.isArray(prevChats)) return [];
-                  return prevChats.filter((chat) => chat?.chatId !== chatId);
-                });
-              }
-
               showSuccessMessage(t("home.alert.success"), t("chat.chat_success_message"));
             } catch (error) {
               console.error('❌ Error deleting chat:', error);
@@ -230,7 +224,7 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       ],
       { cancelable: true }
     );
-  }, [allChats, user?.id, setChats, t]);
+  }, [allChats, user?.id, t]);
 
 
 
@@ -256,16 +250,6 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
         );
       });
 
-      // ✅ Also update parent state if provided
-      if (setChats && typeof setChats === 'function') {
-        setChats((prevChats) => {
-          if (!Array.isArray(prevChats)) return prevChats;
-          return prevChats.map((chat) =>
-            chat?.chatId === chatId ? { ...chat, unreadCount: 0 } : chat
-          );
-        });
-      }
-
       // ✅ Navigate to PrivateChat with isOnline status
       if (navigation && typeof navigation.navigate === 'function') {
         navigation.navigate('PrivateChat', {
@@ -281,7 +265,7 @@ const InboxScreen = ({ chats, setChats, loading, bannedUsers }) => {
       console.error("Error opening chat:", error);
       Alert.alert('Error', 'Failed to open chat. Please try again.');
     }
-  }, [user?.id, setChats, navigation]);
+  }, [user?.id, navigation]);
 
 
 
@@ -464,4 +448,4 @@ const getStyles = (isDarkMode) =>
     }
   });
 
-export default InboxScreen;
+export default React.memo(InboxScreen);

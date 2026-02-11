@@ -27,7 +27,6 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { showMessage } from 'react-native-flash-message';
 import ProfileBottomDrawer from './BottomDrawer';
-import { isUserOnline } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
@@ -58,7 +57,6 @@ const GroupChatScreen = () => {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedUserForDrawer, setSelectedUserForDrawer] = useState(null);
-  const [selectedUserOnline, setSelectedUserOnline] = useState(false);
   const [memberToMakeCreator, setMemberToMakeCreator] = useState(null);
   const [petModalVisible, setPetModalVisible] = useState(false);
   const [selectedFruits, setSelectedFruits] = useState([]);
@@ -967,14 +965,6 @@ const GroupChatScreen = () => {
       avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
     });
 
-    // Check if user is online
-    try {
-      const online = await isUserOnline(userData.senderId);
-      setSelectedUserOnline(online);
-    } catch (error) {
-      setSelectedUserOnline(false);
-    }
-
     setIsDrawerVisible(true);
   }, []);
 
@@ -1298,7 +1288,7 @@ const GroupChatScreen = () => {
           // Navigate to private chat if needed
         }}
         selectedUser={selectedUserForDrawer}
-        isOnline={selectedUserOnline}
+        isOnline={false}
         bannedUsers={bannedUsers}
         fromPvtChat={true}
       />

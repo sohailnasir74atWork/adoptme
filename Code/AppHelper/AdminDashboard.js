@@ -52,7 +52,7 @@ import {
   getDoc,
 } from '@react-native-firebase/firestore';
 
-import { unbanUserWithEmail, banUserwithEmail, setUserStrike } from '../ChatScreen/utils';
+import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser } from '../ChatScreen/utils';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -145,6 +145,9 @@ const AdminDashboard = () => {
 
   // Strike History
   const [strikeHistory, setStrikeHistory] = useState([]);
+
+  // Mute
+  const [customMuteMinutes, setCustomMuteMinutes] = useState('');
 
   // ─────────────────────────────────────────────
   // Fetch Banned Users (Paginated)
@@ -476,6 +479,41 @@ const AdminDashboard = () => {
       if (activeTab === 'search') {
         setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
         // ✅ Refresh cached ban status for this user
+        checkUserBanStatus(userItem.email).then((banData) => {
+          if (banData) {
+            setUserBanStatus((prev) => ({
+              ...prev,
+              [userItem.email]: banData,
+            }));
+          }
+        });
+      }
+    }
+  };
+
+  const handleMuteUser = async (userItem, minutes) => {
+    if (!userItem.email) {
+      Alert.alert('Error', 'User has no email associated.');
+      return;
+    }
+
+    const bannerInfo = {
+      id: currentUser?.id,
+      displayName: currentUser?.userName || currentUser?.displayName || 'Admin',
+      avatar: currentUser?.avatar
+    };
+    const userInfo = {
+      id: userItem.id,
+      displayName: userItem.displayName,
+      avatar: userItem.avatar,
+    };
+
+    const success = await muteUser(userItem.email, minutes, userInfo, bannerInfo, true);
+    if (success) {
+      setSelectedUser(null);
+      fetchBannedUsers(true);
+      if (activeTab === 'search') {
+        setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
         checkUserBanStatus(userItem.email).then((banData) => {
           if (banData) {
             setUserBanStatus((prev) => ({
@@ -1008,6 +1046,51 @@ const AdminDashboard = () => {
                   ))}
                 </View>
               )}
+
+              {/* Mute Buttons */}
+              <View style={{ marginTop: 16 }}>
+                <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                  Mute User (temporary silence, no strike)
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#5856D6' }]} onPress={() => handleMuteUser(selectedUser, 5)}>
+                    <Ionicons name="volume-mute" size={16} color="#FFF" />
+                    <Text style={[styles.buttonText, { fontSize: 14 }]}>5 min</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#AF52DE' }]} onPress={() => handleMuteUser(selectedUser, 10)}>
+                    <Ionicons name="volume-mute" size={16} color="#FFF" />
+                    <Text style={[styles.buttonText, { fontSize: 14 }]}>10 min</Text>
+                  </TouchableOpacity>
+                  <View style={[styles.strikeButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', justifyContent: 'center' }]}> 
+                    <TextInput
+                      value={customMuteMinutes}
+                      onChangeText={setCustomMuteMinutes}
+                      placeholder="Min"
+                      placeholderTextColor={isDark ? '#666' : '#999'}
+                      keyboardType="number-pad"
+                      style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, textAlign: 'center', width: '100%', paddingVertical: 0 }}
+                      maxLength={4}
+                    />
+                  </View>
+                </View>
+                {customMuteMinutes.trim().length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#5856D6', height: 40, marginBottom: 8 }]}
+                    onPress={() => {
+                      const mins = parseInt(customMuteMinutes, 10);
+                      if (mins > 0) {
+                        handleMuteUser(selectedUser, mins);
+                        setCustomMuteMinutes('');
+                      } else {
+                        Alert.alert('Error', 'Enter a valid number of minutes.');
+                      }
+                    }}
+                  >
+                    <Ionicons name="volume-mute" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={[styles.buttonText, { fontSize: 14 }]}>Mute for {customMuteMinutes} min</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
               {/* Strike Buttons */}
               <View style={{ marginTop: 16 }}>

@@ -18,7 +18,6 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
-import { isUserOnline } from '../ChatScreen/utils';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import {
   collection,
@@ -61,7 +60,6 @@ const TradeList = ({ route }) => {
   // const [openShareModel, setOpenShareModel] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [bannedUsers, setBannedUsers] = useState([]);
-  const [isOnline, setIsOnline] = useState(false);
 
 
   const [isAdLoaded, setIsAdLoaded] = useState(false);
@@ -862,15 +860,6 @@ const TradeList = ({ route }) => {
       return;
     }
     setSelectedTrade(item)
-    setIsOnline(false); // Reset online status before checking to prevent stale state
-    // console.log(item, selectedTrade)
-    try {
-      const online = await isUserOnline(item?.userId);
-      setIsOnline(online);
-    } catch (error) {
-      console.error('🔥 Error checking online status:', error);
-      setIsOnline(false);
-    }
     setIsDrawerVisible(true);
   }
 
@@ -1511,7 +1500,7 @@ const TradeList = ({ route }) => {
         toggleModal={closeProfileDrawer}
         startChat={handleChatNavigation2}
         selectedUser={selectedUser}
-        isOnline={isOnline}
+        isOnline={false}
         bannedUsers={bannedUsers}
       />
 

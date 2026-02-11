@@ -75,6 +75,12 @@ export const GlobalStateProvider = ({ children }) => {
     updateLocalStateRef.current = updateLocalState;
   }, [updateLocalState]);
 
+  // ✅ Keep localState accessible via ref for memoized callbacks (avoids stale closures)
+  const localStateRef = useRef(localState);
+  useEffect(() => {
+    localStateRef.current = localState;
+  }, [localState]);
+
   // ✅ Memoize updateLocalStateAndDatabase to prevent infinite loops and duplicate writes
   const updateLocalStateAndDatabase = useCallback(async (keyOrUpdates, value) => {
     try {
@@ -327,53 +333,47 @@ export const GlobalStateProvider = ({ children }) => {
   }, []);
 
   // Fetch trading server link with 3 hour caching
+  // ✅ FIXED: Run once on mount only — deps no longer include values this effect updates
   useEffect(() => {
+    if (!appdatabase) return;
+
     const fetchTradingServerLink = async () => {
       try {
-        const lastServerFetch = localState.lastServerFetch ? new Date(localState.lastServerFetch).getTime() : 0;
+        // Read from MMKV directly to avoid stale closure
+        const cachedLink = localState.tradingServerLink;
+        const lastFetch = localState.lastServerFetch ? new Date(localState.lastServerFetch).getTime() : 0;
         const now = Date.now();
-        const timeElapsed = now - lastServerFetch;
         const EXPIRY_LIMIT = 3 * 60 * 60 * 1000; // 3 hours
 
-        // Only fetch if expired or not cached
-        if (timeElapsed > EXPIRY_LIMIT || !localState.tradingServerLink) {
+        if ((now - lastFetch) > EXPIRY_LIMIT || !cachedLink) {
           const serverRef = ref(appdatabase, 'server');
           const snapshot = await get(serverRef);
 
           if (snapshot.exists()) {
             const serverData = snapshot.val();
-            // Convert to array and get first server link
             const serverList = Object.entries(serverData).map(([id, value]) => ({ id, ...value }));
-
-            // Get the first server link (or you can filter by name if needed)
             const firstServer = serverList.length > 0 ? serverList[0] : null;
             const serverLink = firstServer?.link || null;
 
             if (serverLink) {
               setTradingServerLink(serverLink);
-              await updateLocalState('tradingServerLink', serverLink);
-              await updateLocalState('lastServerFetch', new Date().toISOString());
+              updateLocalStateRef.current('tradingServerLink', serverLink);
+              updateLocalStateRef.current('lastServerFetch', new Date().toISOString());
             }
           }
-        } else {
-          // Use cached link
-          if (localState.tradingServerLink) {
-            setTradingServerLink(localState.tradingServerLink);
-          }
+        } else if (cachedLink) {
+          setTradingServerLink(cachedLink);
         }
       } catch (error) {
         console.error('Error fetching trading server link:', error);
-        // Fallback to cached link if available
         if (localState.tradingServerLink) {
           setTradingServerLink(localState.tradingServerLink);
         }
       }
     };
 
-    if (appdatabase) {
-      fetchTradingServerLink();
-    }
-  }, [appdatabase, localState.lastServerFetch, localState.tradingServerLink]);
+    fetchTradingServerLink();
+  }, [appdatabase]); // ✅ Only re-run if appdatabase changes (once)
 
   const updateUserProStatus = () => {
     if (!user?.id) {
@@ -410,75 +410,22 @@ export const GlobalStateProvider = ({ children }) => {
 
 
 
-  // const fetchStockData = async (refresh) => {
-  //   try {
-  //     setLoading(true);
-
-  //     const lastActivity = localState.lastActivity ? new Date(localState.lastActivity).getTime() : 0;
-  //     const now = Date.now();
-  //     const timeElapsed = now - lastActivity;
-  //     const EXPIRY_LIMIT = refresh ? 1 * 10 * 1000 : 1 * 6 * 60 * 1000; // 30 min or 6 hrs
-
-  //     const shouldFetch =
-  //       timeElapsed > EXPIRY_LIMIT ||
-  //       !localState.data ||
-  //       !Object.keys(localState.data).length ||
-  //       !localState.imgurl;
-
-  //     if (shouldFetch) {
-  //       let data = {};
-  //       let image = '';
-
-  //       // ✅ First try to fetch `data` from Bunny CDN
-  //       try {
-  //         const dataRes = await fetch('https://adoptme.b-cdn.net');
-  //         const dataJson = await dataRes.json();
-  //         // console.log(dataJson)
-
-  //         if (!dataJson || typeof dataJson !== 'object' || dataJson.error || !Object.keys(dataJson).length) {
-  //           throw new Error('CDN returned invalid or error data');
-  //         }
-
-  //         data = dataJson;
-
-  //         console.log('✅ Loaded data from Bunny CDN');
-  //       } catch (err) {
-  //         console.warn('⚠️ Failed to load from CDN, falling back to Firebase:', err.message);
-
-  //         const xlsSnapshot = await get(ref(appdatabase, 'xlsData'));
-  //         data = xlsSnapshot.exists() ? xlsSnapshot.val() : {};
-  //       }
-
-  //       // ✅ Always fetch `image_url` from Firebase
-  //       const imageSnapShot = await get(ref(appdatabase, 'image_url'));
-  //       image = imageSnapShot.exists() ? imageSnapShot.val() : '';
-
-  //       // ✅ Store in local state
-  //       await updateLocalState('data', JSON.stringify(data));
-  //       await updateLocalState('imgurl', JSON.stringify(image));
-  //       await updateLocalState('lastActivity', new Date().toISOString());
-  //     }
-
-  //   } catch (error) {
-  //     console.error("❌ Error fetching stock data:", error);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
-  const fetchStockData = async (refresh) => {
+  // ✅ FIXED: Memoize fetchStockData to prevent contextValue from changing every render
+  // This was causing ALL 80+ useGlobalState consumers to re-render on every cycle
+  const fetchStockData = useCallback(async (refresh) => {
     try {
       setLoading(true);
 
-      const lastActivity = localState.lastActivity ? new Date(localState.lastActivity).getTime() : 0;
+      const ls = localStateRef.current;
+      const lastActivity = ls.lastActivity ? new Date(ls.lastActivity).getTime() : 0;
       const now = Date.now();
       const timeElapsed = now - lastActivity;
       const EXPIRY_LIMIT = refresh ? 1 * 1000 : 3 * 60 * 1000; // 10s for refresh, 6min default
       const shouldFetch =
         timeElapsed > EXPIRY_LIMIT ||
-        !localState.data ||
-        !Object.keys(localState.data).length ||
-        !localState.imgurl;
+        !ls.data ||
+        !Object.keys(ls.data).length ||
+        !ls.imgurl;
 
 
       if (shouldFetch) {
@@ -500,13 +447,13 @@ export const GlobalStateProvider = ({ children }) => {
             throw new Error('Non-GG CDN returned invalid data');
           }
           // console.log(JSON.stringify(json))
-          await updateLocalState('data', json);
+          await updateLocalStateRef.current('data', json);
         } catch (err) {
           console.warn('⚠️ Non-GG CDN failed, using cached data:', err.message);
           // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase xlsData
           // This prevents downloading 12.43 MB from Firebase RTDB
           // If no cached data exists, keep existing localState.data (empty or old)
-          const localDataObj = typeof localState.data === 'string' ? JSON.parse(localState.data) : localState.data;
+          const localDataObj = typeof ls.data === 'string' ? JSON.parse(ls.data) : ls.data;
           const hasLocalData = localDataObj && Object.keys(localDataObj || {}).length > 0;
 
           if (!hasLocalData) {
@@ -523,7 +470,7 @@ export const GlobalStateProvider = ({ children }) => {
         // 🔹 Fetch shared image_url
         const imageSnapShot = await get(ref(appdatabase, 'image_url'));
         image = imageSnapShot.exists() ? imageSnapShot.val() : '';
-        await updateLocalState('imgurl', image);
+        await updateLocalStateRef.current('imgurl', image);
         // console.log('updated everything')
       }
     } catch (error) {
@@ -531,24 +478,20 @@ export const GlobalStateProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-
-
-  // console.log(user)
+  }, [appdatabase]); // ✅ Stable — only changes if appdatabase changes (once)
 
   // ✅ Run the function only if needed
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
-      fetchStockData(); // ✅ Now runs after main thread is free
+      fetchStockData();
     });
 
     return () => task.cancel();
-  }, []);
+  }, [fetchStockData]);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     fetchStockData(true);
-  };
+  }, [fetchStockData]);
 
 
 
@@ -722,7 +665,7 @@ export const GlobalStateProvider = ({ children }) => {
       isInActiveGame, // ✅ Game state for invite notifications
       setIsInActiveGame, // ✅ Set game state
     }),
-    [user, theme, fetchStockData, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, auth, tradingServerLink, isInActiveGame]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame]
   );
 
   return (

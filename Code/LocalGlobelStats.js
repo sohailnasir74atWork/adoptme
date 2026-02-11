@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { InteractionManager } from 'react-native';
 import { mixpanel } from './AppHelper/MixPenel';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
+import { preloadOfferings } from './SettingScreen/PayWall';
 
 const storage = new MMKV();
 const LocalStateContext = createContext();
@@ -70,15 +71,9 @@ export const LocalStateProvider = ({ children }) => {
   const { t } = useTranslation();
 
 
-  // Listen for system theme changes
-  useEffect(() => {
-    if (localState.theme === 'system') {
-      const listener = Appearance.addChangeListener(({ colorScheme }) => {
-        updateLocalState('theme', colorScheme);
-      });
-      return () => listener.remove(); // Correct cleanup
-    }
-  }, [localState.theme]);
+  // ✅ System theme changes are handled by GlobelStats.js (resolvedTheme)
+  // No listener needed here — storing 'system' in MMKV is correct,
+  // GlobelStats resolves it to 'light'/'dark' at render time
 
   useEffect(() => {
     if (localState.data) {
@@ -159,7 +154,8 @@ export const LocalStateProvider = ({ children }) => {
         checkEntitlements().catch(error => {
           // console.error('❌ Error checking entitlements:', error.message);
           return null; // Return null instead of throwing
-        })
+        }),
+        preloadOfferings().catch(() => null),
       ]);
     } catch (error) {
       // console.error('❌ Error initializing RevenueCat:', error.message);

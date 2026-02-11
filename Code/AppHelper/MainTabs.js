@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet } from 'react-native';
+import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -66,34 +66,44 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   // ✅ Memoize isDarkMode to avoid recalculation
   const isDarkMode = useMemo(() => theme === 'dark', [theme]);
 
+  // ✅ Analytics button component (reused in headerLeft on iOS, headerRight on Android)
+  const AnalyticsButton = useCallback((navigation) => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Analytics')}
+      style={{
+        marginRight: Platform.OS === 'ios' ? 0 : 12,
+        marginLeft: Platform.OS === 'ios' ? 10 : 0,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        position: 'relative',
+      }}
+    >
+      <FontAwesome name="chart-line" size={18} color={config.colors.primary} solid />
+      <View style={{
+        position: 'absolute',
+        top: -6,
+        right: -10,
+        backgroundColor: '#EF4444',
+        borderRadius: 6,
+        paddingVertical: 1,
+        minWidth: 30,
+        alignItems: 'center',
+      }}>
+        <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'semi-bold' }}>NEW</Text>
+      </View>
+    </TouchableOpacity>
+  ), []);
+
+  // ✅ On iOS, place Analytics button on the left (header title is centered)
+  const headerLeft = useCallback((navigation) => (
+    Platform.OS === 'ios' ? AnalyticsButton(navigation) : null
+  ), [AnalyticsButton]);
+
   // ✅ Memoize headerRight component to prevent re-renders
   const headerRight = useCallback((navigation) => (
     <>
-      {/* Analytics Button with NEW badge */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Analytics')}
-        style={{
-          marginRight: 12,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          position: 'relative',
-        }}
-      >
-        <FontAwesome name="chart-line" size={18} color={config.colors.primary} solid />
-        <View style={{
-          position: 'absolute',
-          top: -6,
-          right: -10,
-          backgroundColor: '#EF4444',
-          borderRadius: 6,
-          // paddingHorizontal: 1,
-          paddingVertical: 1,
-          minWidth: 30,
-          alignItems: 'center',
-        }}>
-          <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'semi-bold' }}>NEW</Text>
-        </View>
-      </TouchableOpacity>
+      {/* Analytics Button — only on Android (iOS uses headerLeft) */}
+      {Platform.OS !== 'ios' && AnalyticsButton(navigation)}
 
       {/* Language Selector Button */}
       <TouchableOpacity
@@ -266,6 +276,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           name="Calculator"
           options={({ navigation }) => ({
             title: t('tabs.calculator'),
+            headerLeft: () => headerLeft(navigation),
             headerRight: () => headerRight(navigation),
           })}
         >

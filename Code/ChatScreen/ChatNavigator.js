@@ -10,7 +10,6 @@ import PrivateChatHeader from './PrivateChat/PrivateChatHeader';
 import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
-// import database from '@react-native-firebase/database';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
 import { ref, update, get } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
@@ -22,16 +21,13 @@ import { useTranslation } from 'react-i18next';
 const Stack = createNativeStackNavigator();
 
 export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
-  const { user, unreadMessagesCount, appdatabase } = useGlobalState();
+  const { user, appdatabase } = useGlobalState();
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
-  const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [unreadcount, setunreadcount] = useState(0);
-  const { localState, updateLocalState } = useLocalState()
+  const { localState } = useLocalState()
   const { t } = useTranslation();
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
-  const [pinnedMessages, setPinnedMessages] = useState([]);
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupUnreadCount, setGroupUnreadCount] = useState(0); // Total unread count for groups
@@ -261,7 +257,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       >
         {() => (
           <ChatScreen
-            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadMessagesCount, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }}
+            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }}
           />
         )}
       </Stack.Screen>
@@ -271,7 +267,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         name="Inbox"
         options={{ title: 'Inbox' }}
       >
-        {props => <InboxScreen {...props} chats={[]} setChats={() => { }} loading={false} bannedUsers={bannedUsers} />}
+        {props => <InboxScreen {...props} bannedUsers={bannedUsers} />}
       </Stack.Screen>
 
       <Stack.Screen

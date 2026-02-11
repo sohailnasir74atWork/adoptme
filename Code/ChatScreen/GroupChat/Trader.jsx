@@ -14,7 +14,7 @@ import ChatHeaderContent from './ChatHeaderContent';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import { banUser, handleDeleteLast300Messages, isUserOnline, unbanUser } from '../utils';
+import { banUser, handleDeleteLast300Messages, unbanUser } from '../utils';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
 import leoProfanity from 'leo-profanity';
@@ -25,7 +25,6 @@ import database, { onValue, ref, remove } from '@react-native-firebase/database'
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
-import { logoutUser } from '../../Firebase/UserLogics';
 import { showMessage } from 'react-native-flash-message';
 import PetModal from '../PrivateChat/PetsModel';
 leoProfanity.add(['hell', 'shit']);
@@ -35,7 +34,7 @@ leoProfanity.loadDictionary('en');
 
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
-  setModalVisibleChatinfo, unreadMessagesCount, fetchChats, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
+  setModalVisibleChatinfo, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
   const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -47,7 +46,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null); // Store the selected user's details
-  const [isOnline, setIsOnline] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
   const [signinMessage, setSigninMessage] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
@@ -89,14 +87,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     setSelectedUser(userData);
     setIsDrawerVisible(true);
-
-    try {
-      const online = await isUserOnline(userData.senderId);
-      setIsOnline(online);
-    } catch (error) {
-      console.error('🔥 Error checking online status:', error);
-      setIsOnline(false);
-    }
   }, []);
 
   // ✅ Memoize closeProfileDrawer
@@ -108,18 +98,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const toggleDrawer = useCallback(async (userData = null) => {
     setSelectedUser(userData);
     setIsDrawerVisible((prev) => !prev);
-
-    if (userData?.senderId) {
-      try {
-        const online = await isUserOnline(userData.senderId);
-        setIsOnline(online);
-      } catch (error) {
-        console.error("🔥 Error checking online status:", error);
-        setIsOnline(false);
-      }
-    } else {
-      setIsOnline(false);
-    }
   }, []);
 
   // ✅ Memoize startPrivateChat
@@ -729,7 +707,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           toggleModal={closeProfileDrawer}
           startChat={startPrivateChat}
           selectedUser={selectedUser}
-          isOnline={isOnline}
+          isOnline={false}
           bannedUsers={bannedUsers}
         />
       </GestureHandlerRootView>

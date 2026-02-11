@@ -28,8 +28,7 @@ const firestore = admin.firestore();
  * 11. Predictions with confidence scores
  * 
  * Data stored:
- * - trade_analytics/latest  (current snapshot)
- * - trade_analytics/history_{YYYY-MM-DD}  (daily snapshot)
+ * - trade_analytics/latest  (single document, fully replaced on every run)
  * 
  * Deployment:
  * firebase deploy --only functions:aggregateTradeAnalytics
@@ -409,8 +408,19 @@ exports.aggregateTradeAnalytics = functions
 
       await firestore.collection('trade_analytics').doc('latest').set(analyticsData);
 
-      const dateKey = new Date().toISOString().split('T')[0];
-      await firestore.collection('trade_analytics').doc(`history_${dateKey}`).set(analyticsData);
+      // ── Cleanup: delete old history_* documents (no longer needed) ──
+      try {
+        const allDocs = await firestore.collection('trade_analytics').listDocuments();
+        const historyDocs = allDocs.filter(d => d.id.startsWith('history_'));
+        if (historyDocs.length > 0) {
+          const batch = firestore.batch();
+          historyDocs.forEach(d => batch.delete(d));
+          await batch.commit();
+          console.log(`🗑️ Cleaned up ${historyDocs.length} old history documents`);
+        }
+      } catch (cleanupErr) {
+        console.warn('⚠️ Could not cleanup history docs:', cleanupErr.message);
+      }
 
       console.log(`✅ Analytics done: ${weekTrades.length} week trades, ${last24hTrades.length} 24h trades, ${topTraded.length} top items`);
       return null;

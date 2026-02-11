@@ -14,7 +14,7 @@ import ReportModal from './ReportModal';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
-import { isUserOnline, banUserwithEmail as banUtils } from '../../ChatScreen/utils';
+import { banUserwithEmail as banUtils } from '../../ChatScreen/utils';
 import { useTranslation } from 'react-i18next';
 
 const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onDeleteAll }) => {
@@ -26,7 +26,6 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const { t } = useTranslation();
   const [bannedUsers, setBannedUsers] = useState([]);
-  const [isOnline, setIsOnline] = useState(false);
   // const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
@@ -91,14 +90,6 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
       return;
     }
     // setSelectedUser(item)
-    setIsOnline(false); // Reset online status before checking
-    try {
-      const online = await isUserOnline(item?.userId);
-      setIsOnline(online);
-    } catch (error) {
-      console.error('🔥 Error checking online status:', error);
-      setIsOnline(false);
-    }
     setIsDrawerVisible(true);
   };
 
@@ -332,7 +323,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
         toggleModal={closeProfileDrawer}
         startChat={handleChatNavigation}
         selectedUser={selectedUser}
-        isOnline={isOnline}
+        isOnline={false}
         bannedUsers={bannedUsers}
       />
     </View>

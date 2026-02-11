@@ -267,7 +267,7 @@ function App() {
         {/* {modalVisible && (
           <RewardRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} selectedTheme={selectedTheme} />
         )} */}
-          <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall}   oneWallOnly={single_offer_wall}/>
+          {showofferwall && <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall}   oneWallOnly={single_offer_wall}/>}
       </Animated.View>
     </SafeAreaView>
   );

@@ -22,7 +22,6 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import ProfileBottomDrawer from './BottomDrawer';
-import { isUserOnline } from '../utils';
 
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in milliseconds
 
@@ -41,7 +40,6 @@ const LeaderboardModal = ({
   const [loading, setLoading] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [isOnline, setIsOnline] = useState(false);
   const [bannedUsers] = useState(Array.isArray(localState.bannedUsers) ? localState.bannedUsers : []);
 
   // ✅ Memoize styles
@@ -167,15 +165,6 @@ const LeaderboardModal = ({
     };
 
     setSelectedUser(selectedUserData);
-
-    // ✅ Check if user is online
-    try {
-      const online = await isUserOnline(item.userId);
-      setIsOnline(online);
-    } catch (error) {
-      console.error('Error checking online status:', error);
-      setIsOnline(false);
-    }
 
     setIsDrawerVisible(true);
     mixpanel.track("Leaderboard User Click");
@@ -314,7 +303,7 @@ const LeaderboardModal = ({
         toggleModal={() => setIsDrawerVisible(false)}
         startChat={handleStartChat}
         selectedUser={selectedUser}
-        isOnline={isOnline}
+        isOnline={false}
         bannedUsers={bannedUsers}
       />
     </>

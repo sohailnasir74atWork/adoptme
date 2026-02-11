@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
-import { isUserOnline } from '../utils';
+import { useOnlineStatus } from '../utils';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
@@ -15,7 +15,6 @@ import { ref, get } from '@react-native-firebase/database';
 const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { updateLocalState } = useLocalState();
   const { t } = useTranslation();
-  const [isOnline, setIsOnline] = useState(false); // ✅ Add state to store online status
   const { triggerHapticFeedback } = useHaptic();
   const { appdatabase } = useGlobalState();
 
@@ -113,16 +112,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     [mergedUser?.sender]
   );
 
-  useEffect(() => {
-    const selectedUserId = mergedUser?.senderId || mergedUser?.id;
-    if (selectedUserId) {
-      isUserOnline(selectedUserId)
-        .then(setIsOnline)
-        .catch(() => setIsOnline(false));
-    } else {
-      setIsOnline(false);
-    }
-  }, [mergedUser?.senderId, mergedUser?.id]); // ✅ Use mergedUser
+  // ✅ FIXED: Real-time online status listener instead of one-shot get()
+  const selectedUserId = mergedUser?.senderId || mergedUser?.id || null;
+  const isOnline = useOnlineStatus(selectedUserId);
 
   // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {

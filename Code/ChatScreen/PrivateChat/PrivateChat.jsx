@@ -14,7 +14,7 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { clearActiveChat, isUserOnline, setActiveChat, useBanStatus } from '../utils';
+import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
 import { get, increment, ref, update, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +44,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB } = useGlobalState();
   const [trade, setTrade] = useState(null)
+  const [post, setPost] = useState(null)
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,7 +66,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [selectedFruits, setSelectedFruits] = useState([]);
   const [reviewText, setReviewText] = useState('');   // 👈 new
   const [startRating, setStartRating] = useState(false)
-  const [isOnline, setIsOnline] = useState(false);
+  // ✅ FIXED: Real-time online status via listener instead of one-shot get()
+  const isOnline = useOnlineStatus(selectedUserId);
   const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
@@ -93,17 +95,21 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   }, [user?.email, appdatabase]);
 
 
-  // ✅ Fix useEffect dependency
+  // ✅ Detect if item is a trade or a post
   useEffect(() => {
     if (item) {
-      setTrade(item);
+      if (item.hasItems || item.wantsItems) {
+        setTrade(item);
+        setPost(null);
+      } else if (item.desc !== undefined || item.imageUrl) {
+        setPost(item);
+        setTrade(null);
+      } else {
+        setTrade(item);
+        setPost(null);
+      }
     }
   }, [item]);
-  useEffect(() => {
-    if (selectedUserId) {
-      isUserOnline(selectedUserId).then(setIsOnline).catch(() => setIsOnline(false));
-    }
-  }, [selectedUserId]);
 
   useEffect(() => {
     if (!Array.isArray(messages) || messages.length === 0) return;
@@ -472,15 +478,37 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     const chatId = [myUserId, selectedUserId].sort().join('_');
     const tradeRef = ref(appdatabase, `private_messages/${chatId}/trade`);
+    const postRef = ref(appdatabase, `private_messages/${chatId}/post`);
 
     if (item && typeof item === 'object') {
-      // ✅ If trade comes from props, set it and update Firebase
-      setTrade(item);
-      tradeRef.set(item).catch((error) => {
-        console.error("Error updating trade in Firebase:", error);
-      });
+      if (item.hasItems || item.wantsItems) {
+        // ✅ Trade item — persist to trade ref
+        setTrade(item);
+        setPost(null);
+        tradeRef.set(item).catch((error) => {
+          console.error("Error updating trade in Firebase:", error);
+        });
+      } else if (item.desc !== undefined || item.imageUrl) {
+        // ✅ Post item — persist to post ref
+        setPost(item);
+        setTrade(null);
+        postRef.set({
+          desc: item.desc || '',
+          imageUrl: Array.isArray(item.imageUrl) ? item.imageUrl.slice(0, 1) : [],
+          displayName: item.displayName || '',
+          selectedTags: item.selectedTags || [],
+        }).catch((error) => {
+          console.error("Error updating post in Firebase:", error);
+        });
+      } else {
+        setTrade(item);
+        setPost(null);
+        tradeRef.set(item).catch((error) => {
+          console.error("Error updating trade in Firebase:", error);
+        });
+      }
     } else {
-      // ✅ If no trade in props, check Firebase
+      // ✅ No item in props — check Firebase for trade or post
       tradeRef.once('value')
         .then((snapshot) => {
           if (snapshot.exists()) {
@@ -492,6 +520,18 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         })
         .catch((error) => {
           console.error("Error fetching trade from Firebase:", error);
+        });
+      postRef.once('value')
+        .then((snapshot) => {
+          if (snapshot.exists()) {
+            const postData = snapshot.val();
+            if (postData && typeof postData === 'object') {
+              setPost(postData);
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching post from Firebase:", error);
         });
     }
   }, [item, myUserId, selectedUserId, appdatabase]);
@@ -833,6 +873,47 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               </View>
             )}
 
+            {/* ✅ Mini post reminder when coming from a post */}
+            {!trade && post && (
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 8,
+                borderBottomColor: isDarkMode ? 'grey' : 'lightgrey',
+                borderBottomWidth: 1,
+                backgroundColor: isDarkMode ? '#1a1a2e' : '#F0F4FF',
+                gap: 8,
+              }}>
+                {Array.isArray(post.imageUrl) && post.imageUrl.length > 0 && (
+                  <Image
+                    source={{ uri: post.imageUrl[0] }}
+                    style={{ width: 36, height: 36, borderRadius: 6 }}
+                  />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, color: isDarkMode ? '#8B9DC3' : '#6B7280', fontWeight: '600' }}>
+                    {t('feed.about_post') || 'About a post'}
+                  </Text>
+                  {post.desc ? (
+                    <Text
+                      numberOfLines={1}
+                      style={{ fontSize: 12, color: isDarkMode ? '#ddd' : '#333', marginTop: 1 }}
+                    >
+                      {post.desc}
+                    </Text>
+                  ) : null}
+                  {post.selectedTags?.length > 0 && (
+                    <View style={{ flexDirection: 'row', gap: 4, marginTop: 2 }}>
+                      {post.selectedTags.slice(0, 3).map((tag, idx) => (
+                        <View key={idx} style={{ backgroundColor: isDarkMode ? '#333' : '#E5E7EB', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ fontSize: 9, color: isDarkMode ? '#aaa' : '#666' }}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
 
             {messages.length === 0 ? (
               // No messages yet

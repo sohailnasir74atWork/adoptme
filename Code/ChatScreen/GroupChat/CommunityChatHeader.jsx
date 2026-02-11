@@ -140,28 +140,6 @@ const CommunityChatHeader = ({
       {/* Show buttons when logged in */}
       {user?.id && (
         <>
-          {/* Pet Guessing Game Button */}
-          <TouchableOpacity
-            onPress={() => {
-              setGameModalVisible(true);
-              triggerHapticFeedback?.('impactLight');
-            }}
-            style={{ position: 'relative', padding: 8, marginRight: 4 }}
-          >
-            <Icon
-              name="game-controller-outline"
-              size={24}
-              color={config.colors.primary}
-            />
-            {hasValidInvite && (
-              <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#8B5CF6', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>
-                  1
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
           {/* Inbox Button (Private Chats) */}
           <TouchableOpacity
             onPress={() => {
@@ -185,62 +163,6 @@ const CommunityChatHeader = ({
             )}
           </TouchableOpacity>
 
-          {/* Groups Button */}
-          <TouchableOpacity
-            onPress={() => {
-              navigation.navigate('Groups');
-              triggerHapticFeedback('impactLight');
-              if (setGroupUnreadCount && typeof setGroupUnreadCount === 'function') {
-                setGroupUnreadCount(0);
-              }
-            }}
-            style={{ position: 'relative', padding: 8, marginRight: 4 }}
-          >
-            <Icon
-              name="people-circle-outline"
-              size={24}
-              color={config.colors.primary}
-            />
-            {/* Show "!" if there are pending invitations or join requests (prioritized), otherwise show unread count */}
-            {(pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0 || groupUnreadCount > 0) && (
-              <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#10B981', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
-                <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>
-                  {(pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0) ? '!' : (groupUnreadCount > 9 ? '9+' : groupUnreadCount)}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Leaderboard Button */}
-          <TouchableOpacity
-            onPress={() => {
-              if (onLeaderboardPress) {
-                onLeaderboardPress();
-              }
-              triggerHapticFeedback('impactLight');
-            }}
-            style={{ position: 'relative', padding: 8, marginRight: 4 }}
-          >
-            <Icon
-              name="trophy-outline"
-              size={24}
-              color={config.colors.primary}
-            />
-          </TouchableOpacity>
-          {/* Friends Button (All users) */}
-          <TouchableOpacity
-            onPress={() => {
-              navigation.navigate('SocialDashboard');
-              triggerHapticFeedback('impactLight');
-            }}
-            style={{ position: 'relative', padding: 8, marginRight: 4 }}
-          >
-            <Icon
-              name="people-outline"
-              size={24}
-              color={config.colors.primary}
-            />
-          </TouchableOpacity>
           {/* Admin Dashboard Button (Only for Admins/Moderators) */}
           {(isAdmin || user?.isModerator) && (
             <TouchableOpacity
@@ -257,13 +179,56 @@ const CommunityChatHeader = ({
               />
             </TouchableOpacity>
           )}
+
+          {/* Pet Guessing Game Button */}
+          <TouchableOpacity
+            onPress={() => {
+              setGameModalVisible(true);
+              triggerHapticFeedback?.('impactLight');
+            }}
+            style={{ position: 'relative', padding: 8, marginRight: 4 }}
+          >
+            <Icon
+              name="game-controller-outline"
+              size={24}
+              color={config.colors.primary}
+            />
+            {hasValidInvite && (
+              <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#8B5CF6', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>
+                  1
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Social Dashboard Button */}
+          <TouchableOpacity
+            onPress={() => {
+              navigation.navigate('SocialDashboard');
+              triggerHapticFeedback('impactLight');
+            }}
+            style={{ position: 'relative', padding: 8, marginRight: 4 }}
+          >
+            <Icon
+              name="people-outline"
+              size={24}
+              color={config.colors.primary}
+            />
+          </TouchableOpacity>
         </>
       )}
       {user?.id && (
         <Menu>
           <MenuTrigger>
-            <View style={{ padding: 8 }}>
+            <View style={{ padding: 8, position: 'relative' }}>
               <Icon name="ellipsis-vertical-outline" size={24} color={config.colors.primary} />
+              {/* Badge on 3-dot menu if groups have notifications */}
+              {(pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0 || groupUnreadCount > 0) && (
+                <View style={{ position: 'absolute', top: 2, right: 2, backgroundColor: '#10B981', borderRadius: 6, width: 12, height: 12, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 6, fontWeight: 'bold' }}>!</Text>
+                </View>
+              )}
             </View>
           </MenuTrigger>
           <MenuOptions
@@ -273,10 +238,49 @@ const CommunityChatHeader = ({
                 borderRadius: 8,
                 width: 220,
                 padding: 5,
-                backgroundColor: config.colors.background || '#fff',
+                backgroundColor: isDarkMode ? '#1C1C1E' : '#fff',
               },
             }}
           >
+            {/* Top Rated Users */}
+            <MenuOption onSelect={() => {
+              if (onLeaderboardPress) {
+                onLeaderboardPress();
+              }
+              triggerHapticFeedback('impactLight');
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
+                <Icon name="trophy-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+                <Text style={{ fontSize: 16, color: isDarkMode ? '#E5E7EB' : '#000' }}>
+                  {t("chat.top_rated") || "Top Rated Users"}
+                </Text>
+              </View>
+            </MenuOption>
+            {/* Groups */}
+            <MenuOption onSelect={() => {
+              navigation.navigate('Groups');
+              triggerHapticFeedback('impactLight');
+              if (setGroupUnreadCount && typeof setGroupUnreadCount === 'function') {
+                setGroupUnreadCount(0);
+              }
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
+                <Icon name="people-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <Text style={{ fontSize: 16, color: isDarkMode ? '#E5E7EB' : '#000' }}>
+                    {t("chat.groups") || "Groups"}
+                  </Text>
+                  {(pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0 || groupUnreadCount > 0) && (
+                    <View style={{ marginLeft: 8, backgroundColor: '#10B981', borderRadius: 8, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                        {(pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0) ? '!' : (groupUnreadCount > 9 ? '9+' : groupUnreadCount)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </MenuOption>
+            {/* Online Users */}
             <MenuOption onSelect={() => {
               if (onOnlineUsersPress) {
                 onOnlineUsersPress();
@@ -284,18 +288,17 @@ const CommunityChatHeader = ({
               triggerHapticFeedback('impactLight');
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
-                <Icon name="people-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Text style={{ fontSize: 16, color: config.colors.text || '#000' }}>
-                    Online Users
-                  </Text>
-                </View>
+                <Icon name="wifi-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+                <Text style={{ fontSize: 16, color: isDarkMode ? '#E5E7EB' : '#000' }}>
+                  {t("chat.online_users") || "Online Users"}
+                </Text>
               </View>
             </MenuOption>
+            {/* Blocked Users */}
             <MenuOption onSelect={() => navigation?.navigate('BlockedUsers')}>
               <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10 }}>
                 <Icon name="ban-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
-                <Text style={{ fontSize: 16, color: config.colors.text || '#000' }}>
+                <Text style={{ fontSize: 16, color: isDarkMode ? '#E5E7EB' : '#000' }}>
                   {t("chat.blocked_users")}
                 </Text>
               </View>

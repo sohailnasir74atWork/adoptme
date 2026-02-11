@@ -68,6 +68,18 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Does NOT affect ratios, percentages, confidence, or prediction logic
 const VM = 2;
 
+// Fun color palettes for kids
+const FUN_COLORS = {
+  blue: '#4F8CFF', green: '#34D399', pink: '#F472B6', purple: '#A78BFA',
+  orange: '#FB923C', red: '#F87171', yellow: '#FBBF24', cyan: '#22D3EE',
+};
+const BAR_COLORS = [
+  '#4F8CFF','#A78BFA','#F472B6','#FB923C','#34D399','#FBBF24',
+  '#22D3EE','#F87171','#4F8CFF','#A78BFA','#F472B6','#FB923C',
+  '#34D399','#FBBF24','#22D3EE','#F87171','#4F8CFF','#A78BFA',
+  '#F472B6','#FB923C','#34D399','#FBBF24','#22D3EE','#F87171',
+];
+
 const AnalyticsScreen = ({ navigation }) => {
   const { theme, single_offer_wall } = useGlobalState();
   const { localState } = useLocalState();
@@ -102,6 +114,7 @@ const AnalyticsScreen = ({ navigation }) => {
       // Cache expired or missing — fetch from CDN
       const res = await fetch(`${url}?cb=${Date.now()}`);
       const data = await res.json();
+      console.log(res);
 
       // Save to MMKV cache
       analyticsCache.set(cacheKey, JSON.stringify(data));
@@ -129,6 +142,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
     const raw = await fetchFromCDN(ANALYTICS_CDN_URL, 'analytics', ANALYTICS_CACHE_MS);
 
     const data = normalizeFirestoreDocPayload(raw); // ✅ ADD THIS LINE
+    console.log(raw)
 
     if (data) setAnalytics(data);
   } catch (error) {
@@ -211,6 +225,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
       }
 
       const raw = await fetchFromCDN(VALUE_CHANGES_CDN_URL, 'value_changes', CHANGES_CACHE_MS);
+      console.log(raw)
       const data = normalizeDiffPayload(raw);
       if (data && Array.isArray(data.changes)) {
         setValueChanges(data);
@@ -246,42 +261,39 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
 
   const getSignalColor = (signal) => {
     switch (signal) {
-      case 'rising':
-      case 'strong_rise':
-      case 'likely_rise':
-        return '#10B981';
-      case 'falling':
-      case 'strong_fall':
-      case 'likely_fall':
-        return '#EF4444';
-      default:
-        return '#F59E0B';
+      case 'rising': case 'strong_rise': case 'likely_rise': return FUN_COLORS.green;
+      case 'falling': case 'strong_fall': case 'likely_fall': return FUN_COLORS.red;
+      default: return FUN_COLORS.yellow;
     }
   };
 
-  const getSignalIcon = (signal) => {
+  const getSignalEmoji = (signal) => {
     switch (signal) {
-      case 'rising':
-      case 'strong_rise':
-      case 'likely_rise':
-        return 'trending-up';
-      case 'falling':
-      case 'strong_fall':
-      case 'likely_fall':
-        return 'trending-down';
-      default:
-        return 'remove-outline';
+      case 'rising': case 'strong_rise': case 'likely_rise': return 'trending-up';
+      case 'falling': case 'strong_fall': case 'likely_fall': return 'trending-down';
+      default: return 'remove-outline';
     }
   };
 
   const getPredictionLabel = (prediction) => {
     switch (prediction) {
-      case 'strong_rise': return 'Strong Rise';
-      case 'likely_rise': return 'Likely Rise';
-      case 'stable': return 'Stable';
-      case 'likely_fall': return 'Likely Fall';
-      case 'strong_fall': return 'Strong Fall';
-      default: return 'Unknown';
+      case 'strong_rise': return t('analytics.strong_rise');
+      case 'likely_rise': return t('analytics.likely_rise');
+      case 'stable': return t('analytics.stable');
+      case 'likely_fall': return t('analytics.likely_fall');
+      case 'strong_fall': return t('analytics.strong_fall');
+      default: return t('analytics.unknown');
+    }
+  };
+
+  const getPredictionEmoji = (prediction) => {
+    switch (prediction) {
+      case 'strong_rise': return '\u{1F525}';
+      case 'likely_rise': return '\u{2B06}\u{FE0F}';
+      case 'stable': return '\u{1F7F0}';
+      case 'likely_fall': return '\u{2B07}\u{FE0F}';
+      case 'strong_fall': return '\u{1F4A8}';
+      default: return '\u{2753}';
     }
   };
 
@@ -293,102 +305,110 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
       onPress={() => setShowOfferwall(true)}
     >
       <View style={styles.lockedContent}>
-        <FontAwesome name="lock" size={20} color="#FFD700" solid />
-        <Text style={styles.lockedText}>{message || 'Unlock with Pro'}</Text>
+        <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
+        <Text style={styles.lockedText}>{message || t('analytics.unlock_with_pro')}</Text>
         <View style={styles.unlockButton}>
-          <Text style={styles.unlockButtonText}>Upgrade</Text>
+          <Text style={styles.unlockButtonText}>{'\u{2B50}'} {t('analytics.upgrade')}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  // ── Item Row Component ──
-  const ItemRow = ({ item, index, showSignal, showChange, locked }) => (
-    <View style={[styles.itemRow, index % 2 === 0 && styles.itemRowAlt]}>
-      <Text style={styles.itemRank}>#{index + 1}</Text>
-      <View style={styles.itemImageWrap}>
-        {item.image ? (
-          <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
-        ) : (
-          <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-            <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
+  // ── Item Row Component (kid-friendly with medals) ──
+  const ItemRow = ({ item, index, showSignal, showChange, locked }) => {
+    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+    const rankDisplay = index < 3 ? medals[index] : `#${index + 1}`;
+    return (
+      <View style={[styles.itemRow, index % 2 === 0 && styles.itemRowAlt]}>
+        <Text style={[styles.itemRank, index < 3 && { fontSize: 18 }]}>{rankDisplay}</Text>
+        <View style={styles.itemImageWrap}>
+          {item.image ? (
+            <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+          ) : (
+            <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+              <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
+            </View>
+          )}
+        </View>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={1}>{locked ? '???' : item.name}</Text>
+          <Text style={styles.itemType}>{item.type}</Text>
+        </View>
+        {showSignal && item.signal && (
+          <View style={[styles.signalBadge, { backgroundColor: getSignalColor(item.signal) + '25' }]}>
+            <Icon name={getSignalEmoji(item.signal)} size={16} color={getSignalColor(item.signal)} />
+            <Text style={[styles.signalText, { color: getSignalColor(item.signal) }]}>
+              {item.ratio?.toFixed(1)}x
+            </Text>
+          </View>
+        )}
+        {showChange && item.changePercent !== undefined && (
+          <View style={[styles.changeBadge, {
+            backgroundColor: item.changePercent > 0 ? FUN_COLORS.green + '25' : FUN_COLORS.red + '25'
+          }]}>
+            <Text style={{ fontSize: 12 }}>{item.changePercent > 0 ? '\u{1F4C8}' : '\u{1F4C9}'}</Text>
+            <Text style={[styles.changeText, {
+              color: item.changePercent > 0 ? FUN_COLORS.green : FUN_COLORS.red
+            }]}>
+              {Math.abs(item.changePercent)}%
+            </Text>
+          </View>
+        )}
+        {!showSignal && !showChange && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{(item.count || 0) * VM}x</Text>
           </View>
         )}
       </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={1}>{locked ? '???' : item.name}</Text>
-        <Text style={styles.itemType}>{item.type}</Text>
-      </View>
-      {showSignal && item.signal && (
-        <View style={[styles.signalBadge, { backgroundColor: getSignalColor(item.signal) + '20' }]}>
-          <Icon name={getSignalIcon(item.signal)} size={14} color={getSignalColor(item.signal)} />
-          <Text style={[styles.signalText, { color: getSignalColor(item.signal) }]}>
-            {item.ratio?.toFixed(1)}x
-          </Text>
-        </View>
-      )}
-      {showChange && item.changePercent !== undefined && (
-        <View style={[styles.changeBadge, {
-          backgroundColor: item.changePercent > 0 ? '#10B98120' : '#EF444420'
-        }]}>
-          <Icon
-            name={item.changePercent > 0 ? 'arrow-up' : 'arrow-down'}
-            size={12}
-            color={item.changePercent > 0 ? '#10B981' : '#EF4444'}
-          />
-          <Text style={[styles.changeText, {
-            color: item.changePercent > 0 ? '#10B981' : '#EF4444'
-          }]}>
-            {Math.abs(item.changePercent)}%
-          </Text>
-        </View>
-      )}
-      {!showSignal && !showChange && (
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{(item.count || 0) * VM}x</Text>
-        </View>
-      )}
-    </View>
-  );
+    );
+  };
 
-  // ── Mini Bar Chart ──
+  // ── Fun Colorful Bar Chart ──
   const MiniBarChart = ({ data, label }) => {
     const maxVal = Math.max(...data, 1);
     return (
       <View style={styles.chartContainer}>
         <Text style={styles.chartLabel}>{label}</Text>
         <View style={styles.chartBars}>
-          {data.map((val, i) => (
-            <View key={i} style={styles.chartBarWrap}>
-              <View
-                style={[
-                  styles.chartBar,
-                  {
-                    height: Math.max(2, (val / maxVal) * 60),
-                    backgroundColor: i === analytics?.peakHour ? config.colors.primary : (isDarkMode ? '#555' : '#ddd'),
-                  },
-                ]}
-              />
-              {i % 6 === 0 && (
-                <Text style={styles.chartBarLabel}>{i}h</Text>
-              )}
-            </View>
-          ))}
+          {data.map((val, i) => {
+            const isPeak = i === analytics?.peakHour;
+            return (
+              <View key={i} style={styles.chartBarWrap}>
+                <View
+                  style={[
+                    styles.chartBar,
+                    {
+                      height: Math.max(4, (val / maxVal) * 70),
+                      backgroundColor: isPeak ? FUN_COLORS.orange : BAR_COLORS[i],
+                      opacity: isPeak ? 1 : 0.7,
+                    },
+                  ]}
+                />
+                {i % 4 === 0 && (
+                  <Text style={styles.chartBarLabel}>{i}h</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
       </View>
     );
   };
 
-  // ── Section Header ──
-  const SectionHeader = ({ icon, title, subtitle, locked }) => (
+  // ── Section Header (kid-friendly with emoji) ──
+  const SectionHeader = ({ icon, title, subtitle, locked, emoji }) => (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderLeft}>
-        <FontAwesome name={icon} size={16} color={config.colors.primary} solid />
+        {emoji ? (
+          <Text style={{ fontSize: 20 }}>{emoji}</Text>
+        ) : (
+          <FontAwesome name={icon} size={18} color={config.colors.primary} solid />
+        )}
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       {locked && (
         <View style={styles.proBadge}>
-          <FontAwesome name="crown" size={10} color="#FFD700" solid />
+          <Text style={{ fontSize: 12 }}>{'\u{1F451}'}</Text>
           <Text style={styles.proBadgeText}>PRO</Text>
         </View>
       )}
@@ -402,12 +422,12 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
     const now = new Date();
     const diffMs = now - date;
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+    if (diffDays === 0) return t('analytics.today');
+    if (diffDays === 1) return t('analytics.yesterday') || 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
     return date.toLocaleDateString();
-  }, []);
+  }, [t]);
 
   const getChangeDirection = useCallback((item) => {
     // Use 'primary' field if present (new format), fallback to oldValue/newValue (legacy)
@@ -445,20 +465,21 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
     return valueChanges.changes;
   }, [valueChanges, changesFilter, getChangeDirection]);
 
-  // ── Tab Bar ──
+  // ── Tab Bar (fun emoji tabs) ──
   const tabs = [
-    { key: 'overview', label: 'Overview', icon: 'chart-pie' },
-    { key: 'changes', label: 'Changes', icon: 'rotate' },
-    { key: 'movers', label: 'Movers', icon: 'arrow-trend-up' },
-    { key: 'demand', label: 'Demand', icon: 'fire' },
-    { key: 'predict', label: 'Predict', icon: 'wand-magic-sparkles' },
+    { key: 'overview', label: t('analytics.tab_overview'), emoji: '\u{1F3E0}' },
+    { key: 'changes', label: t('analytics.tab_changes'), emoji: '\u{1F4CA}' },
+    { key: 'movers', label: t('analytics.tab_movers'), emoji: '\u{1F680}' },
+    { key: 'demand', label: t('analytics.tab_demand'), emoji: '\u{1F525}' },
+    { key: 'predict', label: t('analytics.tab_predict'), emoji: '\u{1F52E}' },
   ];
 
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={config.colors.primary} />
-        <Text style={styles.loadingText}>Loading analytics...</Text>
+        <Text style={{ fontSize: 40, marginBottom: 8 }}>{'\u{1F50D}'}</Text>
+        <ActivityIndicator size="large" color={FUN_COLORS.purple} />
+        <Text style={styles.loadingText}>{t('analytics.loading')}</Text>
       </View>
     );
   }
@@ -466,11 +487,11 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
   if (!analytics) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <FontAwesome name="chart-line" size={48} color={isDarkMode ? '#555' : '#ccc'} />
-        <Text style={styles.emptyTitle}>No Analytics Yet</Text>
-        <Text style={styles.emptySubtitle}>Analytics will be available once enough trades are created.</Text>
+        <Text style={{ fontSize: 48 }}>{'\u{1F914}'}</Text>
+        <Text style={styles.emptyTitle}>{t('analytics.no_analytics_title')}</Text>
+        <Text style={styles.emptySubtitle}>{t('analytics.no_analytics_subtitle')}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchAnalytics()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>{'\u{1F504}'} {t('analytics.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -479,77 +500,77 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
   return (
     <View style={styles.container}>
       {/* Tab Bar */}
-      <View style={styles.tabBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabBarScroll}
+        contentContainerStyle={styles.tabBar}
+      >
         {tabs.map(tab => (
           <TouchableOpacity
             key={tab.key}
             style={[styles.tab, activeTab === tab.key && styles.tabActive]}
             onPress={() => setActiveTab(tab.key)}
           >
-            <FontAwesome
-              name={tab.icon}
-              size={14}
-              color={activeTab === tab.key ? config.colors.primary : (isDarkMode ? '#888' : '#999')}
-              solid
-            />
-            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+            <Text style={{ fontSize: 16 }}>{tab.emoji}</Text>
+            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]} numberOfLines={1}>
               {tab.label}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { fetchAnalytics(true); fetchValueChanges(true); }} tintColor={config.colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { fetchAnalytics(true); fetchValueChanges(true); }} tintColor={FUN_COLORS.purple} />
         }
       >
         {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
         {activeTab === 'overview' && (
           <>
-            {/* Trade Volume Cards */}
+            {/* Trade Volume Cards — big, colorful, fun */}
             <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2332' : '#EFF6FF' }]}>
-                <FontAwesome name="handshake" size={18} color="#3B82F6" solid />
-                <Text style={styles.statNumber}>{formatNumber((analytics.tradeVolume?.today || 0) * VM)}</Text>
-                <Text style={styles.statLabel}>Today</Text>
+              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2540' : '#EBF5FF', borderColor: FUN_COLORS.blue + '40' }]}>
+                <Text style={styles.statEmoji}>{'\u{1F91D}'}</Text>
+                <Text style={[styles.statNumber, { color: FUN_COLORS.blue }]}>{formatNumber((analytics.tradeVolume?.today || 0) * VM)}</Text>
+                <Text style={styles.statLabel}>{t('analytics.today')}</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2a1a' : '#F0FDF4' }]}>
-                <FontAwesome name="clock-rotate-left" size={18} color="#10B981" solid />
-                <Text style={styles.statNumber}>{formatNumber((analytics.tradeVolume?.last24h || 0) * VM)}</Text>
-                <Text style={styles.statLabel}>24 Hours</Text>
+              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2a1a' : '#ECFDF5', borderColor: FUN_COLORS.green + '40' }]}>
+                <Text style={styles.statEmoji}>{'\u{23F0}'}</Text>
+                <Text style={[styles.statNumber, { color: FUN_COLORS.green }]}>{formatNumber((analytics.tradeVolume?.last24h || 0) * VM)}</Text>
+                <Text style={styles.statLabel}>{t('analytics.hours_24')}</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2a1a2a' : '#FDF2F8' }]}>
-                <FontAwesome name="calendar-week" size={18} color="#EC4899" solid />
-                <Text style={styles.statNumber}>{formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM)}</Text>
-                <Text style={styles.statLabel}>This Week</Text>
+              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2a1a2e' : '#FDF2F8', borderColor: FUN_COLORS.pink + '40' }]}>
+                <Text style={styles.statEmoji}>{'\u{1F4C5}'}</Text>
+                <Text style={[styles.statNumber, { color: FUN_COLORS.pink }]}>{formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM)}</Text>
+                <Text style={styles.statLabel}>{t('analytics.this_week')}</Text>
               </View>
             </View>
 
-            {/* Win/Lose/Fair Distribution */}
+            {/* Win/Lose/Fair Distribution — emoji labels */}
             {analytics.statusDistribution && (
               <View style={styles.card}>
-                <SectionHeader icon="chart-pie" title="Trade Outcomes (24h)" />
+                <SectionHeader icon="chart-pie" title={t('analytics.trade_outcomes')} emoji={'\u{1F3AF}'} />
                 <View style={styles.distributionRow}>
                   <View style={styles.distributionItem}>
-                    <View style={[styles.distributionDot, { backgroundColor: '#10B981' }]} />
-                    <Text style={styles.distributionLabel}>Win</Text>
-                    <Text style={styles.distributionValue}>{(analytics.statusDistribution.win || 0) * VM}</Text>
+                    <Text style={styles.distributionEmoji}>{'\u{1F389}'}</Text>
+                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.green }]}>{t('analytics.win')}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.green }]}>{(analytics.statusDistribution.win || 0) * VM}</Text>
                   </View>
                   <View style={styles.distributionItem}>
-                    <View style={[styles.distributionDot, { backgroundColor: '#F59E0B' }]} />
-                    <Text style={styles.distributionLabel}>Fair</Text>
-                    <Text style={styles.distributionValue}>{(analytics.statusDistribution.fair || 0) * VM}</Text>
+                    <Text style={styles.distributionEmoji}>{'\u{1F91D}'}</Text>
+                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.yellow }]}>{t('analytics.fair')}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.yellow }]}>{(analytics.statusDistribution.fair || 0) * VM}</Text>
                   </View>
                   <View style={styles.distributionItem}>
-                    <View style={[styles.distributionDot, { backgroundColor: '#EF4444' }]} />
-                    <Text style={styles.distributionLabel}>Lose</Text>
-                    <Text style={styles.distributionValue}>{(analytics.statusDistribution.lose || 0) * VM}</Text>
+                    <Text style={styles.distributionEmoji}>{'\u{1F614}'}</Text>
+                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.red }]}>{t('analytics.lose')}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.red }]}>{(analytics.statusDistribution.lose || 0) * VM}</Text>
                   </View>
                 </View>
-                {/* Simple bar visualization */}
+                {/* Fun rounded bar */}
                 <View style={styles.distributionBar}>
                   {(() => {
                     const total = (analytics.statusDistribution.win || 0) +
@@ -561,9 +582,9 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                     const losePct = ((analytics.statusDistribution.lose || 0) / total) * 100;
                     return (
                       <>
-                        <View style={[styles.distributionBarSegment, { width: `${winPct}%`, backgroundColor: '#10B981' }]} />
-                        <View style={[styles.distributionBarSegment, { width: `${fairPct}%`, backgroundColor: '#F59E0B' }]} />
-                        <View style={[styles.distributionBarSegment, { width: `${losePct}%`, backgroundColor: '#EF4444' }]} />
+                        <View style={[styles.distributionBarSegment, { width: `${winPct}%`, backgroundColor: FUN_COLORS.green }]} />
+                        <View style={[styles.distributionBarSegment, { width: `${fairPct}%`, backgroundColor: FUN_COLORS.yellow }]} />
+                        <View style={[styles.distributionBarSegment, { width: `${losePct}%`, backgroundColor: FUN_COLORS.red }]} />
                       </>
                     );
                   })()}
@@ -571,17 +592,17 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
               </View>
             )}
 
-            {/* Hourly Activity */}
+            {/* Hourly Activity — colorful bars */}
             {analytics.hourlyActivity && (
               <View style={styles.card}>
-                <SectionHeader icon="chart-bar" title="Hourly Activity" subtitle={`Peak: ${analytics.peakHour}:00`} />
-                <MiniBarChart data={analytics.hourlyActivity} label="Trades per hour (24h)" />
+                <SectionHeader icon="chart-bar" title={t('analytics.hourly_activity')} subtitle={t('analytics.peak', { hour: analytics.peakHour })} emoji={'\u{1F552}'} />
+                <MiniBarChart data={analytics.hourlyActivity} label={t('analytics.trades_per_hour')} />
               </View>
             )}
 
-            {/* Top 5 Most Traded (Free) */}
+            {/* Top 5 Most Traded */}
             <View style={styles.card}>
-              <SectionHeader icon="fire" title="Most Traded (24h)" />
+              <SectionHeader icon="fire" title={t('analytics.most_traded')} emoji={'\u{1F525}'} />
               {(analytics.topTraded || []).slice(0, 5).map((item, i) => (
                 <ItemRow key={`traded-${i}`} item={item} index={i} />
               ))}
@@ -593,13 +614,13 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
         {activeTab === 'changes' && (
           <>
             {/* Header Card */}
-            <View style={[styles.card, { backgroundColor: isDarkMode ? '#1a2a1a' : '#F0FDF4' }]}>
+            <View style={[styles.card, { backgroundColor: isDarkMode ? '#1a2a1a' : '#ECFDF5', borderWidth: 1, borderColor: FUN_COLORS.green + '30' }]}>
               <View style={styles.predictionHeader}>
-                <FontAwesome name="rotate" size={22} color="#10B981" solid />
+                <Text style={{ fontSize: 28 }}>{'\u{1F4CA}'}</Text>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={[styles.sectionTitle, { color: '#10B981' }]}>Official Value Changes</Text>
+                  <Text style={[styles.sectionTitle, { color: FUN_COLORS.green }]}>{t('analytics.value_changes_title')}</Text>
                   <Text style={styles.predictionSubtext}>
-                    Manually verified value updates{valueChanges?.lastUpdated ? ` • ${getTimeAgo(valueChanges.lastUpdated)}` : ''}
+                    {t('analytics.value_changes_subtitle')}{valueChanges?.lastUpdated ? ` \u{2022} ${getTimeAgo(valueChanges.lastUpdated)}` : ''}
                   </Text>
                 </View>
               </View>
@@ -608,20 +629,16 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
             {/* Filter Buttons */}
             <View style={styles.changesFilterRow}>
               {[
-                { key: 'all', label: 'All', icon: 'list' },
-                { key: 'increased', label: 'Up', icon: 'arrow-up' },
-                { key: 'decreased', label: 'Down', icon: 'arrow-down' },
+                { key: 'all', label: t('analytics.filter_all'), emoji: '\u{1F4CB}' },
+                { key: 'increased', label: t('analytics.filter_up'), emoji: '\u{2B06}\u{FE0F}' },
+                { key: 'decreased', label: t('analytics.filter_down'), emoji: '\u{2B07}\u{FE0F}' },
               ].map(f => (
                 <TouchableOpacity
                   key={f.key}
                   style={[styles.changesFilterBtn, changesFilter === f.key && styles.changesFilterBtnActive]}
                   onPress={() => setChangesFilter(f.key)}
                 >
-                  <Icon
-                    name={f.icon}
-                    size={14}
-                    color={changesFilter === f.key ? '#fff' : (isDarkMode ? '#aaa' : '#666')}
-                  />
+                  <Text style={{ fontSize: 14 }}>{f.emoji}</Text>
                   <Text style={[
                     styles.changesFilterText,
                     changesFilter === f.key && styles.changesFilterTextActive,
@@ -637,22 +654,23 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
 
             {valueChangesLoading ? (
               <View style={[styles.card, { alignItems: 'center', paddingVertical: 30 }]}>
-                <ActivityIndicator size="small" color={config.colors.primary} />
-                <Text style={styles.loadingText}>Loading value changes...</Text>
+                <ActivityIndicator size="small" color={FUN_COLORS.purple} />
+                <Text style={styles.loadingText}>{t('analytics.loading_changes')}</Text>
               </View>
             ) : !valueChanges || filteredChanges.length === 0 ? (
               <View style={[styles.card, { alignItems: 'center', paddingVertical: 30 }]}>
-                <FontAwesome name="rotate" size={32} color={isDarkMode ? '#444' : '#ddd'} />
+                <Text style={{ fontSize: 36 }}>{'\u{1F937}'}</Text>
                 <Text style={[styles.emptySubtitle, { marginTop: 12 }]}>
-                  {!valueChanges ? 'No value changes data available yet.' : 'No items match this filter.'}
+                  {!valueChanges ? t('analytics.no_changes') : t('analytics.no_filter_match')}
                 </Text>
               </View>
             ) : (
               <View style={styles.card}>
                 <SectionHeader
                   icon="rotate"
-                  title={`Value Updates`}
+                  title={t('analytics.value_updates')}
                   subtitle={valueChanges.note || `${filteredChanges.length} items changed`}
+                  emoji={'\u{1F504}'}
                 />
                 {filteredChanges.map((item, i) => {
                   const primary = getPrimaryChange(item);
@@ -696,19 +714,19 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                         <View style={styles.changeRight}>
                           <View style={styles.changeValuesRow}>
                             <Text style={styles.changeOldValue}>{formatNumber(primary.oldVal)}</Text>
-                            <Icon name="arrow-forward" size={10} color={isDarkMode ? '#555' : '#bbb'} />
-                            <Text style={[styles.changeNewValue, { color: isUp ? '#10B981' : isZero ? (isDarkMode ? '#aaa' : '#666') : '#EF4444' }]}>
+                            <Text style={{ fontSize: 12 }}>{'\u{27A1}\u{FE0F}'}</Text>
+                            <Text style={[styles.changeNewValue, { color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#aaa' : '#666') : FUN_COLORS.red }]}>
                               {formatNumber(primary.newVal)}
                             </Text>
                           </View>
                           <View style={[styles.changePctBadge, {
-                            backgroundColor: isUp ? '#10B98120' : isZero ? (isDarkMode ? '#33333340' : '#eee') : '#EF444420',
+                            backgroundColor: isUp ? FUN_COLORS.green + '25' : isZero ? (isDarkMode ? '#33333340' : '#eee') : FUN_COLORS.red + '25',
                           }]}>
                             {!isZero && (
-                              <Icon name={isUp ? 'arrow-up' : 'arrow-down'} size={10} color={isUp ? '#10B981' : '#EF4444'} />
+                              <Text style={{ fontSize: 10 }}>{isUp ? '\u{2B06}\u{FE0F}' : '\u{2B07}\u{FE0F}'}</Text>
                             )}
                             <Text style={[styles.changePctText, {
-                              color: isUp ? '#10B981' : isZero ? (isDarkMode ? '#888' : '#999') : '#EF4444',
+                              color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red,
                             }]}>
                               {isZero ? '0%' : `${isUp ? '+' : ''}${primary.pct}%`}
                             </Text>
@@ -733,11 +751,11 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                                   <Text style={styles.subValueOld}>{formatNumber(v.oldVal)}</Text>
                                   <Icon name="arrow-forward" size={8} color={isDarkMode ? '#444' : '#ccc'} />
-                                  <Text style={[styles.subValueNew, { color: vUp ? '#10B981' : vSame ? (isDarkMode ? '#888' : '#999') : '#EF4444' }]}>
+                                  <Text style={[styles.subValueNew, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red }]}>
                                     {formatNumber(v.newVal)}
                                   </Text>
                                 </View>
-                                <Text style={[styles.subValuePct, { color: vUp ? '#10B981' : vSame ? (isDarkMode ? '#666' : '#bbb') : '#EF4444' }]}>
+                                <Text style={[styles.subValuePct, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#666' : '#bbb') : FUN_COLORS.red }]}>
                                   {vSame ? '0%' : `${vUp ? '+' : ''}${vPct}%`}
                                 </Text>
                               </View>
@@ -753,9 +771,9 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
 
             {/* Info about data source */}
             <View style={styles.disclaimerCard}>
-              <Icon name="shield-checkmark-outline" size={16} color={isDarkMode ? '#888' : '#999'} />
+              <Text style={{ fontSize: 14 }}>{'\u{2139}\u{FE0F}'}</Text>
               <Text style={styles.disclaimerText}>
-                Value changes are manually verified by comparing official value updates. Updated by admin when new values are released.
+                {t('analytics.changes_disclaimer')}
               </Text>
             </View>
           </>
@@ -765,24 +783,24 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
         {activeTab === 'movers' && (
           <>
             {/* Top Movers (Rising) */}
-            <View style={styles.card}>
-              <SectionHeader icon="arrow-trend-up" title="Top Movers" subtitle="Rising demand this week" />
+            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.green }]}>
+              <SectionHeader icon="arrow-trend-up" title={t('analytics.top_movers')} subtitle={t('analytics.rising_demand')} emoji={'\u{1F680}'} />
               {(analytics.topMovers || []).slice(0, isPro ? 10 : 3).map((item, i) => (
                 <ItemRow key={`mover-${i}`} item={item} index={i} showChange />
               ))}
               {!isPro && (analytics.topMovers || []).length > 3 && (
-                <LockedOverlay message="See all 10 top movers" />
+                <LockedOverlay message={t('analytics.see_all_movers')} />
               )}
             </View>
 
             {/* Top Losers (Falling) */}
-            <View style={styles.card}>
-              <SectionHeader icon="arrow-trend-down" title="Top Losers" subtitle="Falling demand this week" />
+            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.red }]}>
+              <SectionHeader icon="arrow-trend-down" title={t('analytics.top_losers')} subtitle={t('analytics.falling_demand')} emoji={'\u{1F4C9}'} />
               {(analytics.topLosers || []).slice(0, isPro ? 10 : 3).map((item, i) => (
                 <ItemRow key={`loser-${i}`} item={item} index={i} showChange />
               ))}
               {!isPro && (analytics.topLosers || []).length > 3 && (
-                <LockedOverlay message="See all 10 top losers" />
+                <LockedOverlay message={t('analytics.see_all_losers')} />
               )}
             </View>
           </>
@@ -792,40 +810,40 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
         {activeTab === 'demand' && (
           <>
             {/* Most Wanted */}
-            <View style={styles.card}>
-              <SectionHeader icon="heart" title="Most Wanted" subtitle="Highest demand (24h)" />
+            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.pink }]}>
+              <SectionHeader icon="heart" title={t('analytics.most_wanted')} subtitle={t('analytics.highest_demand')} emoji={'\u{2764}\u{FE0F}'} />
               {(analytics.topWanted || []).slice(0, isPro ? 15 : 5).map((item, i) => (
                 <ItemRow key={`wanted-${i}`} item={item} index={i} />
               ))}
               {!isPro && (analytics.topWanted || []).length > 5 && (
-                <LockedOverlay message="See full demand list" />
+                <LockedOverlay message={t('analytics.see_full_demand')} />
               )}
             </View>
 
             {/* Most Offered */}
-            <View style={styles.card}>
-              <SectionHeader icon="box-open" title="Most Offered" subtitle="Highest supply (24h)" />
+            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.blue }]}>
+              <SectionHeader icon="box-open" title={t('analytics.most_offered')} subtitle={t('analytics.highest_supply')} emoji={'\u{1F4E6}'} />
               {(analytics.topOffered || []).slice(0, isPro ? 15 : 5).map((item, i) => (
                 <ItemRow key={`offered-${i}`} item={item} index={i} />
               ))}
               {!isPro && (analytics.topOffered || []).length > 5 && (
-                <LockedOverlay message="See full supply list" />
+                <LockedOverlay message={t('analytics.see_full_supply')} />
               )}
             </View>
 
             {/* Demand/Supply Ratios */}
             {isPro ? (
-              <View style={styles.card}>
-                <SectionHeader icon="scale-balanced" title="Demand vs Supply" subtitle="D/S ratio (higher = more wanted)" locked={false} />
+              <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
+                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} subtitle={t('analytics.ds_ratio_subtitle')} locked={false} emoji={'\u{2696}\u{FE0F}'} />
                 {(analytics.demandSupplyRatios || []).slice(0, 15).map((item, i) => (
                   <ItemRow key={`ds-${i}`} item={item} index={i} showSignal />
                 ))}
               </View>
             ) : (
-              <View style={styles.card}>
-                <SectionHeader icon="scale-balanced" title="Demand vs Supply" locked />
+              <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
+                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} locked emoji={'\u{2696}\u{FE0F}'} />
                 <View style={{ height: 120, justifyContent: 'center' }}>
-                  <LockedOverlay message="Unlock demand/supply analysis" />
+                  <LockedOverlay message={t('analytics.unlock_ds')} />
                 </View>
               </View>
             )}
@@ -836,13 +854,13 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
         {activeTab === 'predict' && (
           <>
             {/* Prediction Header */}
-            <View style={[styles.card, { backgroundColor: isDarkMode ? '#1a1a2e' : '#F5F3FF' }]}>
+            <View style={[styles.card, { backgroundColor: isDarkMode ? '#1a1a2e' : '#F5F3FF', borderWidth: 1, borderColor: FUN_COLORS.purple + '30' }]}>
               <View style={styles.predictionHeader}>
-                <FontAwesome name="wand-magic-sparkles" size={24} color="#8B5CF6" solid />
+                <Text style={{ fontSize: 32 }}>{'\u{1F52E}'}</Text>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={[styles.sectionTitle, { color: '#8B5CF6' }]}>Value Predictions</Text>
+                  <Text style={[styles.sectionTitle, { color: FUN_COLORS.purple, fontSize: 18 }]}>{t('analytics.value_predictions')}</Text>
                   <Text style={styles.predictionSubtext}>
-                    Based on demand/supply trends from {formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM)} trades this week
+                    {t('analytics.predictions_based_on', { count: formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM) })}
                   </Text>
                 </View>
               </View>
@@ -851,7 +869,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
             {/* Predictions List */}
             {isPro ? (
               <View style={styles.card}>
-                <SectionHeader icon="crystal-ball" title="Predicted Movements" subtitle="Next 24-48h forecast" />
+                <SectionHeader icon="crystal-ball" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} emoji={'\u{1F3B1}'} />
                 {(analytics.predictions || []).map((item, i) => (
                   <View key={`pred-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
                     <View style={styles.predictionLeft}>
@@ -860,20 +878,20 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                           <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
                         ) : (
                           <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                            <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
+                            <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
                           </View>
                         )}
                       </View>
                       <View style={styles.itemInfo}>
                         <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                         <Text style={styles.itemType}>
-                          D:{(item.demand || 0) * VM} S:{(item.supply || 0) * VM} | Ratio: {item.ratio}x
+                          Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
                         </Text>
                       </View>
                     </View>
                     <View style={styles.predictionRight}>
-                      <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '20' }]}>
-                        <Icon name={getSignalIcon(item.prediction)} size={14} color={getSignalColor(item.prediction)} />
+                      <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
+                        <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
                         <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
                           {getPredictionLabel(item.prediction)}
                         </Text>
@@ -884,7 +902,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                           backgroundColor: getSignalColor(item.prediction),
                         }]} />
                       </View>
-                      <Text style={styles.confidenceText}>{item.confidence}% confidence</Text>
+                      <Text style={styles.confidenceText}>{t('analytics.confidence', { value: item.confidence })}</Text>
                     </View>
                   </View>
                 ))}
@@ -893,7 +911,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
               <>
                 {/* Show 2 predictions free, lock the rest */}
                 <View style={styles.card}>
-                  <SectionHeader icon="bolt" title="Predicted Movements" subtitle="Next 24-48h forecast" locked />
+                  <SectionHeader icon="bolt" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} locked emoji={'\u{1F3B1}'} />
                   {(analytics.predictions || []).slice(0, 2).map((item, i) => (
                     <View key={`pred-free-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
                       <View style={styles.predictionLeft}>
@@ -902,20 +920,20 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                             <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
                           ) : (
                             <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                              <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
+                              <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
                             </View>
                           )}
                         </View>
                         <View style={styles.itemInfo}>
                           <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                           <Text style={styles.itemType}>
-                            D:{(item.demand || 0) * VM} S:{(item.supply || 0) * VM}
+                            Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
                           </Text>
                         </View>
                       </View>
                       <View style={styles.predictionRight}>
-                        <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '20' }]}>
-                          <Icon name={getSignalIcon(item.prediction)} size={14} color={getSignalColor(item.prediction)} />
+                        <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
+                          <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
                           <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
                             {getPredictionLabel(item.prediction)}
                           </Text>
@@ -923,16 +941,16 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
                       </View>
                     </View>
                   ))}
-                  <LockedOverlay message="Unlock all predictions & confidence scores" />
+                  <LockedOverlay message={t('analytics.unlock_predictions')} />
                 </View>
               </>
             )}
 
             {/* Disclaimer */}
             <View style={styles.disclaimerCard}>
-              <Icon name="information-circle-outline" size={16} color={isDarkMode ? '#888' : '#999'} />
+              <Text style={{ fontSize: 14 }}>{'\u{1F4A1}'}</Text>
               <Text style={styles.disclaimerText}>
-                Predictions are based on trade activity patterns and demand/supply ratios. They are not financial advice and actual values may vary.
+                {t('analytics.predictions_disclaimer')}
               </Text>
             </View>
           </>
@@ -943,7 +961,7 @@ const fetchAnalytics = useCallback(async (isRefresh = false) => {
           <View style={styles.updatedRow}>
             <Icon name="time-outline" size={12} color={isDarkMode ? '#666' : '#999'} />
             <Text style={styles.updatedText}>
-              Updated: {new Date(analytics.computedAt).toLocaleString()}
+              {t('analytics.updated', { date: new Date(analytics.computedAt).toLocaleString() })}
             </Text>
           </View>
         )}
@@ -967,7 +985,7 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#F5F5F5',
+      backgroundColor: isDarkMode ? '#0f0f1a' : '#F0F4FF',
     },
     centered: {
       justifyContent: 'center',
@@ -976,57 +994,65 @@ const getStyles = (isDarkMode) =>
     },
     loadingText: {
       marginTop: 12,
-      color: isDarkMode ? '#aaa' : '#666',
-      fontSize: 14,
+      color: isDarkMode ? '#bbb' : '#666',
+      fontSize: 15,
+      fontWeight: '600',
     },
     emptyTitle: {
-      fontSize: 18,
+      fontSize: 22,
       fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#333',
-      marginTop: 16,
+      marginTop: 12,
     },
     emptySubtitle: {
-      fontSize: 14,
-      color: isDarkMode ? '#888' : '#666',
+      fontSize: 15,
+      color: isDarkMode ? '#999' : '#666',
       textAlign: 'center',
       marginTop: 8,
+      lineHeight: 22,
     },
     retryButton: {
       marginTop: 20,
-      paddingHorizontal: 24,
-      paddingVertical: 10,
+      paddingHorizontal: 28,
+      paddingVertical: 12,
       backgroundColor: config.colors.primary,
-      borderRadius: 8,
+      borderRadius: 24,
     },
     retryButtonText: {
       color: '#fff',
       fontWeight: 'bold',
+      fontSize: 15,
     },
 
     // Tab Bar
+    tabBarScroll: {
+      flexGrow: 0,
+      flexShrink: 0,
+      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      borderBottomWidth: 1,
+      borderBottomColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+    },
     tabBar: {
       flexDirection: 'row',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      backgroundColor: isDarkMode ? '#1a1a1a' : '#fff',
-      borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333' : '#eee',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      gap: 4,
     },
     tab: {
-      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 8,
-      borderRadius: 8,
-      gap: 4,
+      paddingHorizontal: 12,
+      borderRadius: 20,
+      gap: 6,
     },
     tabActive: {
-      backgroundColor: config.colors.primary + '15',
+      backgroundColor: config.colors.primary + '20',
     },
     tabText: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 13,
+      fontWeight: '700',
       color: isDarkMode ? '#888' : '#999',
     },
     tabTextActive: {
@@ -1046,25 +1072,29 @@ const getStyles = (isDarkMode) =>
     },
     statCard: {
       flex: 1,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: 16,
+      padding: 14,
       alignItems: 'center',
-      gap: 6,
+      gap: 4,
+      borderWidth: 1.5,
+    },
+    statEmoji: {
+      fontSize: 22,
     },
     statNumber: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#111',
+      fontSize: 22,
+      fontWeight: '900',
     },
     statLabel: {
       fontSize: 11,
-      color: isDarkMode ? '#aaa' : '#666',
+      fontWeight: '600',
+      color: isDarkMode ? '#bbb' : '#666',
     },
 
     // Card
     card: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
-      borderRadius: 12,
+      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      borderRadius: 16,
       padding: 14,
       marginBottom: 12,
       overflow: 'hidden',
@@ -1075,7 +1105,7 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       flexWrap: 'wrap',
-      marginBottom: 10,
+      marginBottom: 12,
     },
     sectionHeaderLeft: {
       flexDirection: 'row',
@@ -1084,28 +1114,28 @@ const getStyles = (isDarkMode) =>
       flex: 1,
     },
     sectionTitle: {
-      fontSize: 15,
-      fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#111',
+      fontSize: 16,
+      fontWeight: '800',
+      color: isDarkMode ? '#fff' : '#222',
     },
     sectionSubtitle: {
-      fontSize: 11,
-      color: isDarkMode ? '#888' : '#999',
+      fontSize: 12,
+      color: isDarkMode ? '#999' : '#888',
       width: '100%',
       marginTop: 2,
-      marginLeft: 24,
+      marginLeft: 30,
     },
     proBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: '#FFD70020',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 10,
+      backgroundColor: '#FFD70025',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 14,
     },
     proBadgeText: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 'bold',
       color: '#FFD700',
     },
@@ -1114,29 +1144,30 @@ const getStyles = (isDarkMode) =>
     itemRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 4,
-      borderRadius: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 6,
+      borderRadius: 10,
     },
     itemRowAlt: {
-      backgroundColor: isDarkMode ? '#252525' : '#F9FAFB',
+      backgroundColor: isDarkMode ? '#22223a' : '#F5F7FF',
     },
     itemRank: {
-      width: 28,
-      fontSize: 12,
+      width: 32,
+      fontSize: 13,
       fontWeight: 'bold',
       color: isDarkMode ? '#888' : '#999',
+      textAlign: 'center',
     },
     itemImageWrap: {
-      marginRight: 8,
+      marginRight: 10,
     },
     itemImage: {
-      width: 32,
-      height: 32,
-      borderRadius: 6,
+      width: 38,
+      height: 38,
+      borderRadius: 10,
     },
     itemImagePlaceholder: {
-      backgroundColor: isDarkMode ? '#333' : '#eee',
+      backgroundColor: isDarkMode ? '#2a2a3e' : '#eef0f8',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1144,81 +1175,78 @@ const getStyles = (isDarkMode) =>
       flex: 1,
     },
     itemName: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: isDarkMode ? '#fff' : '#111',
+      fontSize: 14,
+      fontWeight: '700',
+      color: isDarkMode ? '#fff' : '#222',
     },
     itemType: {
-      fontSize: 10,
-      color: isDarkMode ? '#888' : '#999',
+      fontSize: 11,
+      color: isDarkMode ? '#999' : '#888',
       textTransform: 'capitalize',
     },
     countBadge: {
-      backgroundColor: isDarkMode ? '#333' : '#F3F4F6',
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
+      backgroundColor: isDarkMode ? '#2a2a3e' : '#EEF0FF',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
     },
     countText: {
-      fontSize: 12,
-      fontWeight: 'bold',
-      color: isDarkMode ? '#aaa' : '#666',
+      fontSize: 13,
+      fontWeight: '800',
+      color: isDarkMode ? '#bbb' : '#555',
     },
     signalBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
     },
     signalText: {
-      fontSize: 11,
-      fontWeight: 'bold',
+      fontSize: 12,
+      fontWeight: '800',
     },
     changeBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
     },
     changeText: {
-      fontSize: 11,
-      fontWeight: 'bold',
+      fontSize: 12,
+      fontWeight: '800',
     },
 
     // Distribution
     distributionRow: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginBottom: 10,
+      marginBottom: 14,
     },
     distributionItem: {
       alignItems: 'center',
       gap: 4,
     },
-    distributionDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+    distributionEmoji: {
+      fontSize: 24,
     },
     distributionLabel: {
-      fontSize: 11,
-      color: isDarkMode ? '#aaa' : '#666',
+      fontSize: 13,
+      fontWeight: '700',
     },
     distributionValue: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#111',
+      fontSize: 20,
+      fontWeight: '900',
     },
     distributionBar: {
       flexDirection: 'row',
-      height: 6,
-      borderRadius: 3,
+      height: 10,
+      borderRadius: 5,
       overflow: 'hidden',
-      backgroundColor: isDarkMode ? '#333' : '#eee',
+      backgroundColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
     },
     distributionBarSegment: {
       height: '100%',
@@ -1229,14 +1257,15 @@ const getStyles = (isDarkMode) =>
       marginTop: 4,
     },
     chartLabel: {
-      fontSize: 11,
-      color: isDarkMode ? '#888' : '#999',
+      fontSize: 12,
+      color: isDarkMode ? '#999' : '#888',
       marginBottom: 8,
+      fontWeight: '600',
     },
     chartBars: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      height: 70,
+      height: 80,
       gap: 2,
     },
     chartBarWrap: {
@@ -1245,14 +1274,15 @@ const getStyles = (isDarkMode) =>
       justifyContent: 'flex-end',
     },
     chartBar: {
-      width: '80%',
-      borderRadius: 2,
-      minHeight: 2,
+      width: '85%',
+      borderRadius: 4,
+      minHeight: 4,
     },
     chartBarLabel: {
-      fontSize: 8,
-      color: isDarkMode ? '#666' : '#999',
-      marginTop: 2,
+      fontSize: 9,
+      color: isDarkMode ? '#777' : '#999',
+      marginTop: 3,
+      fontWeight: '600',
     },
 
     // Prediction
@@ -1261,16 +1291,16 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
     },
     predictionSubtext: {
-      fontSize: 11,
-      color: isDarkMode ? '#888' : '#999',
+      fontSize: 12,
+      color: isDarkMode ? '#999' : '#888',
       marginTop: 2,
     },
     predictionRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 10,
-      paddingHorizontal: 4,
-      borderRadius: 6,
+      paddingHorizontal: 6,
+      borderRadius: 10,
     },
     predictionLeft: {
       flexDirection: 'row',
@@ -1279,65 +1309,67 @@ const getStyles = (isDarkMode) =>
     },
     predictionRight: {
       alignItems: 'flex-end',
-      minWidth: 110,
+      minWidth: 120,
     },
     predictionBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
     },
     predictionBadgeText: {
-      fontSize: 10,
-      fontWeight: 'bold',
+      fontSize: 11,
+      fontWeight: '800',
     },
     confidenceBar: {
-      width: 80,
-      height: 3,
-      backgroundColor: isDarkMode ? '#333' : '#eee',
-      borderRadius: 2,
-      marginTop: 4,
+      width: 90,
+      height: 5,
+      backgroundColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+      borderRadius: 3,
+      marginTop: 5,
       overflow: 'hidden',
     },
     confidenceFill: {
       height: '100%',
-      borderRadius: 2,
+      borderRadius: 3,
     },
     confidenceText: {
-      fontSize: 9,
-      color: isDarkMode ? '#666' : '#999',
-      marginTop: 2,
+      fontSize: 10,
+      color: isDarkMode ? '#777' : '#999',
+      marginTop: 3,
+      fontWeight: '600',
     },
 
     // Locked Overlay
     lockedOverlay: {
-      backgroundColor: isDarkMode ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.85)',
-      borderRadius: 8,
-      padding: 16,
+      backgroundColor: isDarkMode ? 'rgba(15,15,26,0.85)' : 'rgba(240,244,255,0.92)',
+      borderRadius: 14,
+      padding: 20,
       marginTop: 8,
       alignItems: 'center',
     },
     lockedContent: {
       alignItems: 'center',
-      gap: 8,
+      gap: 10,
     },
     lockedText: {
-      fontSize: 13,
-      fontWeight: '600',
+      fontSize: 14,
+      fontWeight: '700',
       color: isDarkMode ? '#ddd' : '#333',
+      textAlign: 'center',
     },
     unlockButton: {
       backgroundColor: config.colors.primary,
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: 24,
     },
     unlockButtonText: {
       color: '#fff',
       fontWeight: 'bold',
-      fontSize: 12,
+      fontSize: 14,
     },
 
     // Disclaimer
@@ -1345,16 +1377,16 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 8,
-      padding: 12,
-      backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFBEB',
-      borderRadius: 8,
+      padding: 14,
+      backgroundColor: isDarkMode ? '#1a1a2e' : '#FFF8E1',
+      borderRadius: 12,
       marginBottom: 12,
     },
     disclaimerText: {
       flex: 1,
-      fontSize: 11,
-      color: isDarkMode ? '#888' : '#92400E',
-      lineHeight: 16,
+      fontSize: 12,
+      color: isDarkMode ? '#999' : '#8B6914',
+      lineHeight: 18,
     },
 
     // Value Changes Tab
@@ -1368,20 +1400,20 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 4,
-      paddingVertical: 8,
-      borderRadius: 8,
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
-      borderWidth: 1,
-      borderColor: isDarkMode ? '#333' : '#eee',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: 14,
+      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      borderWidth: 1.5,
+      borderColor: isDarkMode ? '#2a2a3e' : '#e0e4f0',
     },
     changesFilterBtnActive: {
       backgroundColor: config.colors.primary,
       borderColor: config.colors.primary,
     },
     changesFilterText: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 12,
+      fontWeight: '700',
       color: isDarkMode ? '#aaa' : '#666',
     },
     changesFilterTextActive: {
@@ -1391,8 +1423,8 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 10,
-      paddingHorizontal: 4,
-      borderRadius: 6,
+      paddingHorizontal: 6,
+      borderRadius: 10,
     },
     changeLeft: {
       flexDirection: 'row',
@@ -1403,13 +1435,13 @@ const getStyles = (isDarkMode) =>
       flex: 1,
     },
     changeDateText: {
-      fontSize: 9,
-      color: isDarkMode ? '#666' : '#aaa',
+      fontSize: 10,
+      color: isDarkMode ? '#777' : '#aaa',
       marginTop: 1,
     },
     changeRight: {
       alignItems: 'flex-end',
-      minWidth: 100,
+      minWidth: 105,
     },
     changeValuesRow: {
       flexDirection: 'row',
@@ -1417,30 +1449,30 @@ const getStyles = (isDarkMode) =>
       gap: 4,
     },
     changeOldValue: {
-      fontSize: 11,
+      fontSize: 12,
       color: isDarkMode ? '#888' : '#999',
       textDecorationLine: 'line-through',
     },
     changeNewValue: {
-      fontSize: 13,
-      fontWeight: 'bold',
+      fontSize: 14,
+      fontWeight: '800',
     },
     changePctBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
-      marginTop: 3,
+      gap: 3,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      marginTop: 4,
     },
     changePctText: {
-      fontSize: 10,
-      fontWeight: 'bold',
+      fontSize: 11,
+      fontWeight: '800',
     },
     changeValueType: {
-      fontSize: 8,
-      color: isDarkMode ? '#666' : '#999',
+      fontSize: 9,
+      color: isDarkMode ? '#777' : '#999',
       marginTop: 2,
       fontWeight: 'bold',
     },
@@ -1450,44 +1482,44 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 6,
-      marginTop: 8,
-      paddingTop: 8,
+      marginTop: 10,
+      paddingTop: 10,
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
+      borderTopColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
     },
     subValueItem: {
-      backgroundColor: isDarkMode ? '#1a1a1a' : '#f8f8f8',
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-      minWidth: 70,
+      backgroundColor: isDarkMode ? '#15152a' : '#f5f5ff',
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      minWidth: 72,
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: isDarkMode ? '#2a2a2a' : '#eee',
+      borderColor: isDarkMode ? '#2a2a3e' : '#e0e4f0',
     },
     subValueItemPrimary: {
-      borderColor: config.colors.primary + '40',
-      backgroundColor: isDarkMode ? '#1a2332' : '#EFF6FF',
+      borderColor: config.colors.primary + '50',
+      backgroundColor: isDarkMode ? '#1a2540' : '#EBF5FF',
     },
     subValueLabel: {
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: 'bold',
-      color: isDarkMode ? '#888' : '#666',
+      color: isDarkMode ? '#999' : '#666',
       marginBottom: 2,
     },
     subValueOld: {
-      fontSize: 9,
+      fontSize: 10,
       color: isDarkMode ? '#666' : '#aaa',
       textDecorationLine: 'line-through',
     },
     subValueNew: {
-      fontSize: 10,
-      fontWeight: 'bold',
+      fontSize: 11,
+      fontWeight: '800',
     },
     subValuePct: {
-      fontSize: 8,
-      fontWeight: 'bold',
-      marginTop: 1,
+      fontSize: 9,
+      fontWeight: '800',
+      marginTop: 2,
     },
 
     // Updated Row
@@ -1496,11 +1528,11 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
-      paddingVertical: 8,
+      paddingVertical: 10,
     },
     updatedText: {
-      fontSize: 10,
-      color: isDarkMode ? '#666' : '#999',
+      fontSize: 11,
+      color: isDarkMode ? '#777' : '#999',
     },
   });
 

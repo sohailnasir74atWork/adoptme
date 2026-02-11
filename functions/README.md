@@ -308,8 +308,7 @@ Cloud Function (every 12h) → Firestore (trade_analytics/latest)
 ```
 
 **Data stored in Firestore:**
-- `trade_analytics/latest` — Current snapshot
-- `trade_analytics/history_{YYYY-MM-DD}` — Daily snapshot
+- `trade_analytics/latest` — Single document, fully replaced on every run (no history)
 
 **Firestore Indexes Required:**
 ```
@@ -325,9 +324,9 @@ firebase deploy --only functions:aggregateTradeAnalytics
 **After deployment workflow:**
 1. Function runs automatically every 12 hours
 2. Go to Firebase Console → Firestore → `trade_analytics/latest`
-3. Copy the JSON data
+3. Copy the JSON data (single document, no history)
 4. Upload to Bunny CDN as `trade_analytics.json`
-5. App automatically picks it up (with 3hr MMKV cache)
+5. App automatically picks it up (with MMKV cache)
 
 ### Value Changes (Manual CDN File)
 
