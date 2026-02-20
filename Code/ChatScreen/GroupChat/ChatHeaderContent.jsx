@@ -75,13 +75,13 @@ const ChatHeaderContent = ({
   return (
     <>
       <View style={{
-        flexDirection: 'row', justifyContent: 'space-between', padding: 10, alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
+        flexDirection: 'row', justifyContent: 'space-between', padding: 3, alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
       }}>
-        <Text style={{ fontSize: 12, color: isDarkMode ? 'white' : 'black' }}>
+        <Text style={{ fontSize: 9, color: isDarkMode ? 'white' : 'black' }}>
           {t('chat.no_spamming')}
         </Text>
         <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
-          <Icon name="information-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+          <Icon name="information-circle-outline" size={15} color={config.colors.primary} style={{ marginRight: 10 }} />
         </TouchableOpacity>
       </View>
 

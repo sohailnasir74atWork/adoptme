@@ -1016,7 +1016,7 @@ const TradeList = ({ route }) => {
     };
     return (
       <View style={[styles.tradeItem, item.isFeatured && { backgroundColor: isDarkMode ? '#34495E' : 'rgba(245, 222, 179, 0.6)' }]}>
-        {item.isFeatured && <View style={styles.tag}></View>}
+        {item.isFeatured && <View style={styles.tag}><Text style={styles.tagText}>Featured</Text></View>}
 
 
         <View style={styles.tradeHeader}>
@@ -1051,7 +1051,7 @@ const TradeList = ({ route }) => {
                   ) : null;
                 })()}{' '}
                 {item.rating ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#FFD700', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#ffb700be', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
                     <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />
                     <Text style={{ fontSize: 8, color: 'white' }}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
                   </View>
@@ -1345,7 +1345,11 @@ const TradeList = ({ route }) => {
           onSubmitEditing={() => {
             setSearchLastDoc(null);
             setSearchHasMore(true);
-            handleSearchTrades(false);
+            if (!localState.isPro && searchQuery.trim()) {
+              InterstitialAdManager.showAd(() => handleSearchTrades(false));
+            } else {
+              handleSearchTrades(false);
+            }
           }}
           returnKeyType="search"
         />
@@ -1362,7 +1366,11 @@ const TradeList = ({ route }) => {
           onPress={() => {
             setSearchLastDoc(null);
             setSearchHasMore(true);
-            handleSearchTrades(false);
+            if (!localState.isPro && searchQuery.trim()) {
+              InterstitialAdManager.showAd(() => handleSearchTrades(false));
+            } else {
+              handleSearchTrades(false);
+            }
           }}
           disabled={isSearching}
         >
@@ -1912,10 +1920,16 @@ const getStyles = (isDarkMode) =>
       position: 'absolute',
       top: 0,
       left: 0,
-      height: 15, // Increased height for a better rounded effect
-      width: 15,  // Increased width for proportion
-      borderTopLeftRadius: 10,  // Increased to make it more curved
-      borderBottomRightRadius: 30, // Further increased for more curve
+      paddingHorizontal: 8,
+      paddingVertical: 1,
+      borderTopLeftRadius: 8,
+      borderBottomRightRadius: 10,
+      zIndex: 10,
+    },
+    tagText: {
+      color: '#fff',
+      fontSize: 7,
+      fontWeight: 'bold',
     },
     icon: {
       // marginRight: 1,

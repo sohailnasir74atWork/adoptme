@@ -23,7 +23,8 @@ import {
   Image,
   Modal,
   ScrollView,
-  Keyboard
+  Keyboard,
+  Clipboard,
 } from 'react-native';
 
 import {
@@ -50,16 +51,54 @@ import {
   startAfter,
   doc,
   getDoc,
+  deleteDoc,
+  setDoc,
+  addDoc,
+  Timestamp,
+  updateDoc,
 } from '@react-native-firebase/firestore';
 
 import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser } from '../ChatScreen/utils';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
+import RNFS from 'react-native-fs';
+import { Image as CompressorImage } from 'react-native-compressor';
+
+const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
+const BUNNY_STORAGE_ZONE = 'post-gag';
+const BUNNY_ACCESS_KEY = '1b7e1a85-dff7-4a98-ba701fc7f9b9-6542-46e2';
+const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
+
+const base64ToBytes = (base64) => {
+  if (!base64 || typeof base64 !== 'string') throw new Error('Invalid base64 input');
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let str = base64.replace(/[\r\n]+/g, '');
+  let output = [];
+  let i = 0;
+  while (i < str.length) {
+    const enc1 = chars.indexOf(str.charAt(i++));
+    const enc2 = chars.indexOf(str.charAt(i++));
+    const enc3 = chars.indexOf(str.charAt(i++));
+    const enc4 = chars.indexOf(str.charAt(i++));
+    if (enc1 === -1 || enc2 === -1 || enc3 === -1 || enc4 === -1) throw new Error('Invalid base64 character');
+    const chr1 = (enc1 << 2) | (enc2 >> 4);
+    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+    const chr3 = ((enc3 & 3) << 6) | enc4;
+    if (enc3 !== 64) output.push(chr1, chr2);
+    else output.push(chr1);
+    if (enc4 !== 64 && enc3 !== 64) output.push(chr3);
+  }
+  return Uint8Array.from(output);
+};
 
 const decodeEmail = (encoded) => (encoded ? encoded.replace(/\(dot\)/g, '.') : '');
 const BAD_KEYS = new Set(['undefined', 'onloaduser', '', null, undefined]);
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+
+// ✅ Sanitize search query — strip chars invalid in Firebase RTDB queries
+const sanitizeSearchQuery = (q) => q.replace(/[.#$\[\]\/\\]/g, '');
 
 // ✅ Timestamp/date helpers (Fix "Invalid Date")
 const toMillisSafe = (v) => {
@@ -149,6 +188,27 @@ const AdminDashboard = () => {
   // Mute
   const [customMuteMinutes, setCustomMuteMinutes] = useState('');
 
+  // Chat Viewer
+  const [chatPerson1, setChatPerson1] = useState(null);
+  const [chatPerson2, setChatPerson2] = useState(null);
+  const [chatSearch1, setChatSearch1] = useState('');
+  const [chatSearch2, setChatSearch2] = useState('');
+  const [chatResults1, setChatResults1] = useState([]);
+  const [chatResults2, setChatResults2] = useState([]);
+  const [chatSearching1, setChatSearching1] = useState(false);
+  const [chatSearching2, setChatSearching2] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [loadingChat, setLoadingChat] = useState(false);
+
+  // Polls Management
+  const [polls, setPolls] = useState([]);
+  const [loadingPolls, setLoadingPolls] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollImageUrl, setPollImageUrl] = useState('');
+  const [creatingPoll, setCreatingPoll] = useState(false);
+  const [uploadingPollImage, setUploadingPollImage] = useState(false);
+
   // ─────────────────────────────────────────────
   // Fetch Banned Users (Paginated)
   const fetchBannedUsers = useCallback(async (reset = false) => {
@@ -163,7 +223,11 @@ const AdminDashboard = () => {
       if (bannedSearchQuery.trim().length >= 1) {
         if (reset) setBannedUsers([]);
 
-        const lower = bannedSearchQuery.trim().toLowerCase();
+        const lower = sanitizeSearchQuery(bannedSearchQuery.trim().toLowerCase());
+        if (!lower) {
+          setLoadingBanned(false);
+          return;
+        }
         const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
         const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
 
@@ -320,7 +384,11 @@ const AdminDashboard = () => {
     setUserBanStatus({}); // ✅ Clear cached ban status on new search
 
     try {
-      const lower = searchQuery.trim().toLowerCase();
+      const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
+      if (!lower) {
+        setLoadingSearch(false);
+        return;
+      }
       const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
       const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
 
@@ -682,7 +750,86 @@ const AdminDashboard = () => {
     }
   }, [db]);
 
-  // Handle selection
+  // ─────────────────────────────────────────────
+  // Delete a Review (Admin can delete any, Mod cannot delete mod/admin reviews)
+  const handleDeleteReview = useCallback(async (review) => {
+    if (!review?.id || !selectedUser?.id) return;
+
+    // If current user is a mod (not admin), check if the reviewer is also a mod/admin
+    if (!isAdmin && isModerator && review.fromUserId) {
+      try {
+        const reviewerRef = ref(db, `users/${review.fromUserId}`);
+        const reviewerSnap = await get(reviewerRef);
+        if (reviewerSnap.exists()) {
+          const reviewerData = reviewerSnap.val();
+          if (reviewerData?.isModerator || reviewerData?.admin) {
+            Alert.alert('Restricted', 'Moderators cannot delete reviews from other moderators or admins.');
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking reviewer status:', err);
+      }
+    }
+
+    Alert.alert(
+      'Delete Review',
+      `Are you sure you want to delete this review${review.userName ? ` by ${review.userName}` : ''}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const firestoreDB = getFirestore();
+              const reviewRef = doc(firestoreDB, 'reviews', review.id);
+
+              // Get the rating before deleting so we can update the summary
+              const ratingToRemove = parseRatingSafe(review?.rating);
+
+              // Delete the review document
+              await deleteDoc(reviewRef);
+
+              // Update the ratings summary
+              const summaryRef = doc(firestoreDB, 'user_ratings_summary', selectedUser.id);
+              const summarySnap = await getDoc(summaryRef);
+
+              if (summarySnap.exists) {
+                const s = summarySnap.data();
+                const oldAvg = s?.averageRating || 0;
+                const oldCount = s?.count || 0;
+
+                if (oldCount <= 1) {
+                  // Last review — reset summary
+                  await setDoc(summaryRef, { averageRating: 0, count: 0 }, { merge: true });
+                } else {
+                  const newCount = oldCount - 1;
+                  const newAvg = ((oldAvg * oldCount) - ratingToRemove) / newCount;
+                  await setDoc(summaryRef, {
+                    averageRating: parseFloat(newAvg.toFixed(2)),
+                    count: newCount,
+                  }, { merge: true });
+                }
+              }
+
+              // Remove from local state
+              setReviews((prev) => prev.filter((r) => r.id !== review.id));
+
+              // Refresh user details to update displayed rating
+              fetchUserDetails(selectedUser.id);
+
+              Alert.alert('Deleted', 'Review has been removed.');
+            } catch (err) {
+              console.error('Delete review error:', err);
+              Alert.alert('Error', 'Could not delete review.');
+            }
+          },
+        },
+      ]
+    );
+  }, [selectedUser, fetchUserDetails, isAdmin, isModerator, db]);
+
   const handleSelectUser = useCallback(async (userItem) => {
     setSelectedUser(userItem);
     setUserDetails(null);
@@ -699,6 +846,254 @@ const AdminDashboard = () => {
       fetchStrikeHistory(userItem.email);
     }
   }, [fetchUserDetails, fetchReviews, fetchStrikeHistory]);
+
+  // ─────────────────────────────────────────────
+  // Chat Viewer — search users for person slots
+  const searchChatUser = useCallback(async (text, slot) => {
+    const setSearching = slot === 1 ? setChatSearching1 : setChatSearching2;
+    const setResults = slot === 1 ? setChatResults1 : setChatResults2;
+
+    if (!text || text.trim().length < 1) {
+      setResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const lower = sanitizeSearchQuery(text.trim().toLowerCase());
+      if (!lower) { setSearching(false); return; }
+      const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+      const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
+
+      const seen = new Set();
+      const results = [];
+      for (const v of variants) {
+        const q = query(
+          ref(db, 'users'),
+          orderByChild('displayName'),
+          startAt(v),
+          endAt(v + '\uf8ff'),
+          limitToFirst(10)
+        );
+        const snapshot = await get(q);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          for (const u of Object.values(data)) {
+            const id = u.id;
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            results.push({
+              id,
+              displayName: u.displayName || u.userName || 'Unknown',
+              avatar: getAvatarSafe(u),
+              email: u.email,
+            });
+          }
+        }
+      }
+      setResults(results.slice(0, 8));
+    } catch (err) {
+      console.error('Chat user search error:', err);
+    } finally {
+      setSearching(false);
+    }
+  }, [db]);
+
+  // Load Private Chat between two selected users
+  const loadChat = useCallback(async () => {
+    if (!chatPerson1?.id || !chatPerson2?.id) {
+      Alert.alert('Error', 'Please select both users first.');
+      return;
+    }
+    if (chatPerson1.id === chatPerson2.id) {
+      Alert.alert('Error', 'Please select two different users.');
+      return;
+    }
+
+    Keyboard.dismiss();
+    setLoadingChat(true);
+    setChatMessages([]);
+
+    try {
+      const id1 = chatPerson1.id;
+      const id2 = chatPerson2.id;
+      const chatKey = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+      const messagesRef = ref(db, `private_messages/${chatKey}/messages`);
+      const q = query(messagesRef, orderByChild('timestamp'), limitToLast(50));
+      const snapshot = await get(q);
+
+      if (!snapshot.exists()) {
+        setChatMessages([]);
+        setLoadingChat(false);
+        return;
+      }
+
+      const data = snapshot.val();
+      const msgs = Object.entries(data)
+        .map(([key, value]) => ({ id: key, ...value }))
+        .sort((a, b) => (a?.timestamp || 0) - (b?.timestamp || 0));
+
+      setChatMessages(msgs);
+    } catch (err) {
+      console.error('Chat load error:', err);
+      Alert.alert('Error', 'Could not load chat. Check selections and try again.');
+    } finally {
+      setLoadingChat(false);
+    }
+  }, [db, chatPerson1, chatPerson2]);
+
+  // ─────────────────────────────────────────────
+  // Polls Management
+  const fetchPolls = useCallback(async () => {
+    setLoadingPolls(true);
+    try {
+      const firestoreDB = getFirestore();
+      const pollsRef = collection(firestoreDB, 'polls');
+      const q = firestoreQuery(pollsRef, orderBy('createdAt', 'desc'), limit(10));
+      const snapshot = await getDocs(q);
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setPolls(list);
+    } catch (err) {
+      console.error('Fetch polls error:', err);
+    } finally {
+      setLoadingPolls(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'polls') fetchPolls();
+  }, [activeTab, fetchPolls]);
+
+  const handleCreatePoll = useCallback(async () => {
+    const q = pollQuestion.trim();
+    const opts = pollOptions.map((o) => o.trim()).filter((o) => o.length > 0);
+    if (!q) { Alert.alert('Error', 'Please enter a question.'); return; }
+    if (opts.length < 2) { Alert.alert('Error', 'Please add at least 2 options.'); return; }
+
+    // Check max 3 active
+    const activeCount = polls.filter((p) => p.active).length;
+    if (activeCount >= 3) {
+      Alert.alert('Limit Reached', 'Maximum 3 active polls allowed. Deactivate one first.');
+      return;
+    }
+
+    setCreatingPoll(true);
+    try {
+      const firestoreDB = getFirestore();
+      const pollsRef = collection(firestoreDB, 'polls');
+      const newPoll = {
+        question: q,
+        options: opts.map((text) => ({ text, votes: 0 })),
+        totalVotes: 0,
+        voters: {},
+        active: true,
+        createdAt: Timestamp.now(),
+        createdBy: currentUser?.uid || 'admin',
+        imageUrl: pollImageUrl.trim() || null,
+      };
+      await addDoc(pollsRef, newPoll);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setPollImageUrl('');
+      Alert.alert('Success', 'Poll created!');
+      fetchPolls();
+    } catch (err) {
+      console.error('Create poll error:', err);
+      Alert.alert('Error', 'Could not create poll.');
+    } finally {
+      setCreatingPoll(false);
+    }
+  }, [pollQuestion, pollOptions, pollImageUrl, polls, currentUser, fetchPolls]);
+
+  // 🐰 Upload poll image to Bunny CDN
+  const handlePickPollImage = useCallback(async () => {
+    setUploadingPollImage(true);
+    try {
+      launchImageLibrary(
+        { mediaType: 'photo', selectionLimit: 1, quality: 0.8, maxWidth: 1920, maxHeight: 1920 },
+        async (response) => {
+          try {
+            if (!response || response.didCancel) { setUploadingPollImage(false); return; }
+            if (response.errorCode) { setUploadingPollImage(false); return; }
+            const asset = response?.assets?.[0];
+            if (!asset?.uri) { setUploadingPollImage(false); return; }
+
+            let imageUri = asset.uri;
+            // Compress if > 1MB
+            const fileSize = asset.fileSize || 0;
+            if (fileSize > 1024 * 1024) {
+              try {
+                imageUri = await CompressorImage.compress(imageUri, {
+                  maxWidth: 1024, quality: 0.7, returnableOutputType: 'uri',
+                });
+              } catch (e) { console.warn('Compression failed, using original:', e); }
+            }
+
+            // Upload to Bunny
+            const localPath = imageUri.startsWith('file://') ? imageUri.replace('file://', '') : imageUri;
+            const base64 = await RNFS.readFile(localPath, 'base64');
+            const bytes = base64ToBytes(base64);
+            const fileName = `poll_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+            const remotePath = `polls/${fileName}`;
+
+            const res = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`, {
+              method: 'PUT',
+              headers: { AccessKey: BUNNY_ACCESS_KEY, 'Content-Type': 'image/jpeg' },
+              body: bytes,
+            });
+
+            if (!res.ok) throw new Error('Upload failed');
+            const cdnUrl = `${BUNNY_CDN_BASE}/${remotePath}`;
+            setPollImageUrl(cdnUrl);
+          } catch (err) {
+            console.error('Poll image upload error:', err);
+            Alert.alert('Error', 'Could not upload image.');
+          } finally {
+            setUploadingPollImage(false);
+          }
+        },
+      );
+    } catch (err) {
+      console.error('Image picker launch error:', err);
+      setUploadingPollImage(false);
+    }
+  }, []);
+
+  const handleDeletePoll = useCallback(async (pollId) => {
+    Alert.alert('Delete Poll', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            const firestoreDB = getFirestore();
+            await deleteDoc(doc(firestoreDB, 'polls', pollId));
+            setPolls((prev) => prev.filter((p) => p.id !== pollId));
+          } catch (err) {
+            Alert.alert('Error', 'Could not delete poll.');
+          }
+        },
+      },
+    ]);
+  }, []);
+
+  const handleTogglePollActive = useCallback(async (pollItem) => {
+    if (!pollItem.active) {
+      // Check max 3 before activating
+      const activeCount = polls.filter((p) => p.active).length;
+      if (activeCount >= 3) {
+        Alert.alert('Limit Reached', 'Maximum 3 active polls. Deactivate one first.');
+        return;
+      }
+    }
+    try {
+      const firestoreDB = getFirestore();
+      await updateDoc(doc(firestoreDB, 'polls', pollItem.id), { active: !pollItem.active });
+      setPolls((prev) => prev.map((p) => p.id === pollItem.id ? { ...p, active: !p.active } : p));
+    } catch (err) {
+      Alert.alert('Error', 'Could not update poll.');
+    }
+  }, [polls]);
 
   // Render Item (fix avatar)
   const renderItem = ({ item }) => {
@@ -790,6 +1185,24 @@ const AdminDashboard = () => {
             Search DB
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'chatViewer' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
+          onPress={() => setActiveTab('chatViewer')}
+        >
+          <Text style={[styles.tabText, activeTab === 'chatViewer' && styles.activeTabText, { color: activeTab === 'chatViewer' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
+            Chat Viewer
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'polls' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
+          onPress={() => setActiveTab('polls')}
+        >
+          <Text style={[styles.tabText, activeTab === 'polls' && styles.activeTabText, { color: activeTab === 'polls' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
+            Polls
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {activeTab === 'search' && (
@@ -852,30 +1265,361 @@ const AdminDashboard = () => {
             />
           )}
         </View>
-      ) : (
-        loadingSearch ? (
-          <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
-        ) : (
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item, index) => item.id || item.email || `search-${index}`}
-            contentContainerStyle={styles.listContent}
-            renderItem={renderItem}
-            ListEmptyComponent={
-              hasSearched ? (
-                <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>No users found.</Text>
+      ) : activeTab === 'search' ? (
+        <View style={{ flex: 1 }}>
+          {loadingSearch ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item, index) => item.id || item.email || `search-${index}`}
+              contentContainerStyle={styles.listContent}
+              renderItem={renderItem}
+              ListEmptyComponent={
+                hasSearched ? (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>No users found.</Text>
+                  </View>
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="search-outline" size={48} color={isDark ? '#333' : '#CCC'} />
+                    <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>Enter name to search database</Text>
+                  </View>
+                )
+              }
+            />
+          )}
+        </View>
+      ) : activeTab === 'chatViewer' ? (
+        <View style={{ flex: 1 }}>
+          {/* Person Selectors */}
+          <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+
+            {/* Person 1 */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
+              {chatPerson1 ? (
+                <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                  <Image source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
+                    <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setChatPerson1(null); setChatSearch1(''); setChatResults1([]); setChatMessages([]); }} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                  </TouchableOpacity>
                 </View>
               ) : (
-                <View style={styles.emptyState}>
-                  <Ionicons name="search-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>Enter name to search database</Text>
+                <View>
+                  <View style={styles.searchContainer}>
+                    <TextInput
+                      value={chatSearch1}
+                      onChangeText={setChatSearch1}
+                      placeholder="Search user..."
+                      placeholderTextColor={isDark ? '#666' : '#999'}
+                      style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="search"
+                      onSubmitEditing={() => searchChatUser(chatSearch1, 1)}
+                    />
+                    {chatSearching1 ? (
+                      <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
+                    ) : (
+                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#5856D6' }]} onPress={() => searchChatUser(chatSearch1, 1)}>
+                        <Ionicons name="person-outline" size={18} color="#FFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {chatResults1.length > 0 && (
+                    <View style={[styles.chatDropdown, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                      {chatResults1.map((u) => (
+                        <TouchableOpacity
+                          key={u.id}
+                          onPress={() => { setChatPerson1(u); setChatSearch1(''); setChatResults1([]); }}
+                          style={[styles.chatDropdownItem, { borderBottomColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                        >
+                          <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                          <View style={{ flex: 1, marginLeft: 8 }}>
+                            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                            <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
-              )
-            }
-          />
-        )
-      )}
+              )}
+            </View>
+
+            {/* Person 2 */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
+              {chatPerson2 ? (
+                <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                  <Image source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
+                    <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setChatPerson2(null); setChatSearch2(''); setChatResults2([]); setChatMessages([]); }} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <View style={styles.searchContainer}>
+                    <TextInput
+                      value={chatSearch2}
+                      onChangeText={setChatSearch2}
+                      placeholder="Search user..."
+                      placeholderTextColor={isDark ? '#666' : '#999'}
+                      style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="search"
+                      onSubmitEditing={() => searchChatUser(chatSearch2, 2)}
+                    />
+                    {chatSearching2 ? (
+                      <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
+                    ) : (
+                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#AF52DE' }]} onPress={() => searchChatUser(chatSearch2, 2)}>
+                        <Ionicons name="person-outline" size={18} color="#FFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {chatResults2.length > 0 && (
+                    <View style={[styles.chatDropdown, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                      {chatResults2.map((u) => (
+                        <TouchableOpacity
+                          key={u.id}
+                          onPress={() => { setChatPerson2(u); setChatSearch2(''); setChatResults2([]); }}
+                          style={[styles.chatDropdownItem, { borderBottomColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                        >
+                          <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                          <View style={{ flex: 1, marginLeft: 8 }}>
+                            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                            <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Load Chat Button */}
+            {chatPerson1 && chatPerson2 && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#007AFF', height: 46, borderRadius: 14, marginBottom: 0 }]}
+                onPress={loadChat}
+              >
+                <Ionicons name="chatbubbles" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={[styles.buttonText, { fontSize: 15 }]}>View Conversation</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Chat Messages */}
+          {loadingChat ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={chatMessages}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[styles.listContent, { paddingTop: 4 }]}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="chatbubbles-outline" size={48} color={isDark ? '#333' : '#CCC'} />
+                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
+                    {chatPerson1 && chatPerson2 ? 'No messages found between these users' : 'Search and select two users to view their chat'}
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const isPerson1 = item.senderId === chatPerson1?.id;
+                const senderName = isPerson1 ? chatPerson1?.displayName : chatPerson2?.displayName;
+                const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
+                return (
+                  <View style={[styles.chatBubble, {
+                    backgroundColor: isPerson1 ? (isDark ? '#0A3D62' : '#DCF8C6') : (isDark ? '#1C1C1E' : '#FFF'),
+                    alignSelf: isPerson1 ? 'flex-end' : 'flex-start',
+                    borderColor: isPerson1 ? (isDark ? '#1A5276' : '#B8E6A0') : (isDark ? '#2C2C2E' : '#E5E5EA'),
+                  }]}>
+                    <Text style={{ color: isPerson1 ? '#5DADE2' : '#AF52DE', fontSize: 11, fontWeight: '700', marginBottom: 3 }}>
+                      {senderName || item.senderId || 'Unknown'}
+                    </Text>
+                    {item.text ? (
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
+                    ) : null}
+                    {item.imageUrl ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                        <Ionicons name="image-outline" size={14} color="#007AFF" />
+                        <Text style={{ color: '#007AFF', fontSize: 12, marginLeft: 4 }}>Image</Text>
+                      </View>
+                    ) : null}
+                    {item.fruits && item.fruits.length > 0 ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                        <Ionicons name="paw-outline" size={14} color="#FF9500" />
+                        <Text style={{ color: '#FF9500', fontSize: 12, marginLeft: 4 }}>{item.fruits.length} pet(s)</Text>
+                      </View>
+                    ) : null}
+                    <Text style={{ color: isDark ? '#555' : '#AAA', fontSize: 10, marginTop: 4, textAlign: 'right' }}>
+                      {time}
+                    </Text>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      ) : activeTab === 'polls' ? (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+          {/* Create Poll Form */}
+          <View style={[styles.pollFormCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, fontWeight: '700', marginBottom: 12 }}>Create New Poll</Text>
+
+            <TextInput
+              value={pollQuestion}
+              onChangeText={setPollQuestion}
+              placeholder="Poll question..."
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              style={[styles.pollInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
+              multiline
+            />
+
+            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Options</Text>
+            {pollOptions.map((opt, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                <TextInput
+                  value={opt}
+                  onChangeText={(text) => {
+                    const updated = [...pollOptions];
+                    updated[i] = text;
+                    setPollOptions(updated);
+                  }}
+                  placeholder={`Option ${i + 1}`}
+                  placeholderTextColor={isDark ? '#666' : '#999'}
+                  style={[styles.pollInput, { flex: 1, backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
+                />
+                {pollOptions.length > 2 && (
+                  <TouchableOpacity
+                    onPress={() => setPollOptions(pollOptions.filter((_, ix) => ix !== i))}
+                    style={{ padding: 6, marginLeft: 4 }}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#FF3B30" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            {pollOptions.length < 6 && (
+              <TouchableOpacity
+                onPress={() => setPollOptions([...pollOptions, ''])}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}
+              >
+                <Ionicons name="add-circle" size={20} color="#007AFF" />
+                <Text style={{ color: '#007AFF', marginLeft: 6, fontSize: 13, fontWeight: '500' }}>Add Option</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Image (optional)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <TextInput
+                value={pollImageUrl}
+                onChangeText={setPollImageUrl}
+                placeholder="Paste URL or upload below"
+                placeholderTextColor={isDark ? '#666' : '#999'}
+                style={[styles.pollInput, { flex: 1, backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000', marginBottom: 0 }]}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {pollImageUrl ? (
+                <TouchableOpacity onPress={() => setPollImageUrl('')} style={{ padding: 6, marginLeft: 4 }}>
+                  <Ionicons name="close-circle" size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              onPress={handlePickPollImage}
+              disabled={uploadingPollImage}
+              style={[styles.actionButton, { backgroundColor: '#007AFF', height: 38, borderRadius: 10, marginBottom: 6 }]}
+            >
+              {uploadingPollImage ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={[styles.buttonText, { fontSize: 13 }]}>Upload from Gallery</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {pollImageUrl ? (
+              <Image source={{ uri: pollImageUrl }} style={{ width: '100%', height: 120, borderRadius: 10, marginBottom: 6, backgroundColor: '#DDD' }} resizeMode="cover" />
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#5856D6', marginTop: 12, height: 46, borderRadius: 14 }]}
+              onPress={handleCreatePoll}
+              disabled={creatingPoll}
+            >
+              {creatingPoll ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="add-circle" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={[styles.buttonText, { fontSize: 15 }]}>Create Poll</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Existing Polls */}
+          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 12 }}>Existing Polls</Text>
+
+          {loadingPolls ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+          ) : polls.length === 0 ? (
+            <Text style={{ color: isDark ? '#666' : '#999', textAlign: 'center', paddingVertical: 20 }}>No polls created yet</Text>
+          ) : (
+            polls.map((p) => (
+              <View key={p.id} style={[styles.pollListCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <View style={[styles.pollStatusBadge, { backgroundColor: p.active ? '#34C75920' : '#FF3B3020' }]}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.active ? '#34C759' : '#FF3B30', marginRight: 4 }} />
+                    <Text style={{ color: p.active ? '#34C759' : '#FF3B30', fontSize: 10, fontWeight: '700' }}>{p.active ? 'ACTIVE' : 'INACTIVE'}</Text>
+                  </View>
+                  <Text style={{ color: isDark ? '#555' : '#CCC', fontSize: 11, marginLeft: 'auto' }}>
+                    {p.totalVotes || 0} votes
+                  </Text>
+                </View>
+                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600', marginBottom: 4 }} numberOfLines={2}>{p.question}</Text>
+                <Text style={{ color: isDark ? '#666' : '#999', fontSize: 12, marginBottom: 8 }}>
+                  {(p.options || []).map((o) => o.text).join(' • ')}
+                </Text>
+                <View style={{ flexDirection: 'row' }}>
+                  <TouchableOpacity
+                    onPress={() => handleTogglePollActive(p)}
+                    style={[styles.pollActionBtn, { backgroundColor: p.active ? '#FF950020' : '#34C75920' }]}
+                  >
+                    <Ionicons name={p.active ? 'pause-circle' : 'play-circle'} size={16} color={p.active ? '#FF9500' : '#34C759'} />
+                    <Text style={{ color: p.active ? '#FF9500' : '#34C759', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                      {p.active ? 'Deactivate' : 'Activate'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeletePoll(p.id)}
+                    style={[styles.pollActionBtn, { backgroundColor: '#FF3B3020', marginLeft: 8 }]}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                    <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      ) : null}
 
       {/* Modal */}
       <Modal
@@ -900,10 +1644,25 @@ const AdminDashboard = () => {
                 <Text style={[styles.modalName, { color: isDark ? '#FFF' : '#000' }]}>{selectedUser.displayName}</Text>
                 <Text style={[styles.modalEmail, { color: isDark ? '#AAA' : '#666' }]}>{selectedUser.email || selectedUser.decodedEmail}</Text>
 
+                {selectedUser.id && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Clipboard.setString(selectedUser.id);
+                      Alert.alert('Copied', 'User ID copied to clipboard.');
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#E5E5EA', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, marginBottom: 8 }}
+                  >
+                    <Ionicons name="copy-outline" size={14} color={isDark ? '#AAA' : '#666'} style={{ marginRight: 6 }} />
+                    <Text style={{ color: isDark ? '#CCC' : '#333', fontSize: 12 }} numberOfLines={1}>
+                      ID: {selectedUser.id}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 {userDetails?.isPro && (
                   <View style={[styles.proBadge]}>
                     <Ionicons name="star" size={12} color="#FFD700" />
-                    <Text style={{ color: '#FFD700', fontWeight: 'bold', marginLeft: 4 }}>PRO</Text>
+                    <Text style={{ color: '#ffb700be', fontWeight: 'bold', marginLeft: 4 }}>PRO</Text>
                   </View>
                 )}
 
@@ -992,6 +1751,12 @@ const AdminDashboard = () => {
                           <Text style={{ color: isDark ? '#666' : '#999', marginLeft: 'auto', fontSize: 11 }}>
                             {dateText || '—'}
                           </Text>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteReview(review)}
+                            style={{ marginLeft: 10, padding: 4 }}
+                          >
+                            <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                          </TouchableOpacity>
                         </View>
 
                         <Text style={{ color: isDark ? '#CCC' : '#333' }}>
@@ -1061,7 +1826,7 @@ const AdminDashboard = () => {
                     <Ionicons name="volume-mute" size={16} color="#FFF" />
                     <Text style={[styles.buttonText, { fontSize: 14 }]}>10 min</Text>
                   </TouchableOpacity>
-                  <View style={[styles.strikeButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', justifyContent: 'center' }]}> 
+                  <View style={[styles.strikeButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', justifyContent: 'center' }]}>
                     <TextInput
                       value={customMuteMinutes}
                       onChangeText={setCustomMuteMinutes}
@@ -1208,7 +1973,66 @@ const styles = StyleSheet.create({
   strikeCard: { padding: 12, borderRadius: 10, marginBottom: 8 },
   strikeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
 
-  loadMoreBtn: { alignItems: 'center', paddingVertical: 10 }
+  loadMoreBtn: { alignItems: 'center', paddingVertical: 10 },
+
+  chatBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  selectedPersonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  chatDropdown: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  chatDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+  },
+  pollFormCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  pollInput: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  pollListCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  pollStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  pollActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
 });
 
 export default AdminDashboard;

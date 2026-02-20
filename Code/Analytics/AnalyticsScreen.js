@@ -74,10 +74,10 @@ const FUN_COLORS = {
   orange: '#FB923C', red: '#F87171', yellow: '#FBBF24', cyan: '#22D3EE',
 };
 const BAR_COLORS = [
-  '#4F8CFF','#A78BFA','#F472B6','#FB923C','#34D399','#FBBF24',
-  '#22D3EE','#F87171','#4F8CFF','#A78BFA','#F472B6','#FB923C',
-  '#34D399','#FBBF24','#22D3EE','#F87171','#4F8CFF','#A78BFA',
-  '#F472B6','#FB923C','#34D399','#FBBF24','#22D3EE','#F87171',
+  '#4F8CFF', '#A78BFA', '#F472B6', '#FB923C', '#34D399', '#FBBF24',
+  '#22D3EE', '#F87171', '#4F8CFF', '#A78BFA', '#F472B6', '#FB923C',
+  '#34D399', '#FBBF24', '#22D3EE', '#F87171', '#4F8CFF', '#A78BFA',
+  '#F472B6', '#FB923C', '#34D399', '#FBBF24', '#22D3EE', '#F87171',
 ];
 
 const AnalyticsScreen = ({ navigation }) => {
@@ -129,29 +129,28 @@ const AnalyticsScreen = ({ navigation }) => {
     }
   }, []);
 
-const fetchAnalytics = useCallback(async (isRefresh = false) => {
-  try {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+  const fetchAnalytics = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
-    if (isRefresh) {
-      analyticsCache.delete('analytics');
-      analyticsCache.delete('analytics_time');
+      if (isRefresh) {
+        analyticsCache.delete('analytics');
+        analyticsCache.delete('analytics_time');
+      }
+
+      const raw = await fetchFromCDN(ANALYTICS_CDN_URL, 'analytics', ANALYTICS_CACHE_MS);
+
+      const data = normalizeFirestoreDocPayload(raw); // ✅ ADD THIS LINE
+
+      if (data) setAnalytics(data);
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    const raw = await fetchFromCDN(ANALYTICS_CDN_URL, 'analytics', ANALYTICS_CACHE_MS);
-
-    const data = normalizeFirestoreDocPayload(raw); // ✅ ADD THIS LINE
-    console.log(raw)
-
-    if (data) setAnalytics(data);
-  } catch (error) {
-    console.error('Error fetching analytics:', error);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-}, [fetchFromCDN]);
+  }, [fetchFromCDN]);
 
 
   const normalizeDiffPayload = useCallback((data) => {
@@ -1037,12 +1036,13 @@ const getStyles = (isDarkMode) =>
       paddingHorizontal: 8,
       paddingVertical: 6,
       gap: 4,
+      marginTop: 10
     },
     tab: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 8,
+      paddingVertical: 4,
       paddingHorizontal: 12,
       borderRadius: 20,
       gap: 6,
@@ -1137,7 +1137,7 @@ const getStyles = (isDarkMode) =>
     proBadgeText: {
       fontSize: 11,
       fontWeight: 'bold',
-      color: '#FFD700',
+      color: '#ffb700be',
     },
 
     // Item Row

@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
-import InterstitialAdManager from '../../Ads/IntAd';
 
 
 
@@ -55,17 +54,9 @@ const PostsHeader = ({
         {/* All Posts */}
         <MenuOption
           onSelect={() => {
-            const handleAction = () => {
-              setFilterMyPosts(false);
-              setSelectedTag(null);
-              fetchInitialPosts();
-            };
-
-            if (!localState.isPro) {
-              InterstitialAdManager.showAd(handleAction);
-            } else {
-              handleAction();
-            }
+            setFilterMyPosts(false);
+            setSelectedTag(null);
+            fetchInitialPosts();
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 10 }}>
@@ -79,17 +70,9 @@ const PostsHeader = ({
         {/* My Posts */}
         <MenuOption
           onSelect={() => {
-            const handleAction = () => {
-              setFilterMyPosts(true);
-              setSelectedTag(null);
-              fetchMyPosts();
-            };
-
-            if (!localState.isPro) {
-              InterstitialAdManager.showAd(handleAction);
-            } else {
-              handleAction();
-            }
+            setFilterMyPosts(true);
+            setSelectedTag(null);
+            fetchMyPosts();
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 10 }}>
@@ -112,16 +95,9 @@ const PostsHeader = ({
           <MenuOption
             key={index}
             onSelect={() => {
-              const handleAction = () => {
-                setFilterMyPosts(false);
-                setSelectedTag(tagObj.value);
-                fetchPostsByTag(tagObj.value);
-              };
-              if (!localState.isPro) {
-                InterstitialAdManager.showAd(handleAction);
-              } else {
-                handleAction();
-              }
+              setFilterMyPosts(false);
+              setSelectedTag(tagObj.value);
+              fetchPostsByTag(tagObj.value);
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 10 }}>

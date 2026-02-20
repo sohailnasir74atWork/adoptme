@@ -229,7 +229,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         <Text style={[
           styles.drawerSubtitleUser,
           {
-            color: !isOnline
+            color: isOnline
               ? config.colors.hasBlockGreen
               : config.colors.wantBlockRed,
             fontSize: 10,

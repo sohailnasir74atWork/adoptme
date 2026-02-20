@@ -30,6 +30,9 @@ const FRIEND_PAGE_SIZE = 15;
 const SEARCH_LIMIT = 15;
 const FIRESTORE_IN_BATCH_SIZE = 10; // Smaller batch for better cost efficiency
 
+// ✅ Sanitize search query — strip chars invalid in Firebase RTDB queries
+const sanitizeSearchQuery = (q) => q.replace(/[.#$\[\]\/\\]/g, '');
+
 // ✅ Memoized User Card to prevent re-renders
 const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
     <TouchableOpacity
@@ -417,7 +420,11 @@ const SocialDashboard = () => {
 
         try {
             // 1. Search Global Users - case-insensitive via dual query
-            const lower = searchQuery.trim().toLowerCase();
+            const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
+            if (!lower) {
+                setLoadingFriendSearch(false);
+                return;
+            }
             const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
             const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
 
@@ -477,7 +484,11 @@ const SocialDashboard = () => {
 
         try {
             // Case-insensitive search via dual query
-            const lower = searchQuery.trim().toLowerCase();
+            const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
+            if (!lower) {
+                setLoadingSearch(false);
+                return;
+            }
             const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
             const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
 

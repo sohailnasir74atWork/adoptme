@@ -140,9 +140,22 @@ const PrivateMessageInput = ({
                 if (!asset?.uri || typeof asset.uri !== 'string') continue;
 
                 try {
-                  const filePath = asset.uri.replace('file://', '');
-                  const fileInfo = await RNFS.stat(filePath);
-                  const fileSize = fileInfo.size || 0;
+                  let fileSize = asset.fileSize || 0;
+
+                  // Only use RNFS.stat for file:// URIs (content:// URIs crash stat)
+                  if (!fileSize && asset.uri.startsWith('file://')) {
+                    try {
+                      const filePath = asset.uri.replace('file://', '');
+                      const fileInfo = await RNFS.stat(filePath);
+                      fileSize = fileInfo.size || 0;
+                    } catch (statError) {
+                      console.warn('RNFS.stat failed, will compress as fallback:', statError?.message);
+                      fileSize = MAX_SIZE_BYTES + 1; // Force compression
+                    }
+                  } else if (!fileSize) {
+                    // content:// or unknown scheme — compress to be safe
+                    fileSize = MAX_SIZE_BYTES + 1;
+                  }
 
                   // 🟢 If image > 1MB, compress it
                   if (fileSize > MAX_SIZE_BYTES) {
@@ -164,8 +177,18 @@ const PrivateMessageInput = ({
                   }
                 } catch (error) {
                   console.warn('Error processing image:', error);
-                  // Best effort: try adding original if processing fails
-                  validUris.push(asset.uri);
+                  // Best effort: try compressing original if processing fails
+                  try {
+                    const compressedUri = await CompressorImage.compress(asset.uri, {
+                      maxWidth: 1024,
+                      quality: 0.7,
+                      returnableOutputType: 'uri',
+                    });
+                    validUris.push(compressedUri);
+                  } catch (fallbackError) {
+                    console.warn('Fallback compression also failed:', fallbackError);
+                    rejectedCount.push(asset.fileName || 'image');
+                  }
                 }
               }
 
@@ -207,8 +230,9 @@ const PrivateMessageInput = ({
         const remotePath = `uploads/${encodeURIComponent(userId)}/${encodeURIComponent(filename)}`;
         const uploadUrl = `https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`;
 
-        // read file as base64
-        const base64 = await RNFS.readFile(uri.replace('file://', ''), 'base64');
+        // read file as base64 (handle both file:// and content:// URIs)
+        const filePath = uri.startsWith('file://') ? uri.replace('file://', '') : uri;
+        const base64 = await RNFS.readFile(filePath, 'base64');
 
         // convert to bytes without atob
         let binary;

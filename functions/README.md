@@ -298,19 +298,23 @@ Scheduled Cloud Function that runs **every 12 hours** to aggregate trade analyti
 
 **Architecture:**
 ```
-Cloud Function (every 12h) → Firestore (trade_analytics/latest)
+Cloud Function (every 12h) → RTDB /analytics node (plain JSON)
                                 ↓ (you manually copy JSON)
                            Bunny CDN (trade_analytics.json)
                                 ↓
-                           App reads from CDN (zero Firestore reads)
+                           App reads from CDN (zero Firebase reads)
                                 ↓
                            MMKV cache (3hr TTL, no re-fetch on every open)
 ```
 
-**Data stored in Firestore:**
-- `trade_analytics/latest` — Single document, fully replaced on every run (no history)
+**Source data (Firestore — read only):**
+- `trades_new` collection — trade documents
+- `reviews` collection — wishlist/owned pet data
 
-**Firestore Indexes Required:**
+**Output data (RTDB — write):**
+- `/analytics` — Single node, fully replaced on every run (plain JSON, no Firestore wrapper)
+
+**Firestore Indexes Required (for source reads):**
 ```
 Collection: trades_new — Fields: timestamp (DESC)
 Collection: reviews — Fields: updatedAt (DESC)
@@ -323,8 +327,8 @@ firebase deploy --only functions:aggregateTradeAnalytics
 
 **After deployment workflow:**
 1. Function runs automatically every 12 hours
-2. Go to Firebase Console → Firestore → `trade_analytics/latest`
-3. Copy the JSON data (single document, no history)
+2. Go to Firebase Console → Realtime Database → `analytics` node
+3. Copy/export the JSON data
 4. Upload to Bunny CDN as `trade_analytics.json`
 5. App automatically picks it up (with MMKV cache)
 

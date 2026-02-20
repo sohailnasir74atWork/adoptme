@@ -291,78 +291,55 @@ const OnlineUsersList = ({
     setSearching(true);
     try {
       const usersRef = ref(appdatabase, 'users');
-      const searchLower = searchText.trim().toLowerCase();
-      const searchEnd = searchLower + '\uf8ff';
+      const trimmed = searchText.trim();
 
-      // Query users by displayName_lower (if indexed) or displayName
-      const searchQuery = query(
-        usersRef,
-        orderByChild('displayName_lower'),
-        startAt(searchLower),
-        endAt(searchEnd),
-        limitToFirst(20)
-      );
+      // ✅ Build search variants (original, capitalized, lowercase)
+      // Firebase RTDB doesn't support case-insensitive queries natively
+      const searchVariants = new Set([
+        trimmed,
+        trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase(), // "John"
+        trimmed.toLowerCase(), // "john"
+        trimmed.toUpperCase(), // "JOHN"
+      ]);
 
-      const snapshot = await get(searchQuery);
+      const allResults = new Map();
 
-      if (!snapshot.exists()) {
-        // Fallback: Try searching with displayName (case-sensitive)
-        const fallbackQuery = query(
-          usersRef,
-          orderByChild('displayName'),
-          startAt(searchText.trim()),
-          endAt(searchText.trim() + '\uf8ff'),
-          limitToFirst(20)
-        );
-        const fallbackSnapshot = await get(fallbackQuery);
-
-        if (!fallbackSnapshot.exists()) {
-          setSearchResults([]);
-          setSearching(false);
-          return;
-        }
-
-        const results = [];
-        fallbackSnapshot.forEach((child) => {
-          const userData = child.val();
-          // Exclude current user and already loaded online users
-          if (child.key !== user?.id) {
-            results.push({
-              id: child.key,
-              displayName: userData.displayName || t('chat.anonymous'),
-              avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-              isPro: userData.isPro || false,
-              robloxUsernameVerified: userData.robloxUsernameVerified || false,
-              isAdmin: userData.isAdmin || false,
-              isModerator: userData.isModerator || false,
-              isOnline: allOnlineUserIds.includes(child.key),
+      // ✅ Run queries for each variant in parallel
+      const queries = Array.from(searchVariants).map(async (variant) => {
+        try {
+          const searchQ = query(
+            usersRef,
+            orderByChild('displayName'),
+            startAt(variant),
+            endAt(variant + '\uf8ff'),
+            limitToFirst(20)
+          );
+          const snapshot = await get(searchQ);
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              const userData = child.val();
+              if (child.key !== user?.id && !allResults.has(child.key)) {
+                allResults.set(child.key, {
+                  id: child.key,
+                  displayName: userData.displayName || t('chat.anonymous'),
+                  avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                  isPro: userData.isPro || false,
+                  robloxUsernameVerified: userData.robloxUsernameVerified || false,
+                  isAdmin: userData.isAdmin || false,
+                  isModerator: userData.isModerator || false,
+                  isOnline: allOnlineUserIds.includes(child.key),
+                });
+              }
             });
           }
-        });
-        setSearchResults(results);
-        setSearching(false);
-        return;
-      }
-
-      const results = [];
-      snapshot.forEach((child) => {
-        const userData = child.val();
-        // Exclude current user
-        if (child.key !== user?.id) {
-          results.push({
-            id: child.key,
-            displayName: userData.displayName || t('chat.anonymous'),
-            avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            isPro: userData.isPro || false,
-            robloxUsernameVerified: userData.robloxUsernameVerified || false,
-            isAdmin: userData.isAdmin || false,
-            isModerator: userData.isModerator || false,
-            isOnline: allOnlineUserIds.includes(child.key),
-          });
+        } catch (err) {
+          // Silently ignore individual query failures
         }
       });
 
-      setSearchResults(results);
+      await Promise.all(queries);
+
+      setSearchResults(Array.from(allResults.values()));
     } catch (error) {
       console.error('Error searching users:', error);
       setSearchResults([]);
@@ -422,10 +399,10 @@ const OnlineUsersList = ({
       setLoading(true);
 
       try {
-        // ✅ Build user data map from allOnlineUsers to avoid extra Firestore read
+        // ✅ Build user data map from allOnlineUsers + searchResults to avoid extra Firestore read
         const invitedUsersMap = {};
-        allOnlineUsers.forEach((u) => {
-          if (u.id && selectedIds.includes(u.id)) {
+        [...allOnlineUsers, ...searchResults].forEach((u) => {
+          if (u.id && selectedIds.includes(u.id) && !invitedUsersMap[u.id]) {
             invitedUsersMap[u.id] = {
               displayName: u.displayName || t('chat.anonymous'),
               avatar: u.avatar || null,
@@ -463,7 +440,7 @@ const OnlineUsersList = ({
       // Create new group
       setShowCreateGroupModal(true);
     }
-  }, [selectedUserIds, userGroup, user, appdatabase, allOnlineUsers, triggerHapticFeedback]);
+  }, [selectedUserIds, userGroup, user, appdatabase, allOnlineUsers, searchResults, triggerHapticFeedback]);
 
   // ✅ Handle group created (navigate to group chat)
   const handleGroupCreated = useCallback((groupId) => {
@@ -571,10 +548,16 @@ const OnlineUsersList = ({
     callbackFunction();
   }, [mode, onClose, navigation, handleToggleUserSelection, handleGameInvite]);
 
-  // ✅ Get selected users for group creation
+  // ✅ Get selected users for group creation (from both online users AND search results)
   const selectedUsers = useMemo(() => {
-    return allOnlineUsers.filter((u) => selectedUserIds.has(u.id));
-  }, [allOnlineUsers, selectedUserIds]);
+    const combined = new Map();
+    [...allOnlineUsers, ...searchResults].forEach((u) => {
+      if (selectedUserIds.has(u.id) && !combined.has(u.id)) {
+        combined.set(u.id, u);
+      }
+    });
+    return Array.from(combined.values());
+  }, [allOnlineUsers, searchResults, selectedUserIds]);
 
   // ✅ Combine search results with online users based on activeTab
   const displayUsers = useMemo(() => {

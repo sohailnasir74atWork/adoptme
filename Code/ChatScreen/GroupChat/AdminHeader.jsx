@@ -178,13 +178,13 @@ const AdminHeader = ({
         </View>
       </View>
       <View style={{
-        flexDirection: 'row', justifyContent: 'space-between', padding: 10, alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
       }}>
-        <Text style={{ fontSize: 12, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
+        <Text style={{ fontSize: 9, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
         </Text>
         <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
 
-          <Icon name="information-circle-outline" size={20} color={config.colors.primary} style={{ marginRight: 10 }} />
+          <Icon name="information-circle-outline" size={15} color={config.colors.primary} style={{ marginRight: 10 }} />
           {/* <Text style={{ fontSize: 16, color: config.colors.text || '#000' }}>
                       {t("chat.chat_rules")}
                     </Text> */}

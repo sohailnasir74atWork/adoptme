@@ -556,7 +556,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
-    if (hasFruits && fruits.length > 18) {
+    if (hasFruits && fruits.length > 9) {
       showErrorMessage(t("home.alert.error"), t('chat.max_pets_allowed'));
       return;
     }
@@ -712,11 +712,6 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
       return () => {
         clearActiveChat(user.id);
-        // ✅ Show ad when leaving if: 20+ seconds spent AND 2+ messages sent AND not Pro
-        const timeSpent = Date.now() - (chatEnterTimeRef.current || Date.now());
-        if (timeSpent >= 20000 && hasSentMessageRef.current >= 2 && !localState?.isPro) {
-          InterstitialAdManager.showAd();
-        }
       };
     }, [user?.id, selectedUserId, chatKey, localState?.isPro])
   );
@@ -1024,7 +1019,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 15 }}>
               {[1, 2, 3, 4, 5].map((num) => (
                 <TouchableOpacity key={num} onPress={() => setRating(num)}>
-                  <Text style={{ fontSize: 32, color: num <= rating ? '#FFD700' : '#ccc', marginHorizontal: 4 }}>
+                  <Text style={{ fontSize: 32, color: num <= rating ? '#ffb700be' : '#ccc', marginHorizontal: 4 }}>
                     ★
                   </Text>
                 </TouchableOpacity>

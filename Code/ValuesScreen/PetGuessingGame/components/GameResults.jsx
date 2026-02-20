@@ -136,7 +136,7 @@ const GameResults = ({ roomData, currentUser }) => {
 
         <View style={styles.leaderboard}>
           {leaderboard.map((player, index) => {
-            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+            const medalColors = ['#ffb700be', '#C0C0C0', '#CD7F32'];
             const isWinner = index === 0 && isGameFinished;
 
             return (

@@ -365,7 +365,7 @@ const getStyles = (isDarkMode) =>
         },
         admincard: {
             padding: 25,
-            backgroundColor: '#FFD700',
+            backgroundColor: '#ffb700be',
             borderRadius: 12,
             width: '100%',
             alignItems: 'center',

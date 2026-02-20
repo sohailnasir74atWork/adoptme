@@ -66,6 +66,7 @@ const MessagesList = ({
 
   const { t } = useTranslation();
   const { isAdmin, api, freeTranslation } = useGlobalState();
+  const isAdminOrMod = isAdmin || !!user?.isModerator;
   const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
 
@@ -406,9 +407,9 @@ const MessagesList = ({
                     item.isReportedByUser && styles.reportedMessage,
                   ]}>
 
-                    <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdmin && item.strikeCount === 1
+                    <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdminOrMod && item.strikeCount === 1
                       ? { backgroundColor: 'pink' }
-                      : item.strikeCount >= 2
+                      : isAdminOrMod && item.strikeCount >= 2
                         ? { backgroundColor: 'red' }
                         : null,]}>
                       <View style={styles.nameRow}>
@@ -624,7 +625,7 @@ const MessagesList = ({
               </Text>
 
             </View>
-            {(!isAdmin && item.senderId === user?.id) && (
+            {(!isAdminOrMod && item.senderId === user?.id) && (
               <Menu>
                 <MenuTrigger>
                   <Icon
@@ -658,7 +659,7 @@ const MessagesList = ({
                 </MenuOptions>
               </Menu>
             )}
-            {(isAdmin) && (
+            {(isAdminOrMod) && (
               <Menu>
                 <MenuTrigger>
                   <Icon
@@ -700,7 +701,7 @@ const MessagesList = ({
         )}
       </View>
     );
-  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage]);
+  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage]);
 
   return (
     <>

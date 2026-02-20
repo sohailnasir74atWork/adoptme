@@ -6,8 +6,12 @@ import {
   TouchableOpacity,
   Text,
   Platform,
+  ScrollView,
+  StyleSheet as RNStyleSheet,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import FontAwesome from 'react-native-vector-icons/FontAwesome6';
+import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import SignInDrawer from '../../Firebase/SigninDrawer';
 import ChatHeaderContent from './ChatHeaderContent';
@@ -30,8 +34,12 @@ import PetModal from '../PrivateChat/PetsModel';
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
 
-
-
+const CHANNELS = [
+  { id: 'trade', label: 'Trade', icon: 'handshake', path: 'chat_new' },
+  { id: 'help', label: 'Help', icon: 'circle-question', path: 'chat_help' },
+  { id: 'playing', label: 'Playing', icon: 'gamepad', path: 'chat_playing' },
+  { id: 'house_design', label: 'House Design', icon: 'house', path: 'chat_house_design' },
+];
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
@@ -60,19 +68,25 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [device, setDevice] = useState(null)
 
   const [selectedEmoji, setSelectedEmoji] = useState(null);
+  const [activeChannel, setActiveChannel] = useState(CHANNELS[0]); // ✅ Default to Trade Chat
 
   // ✅ Track last sent message to prevent duplicates (session-based, no Firebase cost)
   const lastSentMessageRef = useRef(null);
+  // ✅ OPTIMIZED: Track newest message to skip initial download in listener
+  const newestMessageIdRef = useRef(null);
+  const hasInitializedRef = useRef(false);
+  const initialLoadDoneRef = useRef(false); // ✅ Track if initial load is complete (prevents duplicate messages)
 
   const flatListRef = useRef();
 
-  // console.log(selectedUser)
+  // ✅ Ref to track isAtBottom without triggering re-renders in listener
+  const isAtBottomRef = useRef(isAtBottom);
 
   useEffect(() => {
+    isAtBottomRef.current = isAtBottom;
     if (isAtBottom && pendingMessages.length > 0) {
-      // console.log("✅ User scrolled to bottom. Releasing held messages...");
       setMessages((prev) => [...pendingMessages, ...prev]);
-      setPendingMessages([]); // Clear the queue
+      setPendingMessages([]);
     }
   }, [isAtBottom, pendingMessages]);
 
@@ -113,7 +127,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     callbackfunction();
   }, [selectedUser, selectedTheme, closeProfileDrawer]);
 
-  const chatRef = useMemo(() => ref(appdatabase, 'chat_new'), []);
+  const chatRef = useMemo(() => ref(appdatabase, activeChannel.path), [activeChannel.path]);
   const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);
 
   // const isAdmin = user?.admin || false;
@@ -265,62 +279,191 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     };
   }, []);
 
-  useEffect(() => {
-    const platform = Platform.OS; // "ios" or "android"
+  // ✅ Channel switch handler — resets state for new channel
+  const handleChannelSwitch = useCallback((channel) => {
+    if (channel.id === activeChannel.id) return;
+    setActiveChannel(channel);
+    setMessages([]);
+    setPendingMessages([]);
+    setLastLoadedKey(null);
+    setReplyTo(null);
+    setInput('');
+    newestMessageIdRef.current = null;
+    hasInitializedRef.current = false;
+    initialLoadDoneRef.current = false;
+    lastSentMessageRef.current = null;
+  }, [activeChannel.id]);
 
-    // console.log('Initial loading of messages.');
-    loadMessages(true); // Reset and load the latest messages
+  // ✅ Initial setup (runs once on mount)
+  useEffect(() => {
     if (setChatFocused && typeof setChatFocused === 'function') {
       setChatFocused(false);
     }
-    setDevice(platform);
+    setDevice(Platform.OS);
   }, [setChatFocused]);
 
-  // const bannedUserIds = bannedUsers.map((user) => user.id); // Extract IDs from bannedUsers
-
+  // ✅ Load messages when channel changes (covers initial mount + every switch)
   useEffect(() => {
-    if (!isFocused || !chatRef) return;
+    if (!appdatabase || !activeChannel?.path) return;
+    let cancelled = false;
+    const currentRef = ref(appdatabase, activeChannel.path);
 
-    const listener = chatRef.limitToLast(1).on('child_added', (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      const data = snapshot.val();
-      if (!data || typeof data !== 'object') return;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setLastLoadedKey(null);
 
-      const newMessage = validateMessage({ id: snapshot.key, ...data });
-      if (!newMessage || !newMessage.id) return;
+        const snapshot = await currentRef.orderByKey().limitToLast(INITIAL_PAGE_SIZE).once('value');
+        if (cancelled) return;
 
-      // ✅ Check if message is from banned user
-      const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-      if (banned.includes(newMessage.senderId)) return;
+        const data = snapshot.val() || {};
+        const bannedIds = Array.isArray(bannedUsers)
+          ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
+          : [];
 
-      setMessages((prev) => {
-        if (!Array.isArray(prev)) return [newMessage];
-        const seenKeys = new Set(prev.map((msg) => msg?.id).filter(Boolean));
-        if (seenKeys.has(newMessage.id)) return prev;
+        const parsed = Object.entries(data)
+          .map(([key, value]) => {
+            if (!key || !value || typeof value !== 'object') return null;
+            return validateMessage({ id: key, ...value });
+          })
+          .filter(Boolean)
+          .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId))
+          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
 
-        if (isAtBottom) {
-          // Insert immediately
-          // console.log("📥 User is at bottom, adding message now");
-          return [newMessage, ...prev];
-        } else {
-          // Hold in pending
-          // console.log("⏳ Holding new message, user not at bottom");
-          setPendingMessages((prevPending) => {
-            const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
-            if (pendingIds.has(newMessage.id)) return prevPending;
-            return [newMessage, ...prevPending];
-          });
-          return prev;
+        if (cancelled) return;
+
+        setMessages(parsed);
+        const newLastKey = parsed.length > 0 ? parsed[parsed.length - 1]?.id : null;
+        setLastLoadedKey(newLastKey);
+      } catch (error) {
+        if (!cancelled) console.error('[channel load] Error:', error);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          initialLoadDoneRef.current = true; // ✅ Mark initial load as done
         }
-      });
-    });
-
-    return () => {
-      if (chatRef) {
-        chatRef.off('child_added', listener);
       }
     };
-  }, [chatRef, validateMessage, isAtBottom, isFocused, bannedUsers]);
+
+    load();
+    return () => { cancelled = true; };
+  }, [activeChannel.path, appdatabase, bannedUsers, validateMessage]);
+
+  // ✅ Real-time listener — creates its own ref from activeChannel.path
+  useEffect(() => {
+    if (!isFocused || !appdatabase || !activeChannel?.path) return;
+
+    let cancelled = false;
+    const currentRef = ref(appdatabase, activeChannel.path);
+    let listenerQueryRef = null;
+    let listener = null;
+    let initialLoadQuery = null;
+
+    const initializeListener = async () => {
+      try {
+        // Step 1: Get only the latest message KEY (minimal download)
+        initialLoadQuery = currentRef.orderByKey().limitToLast(1);
+        const initialSnapshot = await initialLoadQuery.once('value');
+        if (cancelled) return;
+
+        if (initialSnapshot.exists()) {
+          const data = initialSnapshot.val();
+          const keys = Object.keys(data);
+          if (keys.length > 0) {
+            newestMessageIdRef.current = keys[0];
+          }
+        }
+
+        hasInitializedRef.current = true;
+
+        // Step 2: Listen for NEW messages only (skips initial data)
+        listenerQueryRef = currentRef.orderByKey().limitToLast(1);
+
+        listener = listenerQueryRef.on('child_added', (snapshot) => {
+          if (cancelled || !snapshot || !snapshot.key) return;
+
+          // ✅ Skip messages until initial load is complete to prevent duplicates
+          if (!initialLoadDoneRef.current) return;
+
+          // Skip if this is the message we already loaded during initialization
+          if (hasInitializedRef.current && snapshot.key === newestMessageIdRef.current) {
+            return;
+          }
+
+          newestMessageIdRef.current = snapshot.key;
+
+          const data = snapshot.val();
+          if (!data || typeof data !== 'object') return;
+
+          const newMessage = validateMessage({ id: snapshot.key, ...data });
+          if (!newMessage || !newMessage.id) return;
+
+          const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+          if (banned.includes(newMessage.senderId)) return;
+
+          setMessages((prev) => {
+            if (!Array.isArray(prev)) return [newMessage];
+            const seenKeys = new Set(prev.map((msg) => msg?.id).filter(Boolean));
+            if (seenKeys.has(newMessage.id)) return prev;
+
+            if (isAtBottomRef.current) {
+              return [newMessage, ...prev];
+            } else {
+              setPendingMessages((prevPending) => {
+                const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
+                if (pendingIds.has(newMessage.id)) return prevPending;
+                return [newMessage, ...prevPending];
+              });
+              return prev;
+            }
+          });
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Error initializing chat listener:', error);
+        // Fallback listener
+        listenerQueryRef = currentRef.limitToLast(1);
+        listener = listenerQueryRef.on('child_added', (snapshot) => {
+          if (cancelled || !snapshot || !snapshot.key) return;
+          const data = snapshot.val();
+          if (!data || typeof data !== 'object') return;
+          const newMessage = validateMessage({ id: snapshot.key, ...data });
+          if (!newMessage || !newMessage.id) return;
+          const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+          if (banned.includes(newMessage.senderId)) return;
+          setMessages((prev) => {
+            if (!Array.isArray(prev)) return [newMessage];
+            const seenKeys = new Set(prev.map((msg) => msg?.id).filter(Boolean));
+            if (seenKeys.has(newMessage.id)) return prev;
+            if (isAtBottomRef.current) {
+              return [newMessage, ...prev];
+            } else {
+              setPendingMessages((prevPending) => {
+                const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
+                if (pendingIds.has(newMessage.id)) return prevPending;
+                return [newMessage, ...prevPending];
+              });
+              return prev;
+            }
+          });
+        });
+      }
+    };
+
+    initializeListener();
+
+    return () => {
+      cancelled = true;
+      if (listener && listenerQueryRef) {
+        listenerQueryRef.off('child_added', listener);
+      }
+      currentRef.off();
+      if (initialLoadQuery) {
+        initialLoadQuery.off('value');
+      }
+      hasInitializedRef.current = false;
+    };
+  }, [activeChannel.path, appdatabase, validateMessage, isFocused, bannedUsers]);
 
 
 
@@ -484,7 +627,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const trimmedInput = (trimmedInputArg || '').trim();
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
-    if (hasFruits && fruits.length > 18) {
+    if (hasFruits && fruits.length > 9) {
       Alert.alert(t('home.alert.error'), t('chat.max_pets_error'));
       return;
     }
@@ -610,6 +753,49 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       <GestureHandlerRootView>
 
         <View style={styles.container}>
+          {/* ✅ Channel Pill Switcher */}
+          <ScrollView
+            horizontal
+            maxHeight={Platform.OS === 'ios' ? 50 : 35}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={channelTabStyles.scrollContent}
+          >
+            {CHANNELS.map((channel) => {
+              const isActive = channel.id === activeChannel.id;
+              return (
+                <TouchableOpacity
+                  key={channel.id}
+                  style={[
+                    channelTabStyles.pill,
+                    isActive
+                      ? { backgroundColor: config.colors.primary, borderColor: config.colors.primary }
+                      : { backgroundColor: 'transparent', borderColor: theme === 'dark' ? '#444' : '#ccc' },
+                  ]}
+                  onPress={() => handleChannelSwitch(channel)}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome
+                    name={channel.icon}
+                    size={11}
+                    color={isActive ? '#fff' : (theme === 'dark' ? '#aaa' : '#666')}
+                    solid={isActive}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text
+                    style={[
+                      channelTabStyles.pillText,
+                      { color: isActive ? '#fff' : (theme === 'dark' ? '#aaa' : '#666') },
+                      isActive && channelTabStyles.pillTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {channel.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
           <ChatHeaderContent
             pinnedMessages={pinnedMessages}
             onUnpinMessage={unpinSingleMessage}
@@ -631,11 +817,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 flatListRef={flatListRef}
                 isDarkMode={theme === 'dark'}
                 onPinMessage={handlePinMessage}
-                onDeleteMessage={(messageId) => chatRef.child(messageId.replace('chat_new-', '')).remove()}
+                onDeleteMessage={(messageId) => chatRef.child(messageId.replace(`${activeChannel.path}-`, '')).remove()}
                 // isAdmin={isAdmin}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId)}
+                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId, false, activeChannel.path)}
                 handleLoadMore={handleLoadMore}
                 onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
                 banUser={banUser}
@@ -668,6 +854,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 setSelectedFruits={setSelectedFruits}
                 selectedEmoji={selectedEmoji}
                 setSelectedEmoji={setSelectedEmoji}
+                activeChannelId={activeChannel.id}
               />
             ) : (
               <TouchableOpacity
@@ -729,5 +916,29 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     </>
   );
 };
+
+const channelTabStyles = RNStyleSheet.create({
+  scrollContent: {
+    paddingHorizontal: 12,
+    // paddingVertical: 3,
+    alignItems: 'center',
+    gap: 8,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 2,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  pillText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  pillTextActive: {
+    fontWeight: '700',
+  },
+});
 
 export default ChatScreen;

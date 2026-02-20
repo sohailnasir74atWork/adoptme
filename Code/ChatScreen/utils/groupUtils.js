@@ -1527,11 +1527,14 @@ export const approveJoinRequest = async (firestoreDB, appdatabase, requestId, cr
 
     // Update RTDB metadata for the new member
     const updates = {};
+    updates[`group_meta_data/${requesterId}/${groupId}/groupId`] = groupId;
     updates[`group_meta_data/${requesterId}/${groupId}/groupName`] = groupData.groupName || 'Group';
     updates[`group_meta_data/${requesterId}/${groupId}/groupAvatar`] = groupData.avatar || null;
     updates[`group_meta_data/${requesterId}/${groupId}/unreadCount`] = 0;
     updates[`group_meta_data/${requesterId}/${groupId}/lastReadAt`] = Date.now();
     updates[`group_meta_data/${requesterId}/${groupId}/createdBy`] = groupData.createdBy;
+    updates[`group_meta_data/${requesterId}/${groupId}/muted`] = false;
+    updates[`group_meta_data/${requesterId}/${groupId}/joinedAt`] = Date.now();
 
     await update(ref(appdatabase, '/'), updates);
 

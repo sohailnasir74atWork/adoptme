@@ -1163,7 +1163,7 @@ const ProfileBottomDrawer = ({
     const full = '★'.repeat(Math.min(rounded, 5));
     const empty = '☆'.repeat(Math.max(0, 5 - rounded));
     return (
-      <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '600' }}>
+      <Text style={{ color: '#ffb700be', fontSize: 14, fontWeight: '600' }}>
         {full}
         <Text style={{ color: '#999' }}>{empty}</Text>
       </Text>

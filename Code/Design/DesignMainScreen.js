@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   FlatList,
@@ -44,6 +44,7 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
 import { useBanStatus } from '../ChatScreen/utils';
+import PollCard from '../Trades/PollCard';
 
 
 const DesignFeedScreen = ({ route }) => {
@@ -72,6 +73,29 @@ const DesignFeedScreen = ({ route }) => {
   const [lastPostTime, setLastPostTime] = useState(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const AD_FREQUENCY = 5;
+
+  // Polls
+  const [activePolls, setActivePolls] = useState([]);
+
+  const fetchActivePolls = useCallback(async () => {
+    try {
+      const pollsRef = collection(firestoreDB, 'polls');
+      const q = query(pollsRef, where('active', '==', true), limit(3));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setActivePolls(list);
+      } else {
+        setActivePolls([]);
+      }
+    } catch (err) {
+      console.error('[Poll] Fetch polls error:', err);
+    }
+  }, [firestoreDB]);
+
+  useEffect(() => {
+    fetchActivePolls();
+  }, [fetchActivePolls]);
 
   useEffect(() => {
     // if (!user?.id) return;
@@ -519,6 +543,7 @@ const DesignFeedScreen = ({ route }) => {
         onRefresh={() => {
           setRefreshing(true);
           fetchInitialPosts();
+          fetchActivePolls();
         }}
         ListFooterComponent={
           loadingMore && !initialLoading ? (
@@ -533,6 +558,21 @@ const DesignFeedScreen = ({ route }) => {
                 : t('feed.no_posts_found')}
             </Text>
           )
+        }
+        ListHeaderComponent={
+          activePolls.length > 0 ? (
+            <View style={{ paddingHorizontal: 10, paddingTop: 8 }}>
+              {activePolls.map((p) => (
+                <PollCard
+                  key={p.id}
+                  poll={p}
+                  user={user}
+                  firestoreDB={firestoreDB}
+                  isDarkMode={isDarkMode}
+                />
+              ))}
+            </View>
+          ) : null
         }
 
       />

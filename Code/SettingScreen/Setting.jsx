@@ -1336,7 +1336,7 @@ export default function SettingsScreen({ selectedTheme }) {
     const full = '★'.repeat(Math.min(rounded, 5));
     const empty = '☆'.repeat(Math.max(0, 5 - rounded));
     return (
-      <Text style={{ color: '#FFD700', fontSize: 14, fontWeight: '600' }}>
+      <Text style={{ color: '#ffb700be', fontSize: 14, fontWeight: '600' }}>
         {full}
         <Text style={{ color: '#999' }}>{empty}</Text>
       </Text>
@@ -1671,7 +1671,7 @@ export default function SettingsScreen({ selectedTheme }) {
   }, [user?.id, firestoreDB, modalLastTradeDoc, loadingModalMyTrades]);
 
   // Load Followers modal when opens
-  const FOLLOWERS_PAGE_SIZE = 10;
+  const FOLLOWERS_PAGE_SIZE = 2;
   useEffect(() => {
     if (!showFollowersModal || !user?.id || !firestoreDB || !appdatabase) return;
 
@@ -1698,7 +1698,7 @@ export default function SettingsScreen({ selectedTheme }) {
           followersSnapshot = await getDocs(fallbackQuery);
         }
         const docs = followersSnapshot.docs;
-        const hasMore = usedOrderBy && docs.length > FOLLOWERS_PAGE_SIZE;
+        const hasMore = docs.length > FOLLOWERS_PAGE_SIZE;
         const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
         const followerIds = displayDocs.map(d => d.data().followerId).filter(Boolean);
 
@@ -1721,7 +1721,7 @@ export default function SettingsScreen({ selectedTheme }) {
         );
 
         setModalFollowers(followersWithDetails);
-        setModalLastFollowerDoc(usedOrderBy ? (displayDocs[displayDocs.length - 1] || null) : null);
+        setModalLastFollowerDoc(displayDocs[displayDocs.length - 1] || null);
         setModalHasMoreFollowers(hasMore);
       } catch (error) {
         console.error('Error loading followers:', error);
@@ -1741,14 +1741,26 @@ export default function SettingsScreen({ selectedTheme }) {
 
     setLoadingModalFollowers(true);
     try {
-      const followersQuery = query(
-        collection(firestoreDB, 'following'),
-        where('followingId', '==', user.id),
-        orderBy('createdAt', 'desc'),
-        startAfter(modalLastFollowerDoc),
-        limit(FOLLOWERS_PAGE_SIZE + 1)
-      );
-      const followersSnapshot = await getDocs(followersQuery);
+      let followersSnapshot;
+      try {
+        const followersQuery = query(
+          collection(firestoreDB, 'following'),
+          where('followingId', '==', user.id),
+          orderBy('createdAt', 'desc'),
+          startAfter(modalLastFollowerDoc),
+          limit(FOLLOWERS_PAGE_SIZE + 1)
+        );
+        followersSnapshot = await getDocs(followersQuery);
+      } catch (idxErr) {
+        // Fallback without orderBy if index is missing
+        const fallbackQuery = query(
+          collection(firestoreDB, 'following'),
+          where('followingId', '==', user.id),
+          startAfter(modalLastFollowerDoc),
+          limit(FOLLOWERS_PAGE_SIZE + 1)
+        );
+        followersSnapshot = await getDocs(fallbackQuery);
+      }
       const docs = followersSnapshot.docs;
       const hasMore = docs.length > FOLLOWERS_PAGE_SIZE;
       const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
@@ -2697,7 +2709,9 @@ export default function SettingsScreen({ selectedTheme }) {
                 source={
                   typeof selectedImage === 'string' && selectedImage.trim()
                     ? { uri: selectedImage }
-                    : { uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }
+                    : user?.avatar && typeof user.avatar === 'string' && user.avatar.trim()
+                      ? { uri: user.avatar.trim() }
+                      : { uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }
                 }
                 style={styles.profileImage}
               />
@@ -3256,7 +3270,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
           <Text style={styles.subtitle}>{t('settings.pro_subscription')}</Text>
-          <View style={[styles.cardContainer, { backgroundColor: '#FFD700' }]}>
+          <View style={[styles.cardContainer, { backgroundColor: '#ffb700be' }]}>
 
             <TouchableOpacity style={[styles.optionLast]} onPress={() => {
               setShowofferWall(true);
@@ -3491,7 +3505,7 @@ export default function SettingsScreen({ selectedTheme }) {
         }}>
           <View style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={styles.drawerSubtitle}>{t('reviews.gave_title')}</Text>
+              <Text style={styles.drawerSubtitle}>{t('settings.reviews.gave_title')}</Text>
               <TouchableOpacity onPress={() => {
                 setShowGaveReviewsModal(false);
                 setModalGaveReviews([]);
@@ -3507,7 +3521,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
               ) : modalGaveReviews.length === 0 ? (
                 <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
-                  {t('reviews.no_reviews')}
+                  {t('settings.reviews.no_reviews')}
                 </Text>
               ) : (
                 <>
@@ -3534,13 +3548,13 @@ export default function SettingsScreen({ selectedTheme }) {
                                 key={star}
                                 name={star <= review.rating ? 'star' : 'star-outline'}
                                 size={14}
-                                color={star <= review.rating ? '#FFD700' : '#ccc'}
+                                color={star <= review.rating ? '#ffb700be' : '#ccc'}
                                 style={{ marginRight: 2 }}
                               />
                             ))}
                             {review.edited && (
                               <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280', marginLeft: 6 }}>
-                                {t('reviews.edited')}
+                                {t('settings.reviews.edited')}
                               </Text>
                             )}
                           </View>
@@ -3588,7 +3602,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                          {t('reviews.load_more')}
+                          {t('settings.reviews.load_more')}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -3628,7 +3642,7 @@ export default function SettingsScreen({ selectedTheme }) {
         }}>
           <View style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={styles.drawerSubtitle}>{t('reviews.received_title')}</Text>
+              <Text style={styles.drawerSubtitle}>{t('settings.reviews.received_title')}</Text>
               <TouchableOpacity onPress={() => {
                 setShowReceivedReviewsModal(false);
                 setModalReceivedReviews([]);
@@ -3644,7 +3658,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
               ) : modalReceivedReviews.length === 0 ? (
                 <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
-                  {t('reviews.no_reviews')}
+                  {t('settings.reviews.no_reviews')}
                 </Text>
               ) : (
                 <>
@@ -3671,13 +3685,13 @@ export default function SettingsScreen({ selectedTheme }) {
                                 key={star}
                                 name={star <= review.rating ? 'star' : 'star-outline'}
                                 size={14}
-                                color={star <= review.rating ? '#FFD700' : '#ccc'}
+                                color={star <= review.rating ? '#ffb700be' : '#ccc'}
                                 style={{ marginRight: 2 }}
                               />
                             ))}
                             {review.edited && (
                               <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280', marginLeft: 6 }}>
-                                {t('reviews.edited')}
+                                {t('settings.reviews.edited')}
                               </Text>
                             )}
                           </View>
@@ -3714,7 +3728,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                          Load More
+                          {t('settings.reviews.load_more')}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -3749,7 +3763,7 @@ export default function SettingsScreen({ selectedTheme }) {
           <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <View style={styles.drawer}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <Text style={styles.drawerSubtitle}>{t('reviews.edit_title')}</Text>
+                <Text style={styles.drawerSubtitle}>{t('settings.reviews.edit_title')}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     setEditingReview(null);
@@ -3761,7 +3775,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>{t('reviews.rating_label')}</Text>
+              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>{t('settings.reviews.rating_label')}</Text>
               <View style={{ flexDirection: 'row', marginBottom: 16 }}>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <TouchableOpacity
@@ -3772,16 +3786,16 @@ export default function SettingsScreen({ selectedTheme }) {
                     <Icon
                       name={star <= editReviewRating ? 'star' : 'star-outline'}
                       size={32}
-                      color={star <= editReviewRating ? '#FFD700' : '#ccc'}
+                      color={star <= editReviewRating ? '#ffb700be' : '#ccc'}
                     />
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>{t('reviews.review_label')}</Text>
+              <Text style={[styles.drawerSubtitle, { marginBottom: 8 }]}>{t('settings.reviews.review_label')}</Text>
               <TextInput
                 style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
-                placeholder={t('reviews.placeholder')}
+                placeholder={t('settings.reviews.placeholder')}
                 placeholderTextColor="#999"
                 value={editReviewText}
                 onChangeText={setEditReviewText}
@@ -3793,7 +3807,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 style={[styles.saveButton, { marginTop: 16 }]}
                 onPress={handleSaveEditedReview}
               >
-                <Text style={styles.saveButtonText}>{t('reviews.save_button')}</Text>
+                <Text style={styles.saveButtonText}>{t('settings.reviews.save_button')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3895,7 +3909,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                          {t('reviews.load_more')}
+                          {t('settings.reviews.load_more')}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -3996,7 +4010,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
                         <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                          {t('reviews.load_more')}
+                          {t('settings.reviews.load_more')}
                         </Text>
                       )}
                     </TouchableOpacity>

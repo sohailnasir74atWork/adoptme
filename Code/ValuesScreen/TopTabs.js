@@ -13,6 +13,7 @@ import {
   ScrollView,
   Animated,
   StyleSheet,
+  Platform,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import ValueScreen from "./ValueScreen";
@@ -22,6 +23,7 @@ import NewsScreen from "./News";
 import { useGlobalState } from "../GlobelStats";
 import NewsFeedbackReport from "./AdminReport";
 import ServerScreen from "./ServerScreen";
+import ScammerDatabaseScreen from "./ScammerDatabaseScreen";
 
 const MemoValueScreen = React.memo(ValueScreen);
 
@@ -38,6 +40,12 @@ const CustomTopTabs = ({ selectedTheme }) => {
         key: "values",
         icon: "pricetags-outline",
         iconActive: "pricetags",
+      },
+      {
+        label: "Scammer DB",
+        key: "scammer",
+        icon: "shield-outline",
+        iconActive: "shield",
       },
       {
         label: "Server",
@@ -250,6 +258,17 @@ const CustomTopTabs = ({ selectedTheme }) => {
           </View>
         )}
 
+        {mountedTabs.scammer && (
+          <View
+            style={[
+              styles.screen,
+              activeKey !== "scammer" && styles.hiddenScreen,
+            ]}
+          >
+            <ScammerDatabaseScreen />
+          </View>
+        )}
+
 
 
         {/* 🔹 Admin tab content, only mounted if the tab exists & was visited */}
@@ -273,7 +292,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     padding: 8,
-    paddingTop: 60, // ✅ Add top padding since header is hidden
+    paddingTop: Platform.OS !== 'ios' ? 60 : 0, // ✅ Add top padding since header is hidden
   },
   container: {
     paddingBottom: 8,

@@ -57,7 +57,8 @@ const MessageInput = ({
   setPetModalVisible,
   selectedFruits,
   setSelectedFruits,
-  setSelectedEmoji
+  setSelectedEmoji,
+  activeChannelId
 }) => {
   // ✅ Memoize styles
   const isDarkMode = selectedTheme?.colors?.text === 'white';

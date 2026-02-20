@@ -67,6 +67,7 @@ const GroupChatScreen = () => {
   const lastLoadedKeyRef = useRef(null); // Oldest message ID (for pagination)
   const newestMessageIdRef = useRef(null); // Newest message ID (for real-time listener)
   const previousGroupIdRef = useRef(null);
+  const initialLoadDoneRef = useRef(false); // ✅ Track if initial load is complete (prevents duplicate messages)
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
 
@@ -344,6 +345,7 @@ const GroupChatScreen = () => {
       if (reset) {
         setLoading(true);
         setMessages([]);
+        initialLoadDoneRef.current = false; // ✅ Reset initial load flag
         lastLoadedKeyRef.current = null;
         newestMessageIdRef.current = null; // Reset newest message ID
       } else {
@@ -428,7 +430,10 @@ const GroupChatScreen = () => {
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
-        if (reset) setLoading(false);
+        if (reset) {
+          setLoading(false);
+          initialLoadDoneRef.current = true; // ✅ Mark initial load as done
+        }
         setIsPaginating(false);
       }
     },
@@ -469,6 +474,8 @@ const GroupChatScreen = () => {
 
     const handleChildAdded = (snapshot) => {
       if (!isMounted || !snapshot || !snapshot.key) return;
+      // ✅ Skip messages until initial load is complete to prevent duplicates
+      if (!initialLoadDoneRef.current) return;
       const data = snapshot.val();
       if (!data || typeof data !== 'object') return;
 
@@ -527,12 +534,6 @@ const GroupChatScreen = () => {
       return () => {
         clearActiveChat(user.id);
         clearActiveGroupChat(user.id, groupId);
-
-        // ✅ Show ad when leaving if: 20+ seconds spent AND 2+ messages sent AND not Pro
-        const timeSpent = Date.now() - (chatEnterTimeRef.current || Date.now());
-        if (timeSpent >= 20000 && hasSentMessageRef.current >= 2 && !localState?.isPro) {
-          InterstitialAdManager.showAd();
-        }
       };
     }, [user?.id, groupId, appdatabase, localState?.isPro])
   );
@@ -767,6 +768,72 @@ const GroupChatScreen = () => {
     },
     [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails]
   );
+
+  // Handle delete single message (admin/mod action)
+  const handleDeleteMessage = useCallback((messageId) => {
+    if (!messagesRef || !messageId) return;
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await messagesRef.child(String(messageId)).remove();
+              setMessages((prev) => prev.filter((m) => String(m?.id) !== String(messageId)));
+              showSuccessMessage('Success', 'Message deleted');
+            } catch (error) {
+              console.error('Error deleting message:', error);
+              showErrorMessage('Error', 'Failed to delete message');
+            }
+          },
+        },
+      ]
+    );
+  }, [messagesRef]);
+
+  // Handle delete all messages from a sender (admin/mod action)
+  const handleDeleteAllMessages = useCallback((senderId) => {
+    if (!messagesRef || !senderId) return;
+    Alert.alert(
+      'Delete All Messages',
+      'Delete all messages from this user?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Get all messages, find ones from this sender, delete them
+              const snapshot = await messagesRef.orderByKey().limitToLast(300).once('value');
+              const data = snapshot.val();
+              if (!data) return;
+
+              const updates = {};
+              Object.entries(data).forEach(([key, msg]) => {
+                if (msg?.senderId === senderId) {
+                  updates[key] = null;
+                }
+              });
+
+              if (Object.keys(updates).length > 0) {
+                await messagesRef.update(updates);
+                setMessages((prev) => prev.filter((m) => m?.senderId !== senderId));
+                showSuccessMessage('Success', `Deleted ${Object.keys(updates).length} messages`);
+              }
+            } catch (error) {
+              console.error('Error deleting all messages:', error);
+              showErrorMessage('Error', 'Failed to delete messages');
+            }
+          },
+        },
+      ]
+    );
+  }, [messagesRef]);
 
   // Handle remove member (admin action)
   const handleRemoveMember = useCallback(async (memberId, memberName) => {
@@ -1131,6 +1198,8 @@ const GroupChatScreen = () => {
               scrollToMessage={scrollToMessage}
               highlightedMessageId={highlightedMessageId}
               flatListRef={flatListRef}
+              onDeleteMessage={handleDeleteMessage}
+              onDeleteAllMessages={handleDeleteAllMessages}
             />
           )}
 

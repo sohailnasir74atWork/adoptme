@@ -38,9 +38,12 @@ const GroupMessageList = ({
   scrollToMessage, // Function to scroll to a message
   highlightedMessageId, // ID of highlighted message
   flatListRef, // Ref for FlatList
+  onDeleteMessage, // Admin/mod: delete single message
+  onDeleteAllMessages, // Admin/mod: delete all messages from sender
 }) => {
-  const { theme } = useGlobalState();
+  const { theme, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const isAdminOrMod = isAdmin || !!user?.isModerator;
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -196,6 +199,11 @@ const GroupMessageList = ({
                 {/* Message Content Wrapper - matching main chat structure */}
                 <View style={[
                   isMyMessage ? styles.myMessageText : styles.otherMessageText,
+                  isAdminOrMod && item.strikeCount === 1
+                    ? { backgroundColor: 'pink' }
+                    : isAdminOrMod && item.strikeCount >= 2
+                      ? { backgroundColor: 'red' }
+                      : null,
                 ]}>
                   <TouchableOpacity
                     onPress={() => {
@@ -422,6 +430,16 @@ const GroupMessageList = ({
                     <Text style={styles.menuOptionText}>{t('chat.reply')}</Text>
                   </MenuOption>
                 )}
+                {isAdminOrMod && onDeleteMessage && (
+                  <MenuOption onSelect={() => onDeleteMessage(item.id)}>
+                    <Text style={[styles.menuOptionText, { color: 'red' }]}>{t('chat.delete')}</Text>
+                  </MenuOption>
+                )}
+                {isAdminOrMod && onDeleteAllMessages && (
+                  <MenuOption onSelect={() => onDeleteAllMessages(item.senderId)}>
+                    <Text style={[styles.menuOptionText, { color: 'red' }]}>{t('chat.delete_all')}</Text>
+                  </MenuOption>
+                )}
               </MenuOptions>
             </Menu>
           </View>
@@ -437,7 +455,7 @@ const GroupMessageList = ({
         </View>
       );
     },
-    [userId, user, groupData, styles, fruitColors, handleCopy, navigation, triggerHapticFeedback, onUserPress, isDarkMode, onReply, scrollToMessage, highlightedMessageId, getReplyPreview, t]
+    [userId, user, groupData, styles, fruitColors, handleCopy, navigation, triggerHapticFeedback, onUserPress, isDarkMode, onReply, scrollToMessage, highlightedMessageId, getReplyPreview, t, isAdmin, isAdminOrMod, onDeleteMessage, onDeleteAllMessages]
   );
 
   const keyExtractor = useCallback((item, index) => {

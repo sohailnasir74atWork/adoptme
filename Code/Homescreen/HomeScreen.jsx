@@ -381,7 +381,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
-    console.log(items);
+    // console.log(items);
 
     const callbackfunction = () => { };
 

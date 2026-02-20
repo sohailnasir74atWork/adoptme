@@ -77,12 +77,14 @@ const GroupMessageInput = ({
 
   const uploadToBunny = useCallback(async (imagePath) => {
     try {
-      const base64 = await RNFS.readFile(imagePath, 'base64');
+      // Handle both file:// and content:// URIs
+      const localPath = imagePath.startsWith('file://') ? imagePath.replace('file://', '') : imagePath;
+      const base64 = await RNFS.readFile(localPath, 'base64');
       const bytes = base64ToBytes(base64);
       const fileName = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-      const filePath = `chat/${fileName}`;
+      const remotePath = `chat/${fileName}`;
 
-      const response = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${filePath}`, {
+      const response = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`, {
         method: 'PUT',
         headers: {
           AccessKey: BUNNY_ACCESS_KEY,
@@ -95,7 +97,7 @@ const GroupMessageInput = ({
         throw new Error('Upload failed');
       }
 
-      return `${BUNNY_CDN_BASE}/${filePath}`;
+      return `${BUNNY_CDN_BASE}/${remotePath}`;
     } catch (error) {
       console.error('Error uploading to BunnyCDN:', error);
       throw error;
@@ -144,9 +146,22 @@ const GroupMessageInput = ({
                 if (!asset?.uri || typeof asset.uri !== 'string') continue;
 
                 try {
-                  const filePath = asset.uri.replace('file://', '');
-                  const fileInfo = await RNFS.stat(filePath);
-                  const fileSize = fileInfo.size || 0;
+                  let fileSize = asset.fileSize || 0;
+
+                  // Only use RNFS.stat for file:// URIs (content:// URIs crash stat)
+                  if (!fileSize && asset.uri.startsWith('file://')) {
+                    try {
+                      const filePath = asset.uri.replace('file://', '');
+                      const fileInfo = await RNFS.stat(filePath);
+                      fileSize = fileInfo.size || 0;
+                    } catch (statError) {
+                      console.warn('RNFS.stat failed, will compress as fallback:', statError?.message);
+                      fileSize = MAX_SIZE_BYTES + 1; // Force compression
+                    }
+                  } else if (!fileSize) {
+                    // content:// or unknown scheme — compress to be safe
+                    fileSize = MAX_SIZE_BYTES + 1;
+                  }
 
                   // 🟢 Compression Logic
                   if (fileSize > MAX_SIZE_BYTES) {
@@ -165,9 +180,19 @@ const GroupMessageInput = ({
                     validUris.push(asset.uri);
                   }
                 } catch (error) {
-                  console.warn('Error checking file size:', error);
-                  // Best effort
-                  validUris.push(asset.uri);
+                  console.warn('Error processing image:', error);
+                  // Best effort: try compressing original if processing fails
+                  try {
+                    const compressedUri = await CompressorImage.compress(asset.uri, {
+                      maxWidth: 1024,
+                      quality: 0.7,
+                      returnableOutputType: 'uri',
+                    });
+                    validUris.push(compressedUri);
+                  } catch (fallbackError) {
+                    console.warn('Fallback compression also failed:', fallbackError);
+                    rejectedCount.push(asset.fileName || 'image');
+                  }
                 }
               }
 
@@ -217,8 +242,8 @@ const GroupMessageInput = ({
 
     setMessageCount((prevCount) => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 15 === 0) {
-        // Show A/B test interstitial ad every 15th message for non-pro users
+      if (!localState?.isPro && newCount % 10 === 0) {
+        // Show A/B test interstitial ad every 10th message for non-pro users
         InterstitialAdManager.showAd(() => { });
       }
       return newCount;

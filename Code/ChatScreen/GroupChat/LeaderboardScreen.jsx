@@ -213,7 +213,7 @@ const LeaderboardScreen = ({ route }) => {
   // ✅ Render leaderboard item
   const renderLeaderboardItem = useCallback(({ item, index }) => {
     const rank = index + 1;
-    const rankColor = rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : rank === 3 ? '#CD7F32' : config.colors.primary;
+    const rankColor = rank === 1 ? '#ffb700be' : rank === 2 ? '#C0C0C0' : rank === 3 ? '#CD7F32' : config.colors.primary;
 
     return (
       <TouchableOpacity

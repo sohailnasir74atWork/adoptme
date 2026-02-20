@@ -88,7 +88,7 @@ export const getStyles = (isDarkMode, config) =>
 
         // Winner Announcement
         winnerCard: {
-            backgroundColor: '#FFD700',
+            backgroundColor: '#ffb700be',
             padding: 10,
             borderRadius: 10,
             alignItems: 'center',
@@ -221,7 +221,7 @@ export const getStyles = (isDarkMode, config) =>
             fontSize: 12,
         },
         claimButton: {
-            backgroundColor: '#FFD700',
+            backgroundColor: '#ffb700be',
             padding: 10,
             borderRadius: 6,
             marginTop: 10,
