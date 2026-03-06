@@ -85,6 +85,7 @@ Firestore-triggered Cloud Function to send push notifications when someone comme
 - Sends notifications to:
   1. The post creator (if they didn't comment themselves)
   2. All previous commenters on that post (excluding the new commenter)
+  3. All users who liked the post (excluding the new commenter)
 - Limits to last 100 comments and max 50 users to notify (cost optimization)
 - Respects user notification preferences (`postCommentNotifications`)
 
@@ -99,6 +100,7 @@ This function is automatically triggered when a new comment is added to any desi
 **Notification Payload:**
 - For post creator: "New Comment on Your Post" - "{Commenter Name} commented on your post: '{post description}'"
 - For previous commenters: "New Comment on Post" - "{Commenter Name} also commented on '{post description}'"
+- For likers: "New Comment on Post You Liked" - "{Commenter Name} commented on a post you liked: '{post description}'"
 - Data: `{ type: 'postComment', postId: '...', commentId: '...', commenterId: '...', commenterName: '...', timestamp: '...' }`
 
 **Cost Optimizations:**
@@ -106,6 +108,7 @@ This function is automatically triggered when a new comment is added to any desi
 - Limits notifications to max 50 users (prevents excessive notification costs)
 - Batches RTDB reads for better performance
 - Early exit if only creator has commented
+- Liker IDs are read from the `likes` map on the post document (no extra Firestore reads)
 
 **Notes:**
 - Uses Firestore transactions to ensure data consistency

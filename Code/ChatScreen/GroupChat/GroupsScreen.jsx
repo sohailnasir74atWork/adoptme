@@ -361,7 +361,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     // Check if user is admin in this specific group
     const group = groups.find(g => g.groupId === groupId);
     const isCreator = group?.createdBy === user.id;
-    const isGroupAdmin = isCreator || (group?.members?.[user.id]?.role === 'admin') || (isAdmin && group?.members?.[user.id]);
+    const isGroupAdmin = isCreator || (group?.members?.[user.id]?.role === 'admin') || (isAdmin && group?.members?.[user.id]) || !!user?.isModerator;
 
     if (!isGroupAdmin) {
       showErrorMessage('Error', 'Only group admins can delete groups');
@@ -729,7 +729,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     const memberCount = item.memberCount || 0;
     const isMyGroup = item.createdBy === user?.id;
     // Check if user is admin in this specific group (creator or has admin role)
-    const isGroupAdmin = isMyGroup || (item.members?.[user?.id]?.role === 'admin') || (isAdmin && item.members?.[user?.id]); // Global admin can also delete if they're a member
+    const isGroupAdmin = isMyGroup || (item.members?.[user?.id]?.role === 'admin') || (isAdmin && item.members?.[user?.id]) || !!user?.isModerator; // Global admin can also delete if they're a member, mods can always delete
 
     return (
       <View style={styles.itemContainer}>
@@ -1573,14 +1573,16 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 }}>
                         {isAlreadyJoined ? (
-                          <View style={{
-                            backgroundColor: isDarkMode ? '#10B981' : '#D1FAE5',
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            borderRadius: 6,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}>
+                          <TouchableOpacity
+                            onPress={() => handleOpenGroup(groupId, groupName)}
+                            style={{
+                              backgroundColor: isDarkMode ? '#10B981' : '#D1FAE5',
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 6,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}>
                             <Text style={{
                               color: isDarkMode ? '#FFFFFF' : '#065F46',
                               fontSize: 11,
@@ -1589,7 +1591,34 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                             }}>
                               Joined
                             </Text>
-                          </View>
+                          </TouchableOpacity>
+                        ) : (isAdmin || !!user?.isModerator) ? (
+                          <TouchableOpacity
+                            onPress={() => handleOpenGroup(groupId, groupName)}
+                            style={{
+                              backgroundColor: '#3B82F6',
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 6,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              shadowColor: '#000',
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.1,
+                              shadowRadius: 2,
+                              elevation: 2,
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={{
+                              color: '#FFFFFF',
+                              fontSize: 11,
+                              fontWeight: 'bold',
+                              letterSpacing: 0.2,
+                            }}>
+                              Enter
+                            </Text>
+                          </TouchableOpacity>
                         ) : hasPendingRequest ? (
                           <View style={{
                             backgroundColor: isDarkMode ? '#F59E0B' : '#FEF3C7',
@@ -1663,7 +1692,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                             </Text>
                           </TouchableOpacity>
                         )}
-                        {isAdmin && (
+                        {(isAdmin || !!user?.isModerator) && (
                           <TouchableOpacity
                             onPress={() => {
                               Alert.alert(

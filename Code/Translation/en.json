@@ -315,6 +315,7 @@
         }
     },
     "value": {
+        "label": "Value:",
         "title": "Value Screen",
         "description": "Live Blox Fruits values updated hourly. Find accurate item values here and visit the trade feed for fruits or game passes.",
         "search_placeholder": "Search",
@@ -331,7 +332,10 @@
         "num_s": "s",
         "filter": "Filter",
         "done": "Done",
-        "search": "Search"
+        "search": "Search",
+        "values_reloaded": "Values have been reloaded",
+        "sort_high": "▲ High",
+        "sort_low": "▼ Low"
     },
     "stock": {
         "description": "Disclaimer: Stock updates may sometimes be delayed as data is updated manually. We appreciate your patience and recommend checking back periodically for the latest updates.",
@@ -371,7 +375,7 @@
         "owned_pets": "Owned pets",
         "wishlist": "Wishlist",
         "sort_high": "▲ High",
-        "sort_low": "▼ LOw",
+        "sort_low": "▼ Low",
         "filter": "Filter",
         "done": "Done",
         "search": "Search"
@@ -953,10 +957,10 @@
         "changes_disclaimer": "Values are checked and updated by our team when new official values drop.",
         "top_movers": "Going Up!",
         "rising_demand": "Everyone wants these this week",
-        "see_all_movers": "See all 10 rising pets",
+        "see_all_movers": "See all rising pets",
         "top_losers": "Going Down!",
         "falling_demand": "Less popular this week",
-        "see_all_losers": "See all 10 dropping pets",
+        "see_all_losers": "See all dropping pets",
         "most_wanted": "Everyone Wants These!",
         "highest_demand": "Most wanted in 24 hours",
         "see_full_demand": "See the full wishlist",

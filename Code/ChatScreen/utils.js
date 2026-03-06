@@ -547,8 +547,8 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
     const snap = await get(banRef);
 
     let strikeCount = 1;
-    let bannedUntil = Date.now() + 3 * 60 * 60 * 1000; // 3 hours
-    let banDuration = '3 hours';
+    let bannedUntil = Date.now() + 12 * 60 * 60 * 1000; // 12 hours
+    let banDuration = '12 hours';
 
     if (snap.exists()) {
       const data = snap.val();
@@ -556,8 +556,8 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
         strikeCount = isAdmin ? (data.strikeCount || 0) + 1 : (data.strikeCount || 1);
 
         if (strikeCount === 2) {
-          bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
-          banDuration = '3 days';
+          bannedUntil = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+          banDuration = '24 hours';
         } else if (strikeCount >= 3) {
           bannedUntil = "permanent";
           banDuration = 'permanent';
@@ -628,11 +628,11 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
     let banDuration;
 
     if (strikeCount === 1) {
-      bannedUntil = Date.now() + 3 * 60 * 60 * 1000; // 3 hours
-      banDuration = '3 hours';
+      bannedUntil = Date.now() + 12 * 60 * 60 * 1000; // 12 hours
+      banDuration = '12 hours';
     } else if (strikeCount === 2) {
-      bannedUntil = Date.now() + 3 * 24 * 60 * 60 * 1000; // 3 days
-      banDuration = '3 days';
+      bannedUntil = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      banDuration = '24 hours';
     } else {
       // Strike 3+ = permanent ban
       bannedUntil = "permanent";

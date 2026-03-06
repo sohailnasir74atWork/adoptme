@@ -4,15 +4,17 @@ const admin = require('firebase-admin');
 if (!admin.apps.length) admin.initializeApp();
 
 const firestore = admin.firestore();
+const rtdb = admin.database();
 
 /**
  * aggregateTradeAnalytics
  * 
  * SCHEDULED Cloud Function — runs every 12 hours (NOT on every trade creation).
- * Aggregates analytics from trades_new + reviews collections and stores in Firestore.
+ * Reads source data from Firestore (trades_new + reviews collections).
+ * Writes aggregated analytics to RTDB at /analytics (plain JSON, fully replaced).
  * 
- * After this runs, you manually push the Firestore data to Bunny CDN.
- * The app reads from Bunny CDN (zero Firestore reads from users).
+ * After this runs, you manually push the RTDB data to Bunny CDN.
+ * The app reads from Bunny CDN (zero Firebase reads from users).
  * 
  * Analytics computed:
  * 1. Top 20 most traded items (24h appearance count)
@@ -28,7 +30,7 @@ const firestore = admin.firestore();
  * 11. Predictions with confidence scores
  * 
  * Data stored:
- * - trade_analytics/latest  (single document, fully replaced on every run)
+ * - RTDB /analytics  (single node, fully replaced on every run)
  * 
  * Deployment:
  * firebase deploy --only functions:aggregateTradeAnalytics
@@ -93,9 +95,9 @@ exports.aggregateTradeAnalytics = functions
       const countItems = (trades, side) => {
         const counts = {};
         trades.forEach(trade => {
-          const items = side === 'has' ? (trade.hasItems || []) : 
-                        side === 'wants' ? (trade.wantsItems || []) :
-                        [...(trade.hasItems || []), ...(trade.wantsItems || [])];
+          const items = side === 'has' ? (trade.hasItems || []) :
+            side === 'wants' ? (trade.wantsItems || []) :
+              [...(trade.hasItems || []), ...(trade.wantsItems || [])];
           items.forEach(item => {
             if (!item?.name) return;
             const key = item.name.toLowerCase().trim();
@@ -173,7 +175,7 @@ exports.aggregateTradeAnalytics = functions
       const allItemCounts = countItems(last24hTrades, 'all');
       const topTraded = Object.values(allItemCounts)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
+        .slice(0, 100);
 
       // ── Most wanted (demand) = trade wants + wishlist (weighted 0.5x) ──
       const wantsCounts24h = countItems(last24hTrades, 'wants');
@@ -191,7 +193,7 @@ exports.aggregateTradeAnalytics = functions
       });
       const topWanted = Object.values(wantsCounts24h)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
+        .slice(0, 100);
 
       // ── Most offered (supply) = trade has + owned (weighted 0.5x) ──
       const hasCounts24h = countItems(last24hTrades, 'has');
@@ -209,12 +211,12 @@ exports.aggregateTradeAnalytics = functions
       });
       const topOffered = Object.values(hasCounts24h)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
+        .slice(0, 100);
 
       // ── Top wishlisted (pure wishlist ranking) ──
       const topWishlisted = Object.values(wishlistCounts)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
+        .slice(0, 100);
 
       // ── Demand/Supply ratio (prediction signal) ──
       // Volume-relative: only include items with meaningful activity
@@ -309,7 +311,7 @@ exports.aggregateTradeAnalytics = functions
           const scoreB = b.volumeChange * Math.log2(Math.abs(b.changePercent) + 1);
           return scoreB - scoreA;
         })
-        .slice(0, 10);
+        .slice(0, 100);
 
       const topLosers = trendItems
         .filter(i => i.direction === 'down')
@@ -318,7 +320,7 @@ exports.aggregateTradeAnalytics = functions
           const scoreB = b.volumeChange * Math.log2(Math.abs(b.changePercent) + 1);
           return scoreB - scoreA;
         })
-        .slice(0, 10);
+        .slice(0, 100);
 
       // ── Trade volume stats ──
       const tradeVolume = {
@@ -357,9 +359,9 @@ exports.aggregateTradeAnalytics = functions
           const effectiveRatio = item.ratio * (0.5 + volWeight * 0.5); // Dampen ratio for low-volume
 
           const prediction = effectiveRatio > 3.0 ? 'strong_rise' :
-                            effectiveRatio > 1.8 ? 'likely_rise' :
-                            effectiveRatio > 0.8 ? 'stable' :
-                            effectiveRatio > 0.4 ? 'likely_fall' : 'strong_fall';
+            effectiveRatio > 1.8 ? 'likely_rise' :
+              effectiveRatio > 0.8 ? 'stable' :
+                effectiveRatio > 0.4 ? 'likely_fall' : 'strong_fall';
 
           // Confidence based on volume share (more data = more confident)
           const confidence = Math.min(95, Math.round(
@@ -381,9 +383,9 @@ exports.aggregateTradeAnalytics = functions
         })
         .slice(0, 20);
 
-      // ── Store in Firestore ──
+      // ── Store in RTDB ──
       // You then push this data to Bunny CDN manually.
-      // App reads from CDN = zero Firestore reads from users.
+      // App reads from CDN = zero Firebase reads from users.
       const analyticsData = {
         topTraded,
         topWanted,
@@ -391,7 +393,7 @@ exports.aggregateTradeAnalytics = functions
         topWishlisted,
         topMovers,
         topLosers,
-        demandSupplyRatios: demandSupplyRatios.slice(0, 30),
+        demandSupplyRatios: demandSupplyRatios.slice(0, 100),
         predictions,
         tradeVolume,
         statusDistribution,
@@ -402,25 +404,11 @@ exports.aggregateTradeAnalytics = functions
           ownedUsers: totalOwnedUsers,
           totalReviews: totalWishlistUsers + totalOwnedUsers,
         },
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
         computedAt: new Date().toISOString(),
       };
 
-      await firestore.collection('trade_analytics').doc('latest').set(analyticsData);
-
-      // ── Cleanup: delete old history_* documents (no longer needed) ──
-      try {
-        const allDocs = await firestore.collection('trade_analytics').listDocuments();
-        const historyDocs = allDocs.filter(d => d.id.startsWith('history_'));
-        if (historyDocs.length > 0) {
-          const batch = firestore.batch();
-          historyDocs.forEach(d => batch.delete(d));
-          await batch.commit();
-          console.log(`🗑️ Cleaned up ${historyDocs.length} old history documents`);
-        }
-      } catch (cleanupErr) {
-        console.warn('⚠️ Could not cleanup history docs:', cleanupErr.message);
-      }
+      await rtdb.ref('analytics').set(analyticsData);
 
       console.log(`✅ Analytics done: ${weekTrades.length} week trades, ${last24hTrades.length} 24h trades, ${topTraded.length} top items`);
       return null;

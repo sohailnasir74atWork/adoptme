@@ -320,12 +320,17 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       }
       setStartRating(false);
 
+      // ✅ Show interstitial ad after review/rating submission (non-Pro only)
+      if (!localState?.isPro) {
+        InterstitialAdManager.showAd();
+      }
+
     } catch (error) {
       console.error("Rating error:", error);
       showErrorMessage(t('chat.error'), t('chat.rating_submit_error'));
       setStartRating(false);
     }
-  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints]);
+  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints, localState?.isPro]);
 
 
 

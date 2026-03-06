@@ -242,8 +242,8 @@ const GroupMessageInput = ({
 
     setMessageCount((prevCount) => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 10 === 0) {
-        // Show A/B test interstitial ad every 10th message for non-pro users
+      if (!localState?.isPro && newCount % 12 === 0) {
+        // Show interstitial ad every 12th message for non-pro users
         InterstitialAdManager.showAd(() => { });
       }
       return newCount;

@@ -31,14 +31,22 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { showMessage } from 'react-native-flash-message';
 import PetModal from '../PrivateChat/PetsModel';
+import { MMKV } from 'react-native-mmkv';
+const storage = new MMKV();
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
 
 const CHANNELS = [
-  { id: 'trade', label: 'Trade', icon: 'handshake', path: 'chat_new' },
-  { id: 'help', label: 'Help', icon: 'circle-question', path: 'chat_help' },
-  { id: 'playing', label: 'Playing', icon: 'gamepad', path: 'chat_playing' },
-  { id: 'house_design', label: 'House Design', icon: 'house', path: 'chat_house_design' },
+  { id: 'en', label: 'English', flag: '🇺🇸', path: 'chat_new' },
+  { id: 'es', label: 'Español', flag: '🇪🇸', path: 'chat_es' },
+  { id: 'pt', label: 'Português', flag: '🇧🇷', path: 'chat_pt' },
+  { id: 'fr', label: 'Français', flag: '🇫🇷', path: 'chat_fr' },
+  { id: 'de', label: 'Deutsch', flag: '🇩🇪', path: 'chat_de' },
+  { id: 'tr', label: 'Türkçe', flag: '🇹🇷', path: 'chat_tr' },
+  { id: 'ar', label: 'العربية', flag: '🇸🇦', path: 'chat_ar' },
+  { id: 'ja', label: '日本語', flag: '🇯🇵', path: 'chat_ja' },
+  { id: 'ko', label: '한국어', flag: '🇰🇷', path: 'chat_ko' },
+  { id: 'ru', label: 'Русский', flag: '🇷🇺', path: 'chat_ru' },
 ];
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
@@ -58,7 +66,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [signinMessage, setSigninMessage] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
   const { localState } = useLocalState()
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [pendingMessages, setPendingMessages] = useState([]);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isFocused = useIsFocused();
@@ -68,7 +76,24 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [device, setDevice] = useState(null)
 
   const [selectedEmoji, setSelectedEmoji] = useState(null);
-  const [activeChannel, setActiveChannel] = useState(CHANNELS[0]); // ✅ Default to Trade Chat
+  // ✅ Remember user's preferred chat language (persisted in MMKV)
+  const [activeChannel, setActiveChannel] = useState(() => {
+    const savedId = storage.getString('preferred_chat_lang');
+    if (savedId) {
+      const found = CHANNELS.find(c => c.id === savedId);
+      if (found) return found;
+    }
+    // Fallback: match app language, then English
+    const lang = (i18n.language || 'en').split('-')[0];
+    return CHANNELS.find(c => c.id === lang) || CHANNELS[0];
+  });
+
+  // ✅ Reorder channels: put user's preferred language first
+  const orderedChannels = useMemo(() => {
+    const idx = CHANNELS.findIndex(c => c.id === activeChannel.id);
+    if (idx <= 0) return CHANNELS;
+    return [CHANNELS[idx], ...CHANNELS.slice(0, idx), ...CHANNELS.slice(idx + 1)];
+  }, [activeChannel.id]);
 
   // ✅ Track last sent message to prevent duplicates (session-based, no Firebase cost)
   const lastSentMessageRef = useRef(null);
@@ -282,6 +307,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   // ✅ Channel switch handler — resets state for new channel
   const handleChannelSwitch = useCallback((channel) => {
     if (channel.id === activeChannel.id) return;
+    // ✅ Save preference to MMKV
+    storage.set('preferred_chat_lang', channel.id);
     setActiveChannel(channel);
     setMessages([]);
     setPendingMessages([]);
@@ -681,10 +708,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     // Link check (only for non-pro & non-admin)
     const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
-    if (containsLink && !localState?.isPro && !isAdmin) {
-      Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
-      return;
-    }
+    // if (containsLink && !localState?.isPro && !isAdmin) {
+    //   Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
+    //   return;
+    // }
 
     try {
       // ✅ Use chatRef instead of creating new ref
@@ -760,7 +787,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={channelTabStyles.scrollContent}
           >
-            {CHANNELS.map((channel) => {
+            {orderedChannels.map((channel) => {
               const isActive = channel.id === activeChannel.id;
               return (
                 <TouchableOpacity
@@ -774,13 +801,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                   onPress={() => handleChannelSwitch(channel)}
                   activeOpacity={0.8}
                 >
-                  <FontAwesome
-                    name={channel.icon}
-                    size={11}
-                    color={isActive ? '#fff' : (theme === 'dark' ? '#aaa' : '#666')}
-                    solid={isActive}
-                    style={{ marginRight: 5 }}
-                  />
+                  <Text style={{ fontSize: 14, marginRight: 5 }}>{channel.flag}</Text>
                   <Text
                     style={[
                       channelTabStyles.pillText,

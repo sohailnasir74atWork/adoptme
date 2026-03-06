@@ -113,7 +113,7 @@ const fmtAgo = (ts) => {
 // ── Status badge colors ──
 const statusColor = (s) => {
     switch (s) {
-        case 'verified': return '#34C759';
+        case 'verified': return '#FF3B30';
         default: return '#FF9500';
     }
 };

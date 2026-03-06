@@ -180,8 +180,8 @@ const AdminHeader = ({
       <View style={{
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
       }}>
-        <Text style={{ fontSize: 9, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
-        </Text>
+        {/* <Text style={{ fontSize: 9, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
+        </Text> */}
         <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
 
           <Icon name="information-circle-outline" size={15} color={config.colors.primary} style={{ marginRight: 10 }} />

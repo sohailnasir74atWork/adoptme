@@ -70,7 +70,7 @@ const MessageInput = ({
   const { triggerHapticFeedback } = useHaptic();
   const { t } = useTranslation();
   const { localState } = useLocalState();
-  const { theme } = useGlobalState();
+  const { theme, isAdmin } = useGlobalState();
   const isDark = theme === 'dark';
   const [showEmojiPopup, setShowEmojiPopup] = useState(false);
 
@@ -95,7 +95,7 @@ const MessageInput = ({
 
     // ✅ Comprehensive content moderation check
     if (trimmedInput) {
-      const validation = validateContent(trimmedInput);
+      const validation = validateContent(trimmedInput, { skipLinkCheck: isAdmin });
       if (!validation.isValid) {
         showMessage({
           message: t('chat.inappropriate_content'),
@@ -125,8 +125,8 @@ const MessageInput = ({
       const newCount = messageCount + 1;
       setMessageCount(newCount);
 
-      if (!localState?.isPro && newCount % 10 === 0) {
-        // Show A/B test interstitial ad only if user is NOT pro (every 15th message)
+      if (!localState?.isPro && newCount % 12 === 0) {
+        // Show interstitial ad every 12th message for non-pro users
         InterstitialAdManager.showAd(adCallback);
       } else {
         setIsSending(false);

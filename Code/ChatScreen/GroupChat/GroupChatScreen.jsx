@@ -41,7 +41,7 @@ const GroupChatScreen = () => {
   const navigation = useNavigation();
   const { groupId } = route.params || {};
 
-  const { user, theme, appdatabase, firestoreDB } = useGlobalState();
+  const { user, theme, appdatabase, firestoreDB, isAdmin } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -114,7 +114,7 @@ const GroupChatScreen = () => {
 
           // Check if user is a member
           const memberIds = data.memberIds || [];
-          const userIsMember = memberIds.includes(user.id);
+          const userIsMember = memberIds.includes(user.id) || isAdmin || !!user?.isModerator;
           setIsMember(userIsMember);
 
           // If not a member, check for pending invitation
@@ -680,7 +680,7 @@ const GroupChatScreen = () => {
         const isMember = groupData.memberIds?.includes(user.id);
         const isMuted = groupData.members?.[user.id]?.muted;
 
-        if (!isMember) {
+        if (!isMember && !isAdmin && !user?.isModerator) {
           showErrorMessage('Error', 'You are not a member of this group');
           return;
         }
@@ -1205,7 +1205,7 @@ const GroupChatScreen = () => {
 
           <GroupMessageInput
             onSend={(text, image, fruits) => sendMessage(text, image, fruits, replyTo)}
-            isBanned={false}
+            isBanned={isMeBanned}
             petModalVisible={petModalVisible}
             setPetModalVisible={setPetModalVisible}
             selectedFruits={selectedFruits}

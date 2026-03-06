@@ -388,6 +388,7 @@
         }
     },
     "value": {
+        "label": "Valor:",
         "filter": "Filtrar",
         "title": "Pantalla de valores",
         "description": "Valores de Blox Fruits en vivo, actualizados cada hora. Encuentra valores correctos aquí.",
@@ -404,7 +405,10 @@
         "num_m": "M",
         "num_s": "s",
         "done": "Listo",
-        "search": "Buscar"
+        "search": "Buscar",
+        "values_reloaded": "Valores actualizados",
+        "sort_high": "▲ Alto",
+        "sort_low": "▼ Bajo"
     },
     "stock": {
         "description": "Aviso: Las actualizaciones pueden tardar un poco. Gracias por tu paciencia.",
@@ -1026,10 +1030,10 @@
         "changes_disclaimer": "Los cambios de valor se verifican manualmente comparando actualizaciones oficiales. Actualizado por el admin cuando se publican nuevos valores.",
         "top_movers": "Más movidos",
         "rising_demand": "Demanda creciente esta semana",
-        "see_all_movers": "Ver los 10 más movidos",
+        "see_all_movers": "Ver todos los más movidos",
         "top_losers": "Más perdedores",
         "falling_demand": "Demanda decreciente esta semana",
-        "see_all_losers": "Ver los 10 más perdedores",
+        "see_all_losers": "Ver todos los más perdedores",
         "most_wanted": "Más buscados",
         "highest_demand": "Mayor demanda (24h)",
         "see_full_demand": "Ver lista completa de demanda",

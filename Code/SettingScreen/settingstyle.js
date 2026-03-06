@@ -33,11 +33,13 @@ export const getStyles = (isDarkMode) =>
 
     },
     profileImage2: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      marginRight: 10,
-      backgroundColor: 'white'
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      marginRight: 12,
+      backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0',
+      borderWidth: 2,
+      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
     },
     userName: {
       fontSize: 18,
@@ -89,16 +91,18 @@ export const getStyles = (isDarkMode) =>
     },
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
     },
     drawer: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
-      padding: 16,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+      padding: 20,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
       shadowColor: '#000',
-      shadowOpacity: 0.25,
-      shadowRadius: 10,
+      shadowOpacity: 0.15,
+      shadowOffset: { width: 0, height: -4 },
+      shadowRadius: 16,
+      elevation: 12,
     },
     drawerTitle: {
       fontSize: 18,
@@ -124,34 +128,43 @@ export const getStyles = (isDarkMode) =>
     },
     saveButton: {
       backgroundColor: config.colors.primary,
-      paddingVertical: 15,
-      borderRadius: 10,
-      marginTop: 10,
+      paddingVertical: 14,
+      borderRadius: 16,
+      marginTop: 8,
+      shadowColor: config.colors.primary,
+      shadowOpacity: 0.25,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 6,
+      elevation: 3,
     },
     saveButtonText: {
       color: '#fff',
       textAlign: 'center',
+      fontWeight: '600',
+      fontSize: 14,
     },
     saveButtonProfile: {
-      borderWidth: 2,
+      borderWidth: 1.5,
       borderColor: config.colors.primary,
-      paddingVertical: 15,
-      borderRadius: 20,
-      marginTop: 20,
+      paddingVertical: 14,
+      borderRadius: 16,
+      marginTop: 16,
+      backgroundColor: isDarkMode ? config.colors.primary + '15' : config.colors.primary + '08',
     },
     saveButtonTextProfile: {
-      // color: '#fff',
       textAlign: 'center',
+      fontWeight: '600',
+      fontSize: 14,
     },
     drawerSubtitle: {
       color: isDarkMode ? '#fff' : '#000',
-      fontwEIGHT: 'bold',
+      fontWeight: 'bold',
       marginBottom: 5
     },
     drawerSubtitleUser: {
-      color: isDarkMode ? '#fff' : '#000',
-      fontwEIGHT: 'bold',
-      // marginBottom:10
+      color: isDarkMode ? '#f1f5f9' : '#0f172a',
+      fontWeight: '700',
+      fontSize: 16,
     },
     subtitle: {
       color: isDarkMode ? '#fff' : '#000',
@@ -326,12 +339,12 @@ export const getStyles = (isDarkMode) =>
     },
 
     petBubble: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
+      borderWidth: 1.5,
+      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
     },
 
     petImageSmall: {
@@ -340,10 +353,10 @@ export const getStyles = (isDarkMode) =>
     },
 
     moreBubble: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: isDarkMode ? '#374151' : '#E5E7EB',
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDarkMode ? '#334155' : '#e2e8f0',
       justifyContent: 'center',
       alignItems: 'center',
     },

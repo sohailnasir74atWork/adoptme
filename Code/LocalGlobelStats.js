@@ -172,6 +172,30 @@ export const LocalStateProvider = ({ children }) => {
     return () => task.cancel();
   }, []);
 
+  // ✅ Listen for real-time subscription changes (purchase, renewal, expiry)
+  useEffect(() => {
+    const listener = Purchases.addCustomerInfoUpdateListener((customerInfo) => {
+      const entitlements = customerInfo.entitlements.active;
+      const proKey = Object.keys(entitlements).find(
+        (key) => key.toLowerCase() === 'pro'
+      );
+      const proStatus = !!(proKey && entitlements[proKey]);
+      updateLocalState('isPro', proStatus);
+
+      if (proStatus) {
+        setMySubscriptions(
+          customerInfo.activeSubscriptions.map((plan) => ({
+            plan,
+            expiry: customerInfo.allExpirationDates[plan] || null,
+          }))
+        );
+      } else {
+        setMySubscriptions([]);
+      }
+    });
+    return () => { if (listener && typeof listener.remove === 'function') listener.remove(); };
+  }, [updateLocalState]);
+
   // console.log(isPro)
   // Fetch available subscriptions
   const fetchOfferings = async () => {
@@ -226,16 +250,18 @@ export const LocalStateProvider = ({ children }) => {
         (key) => key.toLowerCase() === 'pro'
       );
 
-
-      // console.log(customerInfo.activeSubscriptions)
       const proStatus = !!(proKey && entitlements[proKey]);
+      // ✅ Always update isPro — both true AND false (handles expiry)
+      updateLocalState('isPro', proStatus);
+
       if (proStatus) {
-        updateLocalState('isPro', proStatus); // Persist Pro status in MMKV
         const activePlansWithExpiry = customerInfo.activeSubscriptions.map((subscription) => ({
           plan: subscription,
           expiry: customerInfo.allExpirationDates[subscription],
         }));
         setMySubscriptions(activePlansWithExpiry);
+      } else {
+        setMySubscriptions([]);
       }
     } catch (error) {
       // console.error('❌ Error checking entitlements:', error);

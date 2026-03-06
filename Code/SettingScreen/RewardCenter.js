@@ -127,7 +127,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
         });
 
         // Cleanup function to remove the listener on unmount
-        return () => prizeRef.off('value');
+        return () => prizeRef.off('value', unsubscribe);
 
     }, [appdatabase]);
 

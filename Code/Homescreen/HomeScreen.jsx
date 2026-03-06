@@ -12,6 +12,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
 import { isMatch } from '../Helper/searchHelper';
+import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 import { useBanStatus } from '../ChatScreen/utils';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
@@ -42,8 +43,8 @@ const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, is
 
 
   // Handle simple value categories
-  if (simpleValueCategories.includes(item.type)) {
-    const value = Number(item.type === 'eggs' ? item.rvalue : item.value) || 0;
+  if (simpleValueCategories.includes(item.type?.toLowerCase())) {
+    const value = Number(item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0;
     return Number((isSharkMode ? value : value / factor).toFixed(2));
   }
 
@@ -125,6 +126,20 @@ const HomeScreen = ({ selectedTheme }) => {
   const [showofferwall, setShowofferwall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
+  const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+
+  // Load analytics data for demand/hot badges
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      try {
+        const data = await fetchAnalyticsData();
+        setAnalyticsMaps(data);
+      } catch (e) {
+        console.warn('[HomeScreen] Analytics data load failed:', e.message);
+      }
+    };
+    loadAnalytics();
+  }, []);
 
 
   // ✅ Check ban status
@@ -315,6 +330,7 @@ const HomeScreen = ({ selectedTheme }) => {
       if (!item || !selectedSection) return;
 
       triggerHapticFeedback('impactLight');
+      // console.log(item)
 
       const value = getItemValue(
         item,
@@ -336,6 +352,7 @@ const HomeScreen = ({ selectedTheme }) => {
       // Work on copies of both sides so we can decide expansion
       const nextHasItems = [...hasItems];
       const nextWantsItems = [...wantsItems];
+
 
       const targetArray =
         selectedSection === 'has' ? nextHasItems : nextWantsItems;
@@ -723,15 +740,16 @@ const HomeScreen = ({ selectedTheme }) => {
         (fav.name && fav.name.toLowerCase() === item.name?.toLowerCase() && fav.type && fav.type.toLowerCase() === item.type?.toLowerCase())
     );
 
+    const demand = getDemandScore(item.name, analyticsMaps.demandMap);
+    const hot = getHotStatus(item.name, analyticsMaps.hotMap);
+
     return (
       <TouchableOpacity
         style={styles.gridItem}
         onPress={() => {
           if (isAddingToFavorites) {
-            // When in "add to favorites" mode, clicking toggles favorite
             toggleFavorite(item);
           } else {
-            // Normal mode: clicking adds item to calculator
             selectItem(item);
           }
         }}
@@ -749,6 +767,22 @@ const HomeScreen = ({ selectedTheme }) => {
         <Text numberOfLines={1} style={styles.gridItemText}>
           {item.name}
         </Text>
+        {(demand || hot) && (
+          <View style={styles.gridAnalyticsRow}>
+            {demand && demand.score >= 7 && (
+              <View style={styles.gridDemandBadge}>
+                <Text style={{ fontSize: 7 }}>{'\u{1F525}'}</Text>
+                <Text style={styles.gridDemandText}>{demand.label}</Text>
+              </View>
+            )}
+            {hot && (
+              <View style={styles.gridHotBadge}>
+                <Text style={{ fontSize: 7 }}>{'\u{1F4C8}'}</Text>
+                <Text style={styles.gridHotText}>+{hot.pct}%</Text>
+              </View>
+            )}
+          </View>
+        )}
         {isAddingToFavorites && (
           <TouchableOpacity
             style={styles.favoriteButton}
@@ -766,7 +800,7 @@ const HomeScreen = ({ selectedTheme }) => {
         )}
       </TouchableOpacity>
     );
-  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode]);
+  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps]);
 
   // Update renderFavoritesHeader function
   const renderFavoritesHeader = useCallback(() => {
@@ -918,10 +952,17 @@ const HomeScreen = ({ selectedTheme }) => {
       // Clean up after execution
       delete timeoutRefs.current[timeoutKey];
     }, 100); // Small delay to allow React state to settle
-  }, [hasItems, wantsItems, t, user?.id]);
+  }, [hasItems, wantsItems, t, user?.id, isBanned, banDetails]);
 
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
+
+    // ✅ Ban check — defense in depth (in case modal was opened before ban)
+    if (isBanned) {
+      const reason = banDetails?.reason || 'Access Denied';
+      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -1138,7 +1179,7 @@ const HomeScreen = ({ selectedTheme }) => {
         setIsSubmitting(false);
       }
     }
-  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t, resetState]);
+  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t, resetState, isBanned, banDetails]);
 
   const handleShareTrade = useCallback(() => {
     const hasItemsCount = hasItems.filter(Boolean).length;
@@ -1290,6 +1331,32 @@ const HomeScreen = ({ selectedTheme }) => {
                                 )}
                               </View>
                             )}
+                            {(() => {
+                              const demand = getDemandScore(item.name, analyticsMaps.demandMap);
+                              if (demand && demand.score >= 7) {
+                                return (
+                                  <View style={styles.calcDemandOverlay}>
+                                    <View style={styles.calcDemandPill}>
+                                      <Text style={styles.calcDemandPillText}>{demand.label}</Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                              return null;
+                            })()}
+                            {(() => {
+                              const hot = getHotStatus(item.name, analyticsMaps.hotMap);
+                              if (hot) {
+                                return (
+                                  <View style={styles.calcHotOverlay}>
+                                    <View style={styles.calcHotPill}>
+                                      <Text style={styles.calcHotPillText}>+{hot.pct}%</Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                              return null;
+                            })()}
                           </>
                         ) : (
                           index === lastFilledIndexHas + 1 && (
@@ -1342,6 +1409,32 @@ const HomeScreen = ({ selectedTheme }) => {
                                 )}
                               </View>
                             )}
+                            {(() => {
+                              const demand = getDemandScore(item.name, analyticsMaps.demandMap);
+                              if (demand && demand.score >= 7) {
+                                return (
+                                  <View style={styles.calcDemandOverlay}>
+                                    <View style={styles.calcDemandPill}>
+                                      <Text style={styles.calcDemandPillText}>{demand.label}</Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                              return null;
+                            })()}
+                            {(() => {
+                              const hot = getHotStatus(item.name, analyticsMaps.hotMap);
+                              if (hot) {
+                                return (
+                                  <View style={styles.calcHotOverlay}>
+                                    <View style={styles.calcHotPill}>
+                                      <Text style={styles.calcHotPillText}>+{hot.pct}%</Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                              return null;
+                            })()}
                           </>
                         ) : (
                           index === lastFilledIndexWant + 1 && (
@@ -1539,48 +1632,50 @@ const HomeScreen = ({ selectedTheme }) => {
                     getItemLayout={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? undefined : getItemLayout}
                   />
                   {selectedPetType === 'INVENTORY' ? renderFavoritesFooter() : (
-                    <View style={styles.badgeContainer}>
-                      {VALUE_TYPES.map((badge) => (
-                        <TouchableOpacity
-                          key={badge}
-                          onPress={() => handleBadgePress(badge)}
-                          style={[
-                            styles.badgeButton,
-                            selectedValueType === badge.toLowerCase() && [
-                              styles.badgeButtonActive,
-                              badge === 'D' && { backgroundColor: config.colors.hasBlockGreen },
-                              badge === 'M' && { backgroundColor: '#9b59b6' },
-                              badge === 'N' && { backgroundColor: '#2ecc71' }
-                            ]
-                          ]}
-                        >
-                          <Text style={[
-                            styles.badgeButtonText,
-                            selectedValueType === badge.toLowerCase() && styles.badgeButtonTextActive
-                          ]}>{badge}</Text>
-                        </TouchableOpacity>
-                      ))}
+                    (selectedPetType === 'PETS' || selectedPetType === 'ALL') && (
+                      <View style={styles.badgeContainer}>
+                        {VALUE_TYPES.map((badge) => (
+                          <TouchableOpacity
+                            key={badge}
+                            onPress={() => handleBadgePress(badge)}
+                            style={[
+                              styles.badgeButton,
+                              selectedValueType === badge.toLowerCase() && [
+                                styles.badgeButtonActive,
+                                badge === 'D' && { backgroundColor: config.colors.hasBlockGreen },
+                                badge === 'M' && { backgroundColor: '#9b59b6' },
+                                badge === 'N' && { backgroundColor: '#2ecc71' }
+                              ]
+                            ]}
+                          >
+                            <Text style={[
+                              styles.badgeButtonText,
+                              selectedValueType === badge.toLowerCase() && styles.badgeButtonTextActive
+                            ]}>{badge}</Text>
+                          </TouchableOpacity>
+                        ))}
 
-                      {MODIFIERS.map((badge) => (
-                        <TouchableOpacity
-                          key={badge}
-                          onPress={() => handleBadgePress(badge)}
-                          style={[
-                            styles.badgeButton,
-                            (badge === 'F' ? isFlySelected : isRideSelected) && [
-                              styles.badgeButtonActive,
-                              badge === 'F' && { backgroundColor: '#3498db' },
-                              badge === 'R' && { backgroundColor: config.colors.hasBlockGreen }
-                            ]
-                          ]}
-                        >
-                          <Text style={[
-                            styles.badgeButtonText,
-                            (badge === 'F' ? isFlySelected : isRideSelected) && styles.badgeButtonTextActive
-                          ]}>{badge}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                        {MODIFIERS.map((badge) => (
+                          <TouchableOpacity
+                            key={badge}
+                            onPress={() => handleBadgePress(badge)}
+                            style={[
+                              styles.badgeButton,
+                              (badge === 'F' ? isFlySelected : isRideSelected) && [
+                                styles.badgeButtonActive,
+                                badge === 'F' && { backgroundColor: '#3498db' },
+                                badge === 'R' && { backgroundColor: config.colors.hasBlockGreen }
+                              ]
+                            ]}
+                          >
+                            <Text style={[
+                              styles.badgeButtonText,
+                              (badge === 'F' ? isFlySelected : isRideSelected) && styles.badgeButtonTextActive
+                            ]}>{badge}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )
                   )}
                 </View>
               </View>
@@ -1955,6 +2050,72 @@ const getStyles = (isDarkMode) =>
       fontSize: 11,
       marginTop: 4,
       color: isDarkMode ? '#fff' : '#333',
+    },
+    gridAnalyticsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      marginTop: 2,
+    },
+    gridDemandBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#FF6B0025' : '#FF6B0015',
+      paddingHorizontal: 3,
+      paddingVertical: 1,
+      borderRadius: 3,
+      gap: 1,
+    },
+    gridDemandText: {
+      fontSize: 8,
+      fontWeight: '700',
+      color: isDarkMode ? '#FF8C42' : '#E65100',
+    },
+    gridHotBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#10B98125' : '#10B98115',
+      paddingHorizontal: 3,
+      paddingVertical: 1,
+      borderRadius: 3,
+      gap: 1,
+    },
+    gridHotText: {
+      fontSize: 8,
+      fontWeight: '700',
+      color: '#10B981',
+    },
+    calcDemandOverlay: {
+      position: 'absolute',
+      top: 1,
+      left: 1,
+    },
+    calcDemandPill: {
+      backgroundColor: '#FF6B00CC',
+      paddingHorizontal: 2,
+      paddingVertical: 0.5,
+      borderRadius: 2,
+    },
+    calcDemandPillText: {
+      fontSize: 6,
+      fontWeight: '800',
+      color: 'white',
+    },
+    calcHotOverlay: {
+      position: 'absolute',
+      top: 1,
+      right: 1,
+    },
+    calcHotPill: {
+      backgroundColor: '#10B981CC',
+      paddingHorizontal: 2,
+      paddingVertical: 0.5,
+      borderRadius: 2,
+    },
+    calcHotPillText: {
+      fontSize: 6,
+      fontWeight: '800',
+      color: 'white',
     },
     badgeContainer: {
       flexDirection: 'row',

@@ -30,8 +30,8 @@ const ConditionalKeyboardWrapper = ({ children, style, chatscreen = false, priva
     });
 
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
+      showSubscription?.remove();
+      hideSubscription?.remove();
     };
   }, [keyboardHeight]);
 

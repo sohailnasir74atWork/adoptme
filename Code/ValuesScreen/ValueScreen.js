@@ -28,6 +28,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { isMatch } from '../Helper/searchHelper';
+import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 
 
 const VALUE_TYPES = ['D', 'N', 'M'];
@@ -35,6 +36,21 @@ const MODIFIERS = ['F', 'R'];
 
 
 // const CATEGORY_FILTERS = ['PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+
+// Rarity color mapping for badges
+const RARITY_COLORS = {
+  common: '#95a5a6',
+  uncommon: '#2ecc71',
+  rare: '#3498db',
+  'ultra-rare': '#9b59b6',
+  legendary: '#f39c12',
+  premium: '#e74c3c',
+  event: '#e91e63',
+};
+const getRarityColor = (rarity) => {
+  if (!rarity) return '#888';
+  return RARITY_COLORS[rarity.toLowerCase()] || '#888';
+};
 
 const ItemBadge = React.memo(({ type, style, styles }) => (
   <Text style={[styles.itemBadge, style]}>{type}</Text>
@@ -96,6 +112,20 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const { t } = useTranslation();
   const [filters, setFilters] = useState(['All']);
   const displayedFilter = selectedFilter === 'PREMIUM' ? t('categories.GAME PASS') : t(`categories.${selectedFilter.toUpperCase()}`, { defaultValue: selectedFilter });
+  const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+
+  // Load analytics data for demand/hot badges
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      try {
+        const data = await fetchAnalyticsData();
+        setAnalyticsMaps(data);
+      } catch (e) {
+        console.warn('[ValueScreen] Analytics data load failed:', e.message);
+      }
+    };
+    loadAnalytics();
+  }, []);
   const formatName = (name) => name.replace(/^\+/, '').replace(/\s+/g, '-');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [hasAdBeenShown, setHasAdBeenShown] = useState(false);
@@ -117,7 +147,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   // ✅ Memoize categories to prevent recreation
   const hideBadge = useMemo(() =>
-    ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'],
+    ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'],
     []
   );
 
@@ -128,7 +158,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   // console.log(selectedFruits)
 
-  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress }) => {
+  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap }) => {
     const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
     const { localState } = useLocalState()
     const badges = [];
@@ -164,30 +194,67 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           <View style={styles.itemInfo}>
             <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.value}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
-            <Text style={styles.rarity}>{t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}</Text>
+            {item.rarity && (
+              <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
+                <View style={[styles.rarityDot, { backgroundColor: getRarityColor(item.rarity) }]} />
+                <Text style={[styles.rarityText, { color: getRarityColor(item.rarity) }]}>
+                  {t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}
+                </Text>
+              </View>
+            )}
+            <View style={styles.analyticsRow}>
+              {(() => {
+                const demand = getDemandScore(item.name, demandMap);
+                if (demand) {
+                  return (
+                    <View style={[styles.demandBadge, demand.score >= 8 && styles.demandBadgeHigh]}>
+                      <Text style={{ fontSize: 8 }}>{'\u{1F525}'}</Text>
+                      <Text style={[styles.demandText, demand.score >= 8 && styles.demandTextHigh]}>
+                        {demand.label}
+                      </Text>
+                    </View>
+                  );
+                }
+                return null;
+              })()}
+              {(() => {
+                const hot = getHotStatus(item.name, hotMap);
+                if (hot) {
+                  return (
+                    <View style={styles.hotBadge}>
+                      <Text style={{ fontSize: 8 }}>{'\u{1F4C8}'}</Text>
+                      <Text style={styles.hotText}>+{hot.pct}%</Text>
+                    </View>
+                  );
+                }
+                return null;
+              })()}
+            </View>
           </View>
         </View>
 
-        <View style={styles.badgesContainer}>
-          {VALUE_TYPES.map((badge) => (
-            <BadgeButton
-              key={badge}
-              badge={badge}
-              isActive={itemSelection.valueType === badge.toLowerCase()}
-              onPress={() => onBadgePress(item.id, badge)}
-              styles={styles}
-            />
-          ))}
-          {MODIFIERS.map((badge) => (
-            <BadgeButton
-              key={badge}
-              badge={badge}
-              isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
-              onPress={() => onBadgePress(item.id, badge)}
-              styles={styles}
-            />
-          ))}
-        </View>
+        {!hideBadge.includes(item.type?.toUpperCase()) && (
+          <View style={styles.badgesContainer}>
+            {VALUE_TYPES.map((badge) => (
+              <BadgeButton
+                key={badge}
+                badge={badge}
+                isActive={itemSelection.valueType === badge.toLowerCase()}
+                onPress={() => onBadgePress(item.id, badge)}
+                styles={styles}
+              />
+            ))}
+            {MODIFIERS.map((badge) => (
+              <BadgeButton
+                key={badge}
+                badge={badge}
+                isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
+                onPress={() => onBadgePress(item.id, badge)}
+                styles={styles}
+              />
+            ))}
+          </View>
+        )}
       </TouchableOpacity>
     );
   });
@@ -314,8 +381,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     if (!item) return 0;
 
     const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
-    if (simpleValueCategories.includes(item.type)) {
-      return Number((item.type === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
+    if (simpleValueCategories.includes(item.type?.toLowerCase())) {
+      return Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
     }
 
     if (!selectedValueType) return 0;
@@ -466,8 +533,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           onBadgePress={handleItemBadgePress}
           getItemValue={getItemValue}
           styles={styles}
-          onPress={handlePress}  // ✅ pass handler
-        // isSelected={isSelected}
+          onPress={handlePress}
+          demandMap={analyticsMaps.demandMap}
+          hotMap={analyticsMaps.hotMap}
         />
       );
     },
@@ -476,7 +544,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       handleItemBadgePress,
       getItemValue,
       styles,
-      setWishlistPets
+      setWishlistPets,
+      analyticsMaps
     ]
   );
 
@@ -805,12 +874,67 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     marginBottom: 2,
     fontWeight: '500',
   },
-  rarity: {
-    fontSize: 10,
-    color: config.colors.primary,
-    fontWeight: '600',
+  rarityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    marginTop: 2,
+  },
+  rarityDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 3,
+  },
+  rarityText: {
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  analyticsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
+  demandBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDarkMode ? '#FF6B0020' : '#FF6B0015',
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    gap: 2,
+  },
+  demandBadgeHigh: {
+    backgroundColor: isDarkMode ? '#FF450030' : '#FF450020',
+  },
+  demandText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: isDarkMode ? '#FF8C42' : '#E65100',
+  },
+  demandTextHigh: {
+    color: '#FF3D00',
+  },
+  hotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDarkMode ? '#10B98120' : '#10B98115',
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    gap: 2,
+  },
+  hotText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#10B981',
   },
   itemBadgesContainer: {
     position: 'absolute',

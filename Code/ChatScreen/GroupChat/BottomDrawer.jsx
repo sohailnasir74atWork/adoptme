@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
@@ -120,6 +121,79 @@ const getTradeDeal = (hasTotal, wantsTotal) => {
   return { deal, tradeRatio };
 };
 
+// ─── Standalone image carousel for post viewer ───────────────────────────────
+const PostImageCarousel = React.memo(({ images, isDarkMode, screenWidth }) => {
+  const [activeIndex, setActiveIndex] = React.useState(0);
+
+  if (!images || images.length === 0) return null;
+
+  const onScroll = (e) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+    setActiveIndex(index);
+  };
+
+  return (
+    <View style={{ marginVertical: 10 }}>
+      {/* Horizontal paging scroll */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        style={{ width: screenWidth }}
+      >
+        {images.map((imgUrl, idx) => (
+          <View
+            key={idx}
+            style={{
+              width: screenWidth,
+              paddingHorizontal: 16,
+            }}
+          >
+            <Image
+              source={{ uri: imgUrl }}
+              style={{
+                width: screenWidth - 32,
+                height: (screenWidth - 32) * 0.65,
+                borderRadius: 12,
+                backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+              }}
+              resizeMode="cover"
+            />
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Pagination: dots + counter badge */}
+      {images.length > 1 && (
+        <>
+          {/* Dot indicators */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8, gap: 5 }}>
+            {images.map((_, idx) => (
+              <View
+                key={idx}
+                style={{
+                  width: idx === activeIndex ? 16 : 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: idx === activeIndex
+                    ? (isDarkMode ? '#e5e7eb' : '#111827')
+                    : (isDarkMode ? '#374151' : '#d1d5db'),
+                }}
+              />
+            ))}
+          </View>
+          {/* Counter badge */}
+          <View style={{ position: 'absolute', top: 10, right: 24, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>{activeIndex + 1}/{images.length}</Text>
+          </View>
+        </>
+      )}
+    </View>
+  );
+});
+
 const ProfileBottomDrawer = ({
   isVisible,
   toggleModal,
@@ -185,6 +259,7 @@ const ProfileBottomDrawer = ({
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [lastPostDoc, setLastPostDoc] = useState(null);
   const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null); // For full post viewer modal
 
   // toggle details
   const [loadDetails, setLoadDetails] = useState(false);
@@ -516,6 +591,8 @@ const ProfileBottomDrawer = ({
       ],
     );
   };
+
+
 
   // ─────────────────────────────────────────────
   // Moderator Actions
@@ -1175,6 +1252,8 @@ const ProfileBottomDrawer = ({
     if (!pet || typeof pet !== 'object') return null;
 
     const valueType = (pet.valueType || 'd').toLowerCase();
+    const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+    const isPet = !NON_PET_TYPES.includes((pet.category || '').toUpperCase());
     let rarityBg = '#FF6666';
     if (valueType === 'n') rarityBg = '#2ecc71';
     if (valueType === 'm') rarityBg = '#9b59b6';
@@ -1195,74 +1274,76 @@ const ProfileBottomDrawer = ({
           source={{ uri: pet.imageUrl || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
           style={{ width: '100%', height: '100%' }}
         />
-        <View
-          style={{
-            position: 'absolute',
-            right: 2,
-            bottom: 2,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          {/* Rarity badge */}
+        {isPet && (
           <View
             style={{
-              paddingHorizontal: 3,
-              paddingVertical: 1,
-              borderRadius: 999,
-              backgroundColor: rarityBg,
-              marginLeft: 2,
+              position: 'absolute',
+              right: 2,
+              bottom: 2,
+              flexDirection: 'row',
+              alignItems: 'center',
             }}
           >
-            <Text
+            {/* Rarity badge */}
+            <View
               style={{
-                fontSize: 8,
-                fontWeight: '700',
-                color: '#fff',
+                paddingHorizontal: 3,
+                paddingVertical: 1,
+                borderRadius: 999,
+                backgroundColor: rarityBg,
+                marginLeft: 2,
               }}
             >
-              {valueType.toUpperCase()}
-            </Text>
+              <Text
+                style={{
+                  fontSize: 8,
+                  fontWeight: '700',
+                  color: '#fff',
+                }}
+              >
+                {valueType.toUpperCase()}
+              </Text>
+            </View>
+
+            {/* Fly badge */}
+            {pet.isFly && (
+              <View
+                style={{
+                  paddingHorizontal: 3,
+                  paddingVertical: 1,
+                  borderRadius: 999,
+                  backgroundColor: '#3498db',
+                  marginLeft: 2,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
+                >
+                  F
+                </Text>
+              </View>
+            )}
+
+            {/* Ride badge */}
+            {pet.isRide && (
+              <View
+                style={{
+                  paddingHorizontal: 3,
+                  paddingVertical: 1,
+                  borderRadius: 999,
+                  backgroundColor: '#e74c3c',
+                  marginLeft: 2,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
+                >
+                  R
+                </Text>
+              </View>
+            )}
           </View>
-
-          {/* Fly badge */}
-          {pet.isFly && (
-            <View
-              style={{
-                paddingHorizontal: 3,
-                paddingVertical: 1,
-                borderRadius: 999,
-                backgroundColor: '#3498db',
-                marginLeft: 2,
-              }}
-            >
-              <Text
-                style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
-              >
-                F
-              </Text>
-            </View>
-          )}
-
-          {/* Ride badge */}
-          {pet.isRide && (
-            <View
-              style={{
-                paddingHorizontal: 3,
-                paddingVertical: 1,
-                borderRadius: 999,
-                backgroundColor: '#e74c3c',
-                marginLeft: 2,
-              }}
-            >
-              <Text
-                style={{ fontSize: 8, fontWeight: '700', color: '#fff' }}
-              >
-                R
-              </Text>
-            </View>
-          )}
-        </View>
+        )}
       </View>
     );
   }, [isDarkMode]);
@@ -1650,8 +1731,10 @@ const ProfileBottomDrawer = ({
     const imageUrl = Array.isArray(post.imageUrl) && post.imageUrl.length > 0 ? post.imageUrl[0] : (typeof post.imageUrl === 'string' ? post.imageUrl : null);
 
     return (
-      <View
+      <TouchableOpacity
         key={post.id}
+        onPress={() => setSelectedPost(post)}
+        activeOpacity={0.7}
         style={{
           borderBottomWidth: 1,
           borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
@@ -1687,984 +1770,1158 @@ const ProfileBottomDrawer = ({
             {timeLabel}
           </Text>
         </View>
-      </View>
+        <Icon name="chevron-forward" size={16} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginLeft: 4 }} />
+      </TouchableOpacity>
     );
   }, [isDarkMode, t]);
 
   // ─────────────────────────────────────────────
-  return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isVisible}
-      onRequestClose={toggleModal}
-    >
-      {/* Overlay */}
-      <Pressable style={styles.overlay} onPress={toggleModal} />
+  // Post Viewer Modal
+  const screenWidth = Dimensions.get('window').width;
 
-      {/* Drawer Content */}
-      <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <View style={styles.drawer}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 480 }}
+  const getTagColor = useCallback((tag) => {
+    switch ((tag || '').toLowerCase()) {
+      case 'scam alert': return '#FF3B30';
+      case 'looking for trade': return '#34C759';
+      case 'discussion': return '#5AC8FA';
+      case 'real or fake': return '#AF52DE';
+      case 'need help': return '#FF9500';
+      case 'misc': case 'misc.': return '#8E8E93';
+      default: return config.colors.primary;
+    }
+  }, []);
+
+  const renderPostViewerModal = useMemo(() => {
+    if (!selectedPost) return null;
+
+    const post = selectedPost;
+    const timeLabel = post.createdAt
+      ? dayjs(post.createdAt.toDate ? post.createdAt.toDate() : post.createdAt).fromNow()
+      : 'Just now';
+    const images = Array.isArray(post.imageUrl) ? post.imageUrl : (post.imageUrl ? [post.imageUrl] : []);
+    const likeCount = post.likes ? Object.keys(post.likes).length : 0;
+    const tags = Array.isArray(post.selectedTags) ? post.selectedTags : [];
+    // imageWidth removed — carousel uses full screenWidth internally
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={!!selectedPost}
+        onRequestClose={() => setSelectedPost(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+          onPress={() => setSelectedPost(null)}
+        >
+          <Pressable
+            onPress={() => { }} // Prevent close on content tap
+            style={{
+              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: '85%',
+              paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+            }}
           >
-            {/* HEADER: user row */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <View style={{ flexDirection: 'row', flex: 1, marginRight: 8 }}>
-                {/* Avatar with Online Indicator - matches OnlineUsersList.jsx structure */}
-                <View style={{ position: 'relative', marginRight: 12 }}>
-                  <Image
-                    source={{
-                      uri: avatar
-                        ? avatar
-                        : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                    }}
-                    style={styles.profileImage2}
-                  />
-                  {/* Online/Offline Indicator - attached to avatar bottom-right */}
-                  <View
-                    style={{
-                      position: 'absolute',
-                      bottom: 1,
-                      right: 1,
-                      width: 12,
-                      height: 12,
-                      borderRadius: 6,
-                      backgroundColor: isOnline ? '#10B981' : '#9CA3AF', // Green for online, gray for offline
-                      borderWidth: 2,
-                      borderColor: isDarkMode ? '#1F2937' : '#FFFFFF',
-                      zIndex: 10, // Ensure it's above the image
-                    }}
-                  />
-                </View>
-
-                <View style={{ justifyContent: 'center', flex: 1, marginRight: 8 }}>
-                  {/* Username Row */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Text
-                      style={[styles.drawerSubtitleUser, { flexShrink: 1 }]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {userName}{' '}
-                      {mergedUser?.isPro && (
-                        <Image
-                          source={require('../../../assets/pro.png')}
-                          style={{ width: 10, height: 10 }}
-                        />
-                      )}{' '}
-                      {selectedUser?.flage ? selectedUser.flage : ''}
-                    </Text>
-
-                    {/* Admin / Mod Badge */}
-                    {mergedUser?.isAdmin && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                        <Icon name="shield" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
-                      </View>
-                    )}
-                    {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                        <Icon name="shield-checkmark" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
-                      </View>
-                    )}
-                    <Icon
-                      name="copy-outline"
-                      size={16}
-                      color="#007BFF"
-                      style={{ marginLeft: 8 }}
-                      onPress={() => copyToClipboard(userName)}
-                    />
-                  </View>
-                  <View style={{ alignItems: 'flex-start', justifyContent: 'center' }}>
-                    {/* Roblox Badge */}
-                    {mergedUser?.robloxUsername ? (
-                      <View style={{
-                        backgroundColor: mergedUser?.robloxUsernameVerified ? '#4CAF50' : '#FFA500',
-                        paddingHorizontal: 6,
-                        paddingVertical: 2,
-                        borderRadius: 4,
-                        marginBottom: 4,
-                        marginTop: 2,
-                      }}>
-                        <Text style={{
-                          color: '#FFFFFF',
-                          fontSize: 9,
-                          fontWeight: '600'
-                        }}>
-                          {mergedUser?.robloxUsernameVerified ? '✓ Verified' : '⚠ Unverified'}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{
-                        backgroundColor: '#9CA3AF',
-                        paddingHorizontal: 6,
-                        paddingVertical: 2,
-                        borderRadius: 4,
-                        marginVertical: 4,
-                      }}>
-                        <Text style={{
-                          color: '#FFFFFF',
-                          fontSize: 9,
-                          fontWeight: '600'
-                        }}>
-                          No Roblox ID
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {/* Roblox Username Display */}
-                  {/* {mergedUser?.robloxUsername && (
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: '#00A8FF', // Nice blue color for Roblox
-                        marginTop: 4,
-                        fontWeight: '500',
-                      }}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      @{mergedUser.robloxUsername}
-                    </Text>
-                    
-                  )} */}
-
-
-                </View>
-
-                {/* Right Side: Badges */}
-
-              </View>
-
-              {/* Ban/Unban Icon */}
-              <TouchableOpacity onPress={handleBanToggle}>
-                <Icon
-                  name={isBlock ? 'shield-checkmark-outline' : 'ban-outline'}
-                  size={30}
-                  color={
-                    isBlock
-                      ? config.colors.hasBlockGreen
-                      : config.colors.wantBlockRed
-                  }
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Image
+                  source={{ uri: post.avatar || avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                  style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
                 />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#f3f4f6' : '#111827' }} numberOfLines={1}>
+                    {post.displayName || userName || 'Anonymous'}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                    {timeLabel}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedPost(null)}
+                style={{ padding: 4 }}
+              >
+                <Icon name="close" size={24} color={isDarkMode ? '#e5e7eb' : '#374151'} />
               </TouchableOpacity>
             </View>
 
-            {/* ⭐ Rating summary - Below profile picture section */}
-            {loadDetails && (
-              <View style={{ marginBottom: 12, marginTop: 8 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}
-                >
-                  {loadingRating ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={config.colors.primary}
-                    />
-                  ) : ratingSummary ? (
-                    <>
-                      {renderStars(ratingSummary.value)}
-                      <Text
-                        style={{
-                          marginLeft: 6,
-                          fontSize: 12,
-                          color: isDarkMode ? '#e5e7eb' : '#4b5563',
-                        }}
-                      >
-                        {ratingSummary.value.toFixed(1)} / 5 ·{' '}
-                        {t('reviews.rating_count', { count: ratingSummary.count })}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: isDarkMode ? '#9ca3af' : '#6b7280',
-                      }}
-                    >
-                      {t('settings.not_rated')}
-                    </Text>
-                  )}
+            {/* Images carousel — OUTSIDE vertical ScrollView to avoid gesture conflict */}
+            {images.length > 0 && (
+              <PostImageCarousel
+                images={images}
+                isDarkMode={isDarkMode}
+                screenWidth={screenWidth}
+              />
+            )}
 
-                  {!loadingRating && createdAtText && (
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        backgroundColor: '#16A34A',
-                        paddingHorizontal: 5,
-                        borderRadius: 4,
-                        paddingVertical: 1,
-                        color: 'white',
-                        marginLeft: 5,
-                      }}
-                    >
-                      {t('settings.joined', { time: createdAtText })}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+            >
+              {/* Tags */}
+              {tags.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, marginBottom: 4 }}>
+                  {tags.map((tag, idx) => (
+                    <View key={idx} style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 12,
+                      backgroundColor: getTagColor(tag),
+                    }}>
+                      <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Description */}
+              {post.desc ? (
+                <Text style={{
+                  fontSize: 14,
+                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  lineHeight: 20,
+                  marginTop: 10,
+                  marginBottom: 10,
+                }}>
+                  {post.desc}
+                </Text>
+              ) : null}
+
+
+              {/* Like count */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 10,
+                borderTopWidth: 1,
+                borderTopColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                marginBottom: 10,
+              }}>
+                <Icon name="heart" size={16} color="#EF4444" />
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  marginLeft: 6,
+                }}>
+                  {likeCount} {likeCount === 1 ? 'Like' : 'Likes'}
+                </Text>
+                {post.commentCount > 0 && (
+                  <>
+                    <Text style={{ color: isDarkMode ? '#4b5563' : '#d1d5db', marginHorizontal: 8 }}>•</Text>
+                    <Icon name="chatbubble-outline" size={14} color={config.colors.primary} />
+                    <Text style={{
+                      fontSize: 12,
+                      fontWeight: '600',
+                      color: isDarkMode ? '#e5e7eb' : '#111827',
+                      marginLeft: 4,
+                    }}>
+                      {post.commentCount} {post.commentCount === 1 ? 'Comment' : 'Comments'}
                     </Text>
-                  )}
+                  </>
+                )}
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  }, [selectedPost, isDarkMode, avatar, userName, screenWidth, getTagColor]);
+
+  // ─────────────────────────────────────────────
+  return (
+    <>
+      {renderPostViewerModal}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isVisible && !selectedPost}
+        onRequestClose={toggleModal}
+      >
+        {/* Overlay */}
+        <Pressable style={styles.overlay} onPress={toggleModal} />
+
+        {/* Drawer Content */}
+        <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={styles.drawer}>
+            {/* Drag Handle */}
+            <View style={{ alignItems: 'center', marginBottom: 14 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: isDarkMode ? '#334155' : '#d1d5db' }} />
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 500 }}
+            >
+              {/* HEADER: user row */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginBottom: 16,
+                  paddingBottom: 16,
+                  borderBottomWidth: 1,
+                  borderBottomColor: isDarkMode ? '#1e293b' : '#f1f5f9',
+                }}
+              >
+                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
+                  {/* Avatar with Online Indicator */}
+                  <View style={{ position: 'relative', marginRight: 14 }}>
+                    <Image
+                      source={{
+                        uri: avatar
+                          ? avatar
+                          : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                      }}
+                      style={styles.profileImage2}
+                    />
+                    {/* Online/Offline Indicator */}
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        right: 0,
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: isOnline ? '#22c55e' : '#94a3b8',
+                        borderWidth: 3,
+                        borderColor: isDarkMode ? '#0f172a' : '#ffffff',
+                        zIndex: 10,
+                      }}
+                    />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    {/* Username Row */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <Text
+                        style={[styles.drawerSubtitleUser, { flexShrink: 1 }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {userName}{' '}
+                        {mergedUser?.isPro && (
+                          <Image
+                            source={require('../../../assets/pro.png')}
+                            style={{ width: 12, height: 12 }}
+                          />
+                        )}{' '}
+                        {selectedUser?.flage ? selectedUser.flage : ''}
+                      </Text>
+
+                      {/* Admin / Mod Badge */}
+                      {mergedUser?.isAdmin && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
+                          <Icon name="shield" size={10} color="#fff" />
+                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
+                        </View>
+                      )}
+                      {!mergedUser?.isAdmin && mergedUser?.isModerator && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
+                          <Icon name="shield-checkmark" size={10} color="#fff" />
+                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
+                        </View>
+                      )}
+                      <TouchableOpacity onPress={() => copyToClipboard(userName)} style={{ padding: 2 }}>
+                        <Icon name="copy-outline" size={14} color={isDarkMode ? '#64748b' : '#94a3b8'} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Roblox Verification Badge */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
+                      {mergedUser?.robloxUsername ? (
+                        <View style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: mergedUser?.robloxUsernameVerified
+                            ? (isDarkMode ? '#065f4620' : '#dcfce7')
+                            : (isDarkMode ? '#78350f20' : '#fef3c7'),
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 999,
+                          gap: 3,
+                        }}>
+                          <Text style={{ fontSize: 10 }}>
+                            {mergedUser?.robloxUsernameVerified ? '✓' : '⚠'}
+                          </Text>
+                          <Text style={{
+                            color: mergedUser?.robloxUsernameVerified
+                              ? (isDarkMode ? '#4ade80' : '#16a34a')
+                              : (isDarkMode ? '#fbbf24' : '#d97706'),
+                            fontSize: 10,
+                            fontWeight: '600',
+                          }}>
+                            {mergedUser?.robloxUsernameVerified ? 'Verified' : 'Unverified'}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{
+                          backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 999,
+                        }}>
+                          <Text style={{
+                            color: isDarkMode ? '#64748b' : '#94a3b8',
+                            fontSize: 10,
+                            fontWeight: '600',
+                          }}>
+                            No Roblox ID
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
 
-                {/* 💰 Points and Game Wins */}
-                {!loadingRating && (userPoints !== null || gameWins !== null) && (
+                {/* Ban/Unban Icon */}
+                <TouchableOpacity
+                  onPress={handleBanToggle}
+                  style={{
+                    padding: 8,
+                    borderRadius: 12,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                  }}
+                >
+                  <Icon
+                    name={isBlock ? 'shield-checkmark-outline' : 'ban-outline'}
+                    size={22}
+                    color={
+                      isBlock
+                        ? config.colors.hasBlockGreen
+                        : config.colors.wantBlockRed
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* ⭐ Rating summary */}
+              {loadDetails && (
+                <View style={{
+                  marginBottom: 14,
+                  padding: 14,
+                  borderRadius: 16,
+                  backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                }}>
                   <View
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
                       gap: 8,
-                      marginTop: 4,
                     }}
                   >
-                    {userPoints !== null && userPoints > 0 && (
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          backgroundColor: isDarkMode ? '#1e293b' : '#f0f9ff',
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: isDarkMode ? '#334155' : '#bae6fd',
-                        }}
-                      >
-                        <Icon name="diamond" size={14} color="#10B981" />
+                    {loadingRating ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={config.colors.primary}
+                      />
+                    ) : ratingSummary ? (
+                      <>
+                        {renderStars(ratingSummary.value)}
                         <Text
                           style={{
-                            fontSize: 11,
-                            fontWeight: 'bold',
-                            color: isDarkMode ? '#10B981' : '#059669',
-                            marginLeft: 4,
+                            fontSize: 12,
+                            fontWeight: '600',
+                            color: isDarkMode ? '#cbd5e1' : '#475569',
                           }}
                         >
-                          {Number(userPoints).toLocaleString()} {t('profile.pts')}
+                          {ratingSummary.value.toFixed(1)} / 5 ·{' '}
+                          {t('reviews.rating_count', { count: ratingSummary.count })}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: isDarkMode ? '#64748b' : '#94a3b8',
+                        }}
+                      >
+                        {t('settings.not_rated')}
+                      </Text>
+                    )}
+
+                    {!loadingRating && createdAtText && (
+                      <View style={{
+                        backgroundColor: '#16a34a',
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 999,
+                      }}>
+                        <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>
+                          {t('settings.joined', { time: createdAtText })}
                         </Text>
                       </View>
                     )}
-                    {gameWins !== null && gameWins > 0 && (
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          backgroundColor: isDarkMode ? '#1e293b' : '#fef3c7',
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: isDarkMode ? '#334155' : '#fde68a',
-                        }}
-                      >
-                        <Icon name="trophy" size={12} color="#F59E0B" />
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 'bold',
-                            color: isDarkMode ? '#F59E0B' : '#D97706',
-                            marginLeft: 4,
-                          }}
-                        >
-                          {gameWins}x {t('profile.win_count')}
-                        </Text>
-                      </View>
-                    )}
-                    {/* ✅ Followers Count */}
+                  </View>
+
+                  {/* 💰 Points, Wins & Followers */}
+                  {!loadingRating && (userPoints !== null || gameWins !== null) && (
                     <View
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: isDarkMode ? '#1e293b' : '#e0e7ff',
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: isDarkMode ? '#334155' : '#c7d2fe',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        marginTop: 10,
                       }}
                     >
-                      <Icon name="people" size={12} color="#6366f1" />
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 'bold',
-                          color: isDarkMode ? '#a5b4fc' : '#4f46e5',
-                          marginLeft: 4,
-                        }}
-                      >
-                        {followersCount || 0} Followers
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-            {/* 📝 Bio Section */}
-            {loadDetails && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 12,
-                  backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
-                  marginBottom: 12,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: '500',
-                    marginBottom: 6,
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
-                  }}
-                >
-                  {t('profile.bio')}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: isDarkMode ? '#e5e7eb' : '#111827',
-                    lineHeight: 18,
-                  }}
-                >
-                  {userBio || 'Hi there, I am new here'}
-                </Text>
-              </View>
-            )}
-            {/* 🐾 Pets section */}
-            {loadDetails && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
-                  marginBottom: 12,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '600',
-                    marginBottom: 6,
-                    color: isDarkMode ? '#e5e7eb' : '#111827',
-                  }}
-                >
-                  {t('home.categories.pets')}
-                </Text>
-
-                {loadingPets ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={config.colors.primary}
-                  />
-                ) : (
-                  <>
-                    {/* Owned */}
-                    <View style={{ marginBottom: 8 }}>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          marginBottom: 4,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '500',
-                            color: isDarkMode ? '#e5e7eb' : '#111827',
-                          }}
-                        >
-                          {t('profile.pets.owned_title')}
-                        </Text>
-                      </View>
-
-                      {ownedPets.length === 0 ? (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: isDarkMode ? '#9ca3af' : '#6b7280',
-                          }}
-                        >
-                          {t('profile.no_pets_listed')}
-                        </Text>
-                      ) : (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={{ paddingRight: 6 }}
-                        >
-                          <View style={{ flexDirection: 'row' }}>
-                            {ownedPets.map((pet, index) =>
-                              renderPetBubble(pet, index),
-                            )}
-                          </View>
-                        </ScrollView>
-                      )}
-                    </View>
-
-                    {/* Wishlist */}
-                    <View>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          marginBottom: 4,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '500',
-                            color: isDarkMode ? '#e5e7eb' : '#111827',
-                          }}
-                        >
-                          {t('profile.pets.wishlist_title')}
-                        </Text>
-                      </View>
-
-                      {wishlistPets.length === 0 ? (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: isDarkMode ? '#9ca3af' : '#6b7280',
-                          }}
-                        >
-                          {t('profile.no_wishlist_pets')}
-                        </Text>
-                      ) : (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={{ paddingRight: 6 }}
-                        >
-                          <View style={{ flexDirection: 'row' }}>
-                            {wishlistPets.map((pet, index) =>
-                              renderPetBubble(pet, index),
-                            )}
-                          </View>
-                        </ScrollView>
-                      )}
-                    </View>
-                  </>
-                )}
-              </View>
-            )}
-
-            {/* 📝 Reviews section */}
-            {loadDetails && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
-                  marginBottom: 16,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '600',
-                    marginBottom: 6,
-                    color: isDarkMode ? '#e5e7eb' : '#111827',
-                  }}
-                >
-                  {t('profile.recent_reviews')}
-                </Text>
-
-                {loadingReviews && reviews.length === 0 ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={config.colors.primary}
-                  />
-                ) : reviews.length === 0 ? (
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    }}
-                  >
-                    {t('profile.no_reviews_yet')}
-                  </Text>
-                ) : (
-                  <>
-                    {reviews.map((rev) => {
-                      const tsMs = getTimestampMs(
-                        rev.updatedAt || rev.createdAt,
-                      );
-                      const timeLabel = tsMs ? formatCreatedAt(tsMs) : null;
-
-                      return (
+                      {userPoints !== null && userPoints > 0 && (
                         <View
-                          key={rev.id}
                           style={{
-                            paddingVertical: 4,
-                            paddingHorizontal: 4,
-                            borderBottomWidth: 1,
-                            borderBottomColor: isDarkMode
-                              ? '#1f2937'
-                              : '#e5e7eb',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: isDarkMode ? '#064e3b20' : '#ecfdf5',
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            gap: 5,
                           }}
                         >
-                          <View
+                          <Text style={{ fontSize: 12 }}>💎</Text>
+                          <Text
                             style={{
-                              flexDirection: 'row',
-                              justifyContent: 'space-between',
-                              alignItems: 'flex-start',
-                              marginBottom: 4,
+                              fontSize: 12,
+                              fontWeight: '700',
+                              color: isDarkMode ? '#34d399' : '#059669',
                             }}
                           >
-                            <View style={{ flex: 1 }}>
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: '600',
-                                  color: isDarkMode ? '#e5e7eb' : '#111827',
-                                  marginBottom: 2,
-                                }}
-                              >
-                                {rev.userName || t('profile.anonymous')}
-                              </Text>
-                              {!!rev?.review && (
-                                <Text
-                                  style={{
-                                    fontSize: 11,
-                                    color: isDarkMode ? '#d1d5db' : '#4b5563',
-                                    lineHeight: 16,
-                                  }}
-                                >
-                                  {rev.review}
-                                </Text>
-                              )}
-                              {rev?.edited && (
-                                <Text
-                                  style={{
-                                    fontSize: 10,
-                                    color: isDarkMode ? '#9ca3af' : '#9ca3af',
-                                    marginTop: 2,
-                                  }}
-                                >
-                                  {t('reviews.edited')}
-                                </Text>
-                              )}
-                            </View>
-
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              {timeLabel && (
-                                <Text
-                                  style={{
-                                    fontSize: 10,
-                                    color: isDarkMode ? '#9ca3af' : '#9ca3af',
-                                  }}
-                                >
-                                  {timeLabel}
-                                </Text>
-                              )}
-                              {renderStars(rev?.rating || 0)}
-                            </View>
-                          </View>
+                            {Number(userPoints).toLocaleString()} {t('profile.pts')}
+                          </Text>
                         </View>
-                      );
-                    })}
-
-                    {hasMoreReviews && !loadingReviews && (
-                      <TouchableOpacity
-                        onPress={handleLoadMoreReviews}
-                        style={{
-                          marginTop: 8,
-                          alignSelf: 'center',
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderRadius: 999,
-                          borderWidth: 1,
-                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
-                        }}
-                      >
-                        <Text
+                      )}
+                      {gameWins !== null && gameWins > 0 && (
+                        <View
                           style={{
-                            fontSize: 11,
-                            color: isDarkMode ? '#e5e7eb' : '#111827',
-                          }}
-                        >
-                          {t('profile.load_more_reviews')}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {loadingReviews && hasMoreReviews && (
-                      <ActivityIndicator
-                        size="small"
-                        color={config.colors.primary}
-                        style={{ marginTop: 6, alignSelf: 'center' }}
-                      />
-                    )}
-                  </>
-                )}
-              </View>
-            )}
-
-            {/* 💼 Trades section */}
-            {loadDetails && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
-                  marginBottom: 16,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '600',
-                    marginBottom: 6,
-                    color: isDarkMode ? '#e5e7eb' : '#111827',
-                  }}
-                >
-                  {t('profile.recent_trades')}
-                </Text>
-
-                {loadingTrades && trades.length === 0 ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={config.colors.primary}
-                  />
-                ) : trades.length === 0 ? (
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    }}
-                  >
-                    {t('profile.no_trades_yet')}
-                  </Text>
-                ) : (
-                  <>
-                    {trades.map((trade) => renderTradeItem(trade))}
-
-                    {hasMoreTrades && !loadingTrades && (
-                      <TouchableOpacity
-                        onPress={handleLoadMoreTrades}
-                        style={{
-                          marginTop: 8,
-                          alignSelf: 'center',
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderRadius: 999,
-                          borderWidth: 1,
-                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: isDarkMode ? '#e5e7eb' : '#111827',
-                          }}
-                        >
-                          {t('profile.load_more_trades')}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {loadingTrades && hasMoreTrades && (
-                      <ActivityIndicator
-                        size="small"
-                        color={config.colors.primary}
-                        style={{ marginTop: 6, alignSelf: 'center' }}
-                      />
-                    )}
-                  </>
-                )}
-              </View>
-            )}
-
-            {/* 🖼️ Posts section */}
-            {loadDetails && (
-              <View
-                style={{
-                  borderRadius: 12,
-                  padding: 10,
-                  backgroundColor: isDarkMode ? '#020617' : '#f3f4f6',
-                  marginBottom: 16,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '600',
-                    marginBottom: 6,
-                    color: isDarkMode ? '#e5e7eb' : '#111827',
-                  }}
-                >
-                  {t('feed.recent_posts') || 'Recent Posts'}
-                </Text>
-
-                {loadingPosts && posts.length === 0 ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={config.colors.primary}
-                  />
-                ) : posts.length === 0 ? (
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    }}
-                  >
-                    {t('feed.no_posts_found') || 'No posts yet'}
-                  </Text>
-                ) : (
-                  <>
-                    {posts.map((post) => renderPostItem(post))}
-
-                    {hasMorePosts && !loadingPosts && (
-                      <TouchableOpacity
-                        onPress={handleLoadMorePosts}
-                        style={{
-                          marginTop: 8,
-                          alignSelf: 'center',
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderRadius: 999,
-                          borderWidth: 1,
-                          borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: isDarkMode ? '#e5e7eb' : '#111827',
-                          }}
-                        >
-                          {t('feed.load_more') || 'Load More'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {loadingPosts && hasMorePosts && (
-                      <ActivityIndicator
-                        size="small"
-                        color={config.colors.primary}
-                        style={{ marginTop: 6, alignSelf: 'center' }}
-                      />
-                    )}
-                  </>
-                )}
-              </View>
-            )}
-
-            {/* View details button */}
-            {!loadDetails && (
-              <TouchableOpacity
-                style={styles.saveButtonProfile}
-                onPress={() => setLoadDetails(true)}
-              >
-                <Text
-                  style={[
-                    styles.saveButtonTextProfile,
-                    { color: isDarkMode ? 'white' : 'black' },
-                  ]}
-                >
-                  {t('profile.view_detail_profile')}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Roblox Profile Button */}
-            {mergedUser?.robloxUsername && (
-              <TouchableOpacity
-                style={[styles.saveButton, {
-                  backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',
-                  marginBottom: 8,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }]}
-                onPress={handleOpenRobloxProfile}
-              >
-                <Icon
-                  name="game-controller-outline"
-                  size={16}
-                  color="#FFFFFF"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
-                  {t('profile.view_roblox_profile')}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* 🛡️ Moderator/Admin Actions */}
-            {(isAdmin || user?.isModerator) && (
-              <View style={{
-                marginTop: 10,
-                padding: 10,
-                backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
-                borderRadius: 8,
-                marginBottom: 10,
-                borderLeftWidth: 4,
-                borderLeftColor: config.colors.wantBlockRed
-              }}>
-                <Text style={{
-                  fontSize: 12,
-                  fontWeight: 'bold',
-                  color: isDarkMode ? '#94a3b8' : '#64748b',
-                  marginBottom: 8
-                }}>
-                  {isAdmin ? "Admin Actions" : "Moderator Actions"}
-                </Text>
-
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {/* Strike Actions */}
-                  <View style={{ marginBottom: 8 }}>
-                    <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 4, fontWeight: '600' }}>
-                      Server Strikes:
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                      {[1, 2, 3].map((strike) => (
-                        <TouchableOpacity
-                          key={strike}
-                          onPress={() => handleApplyStrike(strike)}
-                          style={{
-                            backgroundColor: strike === 1 ? '#F97316' : strike === 2 ? '#DC2626' : '#991B1B', // Orange / Red / Dark Red
-                            paddingVertical: 6,
-                            paddingHorizontal: 10,
-                            borderRadius: 6,
+                            flexDirection: 'row',
                             alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11 }}>
-                            Strike {strike}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Mute Actions */}
-                  <View style={{ marginBottom: 8 }}>
-                    <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 4, fontWeight: '600' }}>
-                      Mute (no strike):
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                      {[5, 10, 30].map((mins) => (
-                        <TouchableOpacity
-                          key={mins}
-                          onPress={() => handleMuteUser(mins)}
-                          style={{
-                            backgroundColor: '#7C3AED',
-                            paddingVertical: 6,
+                            backgroundColor: isDarkMode ? '#78350f20' : '#fffbeb',
                             paddingHorizontal: 10,
-                            borderRadius: 6,
-                            alignItems: 'center',
-                            justifyContent: 'center'
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            gap: 5,
                           }}
                         >
-                          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 11 }}>
-                            {mins} min
+                          <Text style={{ fontSize: 12 }}>🏆</Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '700',
+                              color: isDarkMode ? '#fbbf24' : '#d97706',
+                            }}
+                          >
+                            {gameWins}x {t('profile.win_count')}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
+                        </View>
+                      )}
+                      {/* ✅ Followers Count */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: isDarkMode ? '#312e8120' : '#eef2ff',
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderRadius: 999,
+                          gap: 5,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12 }}>👥</Text>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: isDarkMode ? '#a5b4fc' : '#4f46e5',
+                          }}
+                        >
+                          {followersCount || 0} Followers
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-
-                  {/* Unban Button (Only if banned) */}
-                  {isBanned && (
-                    <TouchableOpacity
-                      onPress={handleUnbanUser}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: '#10B981',
-                        paddingVertical: 6,
-                        paddingHorizontal: 12,
-                        borderRadius: 6,
-                        alignSelf: 'flex-end',
-                        marginBottom: 5
-                      }}
-                    >
-                      <Icon name="checkmark-circle-outline" size={16} color="white" />
-                      <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
-                        Unban User
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Promote/Demote Moderator (Admin Only) */}
-                  {isAdmin && (
-                    <TouchableOpacity
-                      onPress={mergedUser?.isModerator ? handleDemoteModerator : handlePromoteModerator}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        // backgroundColor: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6',
-                        paddingVertical: 12,
-                        paddingHorizontal: 12,
-                        borderRadius: 6,
-                        marginLeft: 8,
-                        alignSelf: 'flex-end',
-                      }}
-                    >
-                      <Icon name={mergedUser?.isModerator ? "arrow-down-circle-outline" : "shield-outline"} size={16} color="white" />
-                      <Text style={{ color: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
-                        {mergedUser?.isModerator ? "Remove Mod" : "Make Mod"}
-                      </Text>
-                    </TouchableOpacity>
                   )}
                 </View>
-              </View>
-            )}
+              )}
+              {/* 📝 Bio Section */}
+              {loadDetails && (
+                <View
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      marginBottom: 6,
+                      color: isDarkMode ? '#64748b' : '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {t('profile.bio')}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: isDarkMode ? '#e2e8f0' : '#1e293b',
+                      lineHeight: 19,
+                    }}
+                  >
+                    {userBio || 'Hi there, I am new here'}
+                  </Text>
+                </View>
+              )}
+              {/* 🐾 Pets section */}
+              {loadDetails && (
+                <View
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      marginBottom: 8,
+                      color: isDarkMode ? '#64748b' : '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {t('home.categories.pets')}
+                  </Text>
 
-            {/* Follow / Unfollow Button */}
-            {!fromPvtChat && user?.id !== selectedUserId && (
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  {
-                    backgroundColor: isFollowing ? '#8E8E93' : config.colors.primary,
-                    marginBottom: 10,
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                  }
-                ]}
-                onPress={handleFollowToggle}
-                disabled={followLoading}
-              >
-                {followLoading ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <>
-                    <Icon name={isFollowing ? "person-remove-outline" : "person-add-outline"} size={18} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.saveButtonText}>
-                      {isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}
+                  {loadingPets ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={config.colors.primary}
+                    />
+                  ) : (
+                    <>
+                      {/* Owned */}
+                      <View style={{ marginBottom: 8 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '500',
+                              color: isDarkMode ? '#e5e7eb' : '#111827',
+                            }}
+                          >
+                            {t('profile.pets.owned_title')}
+                          </Text>
+                        </View>
+
+                        {ownedPets.length === 0 ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isDarkMode ? '#9ca3af' : '#6b7280',
+                            }}
+                          >
+                            {t('profile.no_pets_listed')}
+                          </Text>
+                        ) : (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ paddingRight: 6 }}
+                          >
+                            <View style={{ flexDirection: 'row' }}>
+                              {ownedPets.map((pet, index) =>
+                                renderPetBubble(pet, index),
+                              )}
+                            </View>
+                          </ScrollView>
+                        )}
+                      </View>
+
+                      {/* Wishlist */}
+                      <View>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '500',
+                              color: isDarkMode ? '#e5e7eb' : '#111827',
+                            }}
+                          >
+                            {t('profile.pets.wishlist_title')}
+                          </Text>
+                        </View>
+
+                        {wishlistPets.length === 0 ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isDarkMode ? '#9ca3af' : '#6b7280',
+                            }}
+                          >
+                            {t('profile.no_wishlist_pets')}
+                          </Text>
+                        ) : (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ paddingRight: 6 }}
+                          >
+                            <View style={{ flexDirection: 'row' }}>
+                              {wishlistPets.map((pet, index) =>
+                                renderPetBubble(pet, index),
+                              )}
+                            </View>
+                          </ScrollView>
+                        )}
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* 📝 Reviews section */}
+              {loadDetails && (
+                <View
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      marginBottom: 8,
+                      color: isDarkMode ? '#64748b' : '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {t('profile.recent_reviews')}
+                  </Text>
+
+                  {loadingReviews && reviews.length === 0 ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={config.colors.primary}
+                    />
+                  ) : reviews.length === 0 ? (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
+                      }}
+                    >
+                      {t('profile.no_reviews_yet')}
                     </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
+                  ) : (
+                    <>
+                      {reviews.map((rev) => {
+                        const tsMs = getTimestampMs(
+                          rev.updatedAt || rev.createdAt,
+                        );
+                        const timeLabel = tsMs ? formatCreatedAt(tsMs) : null;
 
-            {/* Start chat button */}
-            {!fromPvtChat && (
-              <TouchableOpacity style={styles.saveButton} onPress={handleStartChat}>
-                <Text style={styles.saveButtonText}>
-                  {t('chat.start_chat')}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
+                        return (
+                          <View
+                            key={rev.id}
+                            style={{
+                              paddingVertical: 4,
+                              paddingHorizontal: 4,
+                              borderBottomWidth: 1,
+                              borderBottomColor: isDarkMode
+                                ? '#1f2937'
+                                : '#e5e7eb',
+                            }}
+                          >
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                                marginBottom: 4,
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: '600',
+                                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                                    marginBottom: 2,
+                                  }}
+                                >
+                                  {rev.userName || t('profile.anonymous')}
+                                </Text>
+                                {!!rev?.review && (
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      color: isDarkMode ? '#d1d5db' : '#4b5563',
+                                      lineHeight: 16,
+                                    }}
+                                  >
+                                    {rev.review}
+                                  </Text>
+                                )}
+                                {rev?.edited && (
+                                  <Text
+                                    style={{
+                                      fontSize: 10,
+                                      color: isDarkMode ? '#9ca3af' : '#9ca3af',
+                                      marginTop: 2,
+                                    }}
+                                  >
+                                    {t('reviews.edited')}
+                                  </Text>
+                                )}
+                              </View>
+
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                {timeLabel && (
+                                  <Text
+                                    style={{
+                                      fontSize: 10,
+                                      color: isDarkMode ? '#9ca3af' : '#9ca3af',
+                                    }}
+                                  >
+                                    {timeLabel}
+                                  </Text>
+                                )}
+                                {renderStars(rev?.rating || 0)}
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })}
+
+                      {hasMoreReviews && !loadingReviews && (
+                        <TouchableOpacity
+                          onPress={handleLoadMoreReviews}
+                          style={{
+                            marginTop: 8,
+                            alignSelf: 'center',
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isDarkMode ? '#e5e7eb' : '#111827',
+                            }}
+                          >
+                            {t('profile.load_more_reviews')}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {loadingReviews && hasMoreReviews && (
+                        <ActivityIndicator
+                          size="small"
+                          color={config.colors.primary}
+                          style={{ marginTop: 6, alignSelf: 'center' }}
+                        />
+                      )}
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* 💼 Trades section */}
+              {loadDetails && (
+                <View
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      marginBottom: 8,
+                      color: isDarkMode ? '#64748b' : '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {t('profile.recent_trades')}
+                  </Text>
+
+                  {loadingTrades && trades.length === 0 ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={config.colors.primary}
+                    />
+                  ) : trades.length === 0 ? (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
+                      }}
+                    >
+                      {t('profile.no_trades_yet')}
+                    </Text>
+                  ) : (
+                    <>
+                      {trades.map((trade) => renderTradeItem(trade))}
+
+                      {hasMoreTrades && !loadingTrades && (
+                        <TouchableOpacity
+                          onPress={handleLoadMoreTrades}
+                          style={{
+                            marginTop: 8,
+                            alignSelf: 'center',
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isDarkMode ? '#e5e7eb' : '#111827',
+                            }}
+                          >
+                            {t('profile.load_more_trades')}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {loadingTrades && hasMoreTrades && (
+                        <ActivityIndicator
+                          size="small"
+                          color={config.colors.primary}
+                          style={{ marginTop: 6, alignSelf: 'center' }}
+                        />
+                      )}
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* 🖼️ Posts section */}
+              {loadDetails && (
+                <View
+                  style={{
+                    borderRadius: 16,
+                    padding: 14,
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      marginBottom: 8,
+                      color: isDarkMode ? '#64748b' : '#94a3b8',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {t('feed.recent_posts') || 'Recent Posts'}
+                  </Text>
+
+                  {loadingPosts && posts.length === 0 ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={config.colors.primary}
+                    />
+                  ) : posts.length === 0 ? (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
+                      }}
+                    >
+                      {t('feed.no_posts_found') || 'No posts yet'}
+                    </Text>
+                  ) : (
+                    <>
+                      {posts.map((post) => renderPostItem(post))}
+
+                      {hasMorePosts && !loadingPosts && (
+                        <TouchableOpacity
+                          onPress={handleLoadMorePosts}
+                          style={{
+                            marginTop: 8,
+                            alignSelf: 'center',
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isDarkMode ? '#e5e7eb' : '#111827',
+                            }}
+                          >
+                            {t('feed.load_more') || 'Load More'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {loadingPosts && hasMorePosts && (
+                        <ActivityIndicator
+                          size="small"
+                          color={config.colors.primary}
+                          style={{ marginTop: 6, alignSelf: 'center' }}
+                        />
+                      )}
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* View details button */}
+              {!loadDetails && (
+                <TouchableOpacity
+                  style={styles.saveButtonProfile}
+                  onPress={() => setLoadDetails(true)}
+                >
+                  <Text
+                    style={[
+                      styles.saveButtonTextProfile,
+                      { color: isDarkMode ? 'white' : 'black' },
+                    ]}
+                  >
+                    {t('profile.view_detail_profile')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Roblox Profile Button */}
+              {mergedUser?.robloxUsername && (
+                <TouchableOpacity
+                  style={[styles.saveButton, {
+                    backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',
+                    marginBottom: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }]}
+                  onPress={handleOpenRobloxProfile}
+                >
+                  <Icon
+                    name="game-controller-outline"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
+                    {t('profile.view_roblox_profile')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* 🛡️ Moderator/Admin Actions */}
+              {(isAdmin || user?.isModerator) && (
+                <View style={{
+                  marginTop: 4,
+                  padding: 14,
+                  backgroundColor: isDarkMode ? '#1e293b' : '#fef2f2',
+                  borderRadius: 16,
+                  marginBottom: 12,
+                  borderLeftWidth: 4,
+                  borderLeftColor: config.colors.wantBlockRed
+                }}>
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: isDarkMode ? '#94a3b8' : '#64748b',
+                    marginBottom: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.8,
+                  }}>
+                    {isAdmin ? "Admin Actions" : "Moderator Actions"}
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {/* Strike Actions */}
+                    <View style={{ marginBottom: 10 }}>
+                      <Text style={{ fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Server Strikes:
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {[1, 2, 3].map((strike) => (
+                          <TouchableOpacity
+                            key={strike}
+                            onPress={() => handleApplyStrike(strike)}
+                            style={{
+                              backgroundColor: strike === 1 ? '#F97316' : strike === 2 ? '#DC2626' : '#991B1B',
+                              paddingVertical: 7,
+                              paddingHorizontal: 14,
+                              borderRadius: 12,
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Text style={{ color: 'white', fontWeight: '700', fontSize: 11 }}>
+                              Strike {strike}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Mute Actions */}
+                    <View style={{ marginBottom: 10 }}>
+                      <Text style={{ fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Mute (no strike):
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {[5, 10, 30].map((mins) => (
+                          <TouchableOpacity
+                            key={mins}
+                            onPress={() => handleMuteUser(mins)}
+                            style={{
+                              backgroundColor: '#7C3AED',
+                              paddingVertical: 7,
+                              paddingHorizontal: 14,
+                              borderRadius: 12,
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Text style={{ color: 'white', fontWeight: '700', fontSize: 11 }}>
+                              {mins} min
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Unban Button (Only if banned) */}
+                    {isBanned && (
+                      <TouchableOpacity
+                        onPress={handleUnbanUser}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#10B981',
+                          paddingVertical: 6,
+                          paddingHorizontal: 12,
+                          borderRadius: 6,
+                          alignSelf: 'flex-end',
+                          marginBottom: 5
+                        }}
+                      >
+                        <Icon name="checkmark-circle-outline" size={16} color="white" />
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
+                          Unban User
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Promote/Demote Moderator (Admin Only) */}
+                    {isAdmin && (
+                      <TouchableOpacity
+                        onPress={mergedUser?.isModerator ? handleDemoteModerator : handlePromoteModerator}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          // backgroundColor: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6',
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 6,
+                          marginLeft: 8,
+                          alignSelf: 'flex-end',
+                        }}
+                      >
+                        <Icon name={mergedUser?.isModerator ? "arrow-down-circle-outline" : "shield-outline"} size={16} color="white" />
+                        <Text style={{ color: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6', fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
+                          {mergedUser?.isModerator ? "Remove Mod" : "Make Mod"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* Follow / Unfollow Button */}
+              {!fromPvtChat && user?.id !== selectedUserId && (
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    {
+                      backgroundColor: isFollowing ? '#8E8E93' : config.colors.primary,
+                      marginBottom: 10,
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }
+                  ]}
+                  onPress={handleFollowToggle}
+                  disabled={followLoading}
+                >
+                  {followLoading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Icon name={isFollowing ? "person-remove-outline" : "person-add-outline"} size={18} color="#FFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.saveButtonText}>
+                        {isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* Start chat button */}
+              {!fromPvtChat && (
+                <TouchableOpacity style={styles.saveButton} onPress={handleStartChat}>
+                  <Text style={styles.saveButtonText}>
+                    {t('chat.start_chat')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+    </>
   );
 };
 

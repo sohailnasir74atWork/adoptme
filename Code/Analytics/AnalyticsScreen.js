@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Image, RefreshControl, Dimensions,
+  ActivityIndicator, Image, RefreshControl, Dimensions, Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
@@ -56,7 +56,7 @@ const analyticsCache = new MMKV({ id: 'analytics-cache' });
 
 // Cache durations
 const ANALYTICS_CACHE_MS = 60 * 60 * 1000; // 3 hours
-const CHANGES_CACHE_MS = 10000;   // 1 hour
+const CHANGES_CACHE_MS = 60 * 60 * 1000;   // 1 hour
 
 // CDN URLs — you push data here after cloud function runs
 const ANALYTICS_CDN_URL = 'https://analytics.b-cdn.net';
@@ -80,6 +80,238 @@ const BAR_COLORS = [
   '#F472B6', '#FB923C', '#34D399', '#FBBF24', '#22D3EE', '#F87171',
 ];
 
+// Value type labels for display (module-level constant to avoid re-allocation)
+const VALUE_TYPE_LABELS = {
+  d_nopotion: 'D', d_fly: 'D-F', d_ride: 'D-R', d_flyride: 'D-FR',
+  n_nopotion: 'N', n_fly: 'N-F', n_ride: 'N-R', n_flyride: 'N-FR',
+  m_nopotion: 'M', m_fly: 'M-F', m_ride: 'M-R', m_flyride: 'M-FR',
+};
+
+// ── Extracted sub-components (outside main component to prevent unmount/remount on every state change) ──
+
+const LockedOverlay = memo(({ message, onPress, styles }) => (
+  <TouchableOpacity
+    style={styles.lockedOverlay}
+    activeOpacity={0.9}
+    onPress={onPress}
+  >
+    <View style={styles.lockedContent}>
+      <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
+      <Text style={styles.lockedText}>{message}</Text>
+      <View style={styles.unlockButton}>
+        <Text style={styles.unlockButtonText}>{'\u{2B50}'} Upgrade</Text>
+      </View>
+    </View>
+  </TouchableOpacity>
+));
+
+const ItemRow = memo(({ item, index, showSignal, showChange, locked, getImageUrl, isDarkMode, styles }) => {
+  const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+  const rankDisplay = index < 3 ? medals[index] : `#${index + 1}`;
+
+  const getSignalColor = (signal) => {
+    switch (signal) {
+      case 'rising': case 'strong_rise': case 'likely_rise': return FUN_COLORS.green;
+      case 'falling': case 'strong_fall': case 'likely_fall': return FUN_COLORS.red;
+      default: return FUN_COLORS.yellow;
+    }
+  };
+
+  const getSignalEmoji = (signal) => {
+    switch (signal) {
+      case 'rising': case 'strong_rise': case 'likely_rise': return 'trending-up';
+      case 'falling': case 'strong_fall': case 'likely_fall': return 'trending-down';
+      default: return 'remove-outline';
+    }
+  };
+
+  return (
+    <View style={[styles.itemRow, index % 2 === 0 && styles.itemRowAlt]}>
+      <Text style={[styles.itemRank, index < 3 && { fontSize: 18 }]}>{rankDisplay}</Text>
+      <View style={styles.itemImageWrap}>
+        {item.image ? (
+          <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+        ) : (
+          <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+            <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
+          </View>
+        )}
+      </View>
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName} numberOfLines={1}>{locked ? '???' : item.name}</Text>
+        <Text style={styles.itemType}>{item.type}</Text>
+      </View>
+      {showSignal && item.signal && (
+        <View style={[styles.signalBadge, { backgroundColor: getSignalColor(item.signal) + '25' }]}>
+          <Icon name={getSignalEmoji(item.signal)} size={16} color={getSignalColor(item.signal)} />
+          <Text style={[styles.signalText, { color: getSignalColor(item.signal) }]}>
+            {item.ratio?.toFixed(1)}x
+          </Text>
+        </View>
+      )}
+      {showChange && item.changePercent !== undefined && (
+        <View style={[styles.changeBadge, {
+          backgroundColor: item.changePercent > 0 ? FUN_COLORS.green + '25' : FUN_COLORS.red + '25'
+        }]}>
+          <Text style={{ fontSize: 12 }}>{item.changePercent > 0 ? '\u{1F4C8}' : '\u{1F4C9}'}</Text>
+          <Text style={[styles.changeText, {
+            color: item.changePercent > 0 ? FUN_COLORS.green : FUN_COLORS.red
+          }]}>
+            {Math.abs(item.changePercent)}%
+          </Text>
+        </View>
+      )}
+      {!showSignal && !showChange && (
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{(item.count || 0) * VM}x</Text>
+        </View>
+      )}
+    </View>
+  );
+});
+
+const MiniBarChart = memo(({ data, label, peakHour, styles }) => {
+  const maxVal = Math.max(...data, 1);
+  return (
+    <View style={styles.chartContainer}>
+      <Text style={styles.chartLabel}>{label}</Text>
+      <View style={styles.chartBars}>
+        {data.map((val, i) => {
+          const isPeak = i === peakHour;
+          return (
+            <View key={i} style={styles.chartBarWrap}>
+              <View
+                style={[
+                  styles.chartBar,
+                  {
+                    height: Math.max(4, (val / maxVal) * 70),
+                    backgroundColor: isPeak ? FUN_COLORS.orange : BAR_COLORS[i],
+                    opacity: isPeak ? 1 : 0.7,
+                  },
+                ]}
+              />
+              {i % 4 === 0 && (
+                <Text style={styles.chartBarLabel}>{i}h</Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
+const SectionHeader = memo(({ icon, title, subtitle, locked, emoji, styles }) => (
+  <View style={styles.sectionHeader}>
+    <View style={styles.sectionHeaderLeft}>
+      {emoji ? (
+        <Text style={{ fontSize: 20 }}>{emoji}</Text>
+      ) : (
+        <FontAwesome name={icon} size={18} color={config.colors.primary} solid />
+      )}
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+    {locked && (
+      <View style={styles.proBadge}>
+        <Text style={{ fontSize: 12 }}>{'\u{1F451}'}</Text>
+        <Text style={styles.proBadgeText}>PRO</Text>
+      </View>
+    )}
+    {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+  </View>
+));
+
+// ── Change Row Component (heavy — memoized to avoid re-renders) ──
+const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, formatNumber, getPrimaryChange, styles }) => {
+  const primary = getPrimaryChange(item);
+  const isUp = primary.pct > 0;
+  const isZero = primary.pct === 0;
+  const hasMultiValues = item.values && Object.keys(item.values).length > 0;
+
+  return (
+    <View style={[styles.changeRow, index % 2 === 0 && styles.itemRowAlt, { flexDirection: 'column', alignItems: 'stretch' }]}>
+      {/* Top row: Image + Name + Primary Change */}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={styles.changeLeft}>
+          <View style={styles.itemImageWrap}>
+            {item.image ? (
+              <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+            ) : (
+              <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
+              </View>
+            )}
+          </View>
+          <View style={styles.changeInfo}>
+            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.itemType}>{item.type || 'Pet'}</Text>
+              {item.date && (
+                <Text style={styles.changeDateText}>{getTimeAgo(item.date)}</Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Primary value change */}
+        <View style={styles.changeRight}>
+          <View style={styles.changeValuesRow}>
+            <Text style={styles.changeOldValue}>{formatNumber(primary.oldVal)}</Text>
+            <Text style={{ fontSize: 12 }}>{'\u{27A1}\u{FE0F}'}</Text>
+            <Text style={[styles.changeNewValue, { color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#aaa' : '#666') : FUN_COLORS.red }]}>
+              {formatNumber(primary.newVal)}
+            </Text>
+          </View>
+          <View style={[styles.changePctBadge, {
+            backgroundColor: isUp ? FUN_COLORS.green + '25' : isZero ? (isDarkMode ? '#33333340' : '#eee') : FUN_COLORS.red + '25',
+          }]}>
+            {!isZero && (
+              <Text style={{ fontSize: 10 }}>{isUp ? '\u{2B06}\u{FE0F}' : '\u{2B07}\u{FE0F}'}</Text>
+            )}
+            <Text style={[styles.changePctText, {
+              color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red,
+            }]}>
+              {isZero ? '0%' : `${isUp ? '+' : ''}${primary.pct}%`}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Sub-values grid (all value types) */}
+      {hasMultiValues && (
+        <View style={styles.subValuesGrid}>
+          {Object.entries(item.values).map(([vKey, v]) => {
+            const label = VALUE_TYPE_LABELS[vKey] || vKey;
+            const vDiff = v.newVal - v.oldVal;
+            const vPct = v.oldVal > 0 ? Math.round((vDiff / v.oldVal) * 100) : 0;
+            const vUp = vDiff > 0;
+            const vSame = vDiff === 0;
+            const isPrimary = vKey === (item.primary || 'd_nopotion');
+
+            return (
+              <View key={vKey} style={[styles.subValueItem, isPrimary && styles.subValueItemPrimary]}>
+                <Text style={[styles.subValueLabel, isPrimary && { color: config.colors.primary }]}>{label}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                  <Text style={styles.subValueOld}>{formatNumber(v.oldVal)}</Text>
+                  <Icon name="arrow-forward" size={8} color={isDarkMode ? '#444' : '#ccc'} />
+                  <Text style={[styles.subValueNew, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red }]}>
+                    {formatNumber(v.newVal)}
+                  </Text>
+                </View>
+                <Text style={[styles.subValuePct, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#666' : '#bbb') : FUN_COLORS.red }]}>
+                  {vSame ? '0%' : `${vUp ? '+' : ''}${vPct}%`}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+});
+
+const CHANGES_PAGE_SIZE = 15;
+
 const AnalyticsScreen = ({ navigation }) => {
   const { theme, single_offer_wall } = useGlobalState();
   const { localState } = useLocalState();
@@ -95,6 +327,7 @@ const AnalyticsScreen = ({ navigation }) => {
   const [valueChanges, setValueChanges] = useState(null);
   const [valueChangesLoading, setValueChangesLoading] = useState(false);
   const [changesFilter, setChangesFilter] = useState('all'); // 'all', 'increased', 'decreased'
+  const [changesVisible, setChangesVisible] = useState(CHANGES_PAGE_SIZE); // progressive rendering
 
   // ── Fetch from Bunny CDN with MMKV caching ──
   const fetchFromCDN = useCallback(async (url, cacheKey, cacheDuration) => {
@@ -114,7 +347,6 @@ const AnalyticsScreen = ({ navigation }) => {
       // Cache expired or missing — fetch from CDN
       const res = await fetch(`${url}?cb=${Date.now()}`);
       const data = await res.json();
-      console.log(res);
 
       // Save to MMKV cache
       analyticsCache.set(cacheKey, JSON.stringify(data));
@@ -224,7 +456,6 @@ const AnalyticsScreen = ({ navigation }) => {
       }
 
       const raw = await fetchFromCDN(VALUE_CHANGES_CDN_URL, 'value_changes', CHANGES_CACHE_MS);
-      console.log(raw)
       const data = normalizeDiffPayload(raw);
       if (data && Array.isArray(data.changes)) {
         setValueChanges(data);
@@ -238,8 +469,17 @@ const AnalyticsScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchAnalytics();
-    fetchValueChanges();
-  }, [fetchAnalytics, fetchValueChanges]);
+    // Value changes are now lazy-loaded when the user taps the changes tab
+  }, [fetchAnalytics]);
+
+  // ── Lazy-load value changes only when changes tab is first opened ──
+  const valueChangesFetchedRef = React.useRef(false);
+  useEffect(() => {
+    if (activeTab === 'changes' && !valueChangesFetchedRef.current) {
+      valueChangesFetchedRef.current = true;
+      fetchValueChanges();
+    }
+  }, [activeTab, fetchValueChanges]);
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
@@ -296,124 +536,8 @@ const AnalyticsScreen = ({ navigation }) => {
     }
   };
 
-  // ── Locked Feature Overlay ──
-  const LockedOverlay = ({ message }) => (
-    <TouchableOpacity
-      style={styles.lockedOverlay}
-      activeOpacity={0.9}
-      onPress={() => setShowOfferwall(true)}
-    >
-      <View style={styles.lockedContent}>
-        <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
-        <Text style={styles.lockedText}>{message || t('analytics.unlock_with_pro')}</Text>
-        <View style={styles.unlockButton}>
-          <Text style={styles.unlockButtonText}>{'\u{2B50}'} {t('analytics.upgrade')}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
-  // ── Item Row Component (kid-friendly with medals) ──
-  const ItemRow = ({ item, index, showSignal, showChange, locked }) => {
-    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-    const rankDisplay = index < 3 ? medals[index] : `#${index + 1}`;
-    return (
-      <View style={[styles.itemRow, index % 2 === 0 && styles.itemRowAlt]}>
-        <Text style={[styles.itemRank, index < 3 && { fontSize: 18 }]}>{rankDisplay}</Text>
-        <View style={styles.itemImageWrap}>
-          {item.image ? (
-            <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
-          ) : (
-            <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-              <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
-            </View>
-          )}
-        </View>
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName} numberOfLines={1}>{locked ? '???' : item.name}</Text>
-          <Text style={styles.itemType}>{item.type}</Text>
-        </View>
-        {showSignal && item.signal && (
-          <View style={[styles.signalBadge, { backgroundColor: getSignalColor(item.signal) + '25' }]}>
-            <Icon name={getSignalEmoji(item.signal)} size={16} color={getSignalColor(item.signal)} />
-            <Text style={[styles.signalText, { color: getSignalColor(item.signal) }]}>
-              {item.ratio?.toFixed(1)}x
-            </Text>
-          </View>
-        )}
-        {showChange && item.changePercent !== undefined && (
-          <View style={[styles.changeBadge, {
-            backgroundColor: item.changePercent > 0 ? FUN_COLORS.green + '25' : FUN_COLORS.red + '25'
-          }]}>
-            <Text style={{ fontSize: 12 }}>{item.changePercent > 0 ? '\u{1F4C8}' : '\u{1F4C9}'}</Text>
-            <Text style={[styles.changeText, {
-              color: item.changePercent > 0 ? FUN_COLORS.green : FUN_COLORS.red
-            }]}>
-              {Math.abs(item.changePercent)}%
-            </Text>
-          </View>
-        )}
-        {!showSignal && !showChange && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{(item.count || 0) * VM}x</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  // ── Fun Colorful Bar Chart ──
-  const MiniBarChart = ({ data, label }) => {
-    const maxVal = Math.max(...data, 1);
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartLabel}>{label}</Text>
-        <View style={styles.chartBars}>
-          {data.map((val, i) => {
-            const isPeak = i === analytics?.peakHour;
-            return (
-              <View key={i} style={styles.chartBarWrap}>
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      height: Math.max(4, (val / maxVal) * 70),
-                      backgroundColor: isPeak ? FUN_COLORS.orange : BAR_COLORS[i],
-                      opacity: isPeak ? 1 : 0.7,
-                    },
-                  ]}
-                />
-                {i % 4 === 0 && (
-                  <Text style={styles.chartBarLabel}>{i}h</Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
-
-  // ── Section Header (kid-friendly with emoji) ──
-  const SectionHeader = ({ icon, title, subtitle, locked, emoji }) => (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionHeaderLeft}>
-        {emoji ? (
-          <Text style={{ fontSize: 20 }}>{emoji}</Text>
-        ) : (
-          <FontAwesome name={icon} size={18} color={config.colors.primary} solid />
-        )}
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      {locked && (
-        <View style={styles.proBadge}>
-          <Text style={{ fontSize: 12 }}>{'\u{1F451}'}</Text>
-          <Text style={styles.proBadgeText}>PRO</Text>
-        </View>
-      )}
-      {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
-    </View>
-  );
+  // Stable callback for LockedOverlay press
+  const handleShowOfferwall = useCallback(() => setShowOfferwall(true), []);
 
   const getTimeAgo = useCallback((dateStr) => {
     if (!dateStr) return '';
@@ -456,13 +580,29 @@ const AnalyticsScreen = ({ navigation }) => {
     return { oldVal: item.oldValue || 0, newVal: item.newValue || 0, pct: Math.round(pct) };
   }, []);
 
+  // ── Deferred: only compute when changes tab is active ──
   const filteredChanges = useMemo(() => {
+    if (activeTab !== 'changes') return []; // skip computation when tab is hidden
     if (!valueChanges?.changes) return [];
     if (changesFilter === 'all') return valueChanges.changes;
     if (changesFilter === 'increased') return valueChanges.changes.filter(c => getChangeDirection(c) === 'up');
     if (changesFilter === 'decreased') return valueChanges.changes.filter(c => getChangeDirection(c) === 'down');
     return valueChanges.changes;
-  }, [valueChanges, changesFilter, getChangeDirection]);
+  }, [activeTab, valueChanges, changesFilter, getChangeDirection]);
+
+  // Memoized filter counts — only computed when changes tab is active
+  const filterCounts = useMemo(() => {
+    if (activeTab !== 'changes') return { all: 0, up: 0, down: 0 };
+    if (!valueChanges?.changes) return { all: 0, up: 0, down: 0 };
+    let up = 0;
+    let down = 0;
+    for (const c of valueChanges.changes) {
+      const dir = getChangeDirection(c);
+      if (dir === 'up') up++;
+      else if (dir === 'down') down++;
+    }
+    return { all: valueChanges.changes.length, up, down };
+  }, [activeTab, valueChanges, getChangeDirection]);
 
   // ── Tab Bar (fun emoji tabs) ──
   const tabs = [
@@ -509,7 +649,10 @@ const AnalyticsScreen = ({ navigation }) => {
           <TouchableOpacity
             key={tab.key}
             style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-            onPress={() => setActiveTab(tab.key)}
+            onPress={() => {
+              setActiveTab(tab.key);
+              setChangesVisible(CHANGES_PAGE_SIZE); // reset when switching tabs
+            }}
           >
             <Text style={{ fontSize: 16 }}>{tab.emoji}</Text>
             <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]} numberOfLines={1}>
@@ -523,7 +666,7 @@ const AnalyticsScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { fetchAnalytics(true); fetchValueChanges(true); }} tintColor={FUN_COLORS.purple} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { fetchAnalytics(true); if (activeTab === 'changes') { valueChangesFetchedRef.current = false; fetchValueChanges(true); } }} tintColor={FUN_COLORS.purple} />
         }
       >
         {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
@@ -551,7 +694,7 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Win/Lose/Fair Distribution — emoji labels */}
             {analytics.statusDistribution && (
               <View style={styles.card}>
-                <SectionHeader icon="chart-pie" title={t('analytics.trade_outcomes')} emoji={'\u{1F3AF}'} />
+                <SectionHeader icon="chart-pie" title={t('analytics.trade_outcomes')} emoji={'\u{1F3AF}'} styles={styles} />
                 <View style={styles.distributionRow}>
                   <View style={styles.distributionItem}>
                     <Text style={styles.distributionEmoji}>{'\u{1F389}'}</Text>
@@ -594,16 +737,16 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Hourly Activity — colorful bars */}
             {analytics.hourlyActivity && (
               <View style={styles.card}>
-                <SectionHeader icon="chart-bar" title={t('analytics.hourly_activity')} subtitle={t('analytics.peak', { hour: analytics.peakHour })} emoji={'\u{1F552}'} />
-                <MiniBarChart data={analytics.hourlyActivity} label={t('analytics.trades_per_hour')} />
+                <SectionHeader icon="chart-bar" title={t('analytics.hourly_activity')} subtitle={t('analytics.peak', { hour: analytics.peakHour })} emoji={'\u{1F552}'} styles={styles} />
+                <MiniBarChart data={analytics.hourlyActivity} label={t('analytics.trades_per_hour')} peakHour={analytics?.peakHour} styles={styles} />
               </View>
             )}
 
             {/* Top 5 Most Traded */}
             <View style={styles.card}>
-              <SectionHeader icon="fire" title={t('analytics.most_traded')} emoji={'\u{1F525}'} />
+              <SectionHeader icon="fire" title={t('analytics.most_traded')} emoji={'\u{1F525}'} styles={styles} />
               {(analytics.topTraded || []).slice(0, 5).map((item, i) => (
-                <ItemRow key={`traded-${i}`} item={item} index={i} />
+                <ItemRow key={`traded-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
               ))}
             </View>
           </>
@@ -635,7 +778,10 @@ const AnalyticsScreen = ({ navigation }) => {
                 <TouchableOpacity
                   key={f.key}
                   style={[styles.changesFilterBtn, changesFilter === f.key && styles.changesFilterBtnActive]}
-                  onPress={() => setChangesFilter(f.key)}
+                  onPress={() => {
+                    setChangesFilter(f.key);
+                    setChangesVisible(CHANGES_PAGE_SIZE); // reset when switching filters
+                  }}
                 >
                   <Text style={{ fontSize: 14 }}>{f.emoji}</Text>
                   <Text style={[
@@ -643,9 +789,9 @@ const AnalyticsScreen = ({ navigation }) => {
                     changesFilter === f.key && styles.changesFilterTextActive,
                   ]}>
                     {f.label}
-                    {f.key === 'all' && valueChanges?.changes ? ` (${valueChanges.changes.length})` : ''}
-                    {f.key === 'increased' && valueChanges?.changes ? ` (${valueChanges.changes.filter(c => getChangeDirection(c) === 'up').length})` : ''}
-                    {f.key === 'decreased' && valueChanges?.changes ? ` (${valueChanges.changes.filter(c => getChangeDirection(c) === 'down').length})` : ''}
+                    {f.key === 'all' && filterCounts.all > 0 ? ` (${filterCounts.all})` : ''}
+                    {f.key === 'increased' && filterCounts.up > 0 ? ` (${filterCounts.up})` : ''}
+                    {f.key === 'decreased' && filterCounts.down > 0 ? ` (${filterCounts.down})` : ''}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -670,101 +816,37 @@ const AnalyticsScreen = ({ navigation }) => {
                   title={t('analytics.value_updates')}
                   subtitle={valueChanges.note || `${filteredChanges.length} items changed`}
                   emoji={'\u{1F504}'}
+                  styles={styles}
                 />
-                {filteredChanges.map((item, i) => {
-                  const primary = getPrimaryChange(item);
-                  const isUp = primary.pct > 0;
-                  const isZero = primary.pct === 0;
-                  const hasMultiValues = item.values && Object.keys(item.values).length > 0;
-
-                  // Value type labels for display
-                  const valueTypeLabels = {
-                    d_nopotion: 'D', d_fly: 'D-F', d_ride: 'D-R', d_flyride: 'D-FR',
-                    n_nopotion: 'N', n_fly: 'N-F', n_ride: 'N-R', n_flyride: 'N-FR',
-                    m_nopotion: 'M', m_fly: 'M-F', m_ride: 'M-R', m_flyride: 'M-FR',
-                  };
-
-                  return (
-                    <View key={`change-${i}`} style={[styles.changeRow, i % 2 === 0 && styles.itemRowAlt, { flexDirection: 'column', alignItems: 'stretch' }]}>
-                      {/* Top row: Image + Name + Primary Change */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={styles.changeLeft}>
-                          <View style={styles.itemImageWrap}>
-                            {item.image ? (
-                              <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
-                            ) : (
-                              <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                                <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.changeInfo}>
-                            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text style={styles.itemType}>{item.type || 'Pet'}</Text>
-                              {item.date && (
-                                <Text style={styles.changeDateText}>{getTimeAgo(item.date)}</Text>
-                              )}
-                            </View>
-                          </View>
-                        </View>
-
-                        {/* Primary value change */}
-                        <View style={styles.changeRight}>
-                          <View style={styles.changeValuesRow}>
-                            <Text style={styles.changeOldValue}>{formatNumber(primary.oldVal)}</Text>
-                            <Text style={{ fontSize: 12 }}>{'\u{27A1}\u{FE0F}'}</Text>
-                            <Text style={[styles.changeNewValue, { color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#aaa' : '#666') : FUN_COLORS.red }]}>
-                              {formatNumber(primary.newVal)}
-                            </Text>
-                          </View>
-                          <View style={[styles.changePctBadge, {
-                            backgroundColor: isUp ? FUN_COLORS.green + '25' : isZero ? (isDarkMode ? '#33333340' : '#eee') : FUN_COLORS.red + '25',
-                          }]}>
-                            {!isZero && (
-                              <Text style={{ fontSize: 10 }}>{isUp ? '\u{2B06}\u{FE0F}' : '\u{2B07}\u{FE0F}'}</Text>
-                            )}
-                            <Text style={[styles.changePctText, {
-                              color: isUp ? FUN_COLORS.green : isZero ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red,
-                            }]}>
-                              {isZero ? '0%' : `${isUp ? '+' : ''}${primary.pct}%`}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Sub-values grid (all value types) */}
-                      {hasMultiValues && (
-                        <View style={styles.subValuesGrid}>
-                          {Object.entries(item.values).map(([vKey, v]) => {
-                            const label = valueTypeLabels[vKey] || vKey;
-                            const vDiff = v.newVal - v.oldVal;
-                            const vPct = v.oldVal > 0 ? Math.round((vDiff / v.oldVal) * 100) : 0;
-                            const vUp = vDiff > 0;
-                            const vSame = vDiff === 0;
-                            const isPrimary = vKey === (item.primary || 'd_nopotion');
-
-                            return (
-                              <View key={vKey} style={[styles.subValueItem, isPrimary && styles.subValueItemPrimary]}>
-                                <Text style={[styles.subValueLabel, isPrimary && { color: config.colors.primary }]}>{label}</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                                  <Text style={styles.subValueOld}>{formatNumber(v.oldVal)}</Text>
-                                  <Icon name="arrow-forward" size={8} color={isDarkMode ? '#444' : '#ccc'} />
-                                  <Text style={[styles.subValueNew, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#888' : '#999') : FUN_COLORS.red }]}>
-                                    {formatNumber(v.newVal)}
-                                  </Text>
-                                </View>
-                                <Text style={[styles.subValuePct, { color: vUp ? FUN_COLORS.green : vSame ? (isDarkMode ? '#666' : '#bbb') : FUN_COLORS.red }]}>
-                                  {vSame ? '0%' : `${vUp ? '+' : ''}${vPct}%`}
-                                </Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
+                {filteredChanges.slice(0, changesVisible).map((item, i) => (
+                  <ChangeRow
+                    key={`change-${i}`}
+                    item={item}
+                    index={i}
+                    isDarkMode={isDarkMode}
+                    getImageUrl={getImageUrl}
+                    getTimeAgo={getTimeAgo}
+                    formatNumber={formatNumber}
+                    getPrimaryChange={getPrimaryChange}
+                    styles={styles}
+                  />
+                ))}
+                {changesVisible < filteredChanges.length && (
+                  <TouchableOpacity
+                    style={{
+                      paddingVertical: 14,
+                      alignItems: 'center',
+                      backgroundColor: isDarkMode ? '#1a1a2e' : '#F0F0FF',
+                      borderRadius: 12,
+                      marginTop: 8,
+                    }}
+                    onPress={() => setChangesVisible(prev => prev + CHANGES_PAGE_SIZE)}
+                  >
+                    <Text style={{ color: FUN_COLORS.purple, fontWeight: '700', fontSize: 14 }}>
+                      {'\u{1F447}'} Show More ({filteredChanges.length - changesVisible} remaining)
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -783,23 +865,23 @@ const AnalyticsScreen = ({ navigation }) => {
           <>
             {/* Top Movers (Rising) */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.green }]}>
-              <SectionHeader icon="arrow-trend-up" title={t('analytics.top_movers')} subtitle={t('analytics.rising_demand')} emoji={'\u{1F680}'} />
-              {(analytics.topMovers || []).slice(0, isPro ? 10 : 3).map((item, i) => (
-                <ItemRow key={`mover-${i}`} item={item} index={i} showChange />
+              <SectionHeader icon="arrow-trend-up" title={t('analytics.top_movers')} subtitle={t('analytics.rising_demand')} emoji={'\u{1F680}'} styles={styles} />
+              {(analytics.topMovers || []).slice(0, isPro ? undefined : 3).map((item, i) => (
+                <ItemRow key={`mover-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
               ))}
               {!isPro && (analytics.topMovers || []).length > 3 && (
-                <LockedOverlay message={t('analytics.see_all_movers')} />
+                <LockedOverlay message={t('analytics.see_all_movers')} onPress={handleShowOfferwall} styles={styles} />
               )}
             </View>
 
             {/* Top Losers (Falling) */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.red }]}>
-              <SectionHeader icon="arrow-trend-down" title={t('analytics.top_losers')} subtitle={t('analytics.falling_demand')} emoji={'\u{1F4C9}'} />
-              {(analytics.topLosers || []).slice(0, isPro ? 10 : 3).map((item, i) => (
-                <ItemRow key={`loser-${i}`} item={item} index={i} showChange />
+              <SectionHeader icon="arrow-trend-down" title={t('analytics.top_losers')} subtitle={t('analytics.falling_demand')} emoji={'\u{1F4C9}'} styles={styles} />
+              {(analytics.topLosers || []).slice(0, isPro ? undefined : 3).map((item, i) => (
+                <ItemRow key={`loser-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
               ))}
               {!isPro && (analytics.topLosers || []).length > 3 && (
-                <LockedOverlay message={t('analytics.see_all_losers')} />
+                <LockedOverlay message={t('analytics.see_all_losers')} onPress={handleShowOfferwall} styles={styles} />
               )}
             </View>
           </>
@@ -810,39 +892,39 @@ const AnalyticsScreen = ({ navigation }) => {
           <>
             {/* Most Wanted */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.pink }]}>
-              <SectionHeader icon="heart" title={t('analytics.most_wanted')} subtitle={t('analytics.highest_demand')} emoji={'\u{2764}\u{FE0F}'} />
-              {(analytics.topWanted || []).slice(0, isPro ? 15 : 5).map((item, i) => (
-                <ItemRow key={`wanted-${i}`} item={item} index={i} />
+              <SectionHeader icon="heart" title={t('analytics.most_wanted')} subtitle={t('analytics.highest_demand')} emoji={'\u{2764}\u{FE0F}'} styles={styles} />
+              {(analytics.topWanted || []).slice(0, isPro ? undefined : 5).map((item, i) => (
+                <ItemRow key={`wanted-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
               ))}
               {!isPro && (analytics.topWanted || []).length > 5 && (
-                <LockedOverlay message={t('analytics.see_full_demand')} />
+                <LockedOverlay message={t('analytics.see_full_demand')} onPress={handleShowOfferwall} styles={styles} />
               )}
             </View>
 
             {/* Most Offered */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.blue }]}>
-              <SectionHeader icon="box-open" title={t('analytics.most_offered')} subtitle={t('analytics.highest_supply')} emoji={'\u{1F4E6}'} />
-              {(analytics.topOffered || []).slice(0, isPro ? 15 : 5).map((item, i) => (
-                <ItemRow key={`offered-${i}`} item={item} index={i} />
+              <SectionHeader icon="box-open" title={t('analytics.most_offered')} subtitle={t('analytics.highest_supply')} emoji={'\u{1F4E6}'} styles={styles} />
+              {(analytics.topOffered || []).slice(0, isPro ? undefined : 5).map((item, i) => (
+                <ItemRow key={`offered-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
               ))}
               {!isPro && (analytics.topOffered || []).length > 5 && (
-                <LockedOverlay message={t('analytics.see_full_supply')} />
+                <LockedOverlay message={t('analytics.see_full_supply')} onPress={handleShowOfferwall} styles={styles} />
               )}
             </View>
 
             {/* Demand/Supply Ratios */}
             {isPro ? (
               <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
-                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} subtitle={t('analytics.ds_ratio_subtitle')} locked={false} emoji={'\u{2696}\u{FE0F}'} />
-                {(analytics.demandSupplyRatios || []).slice(0, 15).map((item, i) => (
-                  <ItemRow key={`ds-${i}`} item={item} index={i} showSignal />
+                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} subtitle={t('analytics.ds_ratio_subtitle')} locked={false} emoji={'\u{2696}\u{FE0F}'} styles={styles} />
+                {(analytics.demandSupplyRatios || []).map((item, i) => (
+                  <ItemRow key={`ds-${i}`} item={item} index={i} showSignal getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
                 ))}
               </View>
             ) : (
               <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
-                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} locked emoji={'\u{2696}\u{FE0F}'} />
+                <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} locked emoji={'\u{2696}\u{FE0F}'} styles={styles} />
                 <View style={{ height: 120, justifyContent: 'center' }}>
-                  <LockedOverlay message={t('analytics.unlock_ds')} />
+                  <LockedOverlay message={t('analytics.unlock_ds')} onPress={handleShowOfferwall} styles={styles} />
                 </View>
               </View>
             )}
@@ -868,7 +950,7 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Predictions List */}
             {isPro ? (
               <View style={styles.card}>
-                <SectionHeader icon="crystal-ball" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} emoji={'\u{1F3B1}'} />
+                <SectionHeader icon="crystal-ball" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} emoji={'\u{1F3B1}'} styles={styles} />
                 {(analytics.predictions || []).map((item, i) => (
                   <View key={`pred-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
                     <View style={styles.predictionLeft}>
@@ -910,7 +992,7 @@ const AnalyticsScreen = ({ navigation }) => {
               <>
                 {/* Show 2 predictions free, lock the rest */}
                 <View style={styles.card}>
-                  <SectionHeader icon="bolt" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} locked emoji={'\u{1F3B1}'} />
+                  <SectionHeader icon="bolt" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} locked emoji={'\u{1F3B1}'} styles={styles} />
                   {(analytics.predictions || []).slice(0, 2).map((item, i) => (
                     <View key={`pred-free-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
                       <View style={styles.predictionLeft}>
@@ -940,7 +1022,7 @@ const AnalyticsScreen = ({ navigation }) => {
                       </View>
                     </View>
                   ))}
-                  <LockedOverlay message={t('analytics.unlock_predictions')} />
+                  <LockedOverlay message={t('analytics.unlock_predictions')} onPress={handleShowOfferwall} styles={styles} />
                 </View>
               </>
             )}
@@ -968,7 +1050,11 @@ const AnalyticsScreen = ({ navigation }) => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {!isPro && <BannerAdComponent />}
+      {!isPro && (
+        <View style={{ paddingBottom: Platform.OS === 'android' ? 24 : 0 }}>
+          <BannerAdComponent />
+        </View>
+      )}
       <SubscriptionScreen
         visible={showOfferwall}
         onClose={() => setShowOfferwall(false)}

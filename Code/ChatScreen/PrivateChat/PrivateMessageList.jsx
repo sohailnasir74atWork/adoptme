@@ -294,6 +294,8 @@ const PrivateMessageList = ({
                 {fruits.map((fruit, index) => {
                   const { name: nameColor, value: valueColor } = fruitColors;
                   const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+                  const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+                  const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
 
                   let valueBadgeStyle = fruitStyles.badgeDefault;
                   if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
@@ -326,28 +328,30 @@ const PrivateMessageList = ({
                 : ''} */}{' '}
                         </Text>
 
-                        <View style={fruitStyles.badgeRow}>
-                          {/* D / N / M badge */}
-                          <View style={[fruitStyles.badge, valueBadgeStyle]}>
-                            <Text style={fruitStyles.badgeText}>
-                              {valueType.toUpperCase()}
-                            </Text>
+                        {isPet && (
+                          <View style={fruitStyles.badgeRow}>
+                            {/* D / N / M badge */}
+                            <View style={[fruitStyles.badge, valueBadgeStyle]}>
+                              <Text style={fruitStyles.badgeText}>
+                                {valueType.toUpperCase()}
+                              </Text>
+                            </View>
+
+                            {/* Fly badge */}
+                            {fruit.isFly && (
+                              <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
+                                <Text style={fruitStyles.badgeText}>F</Text>
+                              </View>
+                            )}
+
+                            {/* Ride badge */}
+                            {fruit.isRide && (
+                              <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
+                                <Text style={fruitStyles.badgeText}>R</Text>
+                              </View>
+                            )}
                           </View>
-
-                          {/* Fly badge */}
-                          {fruit.isFly && (
-                            <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
-                              <Text style={fruitStyles.badgeText}>F</Text>
-                            </View>
-                          )}
-
-                          {/* Ride badge */}
-                          {fruit.isRide && (
-                            <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
-                              <Text style={fruitStyles.badgeText}>R</Text>
-                            </View>
-                          )}
-                        </View>
+                        )}
                       </View>
                     </View>
                   );

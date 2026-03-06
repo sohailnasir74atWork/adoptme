@@ -311,7 +311,7 @@ const PrivateMessageInput = ({
 
     setMessageCount(prevCount => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 10 === 0) {
+      if (!localState?.isPro && newCount % 12 === 0) {
         InterstitialAdManager.showAd(() => { });
       }
       return newCount;

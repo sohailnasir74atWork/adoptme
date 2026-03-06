@@ -368,66 +368,148 @@ const AdminDashboard = () => {
   };
 
   // ─────────────────────────────────────────────
-  // Search Users (RTDB) - case-insensitive via dual query
+  // Search Users (RTDB) — fool-proof: email, special chars, case-insensitive
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-
-    if (searchQuery.length < 3) {
-      Alert.alert('Optimization', 'Please enter at least 3 characters to search efficiently.');
-      return;
-    }
+    const raw = searchQuery.trim();
+    if (!raw) return;
 
     Keyboard.dismiss();
     setLoadingSearch(true);
     setHasSearched(true);
     setSearchResults([]);
-    setUserBanStatus({}); // ✅ Clear cached ban status on new search
+    setUserBanStatus({});
 
     try {
-      const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
-      if (!lower) {
-        setLoadingSearch(false);
-        return;
-      }
-      const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-      const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
-
-      const seen = new Set();
       const results = [];
+      const seen = new Set();
+      const isEmailSearch = raw.includes('@') || raw.includes('(dot)');
 
-      for (const v of variants) {
-        const q = query(
-          ref(db, 'users'),
-          orderByChild('displayName'),
-          startAt(v),
-          endAt(v + '\uf8ff'),
-          limitToFirst(20)
-        );
-        const snapshot = await get(q);
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          for (const u of Object.values(data)) {
-            const id = u.id;
-            if (seen.has(id)) continue;
-            seen.add(id);
-            results.push({
-              isBanned: false,
-              id,
-              displayName: u.displayName || u.userName || 'Unknown',
-              email: u.email,
-              avatar: getAvatarSafe(u),
-              robloxUsername: u.robloxUsername,
-              isAdmin: u.admin || false,
-              isModerator: u.isModerator || false
+      if (isEmailSearch) {
+        // ── EMAIL SEARCH: exact lookup by encoded key ──
+        const email = raw.toLowerCase().trim();
+        const encodedEmail = email.replace(/\./g, '(dot)');
+
+        // Direct key lookup first (fastest)
+        const directRef = ref(db, `users/${encodedEmail}`);
+        const directSnap = await get(directRef);
+        if (directSnap.exists()) {
+          const u = directSnap.val();
+          const id = u.id || encodedEmail;
+          seen.add(id);
+          results.push({
+            isBanned: false, id,
+            displayName: u.displayName || u.userName || 'Unknown',
+            email: u.email, avatar: getAvatarSafe(u),
+            robloxUsername: u.robloxUsername,
+            isAdmin: u.admin || false, isModerator: u.isModerator || false,
+          });
+        }
+
+        // Also search by email field (in case key is different)
+        if (results.length === 0) {
+          const emailQ = query(
+            ref(db, 'users'),
+            orderByChild('email'),
+            startAt(email),
+            endAt(email + '\uf8ff'),
+            limitToFirst(10)
+          );
+          const emailSnap = await get(emailQ);
+          if (emailSnap.exists()) {
+            emailSnap.forEach((child) => {
+              const u = child.val();
+              if (BAD_KEYS.has(child.key)) return;
+              const id = u.id || child.key;
+              if (seen.has(id)) return;
+              seen.add(id);
+              results.push({
+                isBanned: false, id,
+                displayName: u.displayName || u.userName || 'Unknown',
+                email: u.email, avatar: getAvatarSafe(u),
+                robloxUsername: u.robloxUsername,
+                isAdmin: u.admin || false, isModerator: u.isModerator || false,
+              });
             });
+          }
+        }
+      } else {
+        // ── NAME SEARCH: multiple case variants + client-side filter ──
+        const lower = raw.toLowerCase();
+        const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+        const allUpper = raw.toUpperCase();
+
+        // Deduplicated list of query variants for broader case coverage
+        const variants = [...new Set([lower, upperFirst, allUpper, raw])];
+        const limitSize = 50;
+
+        for (const v of variants) {
+          if (seen.size >= 50) break;
+          try {
+            const q = query(
+              ref(db, 'users'),
+              orderByChild('displayName'),
+              startAt(v),
+              endAt(v + '\uf8ff'),
+              limitToFirst(limitSize)
+            );
+            const snapshot = await get(q);
+            if (snapshot.exists()) {
+              snapshot.forEach((child) => {
+                const u = child.val();
+                if (BAD_KEYS.has(child.key)) return;
+                const id = u.id || child.key;
+                if (seen.has(id)) return;
+                seen.add(id);
+                results.push({
+                  isBanned: false, id,
+                  displayName: u.displayName || u.userName || 'Unknown',
+                  email: u.email, avatar: getAvatarSafe(u),
+                  robloxUsername: u.robloxUsername,
+                  isAdmin: u.admin || false, isModerator: u.isModerator || false,
+                });
+              });
+            }
+          } catch (variantErr) {
+            console.warn(`Search variant "${v}" failed:`, variantErr.message);
+          }
+        }
+
+        // ── FALLBACK: client-side contains match ──
+        // Catches names with leading symbols like ★CoolPlayer★ or 🔥DragonKing
+        if (results.length < 10 && lower.length >= 2) {
+          try {
+            const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
+            const broadSnap = await get(broadQ);
+            if (broadSnap.exists()) {
+              broadSnap.forEach((child) => {
+                if (seen.size >= 50) return;
+                const u = child.val();
+                if (BAD_KEYS.has(child.key)) return;
+                const id = u.id || child.key;
+                if (seen.has(id)) return;
+                const name = (u.displayName || u.userName || '').toLowerCase();
+                if (name.includes(lower)) {
+                  seen.add(id);
+                  results.push({
+                    isBanned: false, id,
+                    displayName: u.displayName || u.userName || 'Unknown',
+                    email: u.email, avatar: getAvatarSafe(u),
+                    robloxUsername: u.robloxUsername,
+                    isAdmin: u.admin || false, isModerator: u.isModerator || false,
+                  });
+                }
+              });
+            }
+          } catch (broadErr) {
+            console.warn('Broad search failed:', broadErr.message);
           }
         }
       }
 
-      setSearchResults(results.slice(0, 20));
+      setSearchResults(results.slice(0, 50));
     } catch (err) {
       console.error('Search error:', err);
-      Alert.alert('Search Failed', "Indexing required on 'users' -> 'displayName'.");
+      Alert.alert('Search Failed', err.message || 'An unexpected error occurred.');
     } finally {
       setLoadingSearch(false);
     }

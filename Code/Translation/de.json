@@ -315,6 +315,7 @@
         }
     },
     "value": {
+        "label": "Wert:",
         "filter": "Filtern",
         "title": "Wert-Bildschirm",
         "description": "Live-Blox-Fruits-Werte, stündlich aktualisiert. Finde hier genaue Item-Werte und besuche den Trade-Feed für Früchte oder Gamepasses.",
@@ -331,7 +332,10 @@
         "num_m": "M",
         "num_s": "s",
         "done": "Fertig",
-        "search": "Suchen"
+        "search": "Suchen",
+        "values_reloaded": "Werte wurden neu geladen",
+        "sort_high": "▲ Hoch",
+        "sort_low": "▼ Niedrig"
     },
     "stock": {
         "description": "Hinweis: Stock-Updates können manchmal verzögert sein, da Daten manuell aktualisiert werden. Danke für deine Geduld – schau bitte regelmäßig vorbei für die neuesten Updates.",
@@ -953,10 +957,10 @@
         "changes_disclaimer": "Wertänderungen werden manuell durch Vergleich offizieller Wertaktualisierungen verifiziert. Wird vom Admin aktualisiert, wenn neue Werte veröffentlicht werden.",
         "top_movers": "Top Beweger",
         "rising_demand": "Steigende Nachfrage diese Woche",
-        "see_all_movers": "Alle 10 Top-Beweger anzeigen",
+        "see_all_movers": "Alle Top-Beweger anzeigen",
         "top_losers": "Top Verlierer",
         "falling_demand": "Fallende Nachfrage diese Woche",
-        "see_all_losers": "Alle 10 Top-Verlierer anzeigen",
+        "see_all_losers": "Alle Top-Verlierer anzeigen",
         "most_wanted": "Meistgesucht",
         "highest_demand": "Höchste Nachfrage (24h)",
         "see_full_demand": "Vollständige Nachfrageliste anzeigen",

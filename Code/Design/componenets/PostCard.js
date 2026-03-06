@@ -139,20 +139,21 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
     <View style={themedStyles.card}>
       <View style={themedStyles.header}>
         <TouchableOpacity onPress={openProfileDrawer}>
-          <Image source={{ uri: item.avatar }} style={themedStyles.avatar} /></TouchableOpacity>
-        <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={themedStyles.name}>{item.displayName}</Text>
+          <Image source={{ uri: item.avatar }} style={themedStyles.avatar} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{ marginLeft: 12, flex: 1 }} onPress={openProfileDrawer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Text style={themedStyles.name} numberOfLines={1}>{item.displayName}</Text>
             {item.isPro && (
               <Image
                 source={require('../../../assets/pro.png')}
-                style={{ width: 14, height: 14, marginLeft: 4 }}
+                style={{ width: 14, height: 14 }}
               />
             )}
             {item.robloxUsernameVerified && (
               <Image
                 source={require('../../../assets/verification.png')}
-                style={{ width: 14, height: 14, marginLeft: 4 }}
+                style={{ width: 14, height: 14 }}
               />
             )}
             {(() => {
@@ -163,7 +164,7 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
               return hasRecentWin ? (
                 <Image
                   source={require('../../../assets/trophy.webp')}
-                  style={{ width: 12, height: 12, marginLeft: 4 }}
+                  style={{ width: 13, height: 13 }}
                 />
               ) : null;
             })()}
@@ -292,22 +293,22 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
       )}
 
       <View style={themedStyles.actionsRow}>
-        <View style={{ flexDirection: 'row' }}>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
           <TouchableOpacity onPress={() => onLike(item)} style={themedStyles.actionBtn}>
-            <Icon name={liked ? 'heart' : 'heart-o'} size={20} color={liked ? 'red' : 'gray'} />
-            <Text style={themedStyles.likeCount}>{t('feed.likes_count', { count: likeCount })}</Text>
+            <Icon name={liked ? 'heart' : 'heart-o'} size={18} color={liked ? '#EF4444' : isDark ? '#64748b' : '#94a3b8'} />
+            <Text style={[themedStyles.likeCount, liked && { color: '#EF4444' }]}>{t('feed.likes_count', { count: likeCount })}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowComments(true)} style={themedStyles.commentssection}>
-            <Icon name="comment" size={18} color={config.colors.primary} />
+          <TouchableOpacity onPress={() => setShowComments(true)} style={themedStyles.actionBtn}>
+            <Icon name="comment" size={16} color={config.colors.primary} />
             <Text style={themedStyles.sendText}>
               {item.commentCount ? t('feed.comments_count', { count: item.commentCount }) : t('feed.no_comments')}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={openProfileDrawer} style={themedStyles.sendBtn}>
-          <Icon name="paper-plane" size={16} color={config.colors.primary} />
-          <Text style={themedStyles.sendText}>{t('feed.chat')}</Text>
+        <TouchableOpacity onPress={openProfileDrawer} style={themedStyles.chatBtn}>
+          <Icon name="paper-plane" size={13} color="#fff" />
+          <Text style={themedStyles.chatBtnText}>{t('feed.chat')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -333,102 +334,134 @@ const PostCard = ({ item, userId, onLike, localState, appdatabase, onDelete, onD
 const getStyles = (isDark) =>
   StyleSheet.create({
     card: {
-      padding: 10,
-      borderBottomWidth: 1,
-      borderColor: isDark ? '#444' : '#eee',
-      backgroundColor: isDark ? '#121212' : '#fff',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      marginHorizontal: 12,
+      marginVertical: 6,
+      borderRadius: 18,
+      backgroundColor: isDark ? '#1e293b' : '#ffffff',
+      shadowColor: isDark ? '#000' : '#94a3b8',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.3 : 0.08,
+      shadowRadius: 8,
+      elevation: isDark ? 4 : 3,
     },
-    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-    avatar: { width: 40, height: 40, borderRadius: 20 },
-    name: { fontWeight: 'bold', color: isDark ? '#fff' : '#000' },
-    time: { fontSize: 10, color: 'gray', },
-    desc: { marginVertical: 5, fontSize: 14, color: isDark ? '#ccc' : '#333', },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    avatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 2,
+      borderColor: isDark ? '#334155' : '#e2e8f0',
+    },
+    name: {
+      fontWeight: '700',
+      fontSize: 14,
+      color: isDark ? '#f1f5f9' : '#0f172a',
+      flexShrink: 1,
+    },
+    time: {
+      fontSize: 11,
+      color: isDark ? '#64748b' : '#94a3b8',
+      marginTop: 1,
+    },
+    desc: {
+      marginBottom: 10,
+      fontSize: 14,
+      color: isDark ? '#cbd5e1' : '#334155',
+      lineHeight: 20,
+    },
 
     shadowWrapper: {
-      // backgroundColor: '#fff', // needed for shadow contrast
-      borderRadius: 8,
-      // marginTop: 10,
-
-      // iOS Shadow
-      // shadowColor: '#000',
-      // shadowOffset: { width: 0, height: 2 },
-      // shadowOpacity: 0.1,
-      // shadowRadius: 8,
-
-      // // Android
-      // elevation: 5,
+      borderRadius: 14,
     },
 
     imageContainer: {
-      borderRadius: 8,
-      // overflow: 'hidden', // Move it here if you want to clip images inside
-      // shadowColor: '#000',
-      // shadowOffset: { width: 0, height: 2 },
-      // shadowOpacity: 0.1,
-      // shadowRadius: 8,
-
-      // Android
-      // elevation: 1,
-      borderWidth: .5,
-      borderColor: isDark ? 'grey' : 'lightgrey'
-
+      borderRadius: 14,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: isDark ? '#334155' : '#e2e8f0',
     },
 
-    singleImage: { width: '100%', height: 220, borderRadius: 8 },
+    singleImage: {
+      width: '100%',
+      height: 220,
+      borderRadius: 14,
+    },
 
     multiImageGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      gap: 6,
+      gap: 4,
       width: '100%',
-      borderRadius: 6,
-
-      // Shadow for iOS
-      // shadowColor: '#000',
-      // shadowOffset: { width: 4, height: 4 },
-      // shadowOpacity: 0.5,
-      // shadowRadius: 6,
-
-      // Elevation for Android
-      // elevation: 3,
-      // backgroundColor: '#fff',
+      borderRadius: 14,
     },
 
-    gridImage: { width: '49%', height: 120, marginBottom: 2, borderRadius: 6 },
-    gridImageInner: { width: '100%', height: '100%', borderRadius: 8 },
+    gridImage: {
+      width: '49%',
+      height: 130,
+      marginBottom: 2,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    gridImageInner: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 12,
+    },
 
     actionsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 10,
+      marginTop: 12,
       justifyContent: 'space-between',
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: isDark ? '#1e293b40' : '#f1f5f9',
     },
-    actionBtn: { flexDirection: 'row', alignItems: 'center' },
-    likeCount: { marginLeft: 5, fontSize: 14, color: isDark ? '#ccc' : config.colors.primary, fontWeight: 'bold' },
+    actionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+      gap: 5,
+    },
+    likeCount: {
+      fontSize: 12,
+      color: isDark ? '#94a3b8' : '#64748b',
+      fontWeight: '600',
+    },
 
-    sendBtn: {
+    chatBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: config.colors.primary,
+      gap: 6,
+      shadowColor: config.colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
     },
-    commentssection: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      // backgroundColor: isDark ? '#333' : '#f7e7e4',
-      borderRadius: 6,
-      // marginTop: 6,
-      marginLeft: 10
+    chatBtnText: {
+      color: '#ffffff',
+      fontWeight: '700',
+      fontSize: 12,
     },
     sendText: {
-      marginLeft: 6,
+      fontSize: 12,
       color: config.colors.primary,
       fontWeight: '600',
-      fontWeight: 'bold',
     },
 
     metaInfoRow: {
@@ -444,24 +477,22 @@ const getStyles = (isDark) =>
     tagBadge: {
       paddingHorizontal: 10,
       paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: isDark ? '#444' : '#f0f0f0',
+      borderRadius: 999,
+      backgroundColor: isDark ? '#334155' : '#f1f5f9',
     },
     tagText: {
       fontSize: 12,
-      color: isDark ? '#eee' : '#333',
+      color: isDark ? '#e2e8f0' : '#475569',
       textTransform: 'capitalize',
-
     },
     budgetText: {
       fontSize: 13,
       fontStyle: 'italic',
-      color: isDark ? '#aaa' : 'gray',
+      color: isDark ? '#64748b' : '#94a3b8',
       marginTop: 4,
-
     },
     imageWrapper: {
-      marginTop: 10,
+      marginBottom: 4,
       position: 'relative',
     },
 
@@ -469,25 +500,22 @@ const getStyles = (isDark) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 6,
-      // marginBottom: 6,
       position: 'absolute',
-      top: 5,
-      right: 5,
-      zIndex: 1000
+      top: 8,
+      right: 8,
+      zIndex: 1000,
     },
 
     overlayTag: {
       paddingHorizontal: 10,
       paddingVertical: 4,
-      borderRadius: 12,
+      borderRadius: 999,
     },
     overlayTagText: {
-      fontSize: 12,
+      fontSize: 11,
       color: '#fff',
-      fontWeight: 'bold',
+      fontWeight: '700',
     },
-
-
   });
 
 export default memo(PostCard, (prevProps, nextProps) => {

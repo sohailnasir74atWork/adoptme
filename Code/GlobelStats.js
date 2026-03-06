@@ -80,7 +80,7 @@ export const GlobalStateProvider = ({ children }) => {
         setTheme(newScheme || 'light');
       }
     });
-    return () => sub.remove();
+    return () => sub?.remove();
   }, []);
 
   // const isAdmin = user?.id  ? user?.id == '3CAAolfaX3UE3BLTZ7ghFbNnY513' : false

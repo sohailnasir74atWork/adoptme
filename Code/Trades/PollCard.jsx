@@ -41,7 +41,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=007AFF&color=fff&name=U';
 const COMMENTS_PAGE_SIZE = 2;
 
-const PollCard = ({ poll, user, firestoreDB, isDarkMode }) => {
+const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
     const navigation = useNavigation();
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
@@ -102,7 +102,13 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode }) => {
 
     // ─────────── Vote (supports changing vote) ───────────
     const handleVote = useCallback(async (index) => {
-        if (voting || !user?.id || !poll?.id) return;
+        if (voting) return;
+        // If user is not signed in, trigger sign-in flow
+        if (!user?.id) {
+            if (onRequireSignIn) onRequireSignIn();
+            return;
+        }
+        if (!poll?.id) return;
         // If already voted for the same option, do nothing
         if (voted && selectedOption === index) return;
 
@@ -151,7 +157,7 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode }) => {
         } finally {
             setVoting(false);
         }
-    }, [voted, voting, user, poll, options, totalVotes, selectedOption, firestoreDB, animateBars]);
+    }, [voted, voting, user, poll, options, totalVotes, selectedOption, firestoreDB, animateBars, onRequireSignIn]);
 
     // ─────────── Comments (paginated: 2 at a time) ───────────
     const fetchComments = useCallback(async (afterDoc = null) => {
@@ -200,7 +206,13 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode }) => {
 
     const postComment = useCallback(async () => {
         const text = commentText.trim();
-        if (!text || !user?.id || !poll?.id || posting) return;
+        if (!text || posting) return;
+        // If user is not signed in, trigger sign-in flow
+        if (!user?.id) {
+            if (onRequireSignIn) onRequireSignIn();
+            return;
+        }
+        if (!poll?.id) return;
 
         setPosting(true);
         Keyboard.dismiss();
@@ -224,7 +236,7 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode }) => {
         } finally {
             setPosting(false);
         }
-    }, [commentText, user, poll, firestoreDB, replyingTo, posting]);
+    }, [commentText, user, poll, firestoreDB, replyingTo, posting, onRequireSignIn]);
 
     // ─────────── Chat with commenter ───────────
     const handleChatWithUser = useCallback((comment) => {

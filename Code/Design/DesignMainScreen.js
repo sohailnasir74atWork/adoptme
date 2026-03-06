@@ -537,6 +537,7 @@ const DesignFeedScreen = ({ route }) => {
         data={dataToRender}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        contentContainerStyle={{ paddingVertical: 6 }}
         onEndReached={loadMorePosts}
         onEndReachedThreshold={0.5}
         refreshing={refreshing}
@@ -552,7 +553,7 @@ const DesignFeedScreen = ({ route }) => {
         }
         ListEmptyComponent={
           !initialLoading && (
-            <Text style={{ textAlign: 'center', padding: 20, color: isDarkMode ? '#ccc' : '#666' }}>
+            <Text style={{ textAlign: 'center', padding: 20, color: isDarkMode ? '#64748b' : '#94a3b8', fontSize: 14 }}>
               {filterMyPosts
                 ? t('feed.no_my_posts')
                 : t('feed.no_posts_found')}
@@ -569,6 +570,7 @@ const DesignFeedScreen = ({ route }) => {
                   user={user}
                   firestoreDB={firestoreDB}
                   isDarkMode={isDarkMode}
+                  onRequireSignIn={() => setSigninDrawerVisible(true)}
                 />
               ))}
             </View>
@@ -617,7 +619,7 @@ const styles = StyleSheet.create({
     // backgroundColor: '#fff',
   },
   darkContainer: {
-    backgroundColor: '#121212',
+    backgroundColor: '#0f172a',
   },
   fab: {
     position: 'absolute',
@@ -626,7 +628,7 @@ const styles = StyleSheet.create({
     // backgroundColor: config.colors.primary,
     width: 60,
     height: 60,
-    borderRadius: 25,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     // backgroundColor:'white'

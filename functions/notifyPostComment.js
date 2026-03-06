@@ -5,6 +5,7 @@
  * It sends push notifications to:
  * 1. The post creator (if they didn't comment themselves)
  * 2. All previous commenters on that post (excluding the new commenter)
+ * 3. All users who liked the post (excluding the new commenter)
  * 
  * Deployment:
  * firebase deploy --only functions:notifyPostComment
@@ -45,8 +46,8 @@ exports.notifyPostComment = functions.firestore
       const postCreatorId = postData.userId;
       const postDescription = postData.desc || postData.description || 'a post';
       // Truncate description for notification
-      const shortDescription = postDescription.length > 50 
-        ? postDescription.substring(0, 50) + '...' 
+      const shortDescription = postDescription.length > 50
+        ? postDescription.substring(0, 50) + '...'
         : postDescription;
 
       console.log(`✅ Post found. Creator: ${postCreatorId}, New commenter: ${newCommenterId}`);
@@ -58,14 +59,14 @@ exports.notifyPostComment = functions.firestore
           .collection(`designPosts/${postId}/comments`)
           .limit(10)
           .get();
-        
+
         let hasOtherCommenters = false;
         commentsSnapshot.forEach((doc) => {
           if (doc.id !== commentId && doc.data().userId !== newCommenterId) {
             hasOtherCommenters = true;
           }
         });
-        
+
         if (!hasOtherCommenters) {
           console.log('ℹ️ Only creator has commented. No one to notify.');
           return null;
@@ -83,7 +84,7 @@ exports.notifyPostComment = functions.firestore
 
       // Collect unique user IDs who have commented (excluding the new commenter)
       const commenterIds = new Set();
-      
+
       commentsSnapshot.forEach((doc) => {
         const comment = doc.data();
         // Only include previous commenters (not the new one)
@@ -92,27 +93,48 @@ exports.notifyPostComment = functions.firestore
         }
       });
 
-      // Add post creator to the list if they're not the new commenter
-      if (postCreatorId && postCreatorId !== newCommenterId) {
-        commenterIds.add(postCreatorId);
+      // 3. Collect user IDs who liked the post (from the likes map on the post document)
+      const likerIds = new Set();
+      if (postData.likes && typeof postData.likes === 'object') {
+        Object.keys(postData.likes).forEach((likerId) => {
+          if (likerId !== newCommenterId) {
+            likerIds.add(likerId);
+          }
+        });
       }
+
+      console.log(`❤️ Found ${likerIds.size} likers on this post`);
+
+      // Merge all unique user IDs: creator + commenters + likers
+      const allUserIds = new Set();
+
+      // Add post creator if they're not the new commenter
+      if (postCreatorId && postCreatorId !== newCommenterId) {
+        allUserIds.add(postCreatorId);
+      }
+
+      // Add commenters
+      commenterIds.forEach((id) => allUserIds.add(id));
+
+      // Add likers
+      likerIds.forEach((id) => allUserIds.add(id));
 
       // Limit notifications to prevent excessive costs (notify max 50 users)
       const MAX_USERS_TO_NOTIFY = 50;
-      const userIdsArray = Array.from(commenterIds).slice(0, MAX_USERS_TO_NOTIFY);
-      
+      const userIdsArray = Array.from(allUserIds).slice(0, MAX_USERS_TO_NOTIFY);
+
       if (userIdsArray.length === 0) {
         console.log('ℹ️ No users to notify.');
         return null;
       }
 
-      console.log(`📋 Found ${commenterIds.size} unique commenters, notifying ${userIdsArray.length} users (max ${MAX_USERS_TO_NOTIFY})`);
+      console.log(`📋 Found ${commenterIds.size} commenters + ${likerIds.size} likers, notifying ${userIdsArray.length} users (max ${MAX_USERS_TO_NOTIFY})`);
 
       // 3. Batch fetch FCM tokens and preferences (cost optimization)
       const notificationPromises = [];
-      
+
       // Batch RTDB reads using Promise.all for better performance
-      const userDataPromises = userIdsArray.map(userId => 
+      const userDataPromises = userIdsArray.map(userId =>
         Promise.all([
           admin.database().ref(`/users/${userId}/fcmToken`).once('value'),
           admin.database().ref(`/users/${userId}/notificationSettings`).once('value'),
@@ -145,17 +167,33 @@ exports.notifyPostComment = functions.firestore
           continue;
         }
 
-        // Determine notification message based on whether user is the creator or a commenter
+        // Determine notification message based on user's relationship to the post
+        // Priority: creator > commenter > liker
         const isCreator = userId === postCreatorId;
-        const notificationTitle = isCreator 
-          ? 'New Comment on Your Post' 
-          : 'New Comment on Post';
-        
-        const notificationBody = isCreator
-          ? `${newCommenterName} commented on your post: "${shortDescription}"`
-          : `${newCommenterName} also commented on "${shortDescription}"`;
+        const isCommenter = commenterIds.has(userId);
+        const isLiker = likerIds.has(userId);
 
-        console.log(`📡 Preparing notification for user ${userId} (${isCreator ? 'creator' : 'commenter'})`);
+        let notificationTitle;
+        let notificationBody;
+        let role;
+
+        if (isCreator) {
+          role = 'creator';
+          notificationTitle = 'New Comment on Your Post';
+          notificationBody = `${newCommenterName} commented on your post: "${shortDescription}"`;
+        } else if (isCommenter) {
+          role = 'commenter';
+          notificationTitle = 'New Comment on Post';
+          notificationBody = `${newCommenterName} also commented on "${shortDescription}"`;
+        } else if (isLiker) {
+          role = 'liker';
+          notificationTitle = 'New Comment on Post You Liked';
+          notificationBody = `${newCommenterName} commented on a post you liked: "${shortDescription}"`;
+        } else {
+          continue;
+        }
+
+        console.log(`📡 Preparing notification for user ${userId} (${role})`);
 
         const payload = {
           notification: {
@@ -191,14 +229,14 @@ exports.notifyPostComment = functions.firestore
         notificationPromises.push(
           admin.messaging().send(payload)
             .then(() => {
-              console.log(`✅ Notification sent to ${userId} (${isCreator ? 'creator' : 'commenter'})`);
+              console.log(`✅ Notification sent to ${userId} (${role})`);
             })
             .catch((error) => {
               console.error(`❌ Failed to send notification to ${userId}:`, error);
-              
+
               // If token is invalid, remove it
-              if (error.code === 'messaging/invalid-registration-token' || 
-                  error.code === 'messaging/registration-token-not-registered') {
+              if (error.code === 'messaging/invalid-registration-token' ||
+                error.code === 'messaging/registration-token-not-registered') {
                 console.log(`Removing invalid token for user ${userId}`);
                 admin.database().ref(`/users/${userId}/fcmToken`).remove();
               }

@@ -401,16 +401,12 @@ const SocialDashboard = () => {
     // ✅ Memoized Set for O(1) lookup
     const friendIdSet = useMemo(() => new Set(friendIds), [friendIds]);
 
-    // ✅ NEW: Handle Friend Search (Server Side)
+    // ✅ Handle Friend Search (Server Side) — robust: symbols, case-insensitive
     const handleFriendSearch = useCallback(async () => {
-        if (!searchQuery.trim()) {
+        const raw = searchQuery.trim();
+        if (!raw) {
             setIsFriendSearchActive(false);
             setFriendSearchResults([]);
-            return;
-        }
-
-        if (searchQuery.length < 3) {
-            Alert.alert("Search", "Please enter at least 3 characters.");
             return;
         }
 
@@ -419,41 +415,73 @@ const SocialDashboard = () => {
         setFriendSearchResults([]);
 
         try {
-            // 1. Search Global Users - case-insensitive via dual query
-            const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
-            if (!lower) {
-                setLoadingFriendSearch(false);
-                return;
-            }
+            const lower = raw.toLowerCase();
             const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-            const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
+            const allUpper = raw.toUpperCase();
+            const variants = [...new Set([lower, upperFirst, allUpper, raw])];
 
             const seen = new Set();
             const results = [];
 
             for (const v of variants) {
-                const q = query(
-                    ref(db, 'users'),
-                    orderByChild('displayName'),
-                    startAt(v),
-                    endAt(v + "\uf8ff"),
-                    limitToFirst(50)
-                );
-                const snapshot = await get(q);
-                if (!isMounted.current) return;
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    for (const [id, u] of Object.entries(data)) {
-                        if (!friendIdSet.has(id) || seen.has(id)) continue;
-                        seen.add(id);
-                        results.push({
-                            id,
-                            displayName: u.displayName || u.userName || 'Unknown',
-                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                            robloxUsername: u.robloxUsername,
-                            robloxUsernameVerified: u.robloxUsernameVerified,
+                if (seen.size >= 50) break;
+                try {
+                    const q = query(
+                        ref(db, 'users'),
+                        orderByChild('displayName'),
+                        startAt(v),
+                        endAt(v + "\uf8ff"),
+                        limitToFirst(50)
+                    );
+                    const snapshot = await get(q);
+                    if (!isMounted.current) return;
+                    if (snapshot.exists()) {
+                        snapshot.forEach((child) => {
+                            const id = child.key;
+                            const u = child.val();
+                            if (!friendIdSet.has(id) || seen.has(id)) return;
+                            seen.add(id);
+                            results.push({
+                                id,
+                                displayName: u.displayName || u.userName || 'Unknown',
+                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                robloxUsername: u.robloxUsername,
+                                robloxUsernameVerified: u.robloxUsernameVerified,
+                            });
                         });
                     }
+                } catch (variantErr) {
+                    console.warn(`Friend search variant "${v}" failed:`, variantErr.message);
+                }
+            }
+
+            // Fallback: client-side contains match for symbol names
+            if (results.length < 10 && lower.length >= 2) {
+                try {
+                    const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
+                    const broadSnap = await get(broadQ);
+                    if (!isMounted.current) return;
+                    if (broadSnap.exists()) {
+                        broadSnap.forEach((child) => {
+                            if (seen.size >= 50) return;
+                            const id = child.key;
+                            const u = child.val();
+                            if (!friendIdSet.has(id) || seen.has(id)) return;
+                            const name = (u.displayName || u.userName || '').toLowerCase();
+                            if (name.includes(lower)) {
+                                seen.add(id);
+                                results.push({
+                                    id,
+                                    displayName: u.displayName || u.userName || 'Unknown',
+                                    avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                    robloxUsername: u.robloxUsername,
+                                    robloxUsernameVerified: u.robloxUsernameVerified,
+                                });
+                            }
+                        });
+                    }
+                } catch (broadErr) {
+                    console.warn('Broad friend search failed:', broadErr.message);
                 }
             }
 
@@ -469,62 +497,91 @@ const SocialDashboard = () => {
     }, [db, searchQuery, friendIdSet]);
 
     // ─────────────────────────────────────────────
-    // ✅ OPTIMIZED: Search Users (limited results)
+    // ✅ Search Users (Find Users tab) — robust: symbols, case-insensitive
     const handleSearch = useCallback(async () => {
-        if (!searchQuery.trim()) return;
-
-        if (searchQuery.length < 3) {
-            Alert.alert("Search", "Please enter at least 3 characters.");
-            return;
-        }
+        const raw = searchQuery.trim();
+        if (!raw) return;
 
         setLoadingSearch(true);
         setHasSearched(true);
         setSearchResults([]);
 
         try {
-            // Case-insensitive search via dual query
-            const lower = sanitizeSearchQuery(searchQuery.trim().toLowerCase());
-            if (!lower) {
-                setLoadingSearch(false);
-                return;
-            }
+            const lower = raw.toLowerCase();
             const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-            const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
+            const allUpper = raw.toUpperCase();
+            const variants = [...new Set([lower, upperFirst, allUpper, raw])];
 
             const seen = new Set();
             const results = [];
+            const limitSize = 50;
 
             for (const v of variants) {
-                const q = query(
-                    ref(db, 'users'),
-                    orderByChild('displayName'),
-                    startAt(v),
-                    endAt(v + "\uf8ff"),
-                    limitToFirst(SEARCH_LIMIT)
-                );
-                const snapshot = await get(q);
-                if (!isMounted.current) return;
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    for (const [id, u] of Object.entries(data)) {
-                        if (id === currentUser?.id || seen.has(id)) continue;
-                        seen.add(id);
-                        results.push({
-                            id,
-                            displayName: u.displayName || u.userName || 'Unknown',
-                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                            robloxUsername: u.robloxUsername,
-                            robloxUsernameVerified: u.robloxUsernameVerified,
+                if (seen.size >= 50) break;
+                try {
+                    const q = query(
+                        ref(db, 'users'),
+                        orderByChild('displayName'),
+                        startAt(v),
+                        endAt(v + "\uf8ff"),
+                        limitToFirst(limitSize)
+                    );
+                    const snapshot = await get(q);
+                    if (!isMounted.current) return;
+                    if (snapshot.exists()) {
+                        snapshot.forEach((child) => {
+                            const id = child.key;
+                            const u = child.val();
+                            if (id === currentUser?.id || seen.has(id)) return;
+                            seen.add(id);
+                            results.push({
+                                id,
+                                displayName: u.displayName || u.userName || 'Unknown',
+                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                robloxUsername: u.robloxUsername,
+                                robloxUsernameVerified: u.robloxUsernameVerified,
+                            });
                         });
                     }
+                } catch (variantErr) {
+                    console.warn(`Search variant "${v}" failed:`, variantErr.message);
                 }
             }
 
-            setSearchResults(results.slice(0, SEARCH_LIMIT));
+            // Fallback: client-side contains match for symbol names
+            if (results.length < 10 && lower.length >= 2) {
+                try {
+                    const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
+                    const broadSnap = await get(broadQ);
+                    if (!isMounted.current) return;
+                    if (broadSnap.exists()) {
+                        broadSnap.forEach((child) => {
+                            if (seen.size >= 50) return;
+                            const id = child.key;
+                            const u = child.val();
+                            if (id === currentUser?.id || seen.has(id)) return;
+                            const name = (u.displayName || u.userName || '').toLowerCase();
+                            if (name.includes(lower)) {
+                                seen.add(id);
+                                results.push({
+                                    id,
+                                    displayName: u.displayName || u.userName || 'Unknown',
+                                    avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                    robloxUsername: u.robloxUsername,
+                                    robloxUsernameVerified: u.robloxUsernameVerified,
+                                });
+                            }
+                        });
+                    }
+                } catch (broadErr) {
+                    console.warn('Broad search failed:', broadErr.message);
+                }
+            }
+
+            setSearchResults(results.slice(0, 50));
         } catch (err) {
             console.error("Search error:", err);
-            Alert.alert("Search Failed", "Could not search users.");
+            Alert.alert("Search Failed", err.message || "Could not search users.");
         } finally {
             if (isMounted.current) {
                 setLoadingSearch(false);

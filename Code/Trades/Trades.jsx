@@ -1089,18 +1089,7 @@ const TradeList = ({ route }) => {
                 </Text>
               </View>
             )}
-            {item.isSharkMode !== undefined && (
-              <View style={[styles.dealContainer, {
-                backgroundColor: item.isSharkMode === true ? config.colors.secondary : config.colors.hasBlockGreen,
-                paddingVertical: 1,
-                paddingHorizontal: 6,
-                borderRadius: 6,
-              }]}>
-                <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>
-                  {item.isSharkMode === true ? t('home.shark') : t('home.frost')}
-                </Text>
-              </View>
-            )}
+
             <FontAwesome
               name='message'
               size={18}
@@ -1345,9 +1334,7 @@ const TradeList = ({ route }) => {
           onSubmitEditing={() => {
             setSearchLastDoc(null);
             setSearchHasMore(true);
-            if (!localState.isPro && searchQuery.trim()) {
-              InterstitialAdManager.showAd(() => handleSearchTrades(false));
-            } else {
+            if (searchQuery.trim()) {
               handleSearchTrades(false);
             }
           }}
@@ -1366,9 +1353,7 @@ const TradeList = ({ route }) => {
           onPress={() => {
             setSearchLastDoc(null);
             setSearchHasMore(true);
-            if (!localState.isPro && searchQuery.trim()) {
-              InterstitialAdManager.showAd(() => handleSearchTrades(false));
-            } else {
+            if (searchQuery.trim()) {
               handleSearchTrades(false);
             }
           }}

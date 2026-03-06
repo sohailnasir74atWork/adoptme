@@ -32,7 +32,6 @@ const SPAM_KEYWORDS = [
 
 
 
-  'friend me',
   'exploit',
   'mod menu',
   'free account',
@@ -43,12 +42,7 @@ const SPAM_KEYWORDS = [
   'guaranteed',
   '100% free',
 
-  'real deal',
-  'best price',
-  'promo code',
-  'use code',
   'referral code',
-  'invite code',
 ];
 
 // ✅ Inappropriate content patterns (beyond profanity)
@@ -172,9 +166,10 @@ export const containsLink = (text) => {
  * Comprehensive content moderation check
  * Checks for: profanity, spam, inappropriate content, links
  * @param {string} text - Text to check
+ * @param {{skipLinkCheck?: boolean}} [options] - Options (e.g. skip link check for admins)
  * @returns {{isValid: boolean, reason?: string}} - Validation result
  */
-export const validateContent = (text) => {
+export const validateContent = (text, options = {}) => {
   if (!text || typeof text !== 'string') {
     return { isValid: true }; // Empty text is valid
   }
@@ -203,8 +198,8 @@ export const validateContent = (text) => {
     };
   }
 
-  // Check links
-  if (containsLink(text)) {
+  // Check links (skip for admins/mods)
+  if (!options.skipLinkCheck && containsLink(text)) {
     return {
       isValid: false,
       reason: 'Links are not allowed in messages.',
