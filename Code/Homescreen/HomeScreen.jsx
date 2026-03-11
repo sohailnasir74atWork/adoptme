@@ -1754,7 +1754,7 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
       paddingBottom: 5,
     },
     summaryContainer: {
@@ -2359,7 +2359,7 @@ const getStyles = (isDarkMode) =>
     },
     // ✅ Favorites row layout styles - matching ValueScreen.js (compact version)
     favoriteRowItem: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
       borderRadius: 6,
       marginHorizontal: 4,
       marginBottom: 4,

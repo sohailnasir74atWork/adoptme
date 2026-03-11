@@ -24,8 +24,7 @@ import {
 } from './Code/AppHelper/AppHelperFunction';
 import OnboardingScreen from './Code/AppHelper/OnBoardingScreen';
 import { useTranslation } from 'react-i18next';
-// import RewardCenterScreen from './Code/SettingScreen/RewardCenter';
-// import RewardRulesModal from './Code/SettingScreen/RewardRulesModel';
+
 import InterstitialAdManager from './Code/Ads/IntAd';
 import AppOpenAdManager from './Code/Ads/openApp';
 import RNBootSplash from "react-native-bootsplash";
@@ -88,52 +87,6 @@ function App() {
     return () => listener.remove();
   }, [theme]);
 
-  // useEffect(() => {
-  //   const askPermission = async () => {
-  //     const status = await requestTrackingPermission();
-  //     console.log('Tracking status:', status); // authorized, denied, etc.
-  //   };
-  
-  //   if (Platform.OS === 'ios') {
-  //     askPermission();
-  //   }
-  // }, []);
-  // useEffect(() => {
-  //   let isMounted = true;
-  //   let unsubscribe;
-
-  //   const initializeAds = async () => {
-  //     try {
-  //       await AppOpenAdManager.init();
-  //     } catch (error) {
-  //       console.error('❌ Error initializing ads:', error);
-  //     }
-  //   };
-
-  //   const handleAppStateChange = async (state) => {
-  //     if (!isMounted) return;
-
-  //     try {
-  //       if (state === 'active' && !localState?.isPro) {
-  //         await AppOpenAdManager.showAd();
-  //       }
-  //     } catch (error) {
-  //       console.error('❌ Error showing ad:', error);
-  //     }
-  //   };
-
-  //   initializeAds();
-  //   unsubscribe = AppState.addEventListener('change', handleAppStateChange);
-
-  //   return () => {
-  //     isMounted = false;
-  //     if (unsubscribe) {
-  //       unsubscribe.remove();
-  //     }
-  //     AppOpenAdManager.cleanup();
-  //   };
-  // }, [localState?.isPro]);
-
 
 
   if (loading) {
@@ -157,9 +110,9 @@ function App() {
   const handleUserConsent = useCallback(async () => {
     try {
       const consentInfo = await AdsConsent.requestInfoUpdate();
-      await MobileAds().initialize();  
+      await MobileAds().initialize();
 
-  
+
       if (
         consentInfo.status === AdsConsentStatus.OBTAINED ||
         consentInfo.status === AdsConsentStatus.NOT_REQUIRED
@@ -167,7 +120,7 @@ function App() {
         saveConsentStatus(consentInfo.status);
         return;
       }
-  
+
       if (consentInfo.isConsentFormAvailable && consentInfo.isRequestLocationInEeaOrUnknown) {
         const formResult = await AdsConsent.showForm();
         saveConsentStatus(formResult.status);
@@ -261,13 +214,10 @@ function App() {
               {() => <SettingsScreen selectedTheme={selectedTheme} />}
             </Stack.Screen>
           </Stack.Navigator>
-          
+
         </NavigationContainer>
-        {/* RewardRulesModal commented out - uncomment if needed */}
-        {/* {modalVisible && (
-          <RewardRulesModal visible={modalVisible} onClose={() => setModalVisible(false)} selectedTheme={selectedTheme} />
-        )} */}
-          {showofferwall && <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall}   oneWallOnly={single_offer_wall}/>}
+
+        {showofferwall && <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' showoffer={!single_offer_wall} oneWallOnly={single_offer_wall} />}
       </Animated.View>
     </SafeAreaView>
   );
@@ -284,8 +234,7 @@ export default function AppWrapper() {
     }
   }, [localState.isAppReady]);
   useEffect(() => {
-    if (!localState.showOnBoardingScreen) 
-   { (!localState.isPro) && AppOpenAdManager.initAndShow();}
+    if (!localState.showOnBoardingScreen) { (!localState.isPro) && AppOpenAdManager.initAndShow(); }
   }, [localState.isPro]);
 
   const selectedTheme = useMemo(() => {

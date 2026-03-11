@@ -835,6 +835,42 @@ const GroupChatScreen = () => {
     );
   }, [messagesRef]);
 
+  // Handle reaction to a message
+  const handleReaction = useCallback(async (messageId, emoji) => {
+    if (!messagesRef || !messageId || !user?.id) return;
+
+    try {
+      const reactionRef = messagesRef.child(`${messageId}/reactions/${user.id}`);
+      const snapshot = await reactionRef.once('value');
+      const currentReaction = snapshot.val();
+
+      if (currentReaction === emoji) {
+        // Same emoji → remove reaction
+        await reactionRef.remove();
+        // Optimistic update
+        setMessages(prev => prev.map(m => {
+          if (String(m.id) !== String(messageId)) return m;
+          const newReactions = { ...(m.reactions || {}) };
+          delete newReactions[user.id];
+          return { ...m, reactions: newReactions };
+        }));
+      } else {
+        // New or different emoji → set reaction
+        await reactionRef.set(emoji);
+        // Optimistic update
+        setMessages(prev => prev.map(m => {
+          if (String(m.id) !== String(messageId)) return m;
+          return {
+            ...m,
+            reactions: { ...(m.reactions || {}), [user.id]: emoji },
+          };
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling reaction:', error);
+    }
+  }, [messagesRef, user?.id]);
+
   // Handle remove member (admin action)
   const handleRemoveMember = useCallback(async (memberId, memberName) => {
     if (!user?.id || !groupId) return;
@@ -1200,6 +1236,7 @@ const GroupChatScreen = () => {
               flatListRef={flatListRef}
               onDeleteMessage={handleDeleteMessage}
               onDeleteAllMessages={handleDeleteAllMessages}
+              onReaction={handleReaction}
             />
           )}
 

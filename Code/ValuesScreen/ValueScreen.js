@@ -796,7 +796,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 export const getStyles = (isDarkMode) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
+    backgroundColor: isDarkMode ? '#0f172a' : '#f8f9fa',
     // paddingTop: 16,
   },
   columnWrapper: {
@@ -828,7 +828,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
 
   itemContainer: {
-    backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
     borderRadius: 10,
     marginBottom: 8,
     padding: 10,

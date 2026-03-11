@@ -125,6 +125,18 @@
             "wishlist_empty": "Añade mascotas",
             "wishlist_login": "Inicia sesión para añadir"
         },
+        "portfolio": {
+            "title": "Valor del portafolio",
+            "total_value": "Valor total",
+            "top_items": "Mejores artículos",
+            "categories": "Por categoría",
+            "avg_value": "Prom. por artículo",
+            "items": "artículos",
+            "best_category": "Mejor categoría",
+            "wishlist_value": "Lista de deseos",
+            "wishlist_gap": "Diferencia",
+            "empty": "Añade mascotas para ver el valor de tu portafolio"
+        },
         "trades": {
             "title": "Mis intercambios",
             "login_msg": "Inicia sesión para ver",
@@ -221,7 +233,7 @@
         "no_wishlist_pets": "Sin lista de deseos.",
         "no_reviews_yet": "Sin reseñas.",
         "no_trades_yet": "Sin intercambios.",
-        "view_detail_profile": "Ver perfil",
+        "view_detail_profile": "Perfil",
         "load_more_reviews": "Cargar más reseñas",
         "load_more_trades": "Cargar más intercambios",
         "roblox_app_error": "No se pudo abrir perfil Roblox.",

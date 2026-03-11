@@ -316,7 +316,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+    backgroundColor: isDarkMode ? '#1e293b' : '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',

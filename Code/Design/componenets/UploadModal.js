@@ -437,7 +437,7 @@ const getStyles = (isDark) =>
   StyleSheet.create({
     fullScreenContainer: {
       flex: 1,
-      backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
+      backgroundColor: isDark ? '#1e293b' : '#ffffff',
       padding: 24,
       paddingTop: Platform.OS === 'ios' ? 60 : 24, // Safe area space
     },

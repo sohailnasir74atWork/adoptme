@@ -17,6 +17,7 @@ import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-m
 import { useTranslation } from 'react-i18next';
 import database, { ref, get, update } from '@react-native-firebase/database';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
+import { getMyStreaks } from '../../Helper/StreakHelper';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
 const INITIAL_LOAD = 15; // ✅ Initial chats to display
@@ -24,12 +25,13 @@ const LOAD_MORE = 10; // ✅ Load 10 more on scroll
 
 const InboxScreen = ({ bannedUsers }) => {
   const navigation = useNavigation();
-  const { user, theme, appdatabase } = useGlobalState();
+  const { user, theme, appdatabase, firestoreDB } = useGlobalState();
   const { t } = useTranslation();
   const [localLoading, setLocalLoading] = useState(false);
   const [localChats, setLocalChats] = useState([]);
   const [displayedChatsCount, setDisplayedChatsCount] = useState(INITIAL_LOAD); // ✅ Start with 15 chats
   const debounceTimerRef = useRef(null); // ✅ Debounce updateChatsList
+  const [streaks, setStreaks] = useState(new Map());
 
   // ✅ OPTIMIZED: Use get() for initial load + child listeners for updates
   // This prevents re-downloading entire chat_meta_data on every change
@@ -125,6 +127,14 @@ const InboxScreen = ({ bannedUsers }) => {
     }, [user?.id, appdatabase, bannedUsers])
   );
 
+  // 🔥 Fetch streaks on mount
+  useEffect(() => {
+    if (!user?.id || !firestoreDB) return;
+    getMyStreaks(firestoreDB, user.id)
+      .then(map => setStreaks(map))
+      .catch(() => { });
+  }, [user?.id, firestoreDB]);
+
   const allChats = localChats;
   const displayLoading = localLoading;
 
@@ -196,17 +206,9 @@ const InboxScreen = ({ bannedUsers }) => {
                 return;
               }
 
-              // 1. Delete chat metadata for the current user
+              // Delete chat metadata for the current user only (other user keeps their chat)
               const senderChatRef = database().ref(`chat_meta_data/${user.id}/${otherUserId}`);
-              const snapshot = await senderChatRef.once('value');
-
-              if (snapshot.exists()) {
-                await senderChatRef.remove();
-              }
-
-              // 2. Delete full chat thread using chatId
-              const fullChatRef = database().ref(`private_messages/${chatId}`);
-              await fullChatRef.remove();
+              await senderChatRef.remove();
 
               // 3. Update local state - ✅ Validate setChats callback
               setLocalChats((prevChats) => {
@@ -304,9 +306,12 @@ const InboxScreen = ({ bannedUsers }) => {
             <Text style={styles.userName}>
               {otherUserName}
               {isOnline && !isBanned && (
-                <Text style={{ color: config.colors.hasBlockGreen }}> - Online</Text>
+                <Text style={{ color: '#22c55e' }}> - Online</Text>
               )}
             </Text>
+            {streaks.get(otherUserId) >= 2 && (
+              <Text style={{ fontSize: 12, marginTop: 2 }}>🔥 {streaks.get(otherUserId)}</Text>
+            )}
             <Text style={styles.lastMessage} numberOfLines={1}>
               {lastMessage}
             </Text>
@@ -377,7 +382,7 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
     },
     itemContainer: {
       flex: 1,

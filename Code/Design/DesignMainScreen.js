@@ -253,22 +253,7 @@ const DesignFeedScreen = ({ route }) => {
     fetchInitialPosts();
   }, []);
 
-  // Update header when filter state changes
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <PostsHeader
-          selectedTag={selectedTag}
-          filterMyPosts={filterMyPosts}
-          setFilterMyPosts={setFilterMyPosts}
-          setSelectedTag={setSelectedTag}
-          fetchInitialPosts={fetchInitialPosts}
-          fetchMyPosts={fetchMyPosts}
-          fetchPostsByTag={fetchPostsByTag}
-        />
-      ),
-    });
-  }, [navigation, selectedTag, filterMyPosts, fetchInitialPosts, fetchMyPosts, fetchPostsByTag]);
+  // PostsHeader is now rendered inline as part of the FlatList ListHeaderComponent
   useEffect(() => {
     if (posts.length === 0) return;
 
@@ -332,13 +317,9 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-  const handleLike = async (post) => {
+  const handleReaction = async (post, emoji) => {
     // ✅ Ban check
     if (isMeBanned) {
-      // Optional: Show alert or just return silently. 
-      // User didn't explicitly ask for alert on like, but consistent with other actions.
-      // But for likes, often silent failure or simple toast is better to avoid spamming alerts.
-      // Given other implementations use Alert/showMessage, let's use showMessage for less intrusion than Alert.
       showMessage({
         message: t("chat.access_denied", { defaultValue: 'Access Denied' }),
         description: t("chat.banned_message_simple", { defaultValue: "You are banned." }),
@@ -348,11 +329,25 @@ const DesignFeedScreen = ({ route }) => {
     }
 
     const postRef = doc(firestoreDB, 'designPosts', post.id);
-    const alreadyLiked = !!post.likes?.[user.id];
+    const currentReaction = post.reactions?.[user.id];
+    const hadOldLike = !!post.likes?.[user.id];
 
-    await updateDoc(postRef, {
-      [`likes.${user.id}`]: alreadyLiked ? deleteField() : true
-    });
+    if (currentReaction === emoji) {
+      // Same emoji tapped again → remove reaction
+      await updateDoc(postRef, {
+        [`reactions.${user.id}`]: deleteField(),
+      });
+    } else {
+      // New reaction or switching emoji
+      const updates = {
+        [`reactions.${user.id}`]: emoji,
+      };
+      // Clean up old likes entry if exists (migration)
+      if (hadOldLike) {
+        updates[`likes.${user.id}`] = deleteField();
+      }
+      await updateDoc(postRef, updates);
+    }
   };
 
   const handleUploadPost = async (desc, imageUrls, selectedTags, currentUserEmail) => {
@@ -492,7 +487,7 @@ const DesignFeedScreen = ({ route }) => {
       <PostCard
         item={item}
         userId={user?.id}
-        onLike={handleLike}
+        onReaction={handleReaction}
         localState={localState}
         appdatabase={appdatabase}
         onDelete={handleDeletePost}
@@ -533,11 +528,23 @@ const DesignFeedScreen = ({ route }) => {
 
   return (
     <View style={[styles.container, isDarkMode && styles.darkContainer]}>
+
+      {/* ── Filter Bar (outside FlatList to avoid touch conflicts) ── */}
+      <PostsHeader
+        selectedTag={selectedTag}
+        filterMyPosts={filterMyPosts}
+        setFilterMyPosts={setFilterMyPosts}
+        setSelectedTag={setSelectedTag}
+        fetchInitialPosts={fetchInitialPosts}
+        fetchMyPosts={fetchMyPosts}
+        fetchPostsByTag={fetchPostsByTag}
+      />
+
       <FlatList
         data={dataToRender}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingVertical: 6 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
         onEndReached={loadMorePosts}
         onEndReachedThreshold={0.5}
         refreshing={refreshing}
@@ -548,16 +555,18 @@ const DesignFeedScreen = ({ route }) => {
         }}
         ListFooterComponent={
           loadingMore && !initialLoading ? (
-            <ActivityIndicator size="small" color={config.colors.primary} />
+            <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 16 }} />
           ) : null
         }
         ListEmptyComponent={
           !initialLoading && (
-            <Text style={{ textAlign: 'center', padding: 20, color: isDarkMode ? '#64748b' : '#94a3b8', fontSize: 14 }}>
-              {filterMyPosts
-                ? t('feed.no_my_posts')
-                : t('feed.no_posts_found')}
-            </Text>
+            <View style={styles.emptyState}>
+              <FontAwesome name="newspaper" size={48} color={isDarkMode ? '#334155' : '#cbd5e1'} />
+              <Text style={styles.emptyTitle}>
+                {filterMyPosts ? t('feed.no_my_posts') : t('feed.no_posts_found')}
+              </Text>
+              <Text style={styles.emptySubtitle}>Be the first to post!</Text>
+            </View>
           )
         }
         ListHeaderComponent={
@@ -576,21 +585,17 @@ const DesignFeedScreen = ({ route }) => {
             </View>
           ) : null
         }
-
       />
 
-      {/* <TouchableOpacity
+      {/* ── FAB ── */}
+      <TouchableOpacity
         style={styles.fab}
-        onPress={() =>
-          user?.id ? setModalVisible(true) : setSigninDrawerVisible(true)
-        }
+        onPress={() => user?.id ? setModalVisible(true) : setSigninDrawerVisible(true)}
+        activeOpacity={0.85}
       >
-        <Icon name="plus" size={24} color="white" />
-      </TouchableOpacity> */}
-      <TouchableOpacity style={styles.fab} onPress={() =>
-        user?.id ? setModalVisible(true) : setSigninDrawerVisible(true)
-      }>
-        <FontAwesome name="circle-plus" size={44} color={config.colors.primary} />
+        <View style={styles.fabInner}>
+          <FontAwesome name="plus" size={20} color={'#fff'} />
+        </View>
       </TouchableOpacity>
 
       <UploadModal
@@ -616,33 +621,50 @@ const DesignFeedScreen = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // backgroundColor: '#fff',
   },
   darkContainer: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0a0f1e',
   },
   fab: {
     position: 'absolute',
-    bottom: 65,
-    right: 10,
-    // backgroundColor: config.colors.primary,
-    width: 60,
-    height: 60,
-    borderRadius: 28,
+    bottom: 72,
+    right: 16,
+  },
+  fabInner: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: config.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    // backgroundColor:'white'
-    // elevation: 4,
+    shadowColor: config.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
   },
   skeletonPost: {
-    height: 250,
-    margin: 10,
+    height: 180,
+    marginHorizontal: 12,
+    marginVertical: 6,
     backgroundColor: '#e0e0e0',
-    borderRadius: 10,
+    borderRadius: 20,
   },
-
-
-
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+  },
 });
 
 export default DesignFeedScreen;

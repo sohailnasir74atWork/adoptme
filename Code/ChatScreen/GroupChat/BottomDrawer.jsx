@@ -43,6 +43,7 @@ import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
 import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus } from '../utils';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import CompactPortfolio from './CompactPortfolio';
 
 dayjs.extend(relativeTime);
 
@@ -1994,7 +1995,7 @@ const ProfileBottomDrawer = ({
                         width: 16,
                         height: 16,
                         borderRadius: 8,
-                        backgroundColor: isOnline ? '#22c55e' : '#94a3b8',
+                        backgroundColor: isOnline ? '#22c55e' : '#ef4444',
                         borderWidth: 3,
                         borderColor: isDarkMode ? '#0f172a' : '#ffffff',
                         zIndex: 10,
@@ -2038,9 +2039,9 @@ const ProfileBottomDrawer = ({
                       </TouchableOpacity>
                     </View>
 
-                    {/* Roblox Verification Badge */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
-                      {mergedUser?.robloxUsername ? (
+                    {/* Roblox Verification Badge — 2nd row */}
+                    {mergedUser?.robloxUsername && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                         <View style={{
                           flexDirection: 'row',
                           alignItems: 'center',
@@ -2065,23 +2066,8 @@ const ProfileBottomDrawer = ({
                             {mergedUser?.robloxUsernameVerified ? 'Verified' : 'Unverified'}
                           </Text>
                         </View>
-                      ) : (
-                        <View style={{
-                          backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
-                          paddingHorizontal: 8,
-                          paddingVertical: 3,
-                          borderRadius: 999,
-                        }}>
-                          <Text style={{
-                            color: isDarkMode ? '#64748b' : '#94a3b8',
-                            fontSize: 10,
-                            fontWeight: '600',
-                          }}>
-                            No Roblox ID
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                      </View>
+                    )}
                   </View>
                 </View>
 
@@ -2285,126 +2271,16 @@ const ProfileBottomDrawer = ({
                   </Text>
                 </View>
               )}
-              {/* 🐾 Pets section */}
+              {/* 🐾 Pets & Portfolio (unified section) */}
               {loadDetails && (
-                <View
-                  style={{
-                    borderRadius: 16,
-                    padding: 14,
-                    backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '600',
-                      marginBottom: 8,
-                      color: isDarkMode ? '#64748b' : '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.8,
-                    }}
-                  >
-                    {t('home.categories.pets')}
-                  </Text>
-
-                  {loadingPets ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={config.colors.primary}
-                    />
-                  ) : (
-                    <>
-                      {/* Owned */}
-                      <View style={{ marginBottom: 8 }}>
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            marginBottom: 4,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '500',
-                              color: isDarkMode ? '#e5e7eb' : '#111827',
-                            }}
-                          >
-                            {t('profile.pets.owned_title')}
-                          </Text>
-                        </View>
-
-                        {ownedPets.length === 0 ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: isDarkMode ? '#9ca3af' : '#6b7280',
-                            }}
-                          >
-                            {t('profile.no_pets_listed')}
-                          </Text>
-                        ) : (
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={{ paddingRight: 6 }}
-                          >
-                            <View style={{ flexDirection: 'row' }}>
-                              {ownedPets.map((pet, index) =>
-                                renderPetBubble(pet, index),
-                              )}
-                            </View>
-                          </ScrollView>
-                        )}
-                      </View>
-
-                      {/* Wishlist */}
-                      <View>
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            marginBottom: 4,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontWeight: '500',
-                              color: isDarkMode ? '#e5e7eb' : '#111827',
-                            }}
-                          >
-                            {t('profile.pets.wishlist_title')}
-                          </Text>
-                        </View>
-
-                        {wishlistPets.length === 0 ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: isDarkMode ? '#9ca3af' : '#6b7280',
-                            }}
-                          >
-                            {t('profile.no_wishlist_pets')}
-                          </Text>
-                        ) : (
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={{ paddingRight: 6 }}
-                          >
-                            <View style={{ flexDirection: 'row' }}>
-                              {wishlistPets.map((pet, index) =>
-                                renderPetBubble(pet, index),
-                              )}
-                            </View>
-                          </ScrollView>
-                        )}
-                      </View>
-                    </>
-                  )}
-                </View>
+                <CompactPortfolio
+                  ownedPets={ownedPets}
+                  wishlistPets={wishlistPets}
+                  isDarkMode={isDarkMode}
+                  t={t}
+                  loadingPets={loadingPets}
+                  renderPetBubble={renderPetBubble}
+                />
               )}
 
               {/* 📝 Reviews section */}
@@ -2715,49 +2591,132 @@ const ProfileBottomDrawer = ({
                 </View>
               )}
 
-              {/* View details button */}
-              {!loadDetails && (
-                <TouchableOpacity
-                  style={styles.saveButtonProfile}
-                  onPress={() => setLoadDetails(true)}
-                >
-                  <Text
-                    style={[
-                      styles.saveButtonTextProfile,
-                      { color: isDarkMode ? 'white' : 'black' },
-                    ]}
+              {/* ── Quick Actions Row (always visible) ── */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                gap: 24,
+                marginTop: 16,
+                marginBottom: 16,
+                paddingHorizontal: 20,
+              }}>
+                {/* Chat Action */}
+                {!fromPvtChat && (
+                  <TouchableOpacity
+                    onPress={handleStartChat}
+                    style={{ alignItems: 'center', gap: 6 }}
+                    activeOpacity={0.7}
                   >
-                    {t('profile.view_detail_profile')}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: config.colors.primary,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}>
+                      <Icon name="chatbubble-outline" size={20} color="#fff" />
+                    </View>
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      color: isDarkMode ? '#94a3b8' : '#64748b',
+                    }}>{t('chat.start_chat')}</Text>
+                  </TouchableOpacity>
+                )}
 
-              {/* Roblox Profile Button */}
-              {mergedUser?.robloxUsername && (
-                <TouchableOpacity
-                  style={[styles.saveButton, {
-                    backgroundColor: isDarkMode ? '#4A90E2' : '#007AFF',
-                    marginBottom: 8,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }]}
-                  onPress={handleOpenRobloxProfile}
-                >
-                  <Icon
-                    name="game-controller-outline"
-                    size={16}
-                    color="#FFFFFF"
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
-                    {t('profile.view_roblox_profile')}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {/* Roblox Profile Action */}
+                {mergedUser?.robloxUsername && (
+                  <TouchableOpacity
+                    onPress={handleOpenRobloxProfile}
+                    style={{ alignItems: 'center', gap: 6 }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isDarkMode ? '#1e40af' : '#2563eb',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}>
+                      <Icon name="game-controller-outline" size={20} color="#fff" />
+                    </View>
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      color: isDarkMode ? '#94a3b8' : '#64748b',
+                    }}>Roblox</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Follow/Unfollow Action */}
+                {!fromPvtChat && user?.id !== selectedUserId && (
+                  <TouchableOpacity
+                    onPress={handleFollowToggle}
+                    disabled={followLoading}
+                    style={{ alignItems: 'center', gap: 6 }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isFollowing
+                        ? (isDarkMode ? '#334155' : '#e2e8f0')
+                        : (isDarkMode ? '#065f46' : '#10b981'),
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}>
+                      {followLoading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Icon
+                          name={isFollowing ? "person-remove-outline" : "person-add-outline"}
+                          size={20}
+                          color={isFollowing ? (isDarkMode ? '#94a3b8' : '#64748b') : '#fff'}
+                        />
+                      )}
+                    </View>
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      color: isDarkMode ? '#94a3b8' : '#64748b',
+                    }}>{isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* View Profile Action — only on initial view */}
+                {!loadDetails && (
+                  <TouchableOpacity
+                    onPress={() => setLoadDetails(true)}
+                    style={{ alignItems: 'center', gap: 6 }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                    }}>
+                      <Icon name="person-outline" size={20} color={isDarkMode ? '#e2e8f0' : '#334155'} />
+                    </View>
+                    <Text style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      color: isDarkMode ? '#94a3b8' : '#64748b',
+                    }}>{t('profile.view_detail_profile')}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
               {/* 🛡️ Moderator/Admin Actions */}
-              {(isAdmin || user?.isModerator) && (
+              {!loadDetails && (isAdmin || user?.isModerator) && (
                 <View style={{
                   marginTop: 4,
                   padding: 14,
@@ -2862,7 +2821,6 @@ const ProfileBottomDrawer = ({
                         style={{
                           flexDirection: 'row',
                           alignItems: 'center',
-                          // backgroundColor: mergedUser?.isModerator ? '#F59E0B' : '#3B82F6',
                           paddingVertical: 12,
                           paddingHorizontal: 12,
                           borderRadius: 6,
@@ -2879,48 +2837,10 @@ const ProfileBottomDrawer = ({
                   </View>
                 </View>
               )}
-
-              {/* Follow / Unfollow Button */}
-              {!fromPvtChat && user?.id !== selectedUserId && (
-                <TouchableOpacity
-                  style={[
-                    styles.saveButton,
-                    {
-                      backgroundColor: isFollowing ? '#8E8E93' : config.colors.primary,
-                      marginBottom: 10,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      alignItems: 'center'
-                    }
-                  ]}
-                  onPress={handleFollowToggle}
-                  disabled={followLoading}
-                >
-                  {followLoading ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <>
-                      <Icon name={isFollowing ? "person-remove-outline" : "person-add-outline"} size={18} color="#FFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.saveButtonText}>
-                        {isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              {/* Start chat button */}
-              {!fromPvtChat && (
-                <TouchableOpacity style={styles.saveButton} onPress={handleStartChat}>
-                  <Text style={styles.saveButtonText}>
-                    {t('chat.start_chat')}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+            </ScrollView >
+          </View >
+        </View >
+      </Modal >
     </>
   );
 };

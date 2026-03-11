@@ -94,7 +94,7 @@ const PetWinToast = ({ visible, petName, petValue, petImage, onDismiss }) => {
         style={[
           styles.toast,
           {
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#fff',
+            backgroundColor: isDarkMode ? '#1e293b' : '#fff',
             shadowColor: isDarkMode ? '#10B981' : '#000',
           },
         ]}

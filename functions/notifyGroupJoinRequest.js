@@ -77,6 +77,7 @@ exports.notifyGroupJoinRequest = functions.firestore
         requestId: requestId || '',
         groupId: groupId || '',
         requesterId: requestData.requesterId || '',
+        senderId: requestData.requesterId || '',
         groupName: groupName || '',
         timestamp: Date.now().toString(),
       },
@@ -103,10 +104,10 @@ exports.notifyGroupJoinRequest = functions.firestore
       console.log(`✅ Notification successfully sent to ${creatorId} for join request ${requestId}`);
     } catch (error) {
       console.error('❌ Failed to send notification:', error);
-      
+
       // If token is invalid, remove it
-      if (error.code === 'messaging/invalid-registration-token' || 
-          error.code === 'messaging/registration-token-not-registered') {
+      if (error.code === 'messaging/invalid-registration-token' ||
+        error.code === 'messaging/registration-token-not-registered') {
         console.log(`Removing invalid token for user ${creatorId}`);
         await admin.database().ref(`/users/${creatorId}/fcmToken`).remove();
       }

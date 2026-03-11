@@ -169,7 +169,7 @@ const ServerScreen = ({ selectedTheme }) => {
 const getStyles = (isDarkMode) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: isDarkMode ? '#121212' : '#f5f5f5',
+    backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',
   },
   contentContainer: {
     padding: 8,
@@ -179,7 +179,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: isDarkMode ? '#121212' : '#f5f5f5',
+    backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',
   },
   loadingText: {
     marginTop: 12,
@@ -191,7 +191,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: isDarkMode ? '#121212' : '#f5f5f5',
+    backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',
     padding: 20,
   },
   errorText: {
@@ -211,7 +211,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: isDarkMode ? '#121212' : '#f5f5f5',
+    backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',
   },
   emptyText: {
     marginTop: 12,
@@ -234,7 +234,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   serverPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,

@@ -155,8 +155,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const chatRef = useMemo(() => ref(appdatabase, activeChannel.path), [activeChannel.path]);
   const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);
 
-  // const isAdmin = user?.admin || false;
-  // const isOwner = user?.owner || false;
   const styles = useMemo(() => getStyles(theme === 'dark'), [theme]);
 
 
@@ -190,12 +188,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     async (reset = false) => {
       try {
         if (reset) {
-          // console.log('Resetting messages and loading the latest ones.');
+
           setLoading(true);
           setLastLoadedKey(null); // Reset pagination key
         }
 
-        // console.log(`Fetching messages. Reset: ${reset}, LastLoadedKey: ${lastLoadedKey}`);
+
 
         // ✅ Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
@@ -206,15 +204,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         const snapshot = await messageQuery.once('value');
         const data = snapshot.val() || {};
 
-        // if (developmentMode) {
-        //   const dataSize = JSON.stringify(data).length / 1024;
-        //   console.log(`🚀 Downloaded group chat data: ${dataSize.toFixed(2)} KB from load messages`);
-        // }
 
-        // console.log(`Fetched ${Object.keys(data).length} messages from Firebase.`);
 
-        // const bannedUserIds = bannedUsers?.map((user) => user.id) || [];
-        // console.log('Banned User IDs:', bannedUserIds);
+
 
         // ✅ Safety check for bannedUsers array
         const bannedIds = Array.isArray(bannedUsers)
@@ -228,29 +220,26 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           .filter(Boolean)
           .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId)).sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
 
-        // console.log('Parsed Messages:', parsedMessages);
+
 
         if (parsedMessages.length === 0 && !reset) {
-          // console.log('No more messages to load.');
+
           setLastLoadedKey(null);
           return;
         }
 
         if (reset) {
           setMessages(parsedMessages);
-          // console.log('Resetting messages:', parsedMessages);
         } else {
           setMessages((prev) => [...prev, ...parsedMessages]);
-          // console.log('Appending messages:', parsedMessages);
         }
 
         if (parsedMessages.length > 0) {
           // Use the last key from the newly fetched messages
           setLastLoadedKey(parsedMessages[parsedMessages.length - 1].id);
-          // console.log('Updated LastLoadedKey:', parsedMessages[parsedMessages.length - 1].id);
+
         }
       } catch (error) {
-        // console.error('Error loading messages:', error);
       } finally {
         if (reset) setLoading(false);
       }
@@ -511,7 +500,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     if (!loading && lastLoadedKey) {
       await loadMessages(false);
     } else {
-      // console.log('No more messages to load or currently loading.');
+
     }
   }, [user?.id, signinMessage, loading, lastLoadedKey, loadMessages, t]);
 
@@ -591,16 +580,47 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     setRefreshing(true);
     await loadMessages(true);
     setRefreshing(false);
-    // fetchChats()
   };
 
+  // Handle reaction to a message
+  const handleReaction = useCallback(async (messageId, emoji) => {
+    if (!chatRef || !messageId || !user?.id) return;
+
+    try {
+      const reactionRef = chatRef.child(`${messageId}/reactions/${user.id}`);
+      const snapshot = await reactionRef.once('value');
+      const currentReaction = snapshot.val();
+
+      if (currentReaction === emoji) {
+        // Same emoji → remove reaction
+        await reactionRef.remove();
+        setMessages(prev => prev.map(m => {
+          if (String(m.id) !== String(messageId)) return m;
+          const newReactions = { ...(m.reactions || {}) };
+          delete newReactions[user.id];
+          return { ...m, reactions: newReactions };
+        }));
+      } else {
+        // New or different emoji → set reaction
+        await reactionRef.set(emoji);
+        setMessages(prev => prev.map(m => {
+          if (String(m.id) !== String(messageId)) return m;
+          return {
+            ...m,
+            reactions: { ...(m.reactions || {}), [user.id]: emoji },
+          };
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling reaction:', error);
+    }
+  }, [chatRef, user?.id]);
+
   // expects to be called like:
-  // await handleSendMessage(replyTo, trimmedInput, fruits);
+
 
   const handleSendMessage = async (replyToArg, trimmedInputArg, fruits, emojiUrl) => {
     const hasEmoji = !!emojiUrl;
-
-    // console.log(emojiUrl)
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
     const MAX_CHARACTERS = 250;
@@ -708,10 +728,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     // Link check (only for non-pro & non-admin)
     const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
-    // if (containsLink && !localState?.isPro && !isAdmin) {
-    //   Alert.alert(t('home.alert.error'), t('misc.proUsersOnlyLinks'));
-    //   return;
-    // }
+
 
     try {
       // ✅ Use chatRef instead of creating new ref
@@ -774,7 +791,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   };
 
 
-  // console.log(isPro)
+
   return (
     <>
       <GestureHandlerRootView>
@@ -857,6 +874,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 setMessages={setMessages}
                 isAdmin={isAdmin}
                 toggleDrawer={openProfileDrawer}
+                onReaction={handleReaction}
 
               />
             )}

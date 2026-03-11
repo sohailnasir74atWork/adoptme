@@ -599,14 +599,14 @@ const PrivateMessageInput = ({
 
             {/* Templates List */}
             <ScrollView
-              style={{ padding: 16 }}
+              style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}
               showsVerticalScrollIndicator={false}
             >
               <View
                 style={{
                   flexDirection: 'row',
                   flexWrap: 'wrap',
-                  gap: 10,
+                  gap: 8,
                 }}
               >
                 {messageTemplates.map((template, index) => (
@@ -615,21 +615,19 @@ const PrivateMessageInput = ({
                     onPress={() => handleTemplateSelect(template)}
                     disabled={isSending || isBanned}
                     style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
                       borderRadius: 20,
-                      backgroundColor: isDark ? '#374151' : '#E5E7EB',
+                      backgroundColor: isDark ? '#374151' : '#F3F4F6',
                       borderWidth: 1,
                       borderColor: isDark ? '#4B5563' : '#D1D5DB',
-                      minWidth: '45%',
                     }}
                   >
                     <Text
                       style={{
                         color: isDark ? '#F9FAFB' : '#111827',
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: '500',
-                        textAlign: 'center',
                       }}
                     >
                       {template}

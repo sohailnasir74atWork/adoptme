@@ -341,7 +341,7 @@ const NotifierDrawer = () => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: isDarkMode ? '#121212' : '#fff' }]}>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? '#0f172a' : '#fff' }]}>
       {/* <Text style={[styles.infoText, {  color: isDarkMode ? '#aaa' : '#666' }]}>
         Select items you want to buy or sell — we’ll notify you when someone is offering them or looking for them in a trade.
 </Text> */}
@@ -375,7 +375,7 @@ const NotifierDrawer = () => {
 
 
       <Modal visible={isDrawerVisible} animationType="slide">
-        <View style={[styles.drawerContainer, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' }]}>
+        <View style={[styles.drawerContainer, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
           <Text style={[styles.sectionTitle, { fontWeight: 'bold', color: isDarkMode ? '#fff' : '#000' }]}>{t("trade.notifier.select_items_title")}</Text>
 
           {/* Search Input */}

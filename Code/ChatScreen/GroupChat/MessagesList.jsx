@@ -28,6 +28,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
+import MessageActionDrawer from './MessageActionDrawer';
 
 
 const MessagesList = ({
@@ -53,6 +54,7 @@ const MessagesList = ({
   setMessages,
   onDeleteAllMessage,
   handlePinMessage,
+  onReaction, // Callback to react to a message
 
 }) => {
   // ✅ Memoize styles
@@ -61,6 +63,7 @@ const MessagesList = ({
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReportPopup, setShowReportPopup] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
   const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
 
@@ -260,6 +263,7 @@ const MessagesList = ({
     if (!user?.id || !item) return;
     triggerHapticFeedback('impactMedium');
     setSelectedMessage(item);
+    setActionDrawerVisible(true);
   }, [user?.id, triggerHapticFeedback]);
 
   // ✅ Memoize handleReport
@@ -395,219 +399,248 @@ const MessagesList = ({
 
               {/* Render main message */}
 
-              <Menu>
-                <MenuTrigger
-                  onLongPress={() => handleLongPress(item)}
-                  customStyles={{ triggerTouchable: { activeOpacity: 1 } }}
-                >
+              <TouchableOpacity
+                activeOpacity={1}
+                onLongPress={() => handleLongPress(item)}
+              >
 
-                  <View style={[
-                    item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
-                    item.senderId === user?.id ? styles.myMessage : styles.otherMessage,
-                    item.isReportedByUser && styles.reportedMessage,
-                  ]}>
+                <View style={[
+                  item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
+                  item.senderId === user?.id ? styles.myMessage : styles.otherMessage,
+                  item.isReportedByUser && styles.reportedMessage,
+                ]}>
 
-                    <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdminOrMod && item.strikeCount === 1
-                      ? { backgroundColor: 'pink' }
-                      : isAdminOrMod && item.strikeCount >= 2
-                        ? { backgroundColor: 'red' }
-                        : null,]}>
-                      <View style={styles.nameRow}>
-                        <Text style={styles.userNameText}>{item.sender}</Text>
+                  <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdminOrMod && item.strikeCount === 1
+                    ? { backgroundColor: 'pink' }
+                    : isAdminOrMod && item.strikeCount >= 2
+                      ? { backgroundColor: 'red' }
+                      : null,]}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.userNameText}>{item.sender}</Text>
 
-                        {item?.isPro && (
-                          <Image
-                            source={require('../../../assets/pro.png')}
-                            style={styles.icon}
-                          />
-                        )}
+                      {item?.isPro && (
+                        <Image
+                          source={require('../../../assets/pro.png')}
+                          style={styles.icon}
+                        />
+                      )}
 
-                        {!!item.isAdmin && (
-                          <View style={styles.adminContainer}>
-                            <Icon name="shield" size={10} color="#fff" />
-                            <Text style={styles.adminBadgeText}>{t("chat.admin")}</Text>
-                          </View>
-                        )}
-
-                        {!item.isAdmin && item.isModerator && (
-                          <View style={styles.modContainer}>
-                            <Icon name="shield-checkmark" size={10} color="#fff" />
-                            <Text style={styles.modBadgeText}>{t("chat.mod")}</Text>
-                          </View>
-                        )}
-
-                        {item?.robloxUsernameVerified && (
-                          <Image
-                            source={require('../../../assets/verification.png')}
-                            style={styles.icon}
-                          />
-                        )}
-
-                        {hasRecentWin && (
-                          <Image
-                            source={require('../../../assets/trophy.webp')}
-                            style={{
-                              width: 10,
-                              height: 10,
-                              marginLeft: 4,
-                            }}
-                          />
-                        )}
-
-                        {isAdmin && item.OS && (
-                          <View
-                            style={[
-                              styles.platformBadge,
-                            ]}
-                          >
-                            <Icon
-                              name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
-                              size={14}
-                              color={item.OS === 'ios' ? '#007AFF' : '#34C759'}
-                            />
-                          </View>
-                        )}
-                      </View>
-
-
-
-                      {item.gif && (
-                        <View>
-                          <Image
-                            source={{ uri: item.gif }}
-                            style={{ height: 50, width: 50, resizeMode: 'contain' }}
-                          />
+                      {!!item.isAdmin && (
+                        <View style={styles.adminContainer}>
+                          <Icon name="shield" size={10} color="#fff" />
+                          <Text style={styles.adminBadgeText}>{t("chat.admin")}</Text>
                         </View>
                       )}
-                      {/* {'\n'} */}
-                      {item?.text && (
-                        <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>
-                          {parseMessageText(item.text)}
-                        </Text>
+
+                      {!item.isAdmin && item.isModerator && (
+                        <View style={styles.modContainer}>
+                          <Icon name="shield-checkmark" size={10} color="#fff" />
+                          <Text style={styles.modBadgeText}>{t("chat.mod")}</Text>
+                        </View>
                       )}
 
+                      {item?.robloxUsernameVerified && (
+                        <Image
+                          source={require('../../../assets/verification.png')}
+                          style={styles.icon}
+                        />
+                      )}
 
+                      {hasRecentWin && (
+                        <Image
+                          source={require('../../../assets/trophy.webp')}
+                          style={{
+                            width: 10,
+                            height: 10,
+                            marginLeft: 4,
+                          }}
+                        />
+                      )}
 
-
-                    </View>
-                  </View>
-                  {hasFruits && (
-                    <View
-                      style={[
-                        fruitStyles.fruitsWrapper,
-                        { backgroundColor: fruitColors.wrapperBg },
-                      ]}
-                    >
-                      {fruits.map((fruit, index) => {
-                        const { name: nameColor, value: valueColor } = fruitColors;
-                        const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
-                        const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
-                        const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
-
-                        let valueBadgeStyle = fruitStyles.badgeDefault;
-                        if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
-                        if (valueType === 'm') valueBadgeStyle = fruitStyles.badgeMega;
-
-                        return (
-                          <View
-                            key={`${fruit.id || fruit.name}-${index}`}
-                            style={fruitStyles.fruitCard}
-                          >
-                            <Image
-                              source={{ uri: fruit.imageUrl }}
-                              style={fruitStyles.fruitImage}
-                            />
-
-                            <View style={fruitStyles.fruitInfo}>
-                              <Text
-                                style={[fruitStyles.fruitName, { color: nameColor }]}
-                                numberOfLines={1}
-                              >
-                                {`${fruit.name || fruit.Name}  `}
-                              </Text>
-
-                              <Text
-                                style={[fruitStyles.fruitValue, { color: valueColor }]}
-                              >
-                                {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
-                                {/* {fruit.category
-                ? `  ·  ${String(fruit.category).toUpperCase()}  `
-                : ''} */}{' '}
-                              </Text>
-
-                              {isPet && (
-                                <View style={fruitStyles.badgeRow}>
-                                  {/* D / N / M badge */}
-                                  <View style={[fruitStyles.badge, valueBadgeStyle]}>
-                                    <Text style={fruitStyles.badgeText}>
-                                      {valueType.toUpperCase()}
-                                    </Text>
-                                  </View>
-
-                                  {/* Fly badge */}
-                                  {fruit.isFly && (
-                                    <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
-                                      <Text style={fruitStyles.badgeText}>F</Text>
-                                    </View>
-                                  )}
-
-                                  {/* Ride badge */}
-                                  {fruit.isRide && (
-                                    <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
-                                      <Text style={fruitStyles.badgeText}>R</Text>
-                                    </View>
-                                  )}
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
-
-                      {/* ✅ Total row – only if more than one fruit */}
-                      {fruits.length > 1 && (
+                      {isAdmin && item.OS && (
                         <View
                           style={[
-                            fruitStyles.totalRow,
-                            { borderTopColor: fruitColors.divider },
+                            styles.platformBadge,
                           ]}
                         >
-                          <Text
-                            style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
-                          >
-                            {t('chat.total_label')}
-                          </Text>
-                          <Text
-                            style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
-                          >
-                            {totalFruitValue.toLocaleString()}
-                          </Text>
+                          <Icon
+                            name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
+                            size={14}
+                            color={item.OS === 'ios' ? '#007AFF' : '#34C759'}
+                          />
                         </View>
                       )}
                     </View>
-                  )}
-                </MenuTrigger>
-                <MenuOptions customStyles={{
-                  optionsContainer: styles.menuoptions,
-                  optionWrapper: styles.menuOption,
-                  optionText: styles.menuOptionText,
-                }}>
-                  <MenuOption onSelect={() => handleCopy(item)}>
-                    <Text style={styles.menuOptionText}>{t('chat.copy')}</Text>
-                  </MenuOption>
-                  {user.id && (
-                    <MenuOption onSelect={() => onReply(item)}>
-                      <Text style={styles.menuOptionText}>{t("chat.reply")}</Text>
-                    </MenuOption>
-                  )}
-                  <MenuOption onSelect={() => handleTranslate(item)}>
-                    <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
-                  </MenuOption>
-                  <MenuOption onSelect={() => handleReport(item)}>
-                    <Text style={styles.menuOptionText}>{t("chat.report")}</Text>
-                  </MenuOption>
-                </MenuOptions>
-              </Menu>
+
+
+
+                    {item.gif && (
+                      <View>
+                        <Image
+                          source={{ uri: item.gif }}
+                          style={{ height: 50, width: 50, resizeMode: 'contain' }}
+                        />
+                      </View>
+                    )}
+                    {/* {'\n'} */}
+                    {item?.text && (
+                      <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>
+                        {parseMessageText(item.text)}
+                      </Text>
+                    )}
+
+
+
+
+                  </View>
+                </View>
+                {hasFruits && (
+                  <View
+                    style={[
+                      fruitStyles.fruitsWrapper,
+                      { backgroundColor: fruitColors.wrapperBg },
+                    ]}
+                  >
+                    {fruits.map((fruit, index) => {
+                      const { name: nameColor, value: valueColor } = fruitColors;
+                      const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
+                      const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+                      const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
+
+                      let valueBadgeStyle = fruitStyles.badgeDefault;
+                      if (valueType === 'n') valueBadgeStyle = fruitStyles.badgeNeon;
+                      if (valueType === 'm') valueBadgeStyle = fruitStyles.badgeMega;
+
+                      return (
+                        <View
+                          key={`${fruit.id || fruit.name}-${index}`}
+                          style={fruitStyles.fruitCard}
+                        >
+                          <Image
+                            source={{ uri: fruit.imageUrl }}
+                            style={fruitStyles.fruitImage}
+                          />
+
+                          <View style={fruitStyles.fruitInfo}>
+                            <Text
+                              style={[fruitStyles.fruitName, { color: nameColor }]}
+                              numberOfLines={1}
+                            >
+                              {`${fruit.name || fruit.Name}  `}
+                            </Text>
+
+                            <Text
+                              style={[fruitStyles.fruitValue, { color: valueColor }]}
+                            >
+                              {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
+                              {/* {fruit.category
+                ? `  ·  ${String(fruit.category).toUpperCase()}  `
+                : ''} */}{' '}
+                            </Text>
+
+                            {isPet && (
+                              <View style={fruitStyles.badgeRow}>
+                                {/* D / N / M badge */}
+                                <View style={[fruitStyles.badge, valueBadgeStyle]}>
+                                  <Text style={fruitStyles.badgeText}>
+                                    {valueType.toUpperCase()}
+                                  </Text>
+                                </View>
+
+                                {/* Fly badge */}
+                                {fruit.isFly && (
+                                  <View style={[fruitStyles.badge, fruitStyles.badgeFly]}>
+                                    <Text style={fruitStyles.badgeText}>F</Text>
+                                  </View>
+                                )}
+
+                                {/* Ride badge */}
+                                {fruit.isRide && (
+                                  <View style={[fruitStyles.badge, fruitStyles.badgeRide]}>
+                                    <Text style={fruitStyles.badgeText}>R</Text>
+                                  </View>
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                    {/* ✅ Total row – only if more than one fruit */}
+                    {fruits.length > 1 && (
+                      <View
+                        style={[
+                          fruitStyles.totalRow,
+                          { borderTopColor: fruitColors.divider },
+                        ]}
+                      >
+                        <Text
+                          style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
+                        >
+                          {t('chat.total_label')}
+                        </Text>
+                        <Text
+                          style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
+                        >
+                          {totalFruitValue.toLocaleString()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* ✅ Reaction badges */}
+              {item.reactions && Object.keys(item.reactions).length > 0 && (() => {
+                const counts = {};
+                Object.values(item.reactions).forEach(emoji => {
+                  counts[emoji] = (counts[emoji] || 0) + 1;
+                });
+                const myReaction = item.reactions[user?.id] || null;
+                return (
+                  <View style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: 4,
+                    marginTop: -8,
+                    marginBottom: 4,
+                    marginLeft: 8,
+                    zIndex: 1,
+                  }}>
+                    {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([emoji, count]) => (
+                      <TouchableOpacity
+                        key={emoji}
+                        onPress={() => onReaction && onReaction(item.id, emoji)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 999,
+                          backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                          gap: 3,
+                          borderWidth: 1,
+                          borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                          ...(myReaction === emoji ? {
+                            backgroundColor: isDarkMode ? '#1e3a5f' : '#dbeafe',
+                            borderColor: isDarkMode ? '#3b82f6' : '#60a5fa',
+                          } : {}),
+                        }}
+                      >
+                        <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                        <Text style={{
+                          fontSize: 10,
+                          fontWeight: '600',
+                          color: myReaction === emoji
+                            ? (isDarkMode ? '#93c5fd' : '#2563eb')
+                            : (isDarkMode ? '#94a3b8' : '#64748b'),
+                        }}>{count}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
 
               {/* {(item.reportCount > 0 || item.isReportedByUser) && (
               <Text style={styles.reportIcon}>Reported</Text>
@@ -705,7 +738,7 @@ const MessagesList = ({
         )}
       </View>
     );
-  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage]);
+  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onReaction, isDarkMode]);
 
   return (
     <>
@@ -768,7 +801,7 @@ const MessagesList = ({
             <Icon
               name="chevron-down-circle"
               size={48}
-              color={config.colors.primary}
+              color={'#3b82f6'}
             />
           </TouchableOpacity>
         </Animated.View>
@@ -783,6 +816,25 @@ const MessagesList = ({
           setSelectedMessage(null);
           setShowReportPopup(false);
         }}
+      />
+      <MessageActionDrawer
+        visible={actionDrawerVisible}
+        message={selectedMessage}
+        onClose={() => {
+          setActionDrawerVisible(false);
+          setSelectedMessage(null);
+        }}
+        onReaction={onReaction}
+        onCopy={(msg) => handleCopy(msg)}
+        onReply={onReply ? (msg) => onReply(msg) : null}
+        onTranslate={(msg) => handleTranslate(msg)}
+        onReport={(msg) => handleReport(msg)}
+        onDelete={onDeleteMessage ? (msgId) => onDeleteMessage(msgId) : null}
+        onDeleteAll={onDeleteAllMessage ? (senderId) => onDeleteAllMessage(senderId) : null}
+        onPinMessage={onPinMessage ? (msg) => onPinMessage(msg) : null}
+        isAdminOrMod={isAdminOrMod}
+        userId={user?.id}
+        isDarkMode={isDarkMode}
       />
     </>
   );

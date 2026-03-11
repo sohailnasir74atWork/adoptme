@@ -325,7 +325,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   modalTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: isDarkMode ? '#fff' : '#1a1a1a',
+    color: isDarkMode ? '#fff' : '#0f172a',
   },
   closeIcon: {
     width: 28,

@@ -63,6 +63,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 // Initialize dayjs plugins
 dayjs.extend(relativeTime);
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
+import PortfolioValuation from './PortfolioValuation';
 import { launchImageLibrary } from 'react-native-image-picker';
 // Bunny avatar upload (same zone/keys as your post uploader)
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
@@ -249,7 +250,7 @@ const EditProfileDrawerContent = ({
         </Text>
         <TextInput
           style={{
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
             padding: 12,
             borderRadius: 10,
             fontSize: 14,
@@ -271,7 +272,7 @@ const EditProfileDrawerContent = ({
 
         <TouchableOpacity
           style={{
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
@@ -301,7 +302,7 @@ const EditProfileDrawerContent = ({
         </TouchableOpacity>
 
         <View style={{
-          backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+          backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
           borderRadius: 10,
           padding: 8,
           marginBottom: 8,
@@ -367,7 +368,7 @@ const EditProfileDrawerContent = ({
         </View>
         <TextInput
           style={{
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
             minHeight: 65,
             textAlignVertical: 'top',
             padding: 12,
@@ -396,7 +397,7 @@ const EditProfileDrawerContent = ({
       {shouldDisableSave && (
         <View
           style={{
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#fef3c7',
+            backgroundColor: isDarkMode ? '#1e293b' : '#fef3c7',
             padding: 12,
             borderRadius: 10,
             marginBottom: 12,
@@ -3076,6 +3077,14 @@ export default function SettingsScreen({ selectedTheme }) {
               )}
             </View>
           </View>
+
+          {/* Portfolio Valuation Section */}
+          <PortfolioValuation
+            ownedPets={ownedPets}
+            wishlistPets={wishlistPets}
+            isDarkMode={isDarkMode}
+            t={t}
+          />
 
           {/* My Trades Section - Below Reviews */}
           <View style={styles.reviewsSection}>

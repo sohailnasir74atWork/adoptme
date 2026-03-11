@@ -247,7 +247,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
           style={{ flex: 1, justifyContent: 'flex-end' }}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
+          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
             <View style={styles.header}>
               <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
                 Invite Friends to Play

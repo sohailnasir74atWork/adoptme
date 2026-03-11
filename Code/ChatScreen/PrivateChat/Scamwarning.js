@@ -17,21 +17,17 @@ export default function ScamSafetyBox({
   const { t } = useTranslation();
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  // ✅ Memoize handleOpenServer
   const handleOpenServer = useCallback(() => {
     if (!tradingServerLink || typeof tradingServerLink !== 'string' || tradingServerLink.trim().length === 0) {
       Alert.alert(t('chat.error'), t('chat.server_error'));
       return;
     }
-
     const openLink = () => {
       Linking.openURL(tradingServerLink).catch(err => {
         console.warn('Failed to open server link:', err);
         Alert.alert(t('chat.error'), t('chat.server_open_failed'));
       });
     };
-
-    // Show ad for non-pro users
     if (!localState?.isPro) {
       InterstitialAdManager.showAd(openLink);
     } else {
@@ -39,7 +35,6 @@ export default function ScamSafetyBox({
     }
   }, [tradingServerLink, localState?.isPro]);
 
-  // ✅ Memoize handleOpenRating
   const handleOpenRating = useCallback(() => {
     if (setShowRatingModal && typeof setShowRatingModal === 'function') {
       setShowRatingModal(true);
@@ -47,45 +42,35 @@ export default function ScamSafetyBox({
   }, [setShowRatingModal]);
 
   return (
-    <View style={styles.box}>
-      {/* LEFT: safety tips as a "pill" */}
-      <View style={styles.leftColumn}>
-        <View style={styles.warningBox}>
-          <Text style={styles.title}>{t('chat.safety_title')}</Text>
-          <Text style={styles.item}>{t('chat.safety_too_good')}</Text>
-          <Text style={styles.item}>{t('chat.safety_no_login')}</Text>
-          <Text style={styles.item}>{t('chat.safety_trusted_servers')}</Text>
-        </View>
+    <View style={styles.container}>
+      {/* Top row: Warning icon + safety tips inline */}
+      <View style={styles.safetyRow}>
+        <Text style={styles.warningIcon}>⚠️</Text>
+        <Text style={styles.safetyText} numberOfLines={2}>
+          {t('chat.safety_too_good')} · {t('chat.safety_no_login')} · {t('chat.safety_trusted_servers')}
+        </Text>
       </View>
 
-      {/* RIGHT: actions */}
+      {/* Bottom row: Action chips */}
       {canRate && (
-        <View style={styles.rightColumn}>
-          {/* Safe server button */}
+        <View style={styles.actionsRow}>
           <TouchableOpacity
-            style={[styles.buttonBase, styles.serverButton]}
+            style={styles.serverChip}
             onPress={handleOpenServer}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.buttonTitle, styles.serverButtonTitle]}>
-              {t('chat.join_server')}
-            </Text>
-            <Text style={[styles.buttonSub, styles.serverButtonSub]}>
-              {t('chat.join_server_desc')}
-            </Text>
+            <Text style={styles.serverChipIcon}>🔗</Text>
+            <Text style={styles.serverChipText}>{t('chat.join_server')}</Text>
           </TouchableOpacity>
 
-          {/* Rating button */}
           <TouchableOpacity
-            style={[styles.buttonBase, styles.rateButton]}
+            style={styles.rateChip}
             onPress={handleOpenRating}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.buttonTitle, styles.rateButtonTitle]}>
+            <Text style={styles.rateChipIcon}>⭐</Text>
+            <Text style={styles.rateChipText}>
               {hasRated ? t('chat.rating_edit') : t('chat.rating_btn')}
-            </Text>
-            <Text style={[styles.buttonSub, styles.rateButtonSub]}>
-              {hasRated
-                ? t('chat.rating_update_desc')
-                : t('chat.rating_help_desc')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -96,93 +81,87 @@ export default function ScamSafetyBox({
 
 const getStyles = (isDark) =>
   StyleSheet.create({
-    box: {
+    container: {
+      marginHorizontal: 6,
+      marginVertical: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(255,251,235,0.9)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(71,85,105,0.5)' : 'rgba(251,191,119,0.4)',
+    },
+
+    /* ── Safety row ── */
+    safetyRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 5,
-      paddingHorizontal: 5,
-      marginHorizontal: 4,
-      marginTop: 3,
-      marginBottom: 3,
-      borderBottomWidth: 1,
-      borderBottomColor: isDark ? '#1f2933' : '#E2E8F0',
-      backgroundColor: 'transparent',
     },
-    leftColumn: {
+    warningIcon: {
+      fontSize: 13,
+      marginRight: 6,
+    },
+    safetyText: {
       flex: 1,
-      paddingRight: 5,
+      fontSize: 10,
+      lineHeight: 14,
+      color: isDark ? '#CBD5E1' : '#78716C',
+      letterSpacing: 0.1,
     },
-    // 🔹 Safety warnings styled like a soft "button" / pill
-    warningBox: {
-      paddingHorizontal: 8,
+
+    /* ── Actions row ── */
+    actionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 7,
+      gap: 6,
+    },
+
+    /* Server chip */
+    serverChip: {
+      flex: 1,
+      minWidth: 100,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       paddingVertical: 6,
-      borderRadius: 8,
+      paddingHorizontal: 10,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: isDark ? '#4B5563' : '#FBBF77',
-      backgroundColor: isDark ? 'rgba(15,23,42,0.7)' : '#FFF7ED',
+      borderColor: isDark ? 'rgba(99,102,241,0.5)' : 'rgba(99,102,241,0.3)',
+      backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.06)',
     },
-    rightColumn: {
-      flexShrink: 0,
-      justifyContent: 'center',
-      alignItems: 'flex-end',
-      gap: 6, // if not supported use marginBottom on buttons
-    },
-    title: {
+    serverChipIcon: {
       fontSize: 11,
-      color: isDark ? '#FCD34D' : '#92400E',
-      marginBottom: 6,
-      fontWeight: 'bold',
+      marginRight: 4,
     },
-    item: {
-      fontSize: 9,
-      color: isDark ? '#E5E7EB' : '#4B5563',
-      marginBottom: 5,
-
+    serverChipText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#A5B4FC' : '#4F46E5',
     },
 
-    // shared button base (same size)
-    buttonBase: {
-      width: 170,
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-      borderRadius: 8,
+    /* Rate chip */
+    rateChip: {
+      flex: 1,
+      minWidth: 100,
+      flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'center',
-    },
-
-    // server (outlined) button
-    serverButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 20,
+      backgroundColor: isDark ? 'rgba(251,191,36,0.15)' : 'rgba(251,191,36,0.12)',
       borderWidth: 1,
-      borderColor: config.colors.primary,
-      backgroundColor: isDark ? 'transparent' : '#ffffff',
+      borderColor: isDark ? 'rgba(251,191,36,0.35)' : 'rgba(251,191,36,0.3)',
     },
-    // rating (filled) button
-    rateButton: {
-      backgroundColor: config.colors.primary,
-    },
-
-    buttonTitle: {
+    rateChipIcon: {
       fontSize: 11,
-      fontWeight: 'bold',
+      marginRight: 4,
     },
-    buttonSub: {
-      fontSize: 8,
-      marginTop: 2,
-    },
-
-    // color overrides
-    serverButtonTitle: {
-      color: config.colors.primary,
-      fontWeight: 'bold',
-    },
-    serverButtonSub: {
-      color: isDark ? '#CBD5F5' : '#6B7280',
-    },
-    rateButtonTitle: {
-      color: '#ffffff',
-
-    },
-    rateButtonSub: {
-      color: 'rgba(255,255,255,0.9)',
-
+    rateChipText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: isDark ? '#FCD34D' : '#B45309',
     },
   });

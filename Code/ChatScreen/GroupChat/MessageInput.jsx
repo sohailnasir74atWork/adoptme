@@ -239,7 +239,7 @@ const MessageInput = ({
           onPress={() => setShowEmojiPopup(false)}
           activeOpacity={1}
         >
-          <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e1e1e' : '#fff' }]} onStartShouldSetResponder={() => true}>
+          <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e293b' : '#fff' }]} onStartShouldSetResponder={() => true}>
             <ScrollView
               style={modalStyles.emojiScrollContainer}
               showsVerticalScrollIndicator={false}

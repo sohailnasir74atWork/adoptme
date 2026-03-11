@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
 import ValueScreen from '../ValuesScreen/ValueScreen';
-// import TimerScreen from '../StockScreen/TimerScreen';
+
 import { ChatStack } from '../ChatScreen/ChatNavigator';
 import { TradeStack } from '../Trades/TradeNavigator';
 import { useTranslation } from 'react-i18next';
@@ -171,7 +171,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
         activeOpacity={1}
         onPress={() => setShowLanguageModal(false)}
       >
-        <View style={[langStyles.modal, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
+        <View style={[langStyles.modal, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
           <Text style={[langStyles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
             {t('settings.select_language')}
           </Text>
@@ -254,7 +254,6 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           },
 
           tabBarStyle: {
-            // height: 50,
             backgroundColor: selectedTheme.colors.background,
           },
           tabBarLabelStyle: {
@@ -283,14 +282,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           {() => <HomeScreen selectedTheme={selectedTheme} />}
         </Tab.Screen>
 
-        {/* <Tab.Screen
-        name="Stock"
-        options={{
-          title: t('tabs.stock'), // Translation applied here
-        }}
-      >
-        {() => <TimerScreen selectedTheme={selectedTheme} />}
-      </Tab.Screen> */}
+
 
         <Tab.Screen
           name="Trade"
@@ -329,7 +321,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
               height: 8,
               borderRadius: 4,
               fontSize: 10,
-              // backgroundColor: 'red',
+
               color: 'white',
             },
           }}

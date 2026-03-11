@@ -231,7 +231,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
                         </TouchableOpacity>
                     </View>
 
-                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }} style={{ backgroundColor: isDarkMode ? '#121212' : '#f2f2f7', padding: 8, }}>
+                    <ViewShot ref={viewRef} options={{ format: 'png', quality: 0.8 }} style={{ backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7', padding: 8, }}>
                         {showSummary && showLeftGrid && showRightGrid && (
                             <View style={styles.summaryContainer}>
                                 <View style={styles.summaryInner}>
@@ -326,7 +326,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
 
     },
     modalContent: {
-        backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+        backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
         borderRadius: 12,
         width: '98%',
         // maxHeight: '90%',
@@ -343,7 +343,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: isDarkMode ? '#f2f2f7' : '#121212',
+        color: isDarkMode ? '#f2f2f7' : '#0f172a',
         padding: 8,
     },
     summaryContainer: {
@@ -490,7 +490,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     },
     description: {
         fontSize: 14,
-        color: isDarkMode ? '#f2f2f7' : '#121212',
+        color: isDarkMode ? '#f2f2f7' : '#0f172a',
         marginTop: 8,
         padding: 8,
         backgroundColor: isDarkMode ? '#333' : '#f5f5f5',

@@ -200,8 +200,21 @@ const PrivateMessageList = ({
     }
   }, [freeTranslation, localState?.isPro, canTranslate, incrementTranslationCount, getRemainingTranslationTries, translateText, deviceLanguage]);
 
+  // ✅ Date separator helper
+  const getDateLabel = useCallback((timestamp) => {
+    if (!timestamp) return '';
+    const msgDate = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (msgDate.toDateString() === today.toDateString()) return t('chat.today', { defaultValue: 'Today' });
+    if (msgDate.toDateString() === yesterday.toDateString()) return t('chat.yesterday', { defaultValue: 'Yesterday' });
+    return msgDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }, [t]);
+
   // ✅ Memoize renderMessage
-  const renderMessage = useCallback(({ item }) => {
+  const renderMessage = useCallback(({ item, index }) => {
     // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
@@ -218,7 +231,7 @@ const PrivateMessageList = ({
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
 
-    return (
+    const msgBubble = (
       <View
         style={
           isMyMessage
@@ -421,7 +434,26 @@ const PrivateMessageList = ({
         </Text>
       </View>
     );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t]);
+
+    // Date separator: in inverted list, next item in array is older
+    const nextMsg = filteredMessages[index + 1];
+    const showDateSep = !nextMsg || getDateLabel(item.timestamp) !== getDateLabel(nextMsg.timestamp);
+
+    return (
+      <>
+        {msgBubble}
+        {showDateSep && (
+          <View style={{ alignItems: 'center', marginVertical: 10 }}>
+            <View style={{ backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: '600' }}>
+                {getDateLabel(item.timestamp)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </>
+    );
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, filteredMessages, getDateLabel, isDarkMode]);
 
   // ✅ Memoize keyExtractor
   const keyExtractor = useCallback((item, index) => {

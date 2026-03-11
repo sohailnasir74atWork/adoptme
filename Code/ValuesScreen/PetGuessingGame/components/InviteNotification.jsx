@@ -209,7 +209,7 @@ const InviteNotification = ({ currentUser, onAccept, isInActiveGame = false }) =
       <View
         style={[
           styles.notification,
-          { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' },
+          { backgroundColor: isDarkMode ? '#1e293b' : '#fff' },
         ]}
       >
         <Image

@@ -32,6 +32,7 @@ import {
   serverTimestamp,
 } from '@react-native-firebase/firestore';
 import ProfileBottomDrawer from '../GroupChat/BottomDrawer';
+import { updateStreak } from '../../Helper/StreakHelper';
 
 
 
@@ -692,6 +693,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
       setReplyTo(null);
       hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
+
+      // 🔥 Update streak (fire-and-forget, non-blocking)
+      updateStreak(firestoreDB, myUserId, selectedUserId).catch(() => { });
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
@@ -985,7 +989,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
           style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'rgba(0,0,0,0.6)',
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 9999,
@@ -993,12 +997,14 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         >
           <View
             style={{
-              backgroundColor: 'white',
+              backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
               padding: 20,
-              borderRadius: 10,
-              width: '80%',
+              borderRadius: 16,
+              width: '82%',
               alignItems: 'center',
               position: 'relative',
+              borderWidth: 1,
+              borderColor: isDarkMode ? 'rgba(71,85,105,0.5)' : 'rgba(0,0,0,0.08)',
             }}
           >
             {/* ❌ Close Button */}
@@ -1006,64 +1012,78 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               onPress={() => setShowRatingModal(false)}
               style={{
                 position: 'absolute',
-                top: -5,
-                right: 1,
+                top: 6,
+                right: 8,
                 zIndex: 100,
                 padding: 5,
               }}
             >
-              <Text style={{ fontSize: 18, color: '#888' }}>✖</Text>
+              <Text style={{ fontSize: 16, color: isDarkMode ? '#94A3B8' : '#9CA3AF' }}>✕</Text>
             </TouchableOpacity>
 
             {/* Title */}
-            <Text style={{ fontSize: 16, marginBottom: 10, textAlign: 'center', fontWeight: '600' }}>
+            <Text style={{
+              fontSize: 15,
+              marginBottom: 12,
+              textAlign: 'center',
+              fontWeight: '700',
+              color: isDarkMode ? '#F1F5F9' : '#1F2937',
+            }}>
               {t('chat.rating_title')}
             </Text>
 
             {/* Stars */}
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 15 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 14 }}>
               {[1, 2, 3, 4, 5].map((num) => (
                 <TouchableOpacity key={num} onPress={() => setRating(num)}>
-                  <Text style={{ fontSize: 32, color: num <= rating ? '#ffb700be' : '#ccc', marginHorizontal: 4 }}>
+                  <Text style={{
+                    fontSize: 30,
+                    color: num <= rating
+                      ? '#FBBF24'
+                      : isDarkMode ? '#475569' : '#D1D5DB',
+                    marginHorizontal: 3,
+                  }}>
                     ★
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {/* Review input (optional) */}
+
+            {/* Review input */}
             <TextInput
               style={{
                 width: '100%',
                 minHeight: 60,
                 borderWidth: 1,
-                borderColor: '#ddd',
-                borderRadius: 8,
-                paddingHorizontal: 10,
+                borderColor: isDarkMode ? '#334155' : '#E5E7EB',
+                borderRadius: 10,
+                paddingHorizontal: 12,
                 paddingVertical: 8,
-                marginBottom: 12,
+                marginBottom: 14,
                 textAlignVertical: 'top',
-                fontSize: 14,
+                fontSize: 13,
+                color: isDarkMode ? '#E2E8F0' : '#1F2937',
+                backgroundColor: isDarkMode ? '#0F172A' : '#F9FAFB',
               }}
               placeholder={t('chat.rating_placeholder')}
-              placeholderTextColor="#999"
+              placeholderTextColor={isDarkMode ? '#64748B' : '#9CA3AF'}
               multiline
               value={reviewText}
               onChangeText={setReviewText}
             />
 
-
             {/* Submit Button */}
             <TouchableOpacity
               style={{
-                backgroundColor: config.colors.primary,
+                backgroundColor: isDarkMode ? '#6366F1' : config.colors.primary,
                 paddingVertical: 10,
                 paddingHorizontal: 20,
-                borderRadius: 8,
+                borderRadius: 10,
                 width: '100%',
               }}
               onPress={handleRating}
             >
-              <Text style={{ color: 'white', fontSize: 14, textAlign: 'center' }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
                 {!startRating ? t('chat.rating_submit') : t('chat.rating_submitting')}
               </Text>
             </TouchableOpacity>

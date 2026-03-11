@@ -121,6 +121,18 @@
             "wishlist_empty": "Ajoutez les animaux que vous voulez",
             "wishlist_login": "Connectez-vous et ajoutez les animaux souhaités"
         },
+        "portfolio": {
+            "title": "Valeur du portefeuille",
+            "total_value": "Valeur totale",
+            "top_items": "Meilleurs éléments",
+            "categories": "Par catégorie",
+            "avg_value": "Moy. par élément",
+            "items": "éléments",
+            "best_category": "Meilleure catégorie",
+            "wishlist_value": "Souhaits",
+            "wishlist_gap": "Écart",
+            "empty": "Ajoutez des animaux pour voir la valeur de votre portefeuille"
+        },
         "trades": {
             "title": "Mes échanges",
             "login_msg": "Connectez-vous pour voir vos échanges",
@@ -226,7 +238,7 @@
         "no_wishlist_pets": "Aucun animal dans la liste de souhaits.",
         "no_reviews_yet": "Aucun avis pour le moment.",
         "no_trades_yet": "Aucun échange pour le moment.",
-        "view_detail_profile": "Voir le profil détaillé",
+        "view_detail_profile": "Profil",
         "view_roblox_profile": "Voir le profil Roblox",
         "load_more_reviews": "Charger plus d’avis",
         "load_more_trades": "Charger plus d’échanges",

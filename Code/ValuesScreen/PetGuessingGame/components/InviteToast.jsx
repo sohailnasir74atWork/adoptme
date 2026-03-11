@@ -93,7 +93,7 @@ const InviteToast = ({ visible, fromUserName, fromUserAvatar, onPress, onDismiss
         style={[
           styles.toast,
           {
-            backgroundColor: isDarkMode ? '#1a1a1a' : '#fff',
+            backgroundColor: isDarkMode ? '#1e293b' : '#fff',
             borderLeftColor: '#8B5CF6',
           },
         ]}

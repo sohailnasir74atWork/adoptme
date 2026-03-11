@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
   },
   darkContent: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#1e293b',
   },
   sheetHandle: {
     alignSelf: 'center',

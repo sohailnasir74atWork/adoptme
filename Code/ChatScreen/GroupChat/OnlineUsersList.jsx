@@ -600,7 +600,7 @@ const OnlineUsersList = ({
           />
           <View style={[
             styles.onlineIndicator,
-            item.isOnline === false && { backgroundColor: '#9CA3AF' }
+            item.isOnline === false && { backgroundColor: '#ef4444' }
           ]} />
         </View>
         <View style={styles.userInfo}>

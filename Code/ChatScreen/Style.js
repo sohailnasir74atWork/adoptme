@@ -6,7 +6,7 @@ export const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? config.darkColors.bg : '#f2f2f7',
     },
     loader: {
       flex: 1,
@@ -70,7 +70,7 @@ export const getStyles = (isDarkMode) =>
     myMessageText: {
       fontSize: 10,
       color: isDarkMode ? 'white' : 'black',
-      backgroundColor: isDarkMode ? '#1E88E5' : 'lightgreen',
+      backgroundColor: isDarkMode ? '#1E88E5' : 'lightgreen',  // keep accent colors
       paddingVertical: 2,
       paddingHorizontal: 5,
       borderRadius: 10,
@@ -82,7 +82,7 @@ export const getStyles = (isDarkMode) =>
     otherMessageText: {
       fontSize: 10,
       color: isDarkMode ? 'white' : 'black',
-      backgroundColor: isDarkMode ? '#34495E' : 'white',
+      backgroundColor: isDarkMode ? config.darkColors.surface : 'white',
       paddingHorizontal: 5,
       // lineHeight: 20,
       borderRadius: 10,
@@ -123,7 +123,7 @@ export const getStyles = (isDarkMode) =>
       minHeight: 30, // ✅ Fixed typo: heighteight -> minHeight
       maxHeight: 120, // Limit input growth to a max height
       textAlignVertical: 'top', // Ensures text starts at the top
-      backgroundColor: isDarkMode ? '#333' : '#fff', // Optional background for better visibility
+      backgroundColor: isDarkMode ? config.darkColors.surface : '#fff',
     },
 
     // sendButton: {
@@ -194,7 +194,7 @@ export const getStyles = (isDarkMode) =>
       alignSelf: 'center',
       width: '100%',
       borderTopWidth: 1,
-      borderColor: isDarkMode ? '#333333' : '#cccccc',
+      borderColor: isDarkMode ? config.darkColors.border : '#cccccc',
 
       //  borderRadius:10
 
@@ -210,8 +210,8 @@ export const getStyles = (isDarkMode) =>
       paddingHorizontal: 10,
       paddingVertical: 3,
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? '#333' : '#ddd',
-      backgroundColor: isDarkMode ? '#222' : '#fff',
+      borderTopColor: isDarkMode ? config.darkColors.border : '#ddd',
+      backgroundColor: isDarkMode ? config.darkColors.surface : '#fff',
       // backgroundColor:'red',
 
     },
@@ -246,7 +246,7 @@ export const getStyles = (isDarkMode) =>
       fontSize: 16,
     },
     replyContainer: {
-      backgroundColor: isDarkMode ? '#333' : '#f0f0f0',
+      backgroundColor: isDarkMode ? config.darkColors.surface : '#f0f0f0',
       borderLeftWidth: 3,
       borderLeftColor: isDarkMode ? '#1E88E5' : '#007BFF',
       padding: 5,

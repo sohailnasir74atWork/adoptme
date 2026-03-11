@@ -121,6 +121,18 @@
             "wishlist_empty": "أضف الحيوانات الأليفة التي تريدها",
             "wishlist_login": "سجّل الدخول وأضف الحيوانات الأليفة التي تريدها"
         },
+        "portfolio": {
+            "title": "قيمة المحفظة",
+            "total_value": "القيمة الإجمالية",
+            "top_items": "أفضل العناصر",
+            "categories": "حسب الفئة",
+            "avg_value": "المتوسط لكل عنصر",
+            "items": "عناصر",
+            "best_category": "أفضل فئة",
+            "wishlist_value": "الأمنيات",
+            "wishlist_gap": "الفرق",
+            "empty": "أضف حيوانات أليفة لمعرفة قيمة محفظتك"
+        },
         "trades": {
             "title": "تبادلاتي",
             "login_msg": "سجّل الدخول لرؤية تبادلاتك",
@@ -226,7 +238,7 @@
         "no_wishlist_pets": "لا توجد عناصر في قائمة الأمنيات بعد.",
         "no_reviews_yet": "لا توجد مراجعات بعد.",
         "no_trades_yet": "لا توجد تبادلات بعد.",
-        "view_detail_profile": "عرض تفاصيل الملف الشخصي",
+        "view_detail_profile": "الملف الشخصي",
         "view_roblox_profile": "عرض ملف Roblox",
         "load_more_reviews": "تحميل المزيد من المراجعات",
         "load_more_trades": "تحميل المزيد من التبادلات",

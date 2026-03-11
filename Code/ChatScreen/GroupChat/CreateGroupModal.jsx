@@ -434,7 +434,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
         style={styles.keyboardAvoidingView}
       >
         <View style={styles.overlay}>
-          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1a1a1a' : '#fff' }]}>
+          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>

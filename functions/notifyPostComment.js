@@ -205,6 +205,7 @@ exports.notifyPostComment = functions.firestore
             postId: postId || '',
             commentId: commentId || '',
             commenterId: newCommenterId || '',
+            senderId: newCommenterId || '',
             commenterName: newCommenterName || '',
             timestamp: Date.now().toString(),
           },

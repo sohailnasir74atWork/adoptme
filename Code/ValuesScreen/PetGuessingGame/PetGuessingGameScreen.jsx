@@ -512,7 +512,7 @@ const PetGuessingGameScreen = () => {
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  const containerBgColor = isDarkMode ? '#121212' : '#f2f2f7';
+  const containerBgColor = isDarkMode ? '#0f172a' : '#f2f2f7';
 
   return (
     <>
@@ -813,7 +813,7 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
     },
     scrollContent: {
       padding: 8,
@@ -854,7 +854,7 @@ const getStyles = (isDarkMode) =>
       marginLeft: 8,
     },
     card: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#fff',
       borderRadius: 12,
       padding: 16,
       marginBottom: 12,
@@ -906,7 +906,7 @@ const getStyles = (isDarkMode) =>
       backgroundColor: '#10B981',
     },
     waitingCard: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#fff',
       borderRadius: 12,
       padding: 24,
       alignItems: 'center',
@@ -944,7 +944,7 @@ const getStyles = (isDarkMode) =>
       marginLeft: 8,
     },
     finishedCard: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#fff',
       borderRadius: 12,
       padding: 24,
       alignItems: 'center',
@@ -971,7 +971,7 @@ const getStyles = (isDarkMode) =>
       color: isDarkMode ? '#9ca3af' : '#6b7280',
     },
     pendingInvitesContainer: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#fff',
       borderRadius: 12,
       padding: 16,
       marginTop: 12,

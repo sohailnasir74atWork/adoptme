@@ -38,7 +38,7 @@ const config = {
   otherapplink2: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.mm2tradesvalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
   // Cloud Functions URL (update with your actual region)
   cloudFunctionsUrl: 'https://us-central1-adoptme-7b50c.cloudfunctions.net',
-  
+
   colors: isNoman
     ? {
       primary: '#ff6666', // Muted grayish blue
@@ -46,9 +46,9 @@ const config = {
       hasBlockGreen: 'rgb(255, 102, 102)', // Vibrant success green
       wantBlockRed: '#66b266', // Vivid warning red
       backgroundLight: '#f2f2f7',
-      backgroundDark: '#121212',
-      white:'white',
-      black:'black'
+      backgroundDark: '#0f172a',
+      white: 'white',
+      black: 'black'
     }
     : {
       primary: '#697565', // Deep navy blue
@@ -56,11 +56,21 @@ const config = {
       hasBlockGreen: '#B8860B', // Light mint green
       wantBlockRed: '#E63946', // Warm, soft red
       backgroundLight: '#f2f2f7',
-      backgroundDark: '#121212',
-       white:'white',
-      black:'black'
+      backgroundDark: '#0f172a',
+      white: 'white',
+      black: 'black'
     },
 
+  // ── Unified Dark Mode Palette (Slate-based) ──
+  darkColors: {
+    bg: '#0f172a',           // Slate-900 — main screen background
+    surface: '#1e293b',      // Slate-800 — cards, bubbles, inputs
+    elevated: '#334155',     // Slate-700 — modals, drawers, hover
+    border: '#475569',       // Slate-600 — borders, dividers
+    textPrimary: '#f1f5f9',  // Slate-100 — main text
+    textSecondary: '#94a3b8',// Slate-400 — muted text, timestamps
+    textMuted: '#64748b',    // Slate-500 — placeholder, disabled
+  },
 };
 
 export default config;

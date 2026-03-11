@@ -18,7 +18,7 @@ const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
 
   // ✅ Memoize modal background color
   const modalBgColor = useMemo(() =>
-    isDarkMode ? '#121212' : '#fff',
+    isDarkMode ? '#0f172a' : '#fff',
     [isDarkMode]
   );
 

@@ -223,7 +223,7 @@ const PetSelectionRound = ({ roomData, currentUser, onSelectPet, roomId }) => {
                   style={[
                     styles.petCard,
                     isSelected && styles.petCardSelected,
-                    { backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff' },
+                    { backgroundColor: isDarkMode ? '#1e293b' : '#ffffff' },
                   ]}
                   onPress={() => handleSelectPet(item)}
                   activeOpacity={0.7}

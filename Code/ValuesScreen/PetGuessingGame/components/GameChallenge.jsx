@@ -212,7 +212,7 @@ const GameChallenge = ({ roomData, currentUser, onAnswer, roomId }) => {
 
   if (!challenge) {
     return (
-      <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff' }]}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#ffffff' }]}>
         <ActivityIndicator size="large" color="#8B5CF6" />
         <Text style={[styles.loadingText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
           Loading challenge...
@@ -224,7 +224,7 @@ const GameChallenge = ({ roomData, currentUser, onAnswer, roomId }) => {
   const isCorrect = selectedAnswer === challenge.correctAnswer;
 
   return (
-    <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff' }]}>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#ffffff' }]}>
       <View style={styles.header}>
         <Text style={[styles.roundText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
           Round {challenge.round} of {roomData?.gameData?.totalRounds || 5}

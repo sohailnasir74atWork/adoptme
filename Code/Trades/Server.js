@@ -429,7 +429,7 @@ const getStyles = (isDarkMode) =>
 
         },
         modalContainer: {
-            backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+            backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
             padding: 20,
             width: '90%',
             borderRadius: 12,

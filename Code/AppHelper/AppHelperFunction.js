@@ -19,7 +19,7 @@ export const MyDarkTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: '#121212',
+    background: '#0f172a',
     text: 'white',
     primary: '#BB86FC',
   },

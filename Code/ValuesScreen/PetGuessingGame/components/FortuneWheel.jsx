@@ -202,7 +202,7 @@ const FortuneWheel = ({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.turnIndicator, { backgroundColor: isDarkMode ? '#1e1e1e' : '#f3f4f6' }]}>
+      <View style={[styles.turnIndicator, { backgroundColor: isDarkMode ? '#1e293b' : '#f3f4f6' }]}>
         <Text style={[styles.turnText, { color: isDarkMode ? '#fff' : '#111827' }]}>
           {isMyTurn ? '🎯 Your Turn!' : `⏳ ${currentPlayerName || 'Player'}'s Turn`}
         </Text>

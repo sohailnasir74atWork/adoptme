@@ -121,6 +121,18 @@
             "wishlist_empty": "Füge Haustiere hinzu, die du möchtest",
             "wishlist_login": "Anmelden & Haustiere hinzufügen, die du möchtest"
         },
+        "portfolio": {
+            "title": "Portfolio-Wert",
+            "total_value": "Gesamtwert",
+            "top_items": "Top-Gegenstände",
+            "categories": "Nach Kategorie",
+            "avg_value": "Durchschn. pro Item",
+            "items": "Items",
+            "best_category": "Beste Kategorie",
+            "wishlist_value": "Wunschliste",
+            "wishlist_gap": "Differenz",
+            "empty": "Füge Haustiere hinzu, um deinen Portfolio-Wert zu sehen"
+        },
         "trades": {
             "title": "Meine Trades",
             "login_msg": "Melde dich an, um deine Trades zu sehen",
@@ -226,7 +238,7 @@
         "no_wishlist_pets": "Noch keine Wunschlisten-Haustiere.",
         "no_reviews_yet": "Noch keine Bewertungen.",
         "no_trades_yet": "Noch keine Trades.",
-        "view_detail_profile": "Profil im Detail ansehen",
+        "view_detail_profile": "Profil",
         "view_roblox_profile": "Roblox-Profil ansehen",
         "load_more_reviews": "Mehr Bewertungen laden",
         "load_more_trades": "Mehr Trades laden",

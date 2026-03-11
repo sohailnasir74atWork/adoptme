@@ -5,11 +5,11 @@ export const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
       padding: 8,
     },
     cardContainer: {
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
       borderRadius: 10,
       // paddingVertical: 1,
       paddingHorizontal: 5,
@@ -112,7 +112,7 @@ export const getStyles = (isDarkMode) =>
     },
 
     input: {
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
       padding: 10,
       borderRadius: 5,
       marginBottom: 20,

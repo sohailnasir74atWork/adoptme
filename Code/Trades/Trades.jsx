@@ -18,6 +18,7 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import ShareTradeModal from './ShareTradeModal';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import {
   collection,
@@ -31,10 +32,18 @@ import {
   query,
   startAfter,
   updateDoc,
+  deleteField,
 } from '@react-native-firebase/firestore';
 
 // Initialize dayjs plugins
 dayjs.extend(relativeTime);
+
+const TRADE_REACTIONS = [
+  { emoji: '✅', label: 'Fair' },
+  { emoji: '❌', label: 'Lose' },
+  { emoji: '👍', label: 'OK' },
+  { emoji: '🔥', label: 'W' },
+];
 
 
 const TradeList = ({ route }) => {
@@ -57,7 +66,7 @@ const TradeList = ({ route }) => {
   const [hasMore, setHasMore] = useState(true);
   const [showofferwall, setShowofferwall] = useState(false);
   const [remainingFeaturedTrades, setRemainingFeaturedTrades] = useState([]);
-  // const [openShareModel, setOpenShareModel] = useState(false);
+  const [openShareModel, setOpenShareModel] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [bannedUsers, setBannedUsers] = useState([]);
 
@@ -1015,95 +1024,46 @@ const TradeList = ({ route }) => {
       callbackfunction();
     };
     return (
-      <View style={[styles.tradeItem, item.isFeatured && { backgroundColor: isDarkMode ? '#34495E' : 'rgba(245, 222, 179, 0.6)' }]}>
-        {item.isFeatured && <View style={styles.tag}><Text style={styles.tagText}>Featured</Text></View>}
+      <View style={styles.tradeItem}>
+        {item.isFeatured && <View style={styles.tag}><Text style={styles.tagTextFeatured}>Featured</Text></View>}
 
-
-        <View style={styles.tradeHeader}>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => handleOpenProfile(item)}>
-            <Image source={{ uri: item.avatar }} style={styles.itemImageUser} />
-
-            <View style={{ justifyContent: 'center', marginLeft: 10 }}>
-              <Text style={styles.traderName}>
-                {item.traderName}{' '}
-                {item.isPro && (
-                  <Image
-                    source={require('../../assets/pro.png')}
-                    style={{ width: 10, height: 10 }}
-                  />
-                )}{' '}
-                {item.robloxUsernameVerified && (
-                  <Image
-                    source={require('../../assets/verification.png')}
-                    style={{ width: 10, height: 10 }}
-                  />
-                )}{' '}
+        {/* ✅ Header — Feed-style */}
+        <View style={styles.cardHeader}>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }} onPress={() => handleOpenProfile(item)}>
+            <Image source={{ uri: item.avatar }} style={styles.cardAvatar} />
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                <Text style={styles.cardName} numberOfLines={1}>{item.traderName}</Text>
+                {item.isPro && <Image source={require('../../assets/pro.png')} style={{ width: 12, height: 12 }} />}
+                {item.robloxUsernameVerified && <Image source={require('../../assets/verification.png')} style={{ width: 12, height: 12 }} />}
                 {(() => {
-                  const hasRecentWin =
-                    !!item?.hasRecentGameWin ||
-                    (typeof item?.lastGameWinAt === 'number' &&
-                      Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
-                  return hasRecentWin ? (
-                    <Image
-                      source={require('../../assets/trophy.webp')}
-                      style={{ width: 10, height: 10 }}
-                    />
-                  ) : null;
-                })()}{' '}
+                  const hasRecentWin = !!item?.hasRecentGameWin || (typeof item?.lastGameWinAt === 'number' && Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+                  return hasRecentWin ? <Image source={require('../../assets/trophy.webp')} style={{ width: 12, height: 12 }} /> : null;
+                })()}
                 {item.rating ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#ffb700be', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 2, marginLeft: 5 }}>
-                    <Icon name="star" size={8} color="white" style={{ marginRight: 4 }} />
-                    <Text style={{ fontSize: 8, color: 'white' }}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffb700be', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 }}>
+                    <Icon name="star" size={8} color="white" style={{ marginRight: 2 }} />
+                    <Text style={{ fontSize: 8, color: 'white', fontWeight: '600' }}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
                   </View>
                 ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, backgroundColor: '#888', borderRadius: 5, paddingHorizontal: 2, paddingVertical: 1, marginLeft: 5 }}>
-                    <Icon name="star-outline" size={8} color="white" style={{ marginRight: 4 }} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#888', borderRadius: 5, paddingHorizontal: 3, paddingVertical: 1 }}>
+                    <Icon name="star-outline" size={8} color="white" style={{ marginRight: 2 }} />
                     <Text style={{ fontSize: 8, color: 'white' }}>N/A</Text>
                   </View>
                 )}
-
-
-              </Text>
-
-              {/* Rating Info */}
-
-
-              <Text style={styles.tradeTime}>{formattedTime}</Text>
+              </View>
+              <Text style={styles.cardTime}>{formattedTime}</Text>
             </View>
           </TouchableOpacity>
-
-          <View style={{ flexDirection: 'row' }}>
-            {/* Status Badge (Win/Lose/Fair) - Only show if status field exists */}
-            {item.status && (
-              <View style={[
-                styles.dealContainer,
-                {
-                  backgroundColor: item.status === 'w' ? '#10B981' : // Green for win
-                    item.status === 'f' ? config.colors.secondary : // Blue for fair
-                      config.colors.primary, // Pink/red for lose
-                  marginRight: 5,
-                }
-              ]}>
-                <Text style={styles.dealText}>
-                  {item.status === 'w' ? t('trade.status_win') : item.status === 'f' ? t('trade.status_fair') : t('trade.status_lose')}
-                </Text>
-              </View>
-            )}
-
-            <FontAwesome
-              name='message'
-              size={18}
-              color={config.colors.primary}
-              onPress={() => handleOpenProfile(item)}
-              solid={false}
-            />
-            {/* <Icon
-              name="chatbox-outline"
-              size={18}
-              color={config.colors.secondary}
-              onPress={handleChatNavigation}
-            /> */}
-          </View>
+          {item.status && (
+            <View style={[styles.statusBadge, {
+              backgroundColor: item.status === 'w' ? '#10B981' : item.status === 'f' ? config.colors.secondary : config.colors.primary,
+            }]}>
+              <Text style={styles.statusBadgeText}>
+                {item.status === 'w' ? t('trade.status_win') : item.status === 'f' ? t('trade.status_fair') : t('trade.status_lose')}
+              </Text>
+            </View>
+          )}
         </View>
         {/* Trade Items */}
         <View style={styles.tradeDetails}>
@@ -1260,47 +1220,104 @@ const TradeList = ({ route }) => {
         </View>
 
         {/* Description */}
-        {item.description && <Text style={styles.description}>{renderTextWithUsername(item.description)}
-        </Text>}
-        {item.userId === user.id && (<View style={styles.footer}>
-          {!item.isFeatured &&
-            <TouchableOpacity onPress={() => handleMakeFeatureTrade(item)} style={[styles.boost, { backgroundColor: 'purple' }]}>
-              <Text
+        {item.description && <Text style={styles.description}>{renderTextWithUsername(item.description)}</Text>}
 
+        {/* ✅ Owner actions (boost/delete) */}
+        {item.userId === user.id && (
+          <View style={styles.ownerActions}>
+            {!item.isFeatured &&
+              <TouchableOpacity onPress={() => handleMakeFeatureTrade(item)} style={[styles.ownerBtn, { backgroundColor: '#8B5CF6' }]}>
+                <Icon name="rocket-outline" size={12} color="white" />
+                <Text style={styles.ownerBtnText}>{t('trade.boost_it')}</Text>
+              </TouchableOpacity>}
+            <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.ownerBtn, { backgroundColor: '#EF4444' }]}>
+              <Icon name="trash-outline" size={12} color="white" />
+              <Text style={styles.ownerBtnText}>{t('trade.delete_it')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
+        {/* ✅ Social Actions Row — Feed-style */}
+        <View style={styles.socialActionsRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>
+            {/* Reaction pills */}
+            {TRADE_REACTIONS.map(({ emoji, label }) => {
+              const reactionMap = { ...(item.reactions || {}) };
+              const myReaction = reactionMap[user?.id];
+              const count = Object.values(reactionMap).filter(r => r === emoji).length;
+              const isActive = myReaction === emoji;
+              return (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => {
+                    if (!user?.id) { setIsSigninDrawerVisible(true); return; }
 
+                    // ✅ Optimistic local update — instant UI feedback
+                    setTrades(prev => prev.map(t => {
+                      if (t.id !== item.id) return t;
+                      const newReactions = { ...(t.reactions || {}) };
+                      if (isActive) {
+                        delete newReactions[user.id];
+                      } else {
+                        newReactions[user.id] = emoji;
+                      }
+                      return { ...t, reactions: newReactions };
+                    }));
 
-                style={{ color: 'white', }}
-              >{t('trade.boost_it')}</Text>
-            </TouchableOpacity>}
-          <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.boost, { backgroundColor: 'black' }]}>
-            <Text
+                    // Firestore update (background)
+                    const tradeRef = doc(firestoreDB, 'trades_new', item.id);
+                    if (isActive) {
+                      updateDoc(tradeRef, { [`reactions.${user.id}`]: deleteField() });
+                    } else {
+                      updateDoc(tradeRef, { [`reactions.${user.id}`]: emoji });
+                    }
+                  }}
+                  style={[styles.reactionPill, isActive && styles.reactionPillActive]}
+                >
+                  <Text style={{ fontSize: 12 }}>{emoji}</Text>
+                  {count > 0 && <Text style={styles.reactionPillCount}>{count}</Text>}
+                </TouchableOpacity>
+              );
+            })}
 
+            {/* Share */}
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedTrade(item);
+                setOpenShareModel(true);
+              }}
+              style={styles.socialBtn}
+            >
+              <Icon name="share-social-outline" size={16} color={config.colors.primary} />
+            </TouchableOpacity>
+          </View>
 
-              color={config.colors.secondary}
-
-              style={{ color: 'white', }}
-            >{t('trade.delete_it')}</Text>
+          <TouchableOpacity onPress={handleChatNavigation} style={styles.chatBtn}>
+            <Icon name="chatbubble" size={13} color="#fff" />
+            <Text style={styles.chatBtnText}>{t('feed.chat', { defaultValue: 'Chat' })}</Text>
           </TouchableOpacity>
-          {/* <Icon
-            name="share-social"
-            size={24}
-            color={config.colors.primary}
-            onPress={() => {
-              setSelectedTrade(item); // ✅ Set the selected trade
-              setOpenShareModel(true); // ✅ Then open the modal
-            }}
-          /> */}
+        </View>
 
+        {openShareModel && selectedTrade?.id === item.id && (
+          <ShareTradeModal
+            visible={openShareModel}
+            onClose={() => setOpenShareModel(false)}
+            hasItems={selectedTrade?.hasItems || []}
+            wantsItems={selectedTrade?.wantsItems || []}
+            hasTotal={selectedTrade?.hasTotal || 0}
+            wantsTotal={selectedTrade?.wantsTotal || 0}
+            description={selectedTrade?.description || ''}
+          />
+        )}
 
-
-        </View>)}
-        {/* <ShareTradeModal
-          visible={openShareModel}
-          onClose={() => setOpenShareModel(false)}
-          tradeData={selectedTrade}
-        /> */}
-
+        <ProfileBottomDrawer
+          isVisible={isDrawerVisible && selectedTrade?.id === item.id}
+          toggleModal={() => setIsDrawerVisible(false)}
+          startChat={handleChatNavigation}
+          selectedUser={selectedUser}
+          isOnline={false}
+          bannedUsers={bannedUsers}
+        />
       </View>
     );
   };
@@ -1322,10 +1339,10 @@ const TradeList = ({ route }) => {
             borderRadius: 10,
             paddingHorizontal: 12,
             fontSize: 16,
-            backgroundColor: isDarkMode ? '#1C1C1E' : '#FFF',
+            backgroundColor: isDarkMode ? '#1e293b' : '#FFF',
             color: isDarkMode ? '#FFF' : '#000',
             borderWidth: 1,
-            borderColor: isDarkMode ? '#333' : '#E5E5EA'
+            borderColor: isDarkMode ? '#475569' : '#E5E5EA'
           }}
           placeholder={t("trade.search_placeholder") || "Search items..."}
           placeholderTextColor={isDarkMode ? '#888' : '#666'}
@@ -1523,7 +1540,7 @@ const TradeList = ({ route }) => {
             <Icon
               name="chevron-up-circle"
               size={48}
-              color={config.colors.primary}
+              color={'#3b82f6'}
             />
           </TouchableOpacity>
         </Animated.View>
@@ -1535,18 +1552,21 @@ const getStyles = (isDarkMode) =>
   StyleSheet.create({
     container: {
       paddingHorizontal: 8,
-      backgroundColor: isDarkMode ? '#121212' : '#f2f2f7',
+      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
       flex: 1,
     },
     tradeItem: {
-      padding: 10,
-      marginBottom: 10,
-      // marginHorizontal: 10,
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
-
-      borderRadius: 10, // Smooth rounded corners
-      borderWidth: !config.isNoman ? 3 : 0,
-      borderColor: config.colors.hasBlockGreen,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginHorizontal: 4,
+      marginVertical: 6,
+      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+      borderRadius: 18,
+      shadowColor: isDarkMode ? '#000' : '#94a3b8',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDarkMode ? 0.3 : 0.08,
+      shadowRadius: 8,
+      elevation: isDarkMode ? 4 : 3,
     },
 
     searchContainer: {
@@ -1895,10 +1915,127 @@ const getStyles = (isDarkMode) =>
       justifyContent: 'flex-start',
       borderTopWidth: 1,
       backgroundColor: '#F5A327',
-      // paddingHorizontal: 30,
       paddingTop: 5,
       marginTop: 10,
       borderTopColor: config.colors.hasBlockGreen
+    },
+    // ✅ New feed-style card styles
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    cardAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+    },
+    cardName: {
+      fontWeight: '700',
+      fontSize: 13,
+      color: isDarkMode ? '#f1f5f9' : '#0f172a',
+      flexShrink: 1,
+    },
+    cardTime: {
+      fontSize: 11,
+      color: isDarkMode ? '#64748b' : '#94a3b8',
+      marginTop: 1,
+    },
+    statusBadge: {
+      paddingVertical: 3,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+    },
+    statusBadgeText: {
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: 10,
+    },
+    tagTextFeatured: {
+      color: '#fff',
+      fontSize: 7,
+      fontWeight: 'bold',
+    },
+    ownerActions: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 8,
+    },
+    ownerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+    },
+    ownerBtnText: {
+      color: 'white',
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    socialActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: isDarkMode ? '#1e293b40' : '#f1f5f9',
+    },
+    socialBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc',
+      gap: 4,
+    },
+    socialBtnText: {
+      fontSize: 12,
+      color: config.colors.primary,
+      fontWeight: '600',
+    },
+    reactionPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 999,
+      backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9',
+      gap: 2,
+    },
+    reactionPillActive: {
+      backgroundColor: isDarkMode ? '#1e3a5f' : '#e0e7ff',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#3b82f6' : '#818cf8',
+    },
+    reactionPillCount: {
+      fontSize: 10,
+      color: isDarkMode ? '#94a3b8' : '#64748b',
+      fontWeight: '600',
+    },
+    chatBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      backgroundColor: config.colors.hasBlockGreen,
+      gap: 4,
+      shadowColor: config.colors.primary,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    chatBtnText: {
+      color: '#ffffff',
+      fontWeight: '700',
+      fontSize: 9,
     },
     tag: {
       backgroundColor: config.colors.hasBlockGreen,

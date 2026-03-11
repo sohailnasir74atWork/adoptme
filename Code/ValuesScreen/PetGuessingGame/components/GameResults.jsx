@@ -101,7 +101,7 @@ const GameResults = ({ roomData, currentUser }) => {
     <View style={styles.container}>
       {/* Timeout Message */}
       {timeoutReason && (
-        <View style={[styles.timeoutSection, { backgroundColor: isDarkMode ? '#1e1e1e' : '#fef2f2' }]}>
+        <View style={[styles.timeoutSection, { backgroundColor: isDarkMode ? '#1e293b' : '#fef2f2' }]}>
           <Text style={styles.timeoutEmoji}>⏱️</Text>
           <Text style={[styles.timeoutText, { color: isDarkMode ? '#fff' : '#000' }]}>
             Game Ended

@@ -105,7 +105,7 @@ const PlayerCards = ({ roomData, currentUserId }) => {
               key={player.id}
               style={[
                 styles.card,
-                { backgroundColor: isDarkMode ? '#1e1e1e' : '#fff' },
+                { backgroundColor: isDarkMode ? '#1e293b' : '#fff' },
                 isCurrentTurn && styles.cardActive,
                 isWinner && styles.cardWinner,
               ]}
