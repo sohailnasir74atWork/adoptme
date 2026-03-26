@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet, Platform } from 'react-native';
+import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -13,44 +14,112 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useGlobalState } from '../GlobelStats';
 import DesignUploader from '../Design/DesignMainScreen';
 import DesignStack from '../Design/DesignNavigation';
+import HomeTabScreen from '../HomeTab/HomeTabScreen';
 import CustomTopTabs from '../ValuesScreen/TopTabs';
-import { setAppLanguage, loadLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
+import { setAppLanguage, loadLanguage } from '../../i18n';
+import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
-
+import { checkDailyStreak } from '../ChatScreen/GroupChat/badgeUtils';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+  withDelay,
+} from 'react-native-reanimated';
 
 
 const Tab = createBottomTabNavigator();
 
-const AnimatedTabIcon = React.memo(({ iconName, color, size, focused }) => {
+const AnimatedTabIcon = React.memo(({ iconName, color, size, focused, isDark }) => {
+  const scale = useSharedValue(1);
+  const translateY = useSharedValue(0);
+  const rotate = useSharedValue(0);
+
+  useEffect(() => {
+    if (focused) {
+      scale.value = withSequence(
+        withSpring(1.35, { damping: 3, stiffness: 300 }),
+        withSpring(1.15, { damping: 8, stiffness: 180 })
+      );
+      rotate.value = withSequence(
+        withTiming(8, { duration: 80 }),
+        withTiming(-8, { duration: 80 }),
+        withTiming(4, { duration: 60 }),
+        withTiming(0, { duration: 60 })
+      );
+    } else {
+      scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+      rotate.value = withTiming(0, { duration: 150 });
+    }
+  }, [focused]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { rotate: `${rotate.value}deg` },
+    ],
+  }));
+
   return (
-    <FontAwesome
-      name={iconName}
-      size={size}
-      color={color}
-      solid={focused}
-    />
+    <Animated.View style={animatedStyle}>
+      <FontAwesome
+        name={iconName}
+        size={size}
+        color={color}
+        solid={focused}
+      />
+    </Animated.View>
   );
 });
 
 
+// ✅ PERF: Extracted TabBarButton to avoid recreating inline component on every render
+const TabBarButton = React.memo(({ onPress, children, isSelected, isDarkMode, tabBarButtonStyles }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.9}
+    style={{
+      ...tabBarButtonStyles.base,
+      backgroundColor: isSelected
+        ? (isDarkMode ? tabBarButtonStyles.selected.dark : tabBarButtonStyles.selected.light)
+        : 'transparent',
+    }}
+  >
+    {children}
+  </TouchableOpacity>
+));
+
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t, i18n } = useTranslation();
-  const { isAdmin, user, theme } = useGlobalState();
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const { isAdmin, user, theme, appdatabase } = useGlobalState();
 
-  // ✅ Get current language code (e.g. 'en')
-  const currentLang = i18n.language || 'en';
-  const currentLangData = AVAILABLE_LANGUAGES.find(l => l.code === currentLang) || AVAILABLE_LANGUAGES[0];
+  // 🔥 Daily login streak check + cosmetics sync (fire-and-forget)
+  useEffect(() => {
+    if (user?.id && appdatabase) {
+      checkDailyStreak(appdatabase, user.id);
+      syncMyCosmetics(appdatabase, user.id, true); // force=true on app start
+      if (user.displayName) setCachedUsername(user.displayName);
+      if (user.avatar) setCachedAvatar(user.avatar);
+    }
+  }, [user?.id, appdatabase]);
 
-  // ✅ Handle language change
-  const handleLanguageChange = async (langCode) => {
-    await loadLanguage(langCode);
-    await setAppLanguage(langCode);
-    setShowLanguageModal(false);
-  };
+  // ── Set Android system navigation bar color to match theme ──
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const bg = theme === 'dark' ? '#0f172a' : '#ffffff';
+      SystemNavigationBar.setNavigationColor(bg, theme === 'dark' ? 'light' : 'dark');
+    }
+  }, [theme]);
+
+
+
+
 
   // ✅ Memoize icons object to avoid recreation
   const icons = useMemo(() => ({
+    Home: ['house', 'house'],
     Calculator: ['calculator', 'calculator'],
     Stock: ['cart-shopping', 'cart-shopping'],
     Trade: ['handshake', 'handshake'],
@@ -66,69 +135,9 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   // ✅ Memoize isDarkMode to avoid recalculation
   const isDarkMode = useMemo(() => theme === 'dark', [theme]);
 
-  // ✅ Analytics button component (reused in headerLeft on iOS, headerRight on Android)
-  const AnalyticsButton = useCallback((navigation) => (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('Analytics')}
-      style={{
-        marginRight: Platform.OS === 'ios' ? 0 : 12,
-        marginLeft: Platform.OS === 'ios' ? 10 : 0,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        position: 'relative',
-      }}
-    >
-      <FontAwesome name="chart-line" size={18} color={config.colors.primary} solid />
-      <View style={{
-        position: 'absolute',
-        top: -6,
-        right: -10,
-        backgroundColor: '#EF4444',
-        borderRadius: 6,
-        paddingVertical: 1,
-        minWidth: 30,
-        alignItems: 'center',
-      }}>
-        <Text style={{ color: '#fff', fontSize: 7, fontWeight: 'semi-bold' }}>NEW</Text>
-      </View>
-    </TouchableOpacity>
-  ), []);
-
-  // ✅ On iOS, place Analytics button on the left (header title is centered)
-  const headerLeft = useCallback((navigation) => (
-    Platform.OS === 'ios' ? AnalyticsButton(navigation) : null
-  ), [AnalyticsButton]);
-
-  // ✅ Memoize headerRight component to prevent re-renders
+  // ✅ Memoize headerRight component — only Admin trophy
   const headerRight = useCallback((navigation) => (
     <>
-      {/* Analytics Button — only on Android (iOS uses headerLeft) */}
-      {Platform.OS !== 'ios' && AnalyticsButton(navigation)}
-
-      {/* Language Selector Button */}
-      <TouchableOpacity
-        onPress={() => setShowLanguageModal(true)}
-        style={{
-          marginRight: 12,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          backgroundColor: isDarkMode ? '#333' : '#f0f0f0',
-          borderRadius: 6,
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ fontSize: 14, marginRight: 4 }}>{currentLangData.flag}</Text>
-        <Text style={{
-          fontSize: 12,
-          fontWeight: 'bold',
-          color: isDarkMode ? '#fff' : '#333',
-          textTransform: 'uppercase',
-        }}>
-          {currentLang}
-        </Text>
-      </TouchableOpacity>
-
       {isAdmin && (
         <TouchableOpacity onPress={() => navigation.navigate('Admin')}>
           <Image
@@ -137,69 +146,10 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           />
         </TouchableOpacity>
       )}
-      <TouchableOpacity onPress={() => navigation.navigate('Setting')} style={{ marginRight: 16 }}>
-        <View
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            borderWidth: 2,
-            borderColor: config.colors.primary,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Image
-            source={{ uri: !user?.id ? 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png' : user.avatar }}
-            style={{ width: 28, height: 28, borderRadius: 12.5 }}
-          />
-        </View>
-      </TouchableOpacity>
     </>
-  ), [isAdmin, user?.id, user?.avatar, isDarkMode, currentLangData.flag, currentLang]);
+  ), [isAdmin]);
 
-  // ✅ Language Modal Component
-  const LanguageModal = () => (
-    <Modal
-      visible={showLanguageModal}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={() => setShowLanguageModal(false)}
-    >
-      <TouchableOpacity
-        style={langStyles.overlay}
-        activeOpacity={1}
-        onPress={() => setShowLanguageModal(false)}
-      >
-        <View style={[langStyles.modal, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
-          <Text style={[langStyles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
-            {t('settings.select_language')}
-          </Text>
-          <FlatList
-            data={AVAILABLE_LANGUAGES}
-            keyExtractor={(item) => item.code}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  langStyles.langItem,
-                  item.code === currentLang && { backgroundColor: config.colors.primary + '20' },
-                ]}
-                onPress={() => handleLanguageChange(item.code)}
-              >
-                <Text style={langStyles.flag}>{item.flag}</Text>
-                <Text style={[langStyles.langName, { color: isDarkMode ? '#fff' : '#000' }]}>
-                  {item.name}
-                </Text>
-                {item.code === currentLang && (
-                  <Icon name="checkmark-circle" size={20} color={config.colors.primary} />
-                )}
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
+
 
 
 
@@ -220,66 +170,88 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   }), []);
 
 
+  // ✅ PERF: Memoize screenOptions — prevents recreation on every render cycle
+  const screenOptions = useCallback(({ route }) => ({
+    tabBarIcon: ({ focused }) => (
+      <AnimatedTabIcon
+        focused={focused}
+        iconName={getTabIcon(route.name, focused)}
+        color={focused ? config.colors.primary : (isDarkMode ? '#64748b' : '#94a3b8')}
+        size={18}
+        isDark={isDarkMode}
+      />
+    ),
+    tabBarButton: (props) => (
+      <TabBarButton
+        onPress={props.onPress}
+        isSelected={props?.['aria-selected']}
+        isDarkMode={isDarkMode}
+        tabBarButtonStyles={tabBarButtonStyles}
+      >
+        {props.children}
+      </TabBarButton>
+    ),
+    tabBarStyle: {
+      backgroundColor: selectedTheme.colors.background,
+      paddingTop: 4,
+    },
+    tabBarLabelStyle: {
+      fontSize: 9,
+      fontWeight: 'bold',
+    },
+    tabBarActiveTintColor: config.colors.primary,
+    tabBarInactiveTintColor: isDarkMode ? '#64748b' : '#94a3b8',
+    headerStyle: {
+      backgroundColor: selectedTheme.colors.background,
+    },
+    headerTintColor: selectedTheme.colors.text,
+    headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
+    lazy: true, // ✅ PERF: Only mount tab screen when first visited
+  }), [isDarkMode, selectedTheme, getTabIcon, tabBarButtonStyles]);
+
+  // ✅ PERF: Memoize all tab children with useCallback to prevent remounting on tab switch
+  const renderHome = useCallback(() => <HomeTabScreen selectedTheme={selectedTheme} />, [selectedTheme]);
+  const renderCalculator = useCallback(() => <HomeScreen selectedTheme={selectedTheme} />, [selectedTheme]);
+  const renderTrade = useCallback(() => (
+    <TradeStack
+      selectedTheme={selectedTheme}
+      setChatFocused={setChatFocused}
+      modalVisibleChatinfo={modalVisibleChatinfo}
+      setModalVisibleChatinfo={setModalVisibleChatinfo}
+    />
+  ), [selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo]);
+  const renderDesigns = useCallback(() => <DesignStack selectedTheme={selectedTheme} />, [selectedTheme]);
+  const renderChat = useCallback(() => (
+    <ChatStack
+      selectedTheme={selectedTheme}
+      setChatFocused={setChatFocused}
+      modalVisibleChatinfo={modalVisibleChatinfo}
+      setModalVisibleChatinfo={setModalVisibleChatinfo}
+    />
+  ), [selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo]);
+  const renderMore = useCallback(() => <CustomTopTabs selectedTheme={selectedTheme} />, [selectedTheme]);
+
   return (
     <>
-      <LanguageModal />
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => (
-            <AnimatedTabIcon
-              focused={focused}
-              iconName={getTabIcon(route.name, focused)}
-              color={config.colors.primary}
-              size={18}
-            />
-          ),
-          tabBarButton: (props) => {
-            const { onPress, children } = props;
-            const isSelected = props?.['aria-selected'];
+      <Tab.Navigator screenOptions={screenOptions}>
+        <Tab.Screen
+          name="Home"
+          options={({ navigation }) => ({
+            title: t('tabs.home'),
+            headerShown: false,
+          })}
+        >
+          {renderHome}
+        </Tab.Screen>
 
-            return (
-              <TouchableOpacity
-                onPress={onPress}
-                activeOpacity={0.9}
-                style={{
-                  ...tabBarButtonStyles.base,
-                  backgroundColor: isSelected
-                    ? (isDarkMode ? tabBarButtonStyles.selected.dark : tabBarButtonStyles.selected.light)
-                    : 'transparent',
-                }}
-              >
-                {children}
-              </TouchableOpacity>
-            );
-          },
-
-          tabBarStyle: {
-            backgroundColor: selectedTheme.colors.background,
-          },
-          tabBarLabelStyle: {
-            fontSize: 9, // 👈 Your custom label font size
-            fontWeight: 'bold', // Optional: Custom font family
-            color: config.colors.primary,
-
-          },
-          tabBarActiveTintColor: config.colors.primary,
-          tabBarInactiveTintColor: selectedTheme.colors.text,
-          headerStyle: {
-            backgroundColor: selectedTheme.colors.background,
-          },
-          headerTintColor: selectedTheme.colors.text,
-          headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
-        })}
-      >
         <Tab.Screen
           name="Calculator"
           options={({ navigation }) => ({
             title: t('tabs.calculator'),
-            headerLeft: () => headerLeft(navigation),
             headerRight: () => headerRight(navigation),
           })}
         >
-          {() => <HomeScreen selectedTheme={selectedTheme} />}
+          {renderCalculator}
         </Tab.Screen>
 
 
@@ -291,14 +263,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
             title: t('tabs.trade'), // Translation applied here
           }}
         >
-          {() => (
-            <TradeStack
-              selectedTheme={selectedTheme}
-              setChatFocused={setChatFocused}
-              modalVisibleChatinfo={modalVisibleChatinfo}
-              setModalVisibleChatinfo={setModalVisibleChatinfo}
-            />
-          )}
+          {renderTrade}
         </Tab.Screen>
         <Tab.Screen
           name="Designs"
@@ -307,7 +272,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
             headerShown: false
           }}
         >
-          {() => <DesignStack selectedTheme={selectedTheme} />}
+          {renderDesigns}
         </Tab.Screen>
 
         <Tab.Screen
@@ -326,14 +291,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
             },
           }}
         >
-          {() => (
-            <ChatStack
-              selectedTheme={selectedTheme}
-              setChatFocused={setChatFocused}
-              modalVisibleChatinfo={modalVisibleChatinfo}
-              setModalVisibleChatinfo={setModalVisibleChatinfo}
-            />
-          )}
+          {renderChat}
         </Tab.Screen>
 
 
@@ -344,56 +302,12 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
             headerShown: false,
           }}
         >
-          {() => <CustomTopTabs selectedTheme={selectedTheme} />}
+          {renderMore}
         </Tab.Screen>
 
       </Tab.Navigator>
     </>
   );
-});
-
-// ✅ Language Selector Styles
-const langStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modal: {
-    width: '80%',
-    maxHeight: '70%',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  langItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  flag: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  langName: {
-    flex: 1,
-    fontSize: 16,
-
-  },
 });
 
 export default MainTabs;

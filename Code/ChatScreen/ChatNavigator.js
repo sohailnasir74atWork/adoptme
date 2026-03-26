@@ -13,9 +13,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
 import { ref, update, get } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
-import LeaderboardScreen from './GroupChat/LeaderboardScreen';
 import AdminDashboard from '../AppHelper/AdminDashboard';
-import SocialDashboard from '../AppHelper/SocialDashboard';
 import { useTranslation } from 'react-i18next';
 
 const Stack = createNativeStackNavigator();
@@ -235,12 +233,6 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         setGroupUnreadCount={setGroupUnreadCount}
         triggerHapticFeedback={triggerHapticFeedback}
         onOnlineUsersPress={() => setOnlineUsersVisible(true)}
-        onLeaderboardPress={() => {
-          // Navigate to Leaderboard screen instead of showing modal
-          if (navigation && typeof navigation.navigate === 'function') {
-            navigation.navigate('Leaderboard');
-          }
-        }}
       />
     ),
     headerRightContainerStyle: {
@@ -329,22 +321,12 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         options={{ title: 'Image' }}
       />
 
-      <Stack.Screen
-        name="Leaderboard"
-        options={{ title: 'Top Rated Users' }}
-      >
-        {props => <LeaderboardScreen {...props} />}
-      </Stack.Screen>
+
 
       <Stack.Screen
         name="AdminDashboard"
         component={AdminDashboard}
         options={{ title: 'Admin Dashboard' }}
-      />
-      <Stack.Screen
-        name="SocialDashboard"
-        component={SocialDashboard}
-        options={{ title: 'Friends' }}
       />
     </Stack.Navigator>
   );

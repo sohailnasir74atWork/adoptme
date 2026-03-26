@@ -1,12 +1,13 @@
 import { StyleSheet } from "react-native";
 import config from "../Helper/Environment";
+import { getThemeColors } from '../Helper/themeColors';
 
-export const getStyles = (isDarkMode) =>
-
-  StyleSheet.create({
+export const getStyles = (isDarkMode) => {
+  const c = getThemeColors(isDarkMode);
+  return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? config.darkColors.bg : '#f2f2f7',
+      backgroundColor: c.bg,
     },
     loader: {
       flex: 1,
@@ -44,11 +45,7 @@ export const getStyles = (isDarkMode) =>
 
     },
     senderName: {
-      width: 34,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
+      marginBottom: 2,
       marginHorizontal: 5,
     },
     senderNameText: {
@@ -69,48 +66,41 @@ export const getStyles = (isDarkMode) =>
     },
     myMessageText: {
       fontSize: 10,
-      color: isDarkMode ? 'white' : 'black',
-      backgroundColor: isDarkMode ? '#1E88E5' : 'lightgreen',  // keep accent colors
-      paddingVertical: 2,
-      paddingHorizontal: 5,
-      borderRadius: 10,
-
+      color: c.text,
+      backgroundColor: isDarkMode ? '#0B5E3F' : '#DCF8C6',
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 16,
+      borderTopRightRadius: 4,
       lineHeight: 14,
-
-
     },
     otherMessageText: {
       fontSize: 10,
-      color: isDarkMode ? 'white' : 'black',
-      backgroundColor: isDarkMode ? config.darkColors.surface : 'white',
-      paddingHorizontal: 5,
-      // lineHeight: 20,
-      borderRadius: 10,
-      paddingVertical: 2,
-
-      paddingRight: 20,
+      color: c.text,
+      backgroundColor: c.bgAlt,
+      paddingHorizontal: 10,
+      borderRadius: 16,
+      borderTopLeftRadius: 4,
+      paddingVertical: 6,
       lineHeight: 14,
-
-
-
     },
     myMessageTextOnly: {
       fontSize: 10,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
 
       lineHeight: 14,
       textAlign: 'left',
     },
     otherMessageTextOnly: {
       fontSize: 10,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
 
       lineHeight: 14,
       textAlign: 'left',
     },
     timestamp: {
       fontSize: 5,
-      color: isDarkMode ? 'lightgrey' : 'grey',
+      color: c.textMuted,
       textAlign: 'right',
       paddingHorizontal: 5
     },
@@ -123,7 +113,7 @@ export const getStyles = (isDarkMode) =>
       minHeight: 30, // ✅ Fixed typo: heighteight -> minHeight
       maxHeight: 120, // Limit input growth to a max height
       textAlignVertical: 'top', // Ensures text starts at the top
-      backgroundColor: isDarkMode ? config.darkColors.surface : '#fff',
+      backgroundColor: c.bgAlt,
     },
 
     // sendButton: {
@@ -194,7 +184,7 @@ export const getStyles = (isDarkMode) =>
       alignSelf: 'center',
       width: '100%',
       borderTopWidth: 1,
-      borderColor: isDarkMode ? config.darkColors.border : '#cccccc',
+      borderColor: c.border,
 
       //  borderRadius:10
 
@@ -210,8 +200,8 @@ export const getStyles = (isDarkMode) =>
       paddingHorizontal: 10,
       paddingVertical: 3,
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? config.darkColors.border : '#ddd',
-      backgroundColor: isDarkMode ? config.darkColors.surface : '#fff',
+      borderTopColor: c.border,
+      backgroundColor: c.bgAlt,
       // backgroundColor:'red',
 
     },
@@ -246,7 +236,7 @@ export const getStyles = (isDarkMode) =>
       fontSize: 16,
     },
     replyContainer: {
-      backgroundColor: isDarkMode ? config.darkColors.surface : '#f0f0f0',
+      backgroundColor: c.bgAlt,
       borderLeftWidth: 3,
       borderLeftColor: isDarkMode ? '#1E88E5' : '#007BFF',
       padding: 5,
@@ -262,7 +252,7 @@ export const getStyles = (isDarkMode) =>
     replySenderText: {
       fontSize: 10,
       fontWeight: 'bold',
-      color: isDarkMode ? '#FFF' : '#000',
+      color: c.text,
     },
     profileImage: {
       height: 34,
@@ -279,7 +269,7 @@ export const getStyles = (isDarkMode) =>
     },
 
     userName: {
-      color: isDarkMode ? 'lightfrey' : 'grey',
+      color: c.textMuted,
       fontSize: 10,
       justifyContent: 'center',
       // backgroundColor:'red',
@@ -367,7 +357,7 @@ export const getStyles = (isDarkMode) =>
 
     },
     emptyText: {
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
     },
     tradeDetails: {
       flexDirection: 'row',
@@ -482,7 +472,7 @@ export const getStyles = (isDarkMode) =>
       marginBottom: 4,
     },
     saveButtonTextProfile: {
-      color: isDarkMode ? 'white' : "black",
+      color: c.text,
     },
     highlightedMessage: {
       backgroundColor: '#fef3c7',      // soft yellow
@@ -496,21 +486,21 @@ export const getStyles = (isDarkMode) =>
     },
 
     userNameText: {
-      color: isDarkMode ? 'lightgrey' : 'grey',
+      color: c.textMuted,
       fontSize: 9,
       lineHeight: 14,
       paddingTop: 2
     },
     userNameAdmin: {
-      color: isDarkMode ? 'lightgrey' : 'grey',
+      color: c.textMuted,
       fontSize: 9,
       lineHeight: 11,
       // paddingTop:2
     },
 
     icon: {
-      width: 10,
-      height: 10,
+      width: 11,
+      height: 11,
       marginLeft: 4,
       // paddingBottom:5
     },
@@ -531,6 +521,24 @@ export const getStyles = (isDarkMode) =>
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 12, // Pill shape
+      marginLeft: 6,
+    },
+    trustedContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#10B981', // Emerald-500
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 12,
+      marginLeft: 6,
+    },
+    cmsrContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#F97316', // Orange-500
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 12,
       marginLeft: 6,
     },
     adminBadgeText: {
@@ -578,3 +586,4 @@ export const getStyles = (isDarkMode) =>
     },
 
   });
+};

@@ -29,6 +29,7 @@ import OnlineUsersList from './OnlineUsersList';
 import CreateGroupModal from './CreateGroupModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
+import { getThemeColors } from '../../Helper/themeColors';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -111,7 +112,8 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
   const [searchText, setSearchText] = useState('');
 
   const isDarkMode = theme === 'dark';
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const c = getThemeColors(isDarkMode);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   // Set header with info icon
   useEffect(() => {
@@ -124,7 +126,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           <Icon
             name="information-circle-outline"
             size={24}
-            color={isDarkMode ? '#fff' : '#000'}
+            color={c.text}
           />
         </TouchableOpacity>
       ),
@@ -303,6 +305,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           showSuccessMessage('Success', `You joined "${result.groupName || 'the group'}"!`);
           // Remove from pending list locally
           setPendingInvitations(prev => prev.filter(invite => invite.id !== inviteId));
+
+          // 🐝 Track group joins for socialBee badge (5+ groups)
+          try {
+            const { incrementAndCheckBadge, GROUP_CHAT_BADGE_THRESHOLDS } = require('./badgeUtils');
+            incrementAndCheckBadge(appdatabase, user.id, 'groupJoinCount', GROUP_CHAT_BADGE_THRESHOLDS);
+          } catch (e) {}
+
           // Navigate to the group chat
           navigation.navigate('GroupChatDetail', { groupId, groupName: result.groupName });
         } else {
@@ -786,7 +795,19 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               style={{ paddingLeft: 10 }}
             />
           </MenuTrigger>
-          <MenuOptions>
+          <MenuOptions customStyles={{
+            optionsContainer: {
+              borderRadius: 8,
+              padding: 4,
+              backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 5,
+              width: 200,
+            },
+          }}>
             {/* Group Info */}
             <MenuOption onSelect={() => handleShowGroupInfo(groupId)}>
               <Text style={{ fontSize: 16, padding: 10 }}>Group Info</Text>
@@ -965,12 +986,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
     return (
       <View style={{
-        backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+        backgroundColor: c.bgAlt,
         marginBottom: 10,
         borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: isDarkMode ? '#374151' : '#E5E7EB',
+        borderColor: c.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
@@ -993,14 +1014,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             <Text style={{
               fontSize: 15,
               fontWeight: 'bold',
-              color: isDarkMode ? '#fff' : '#111827',
+              color: c.text,
               marginBottom: 4,
             }} numberOfLines={1} ellipsizeMode="tail">
               {truncatedInviteName}
             </Text>
             <Text style={{
               fontSize: 12,
-              color: isDarkMode ? '#9CA3AF' : '#6B7280',
+              color: c.textSecondary,
 
             }}>
               Invited by {item.invitedByDisplayName || 'Someone'}
@@ -1013,7 +1034,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             style={{
               flex: 1,
               paddingVertical: 10,
-              backgroundColor: isDarkMode ? '#374151' : '#F3F4F6',
+              backgroundColor: c.border,
               borderRadius: 8,
               borderWidth: 1,
               borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
@@ -1056,12 +1077,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
     return (
       <View style={{
-        backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+        backgroundColor: c.bgAlt,
         marginBottom: 10,
         borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: isDarkMode ? '#374151' : '#E5E7EB',
+        borderColor: c.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
@@ -1089,7 +1110,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               borderRadius: 8,
               backgroundColor: '#4CAF50',
               borderWidth: 2,
-              borderColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+              borderColor: c.bgAlt,
               justifyContent: 'center',
               alignItems: 'center',
             }}>
@@ -1100,14 +1121,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             <Text style={{
               fontSize: 15,
               fontWeight: 'bold',
-              color: isDarkMode ? '#fff' : '#111827',
+              color: c.text,
               marginBottom: 4,
             }} numberOfLines={1} ellipsizeMode="tail">
               {item.requesterDisplayName || 'Anonymous'}
             </Text>
             <Text style={{
               fontSize: 12,
-              color: isDarkMode ? '#9CA3AF' : '#6B7280',
+              color: c.textSecondary,
 
             }}>
               Wants to join "{truncatedGroupName}"
@@ -1127,7 +1148,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             style={{
               flex: 1,
               paddingVertical: 10,
-              backgroundColor: isDarkMode ? '#374151' : '#F3F4F6',
+              backgroundColor: c.border,
               borderRadius: 8,
               borderWidth: 1,
               borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
@@ -1204,7 +1225,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             fontWeight: '700',
             color: activeTab === 'joined'
               ? '#FFFFFF'
-              : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+              : (c.textSecondary),
             letterSpacing: 0.3,
           }}>
             Joined Groups
@@ -1231,7 +1252,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             fontWeight: '700',
             color: activeTab === 'all'
               ? '#FFFFFF'
-              : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+              : (c.textSecondary),
             letterSpacing: 0.3,
           }}>
             All Groups ({totalGroupCount})
@@ -1244,7 +1265,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         <View style={{
           backgroundColor: isDarkMode ? '#111827' : '#FFFFFF',
           borderBottomWidth: 1,
-          borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+          borderBottomColor: c.border,
           marginBottom: 8,
           borderRadius: 12,
           marginHorizontal: 12,
@@ -1282,7 +1303,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{
-                  color: isDarkMode ? '#fff' : '#111827',
+                  color: c.text,
                   fontWeight: 'bold',
                   fontSize: 12,
                   marginBottom: 2,
@@ -1290,7 +1311,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   Join Requests
                 </Text>
                 <Text style={{
-                  color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                  color: c.textSecondary,
 
                   fontSize: 10,
                 }}>
@@ -1302,14 +1323,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               width: 28,
               height: 28,
               borderRadius: 12,
-              backgroundColor: isDarkMode ? '#374151' : '#E5E7EB',
+              backgroundColor: c.border,
               justifyContent: 'center',
               alignItems: 'center',
             }}>
               <Icon
                 name={joinRequestsExpanded ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color={isDarkMode ? '#fff' : '#111827'}
+                color={c.text}
               />
             </View>
           </TouchableOpacity>
@@ -1332,7 +1353,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         <View style={{
           backgroundColor: isDarkMode ? '#111827' : '#FFFFFF',
           borderBottomWidth: 1,
-          borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+          borderBottomColor: c.border,
           marginBottom: 8,
           borderRadius: 12,
           marginHorizontal: 12,
@@ -1370,7 +1391,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{
-                  color: isDarkMode ? '#fff' : '#111827',
+                  color: c.text,
                   fontWeight: 'bold',
                   fontSize: 12,
                   marginBottom: 2,
@@ -1378,7 +1399,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   Pending Invitations
                 </Text>
                 <Text style={{
-                  color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                  color: c.textSecondary,
 
                   fontSize: 12,
                 }}>
@@ -1390,14 +1411,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               width: 28,
               height: 28,
               borderRadius: 14,
-              backgroundColor: isDarkMode ? '#374151' : '#E5E7EB',
+              backgroundColor: c.border,
               justifyContent: 'center',
               alignItems: 'center',
             }}>
               <Icon
                 name={invitationsExpanded ? 'chevron-up' : 'chevron-down'}
                 size={16}
-                color={isDarkMode ? '#fff' : '#111827'}
+                color={c.text}
               />
             </View>
           </TouchableOpacity>
@@ -1441,17 +1462,17 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             <TextInput
               style={{
                 flex: 1,
-                backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+                backgroundColor: c.bgAlt,
                 borderWidth: 1,
-                borderColor: isDarkMode ? '#374151' : '#E5E7EB',
+                borderColor: c.border,
                 borderRadius: 10,
                 padding: 12,
-                color: isDarkMode ? '#FFFFFF' : '#000000',
+                color: c.text,
                 fontSize: 14,
                 marginRight: 8,
               }}
               placeholder="Search groups..."
-              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#6B7280'}
+              placeholderTextColor={c.textSecondary}
               value={searchText}
               onChangeText={setSearchText}
               onSubmitEditing={handleSearch}
@@ -1518,10 +1539,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       padding: 12,
                       marginHorizontal: 12,
                       marginBottom: 4,
-                      backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+                      backgroundColor: c.bgAlt,
                       borderRadius: 12,
                       borderWidth: 1,
-                      borderColor: isDarkMode ? '#374151' : '#E5E7EB',
+                      borderColor: c.border,
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -1547,7 +1568,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                           <Text style={{
                             fontSize: 10,
 
-                            color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                            color: c.textSecondary,
                             marginBottom: 4,
                           }}>
                             Created by {creatorName}
@@ -1566,7 +1587,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         <Text style={{
                           fontSize: 10,
 
-                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          color: c.textSecondary,
                         }}>
                           {memberCount} {memberCount === 1 ? 'member' : 'members'}
                         </Text>
@@ -1828,7 +1849,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           justifyContent: 'flex-end',
         }}>
           <View style={{
-            backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
+            backgroundColor: c.bgAlt,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             maxHeight: '90%',
@@ -1841,12 +1862,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               justifyContent: 'space-between',
               padding: 20,
               borderBottomWidth: 1,
-              borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+              borderBottomColor: c.border,
             }}>
               <Text style={{
                 fontSize: 20,
                 fontWeight: 'bold',
-                color: isDarkMode ? '#fff' : '#000',
+                color: c.text,
               }}>
                 Group Information
               </Text>
@@ -1856,7 +1877,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   setSelectedGroupInfo(null);
                 }}
               >
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
             </View>
 
@@ -1890,7 +1911,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                     <Text style={{
                       fontSize: 22,
                       fontWeight: 'bold',
-                      color: isDarkMode ? '#fff' : '#000',
+                      color: c.text,
                       marginTop: 12,
                       textAlign: 'center',
                     }}>
@@ -1903,7 +1924,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                     <Text style={{
                       fontSize: 14,
                       fontWeight: 'bold',
-                      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                      color: c.textSecondary,
                       marginBottom: 8,
                     }}>
                       Description
@@ -1944,7 +1965,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         <Text style={{
                           fontSize: 12,
 
-                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          color: c.textSecondary,
                           marginBottom: 4,
                         }}>
                           Created by
@@ -1952,7 +1973,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         <Text style={{
                           fontSize: 16,
                           fontWeight: 'bold',
-                          color: isDarkMode ? '#fff' : '#000',
+                          color: c.text,
                         }}>
                           {selectedGroupInfo.createdBy.name}
                         </Text>
@@ -1966,7 +1987,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       <Text style={{
                         fontSize: 14,
                         fontWeight: 'bold',
-                        color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                        color: c.textSecondary,
                         marginBottom: 8,
                       }}>
                         Created on
@@ -2004,7 +2025,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         <Text style={{
                           fontSize: 14,
                           fontWeight: 'bold',
-                          color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                          color: c.textSecondary,
                           marginBottom: 4,
                         }}>
                           Members
@@ -2012,7 +2033,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         <Text style={{
                           fontSize: 18,
                           fontWeight: 'bold',
-                          color: isDarkMode ? '#fff' : '#000',
+                          color: c.text,
                         }}>
                           {selectedGroupInfo.memberCount || 0} {selectedGroupInfo.memberCount === 1 ? 'member' : 'members'}
                         </Text>
@@ -2026,7 +2047,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 <Text style={{
                   fontSize: 16,
 
-                  color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                  color: c.textSecondary,
                 }}>
                   No group information available
                 </Text>
@@ -2041,7 +2062,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 };
 
 // Styles
-const getStyles = (isDarkMode) =>
+const getStyles = (isDarkMode, c) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -2082,7 +2103,7 @@ const getStyles = (isDarkMode) =>
     memberCountText: {
       fontSize: 9,
 
-      color: isDarkMode ? '#9ca3af' : '#6b7280',
+      color: c.textSecondary,
     },
     lastMessage: {
       fontSize: 12,
@@ -2106,7 +2127,7 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
     },
     emptyText: {
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
       textAlign: 'center'
     }
   });

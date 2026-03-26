@@ -73,7 +73,7 @@ export default function ScamSafetyBox({
               {hasRated ? t('chat.rating_edit') : t('chat.rating_btn')}
             </Text>
           </TouchableOpacity>
-        </View>
+      </View>
       )}
     </View>
   );

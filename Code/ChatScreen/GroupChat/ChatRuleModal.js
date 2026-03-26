@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { getThemeColors } from '../../Helper/themeColors';
 import {
   Modal,
   View,
@@ -9,8 +10,10 @@ import {
 } from 'react-native';
 import { rulesen } from '../utils';
 import config from '../../Helper/Environment';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 
 const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
+  const c = getThemeColors(isDarkMode);
   // ✅ Safety check and memoize rules array
   const rules = useMemo(() => {
     return Array.isArray(rulesen) ? rulesen : [];
@@ -24,7 +27,7 @@ const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
 
   // ✅ Memoize text colors
   const titleColor = useMemo(() =>
-    isDarkMode ? '#fff' : '#000',
+    c.text,
     [isDarkMode]
   );
 
@@ -43,7 +46,7 @@ const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={handleClose}>
       <View style={styles.overlay}>
-        <View style={[styles.modalContent, { backgroundColor: modalBgColor }]}>
+        <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDarkMode} style={[styles.modalContent, { backgroundColor: modalBgColor }]}>
           <Text style={[styles.title, { color: titleColor }]}>Community Chat Rules</Text>
           <ScrollView style={styles.scroll}>
             {rules.map((rule, index) => {
@@ -63,7 +66,7 @@ const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <Text style={styles.closeButtonText}>Got it</Text>
           </TouchableOpacity>
-        </View>
+        </SwipeableBottomDrawer>
       </View>
     </Modal>
   );
@@ -73,13 +76,11 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    width: '95%',
+    width: '100%',
     maxHeight: '80%',
-    borderRadius: 12,
     padding: 20,
   },
   title: {

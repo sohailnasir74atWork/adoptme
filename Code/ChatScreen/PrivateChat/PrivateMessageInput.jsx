@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
+
 
 import { Image as CompressorImage } from 'react-native-compressor';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -74,6 +76,8 @@ const PrivateMessageInput = ({
   setPetModalVisible,
   selectedFruits,
   setSelectedFruits,
+  chatKey,
+  userId,
 }) => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -88,6 +92,11 @@ const PrivateMessageInput = ({
 
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDark), [isDark]);
+
+  // Handle text change
+  const handleTextChange = useCallback((text) => {
+    setInput(text);
+  }, []);
 
   // ✅ Memoize handlePickImage
   const handlePickImage = useCallback(async () => {
@@ -305,6 +314,7 @@ const PrivateMessageInput = ({
     // clear UI
     setInput('');
     setImageUris([]);
+
     if (setSelectedFruits && typeof setSelectedFruits === 'function') {
       setSelectedFruits([]);
     }
@@ -331,8 +341,8 @@ const PrivateMessageInput = ({
       // Send single image URL if only one, or array if multiple
       const imageUrlToSend = imageUrls.length === 1 ? imageUrls[0] : (imageUrls.length > 1 ? imageUrls : null);
 
-      // 🔺 onSend: text, imageUrl (single or array), fruits
-      await onSend(textToSend, imageUrlToSend, fruitsToSend);
+      // 🔺 onSend: text, imageUrl (single or array), fruits, replyTo
+      await onSend(textToSend, imageUrlToSend, fruitsToSend, replyTo);
 
       if (onCancelReply && typeof onCancelReply === 'function') {
         onCancelReply();
@@ -459,7 +469,7 @@ const PrivateMessageInput = ({
           placeholder={t('chat.type_message')}
           placeholderTextColor="#888"
           value={input}
-          onChangeText={setInput}
+          onChangeText={handleTextChange}
           multiline
           editable={!isBanned}
         />
@@ -561,13 +571,11 @@ const PrivateMessageInput = ({
           activeOpacity={1}
           onPress={() => setShowTemplateDrawer(false)}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
+          <SwipeableBottomDrawer
+            onClose={() => setShowTemplateDrawer(false)}
+            isDarkMode={isDark}
             style={{
               backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
               maxHeight: '60%',
               paddingBottom: 20,
             }}
@@ -636,7 +644,7 @@ const PrivateMessageInput = ({
                 ))}
               </View>
             </ScrollView>
-          </TouchableOpacity>
+          </SwipeableBottomDrawer>
         </TouchableOpacity>
       </Modal>
     </View>

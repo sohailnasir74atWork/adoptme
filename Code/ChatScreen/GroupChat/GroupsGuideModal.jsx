@@ -9,13 +9,16 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import config from '../../Helper/Environment';
 
 const GroupsGuideModal = ({ visible, onClose }) => {
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
 
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   return (
     <Modal
@@ -25,14 +28,14 @@ const GroupsGuideModal = ({ visible, onClose }) => {
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.modalContent, { backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF' }]}>
+        <SwipeableBottomDrawer onClose={onClose} isDarkMode={isDarkMode} style={[styles.modalContent, { backgroundColor: c.bgAlt }]}>
           {/* Header */}
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+            <Text style={[styles.modalTitle, { color: c.text }]}>
               Groups Guide
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close-circle" size={28} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+              <Icon name="close-circle" size={28} color={c.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -46,7 +49,7 @@ const GroupsGuideModal = ({ visible, onClose }) => {
               <View style={styles.iconContainer}>
                 <Icon name="people" size={24} color={config.colors.primary} />
               </View>
-              <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+              <Text style={[styles.sectionTitle, { color: c.text }]}>
                 How to Create a Group
               </Text>
               <Text style={[styles.sectionText, { color: isDarkMode ? '#D1D5DB' : '#4B5563' }]}>
@@ -65,7 +68,7 @@ const GroupsGuideModal = ({ visible, onClose }) => {
               <View style={styles.iconContainer}>
                 <Icon name="information-circle" size={24} color={config.colors.primary} />
               </View>
-              <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+              <Text style={[styles.sectionTitle, { color: c.text }]}>
                 Important Rules
               </Text>
               <Text style={[styles.sectionText, { color: isDarkMode ? '#D1D5DB' : '#4B5563' }]}>
@@ -85,7 +88,7 @@ const GroupsGuideModal = ({ visible, onClose }) => {
               <View style={styles.iconContainer}>
                 <Icon name="chatbubbles" size={24} color={config.colors.primary} />
               </View>
-              <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
+              <Text style={[styles.sectionTitle, { color: c.text }]}>
                 Group Features
               </Text>
               <Text style={[styles.sectionText, { color: isDarkMode ? '#D1D5DB' : '#4B5563' }]}>
@@ -104,31 +107,28 @@ const GroupsGuideModal = ({ visible, onClose }) => {
           >
             <Text style={styles.gotItButtonText}>Got It!</Text>
           </TouchableOpacity>
-        </View>
+        </SwipeableBottomDrawer>
       </View>
     </Modal>
   );
 };
 
-const getStyles = (isDarkMode) =>
+const getStyles = (isDarkMode, c) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: 'flex-end',
     },
     modalContent: {
-      width: '90%',
-      height: '85%',
-      borderRadius: 20,
+      width: '100%',
+      maxHeight: '85%',
       padding: 20,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.25,
       shadowRadius: 4,
       elevation: 5,
-      justifyContent: 'space-between',
     },
     modalHeader: {
       flexDirection: 'row',
@@ -144,7 +144,6 @@ const getStyles = (isDarkMode) =>
       padding: 4,
     },
     scrollContainer: {
-      flex: 1,
       marginBottom: 20,
     },
     scrollContent: {
@@ -172,7 +171,7 @@ const getStyles = (isDarkMode) =>
     },
     divider: {
       height: 1,
-      backgroundColor: isDarkMode ? '#374151' : '#E5E7EB',
+      backgroundColor: c.border,
       marginVertical: 20,
     },
     gotItButton: {

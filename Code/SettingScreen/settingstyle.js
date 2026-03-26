@@ -1,15 +1,17 @@
 import { StyleSheet } from "react-native";
 import config from "../Helper/Environment";
+import { getThemeColors } from '../Helper/themeColors';
 
-export const getStyles = (isDarkMode) =>
-  StyleSheet.create({
+export const getStyles = (isDarkMode) => {
+  const c = getThemeColors(isDarkMode);
+  return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
+      backgroundColor: c.bg,
       padding: 8,
     },
     cardContainer: {
-      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+      backgroundColor: c.bgAlt,
       borderRadius: 10,
       // paddingVertical: 1,
       paddingHorizontal: 5,
@@ -20,9 +22,7 @@ export const getStyles = (isDarkMode) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 15,
-      // borderBottomWidth:1,
-      // borderBottomColor:'grey',
-      paddingVertical: 5,
+      paddingVertical: 12,
     },
     profileImage: {
       width: 60,
@@ -37,14 +37,14 @@ export const getStyles = (isDarkMode) =>
       height: 56,
       borderRadius: 28,
       marginRight: 12,
-      backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0',
+      backgroundColor: c.bgAlt,
       borderWidth: 2,
-      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+      borderColor: c.border,
     },
     userName: {
       fontSize: 18,
       fontwEIGHT: 'bold',
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       lineHeight: 24
 
     },
@@ -56,12 +56,12 @@ export const getStyles = (isDarkMode) =>
     },
     reward: {
       fontSize: 14,
-      color: isDarkMode ? '#ccc' : '#666',
+      color: c.textSecondary,
 
     },
     rewardLogout: {
       fontSize: 12,
-      color: isDarkMode ? '#ccc' : '#666',
+      color: c.textSecondary,
 
       overflow: 'hidden',
       width: 250,
@@ -73,19 +73,19 @@ export const getStyles = (isDarkMode) =>
       paddingHorizontal: 15,
       paddingVertical: 8,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#333333' : '#cccccc',
+      borderBottomColor: c.border,
     },
     optionLast: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 15,
       paddingVertical: 8,
-      borderBottomColor: isDarkMode ? '#333333' : '#cccccc',
+      borderBottomColor: c.border,
     },
     optionText: {
       fontSize: 14,
       marginLeft: 10,
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
 
       lineHeight: 24
     },
@@ -94,10 +94,8 @@ export const getStyles = (isDarkMode) =>
       backgroundColor: 'rgba(0,0,0,0.45)',
     },
     drawer: {
-      backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+      backgroundColor: c.bg,
       padding: 20,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
       shadowColor: '#000',
       shadowOpacity: 0.15,
       shadowOffset: { width: 0, height: -4 },
@@ -112,11 +110,11 @@ export const getStyles = (isDarkMode) =>
     },
 
     input: {
-      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
+      backgroundColor: c.bg,
       padding: 10,
       borderRadius: 5,
       marginBottom: 20,
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
     },
     imageOption: {
       width: 60,
@@ -157,22 +155,22 @@ export const getStyles = (isDarkMode) =>
       fontSize: 14,
     },
     drawerSubtitle: {
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       fontWeight: 'bold',
       marginBottom: 5
     },
     drawerSubtitleUser: {
-      color: isDarkMode ? '#f1f5f9' : '#0f172a',
+      color: c.text,
       fontWeight: '700',
       fontSize: 16,
     },
     subtitle: {
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       fontwEIGHT: 'bold',
       marginVertical: 10
     },
     rewardDescription: {
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
 
       fontSize: 12
 
@@ -195,7 +193,7 @@ export const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       padding: 15,
-      borderBottomColor: isDarkMode ? '#333333' : '#cccccc',
+      borderBottomColor: c.border,
       backgroundColor: isDarkMode ? '#5A1F1F' : '#FFE5E5',
 
 
@@ -274,13 +272,13 @@ export const getStyles = (isDarkMode) =>
     text: {
 
       fontSize: 12,
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       paddingHorizontal: 5
     },
     textlink: {
 
       fontSize: 12,
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       paddingHorizontal: 5,
     },
     emailText: {
@@ -316,7 +314,7 @@ export const getStyles = (isDarkMode) =>
     petsTitle: {
       fontSize: 14,
       fontWeight: 'bold',
-      color: isDarkMode ? '#e5e7eb' : '#111827',
+      color: c.text,
     },
 
     petsActionText: {
@@ -327,7 +325,7 @@ export const getStyles = (isDarkMode) =>
 
     petsEmptyText: {
       fontSize: 11,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
 
     petsAvatarRow: {
@@ -344,7 +342,7 @@ export const getStyles = (isDarkMode) =>
       borderRadius: 17,
       overflow: 'hidden',
       borderWidth: 1.5,
-      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+      borderColor: c.border,
     },
 
     petImageSmall: {
@@ -356,7 +354,7 @@ export const getStyles = (isDarkMode) =>
       width: 34,
       height: 34,
       borderRadius: 17,
-      backgroundColor: isDarkMode ? '#334155' : '#e2e8f0',
+      backgroundColor: c.bgElevated,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -364,7 +362,7 @@ export const getStyles = (isDarkMode) =>
     moreBubbleText: {
       fontSize: 11,
       fontWeight: '700',
-      color: isDarkMode ? '#F9FAFB' : '#111827',
+      color: c.text,
     },
     imageOptionWrapper: {
       marginRight: 8,
@@ -394,13 +392,13 @@ export const getStyles = (isDarkMode) =>
     reviewsTitle: {
       fontSize: 13,
       fontWeight: '700',
-      color: isDarkMode ? '#F9FAFB' : '#111827',
+      color: c.text,
     },
     reviewsList: {
       maxHeight: 200,
     },
     reviewItem: {
-      backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5',
+      backgroundColor: c.bgAlt,
       borderRadius: 8,
       padding: 12,
       marginBottom: 10,
@@ -420,7 +418,7 @@ export const getStyles = (isDarkMode) =>
     reviewUserName: {
       fontSize: 14,
       fontWeight: '600',
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       marginRight: 8,
     },
     reviewRating: {
@@ -429,7 +427,7 @@ export const getStyles = (isDarkMode) =>
     },
     editedBadge: {
       fontSize: 10,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
       fontStyle: 'italic',
     },
     editButton: {
@@ -437,17 +435,17 @@ export const getStyles = (isDarkMode) =>
     },
     reviewText: {
       fontSize: 13,
-      color: isDarkMode ? '#E5E7EB' : '#374151',
+      color: c.textSecondary,
       marginBottom: 6,
       lineHeight: 18,
     },
     reviewDate: {
       fontSize: 11,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
     reviewsEmptyText: {
       fontSize: 11,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
       textAlign: 'center',
       marginVertical: 20,
     },
@@ -466,3 +464,4 @@ export const getStyles = (isDarkMode) =>
       color: '#fff',
     },
   });
+};

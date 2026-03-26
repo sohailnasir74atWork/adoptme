@@ -8,7 +8,8 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
-import { MMKV } from 'react-native-mmkv';
+import { getThemeColors } from '../Helper/themeColors';
+
 import BannerAdComponent from '../Ads/bannerAds';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import { useTranslation } from 'react-i18next';
@@ -52,7 +53,19 @@ const normalizeFirestoreDocPayload = (payload) => {
 };
 
 
-const analyticsCache = new MMKV({ id: 'analytics-cache' });
+let analyticsCache;
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  analyticsCache = createMMKV({ id: 'analytics-cache' });
+} catch (e) {
+  console.warn('[AnalyticsScreen] MMKV not available:', e.message);
+  analyticsCache = {
+    getString: () => undefined,
+    getNumber: () => undefined,
+    set: () => {},
+    delete: () => {}
+  };
+}
 
 // Cache durations
 const ANALYTICS_CACHE_MS = 60 * 60 * 1000; // 3 hours
@@ -317,6 +330,7 @@ const AnalyticsScreen = ({ navigation }) => {
   const { localState } = useLocalState();
   const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const isPro = localState.isPro;
 
   const [analytics, setAnalytics] = useState(null);
@@ -481,7 +495,7 @@ const AnalyticsScreen = ({ navigation }) => {
     }
   }, [activeTab, fetchValueChanges]);
 
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   const getImageUrl = useCallback((image) => {
     if (!image || !localState.imgurl) return '';
@@ -1066,11 +1080,11 @@ const AnalyticsScreen = ({ navigation }) => {
   );
 };
 
-const getStyles = (isDarkMode) =>
-  StyleSheet.create({
+const getStyles = (isDarkMode, c) => {
+  return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#0f0f1a' : '#F0F4FF',
+      backgroundColor: c.bg,
     },
     centered: {
       justifyContent: 'center',
@@ -1079,19 +1093,19 @@ const getStyles = (isDarkMode) =>
     },
     loadingText: {
       marginTop: 12,
-      color: isDarkMode ? '#bbb' : '#666',
+      color: c.textSecondary,
       fontSize: 15,
       fontWeight: '600',
     },
     emptyTitle: {
       fontSize: 22,
       fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#333',
+      color: c.text,
       marginTop: 12,
     },
     emptySubtitle: {
       fontSize: 15,
-      color: isDarkMode ? '#999' : '#666',
+      color: c.textSecondary,
       textAlign: 'center',
       marginTop: 8,
       lineHeight: 22,
@@ -1113,9 +1127,9 @@ const getStyles = (isDarkMode) =>
     tabBarScroll: {
       flexGrow: 0,
       flexShrink: 0,
-      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      backgroundColor: c.bgAlt,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+      borderBottomColor: c.border,
     },
     tabBar: {
       flexDirection: 'row',
@@ -1139,7 +1153,7 @@ const getStyles = (isDarkMode) =>
     tabText: {
       fontSize: 13,
       fontWeight: '700',
-      color: isDarkMode ? '#888' : '#999',
+      color: c.textMuted,
     },
     tabTextActive: {
       color: config.colors.primary,
@@ -1174,12 +1188,12 @@ const getStyles = (isDarkMode) =>
     statLabel: {
       fontSize: 11,
       fontWeight: '600',
-      color: isDarkMode ? '#bbb' : '#666',
+      color: c.textSecondary,
     },
 
     // Card
     card: {
-      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      backgroundColor: c.bgAlt,
       borderRadius: 16,
       padding: 14,
       marginBottom: 12,
@@ -1202,11 +1216,11 @@ const getStyles = (isDarkMode) =>
     sectionTitle: {
       fontSize: 16,
       fontWeight: '800',
-      color: isDarkMode ? '#fff' : '#222',
+      color: c.text,
     },
     sectionSubtitle: {
       fontSize: 12,
-      color: isDarkMode ? '#999' : '#888',
+      color: c.textMuted,
       width: '100%',
       marginTop: 2,
       marginLeft: 30,
@@ -1235,13 +1249,13 @@ const getStyles = (isDarkMode) =>
       borderRadius: 10,
     },
     itemRowAlt: {
-      backgroundColor: isDarkMode ? '#22223a' : '#F5F7FF',
+      backgroundColor: c.cardBg,
     },
     itemRank: {
       width: 32,
       fontSize: 13,
       fontWeight: 'bold',
-      color: isDarkMode ? '#888' : '#999',
+      color: c.textMuted,
       textAlign: 'center',
     },
     itemImageWrap: {
@@ -1253,7 +1267,7 @@ const getStyles = (isDarkMode) =>
       borderRadius: 10,
     },
     itemImagePlaceholder: {
-      backgroundColor: isDarkMode ? '#2a2a3e' : '#eef0f8',
+      backgroundColor: c.bgAlt,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1263,15 +1277,15 @@ const getStyles = (isDarkMode) =>
     itemName: {
       fontSize: 14,
       fontWeight: '700',
-      color: isDarkMode ? '#fff' : '#222',
+      color: c.text,
     },
     itemType: {
       fontSize: 11,
-      color: isDarkMode ? '#999' : '#888',
+      color: c.textMuted,
       textTransform: 'capitalize',
     },
     countBadge: {
-      backgroundColor: isDarkMode ? '#2a2a3e' : '#EEF0FF',
+      backgroundColor: c.bgAlt,
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 10,
@@ -1279,7 +1293,7 @@ const getStyles = (isDarkMode) =>
     countText: {
       fontSize: 13,
       fontWeight: '800',
-      color: isDarkMode ? '#bbb' : '#555',
+      color: c.textSecondary,
     },
     signalBadge: {
       flexDirection: 'row',
@@ -1332,7 +1346,7 @@ const getStyles = (isDarkMode) =>
       height: 10,
       borderRadius: 5,
       overflow: 'hidden',
-      backgroundColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+      backgroundColor: c.border,
     },
     distributionBarSegment: {
       height: '100%',
@@ -1344,7 +1358,7 @@ const getStyles = (isDarkMode) =>
     },
     chartLabel: {
       fontSize: 12,
-      color: isDarkMode ? '#999' : '#888',
+      color: c.textMuted,
       marginBottom: 8,
       fontWeight: '600',
     },
@@ -1366,7 +1380,7 @@ const getStyles = (isDarkMode) =>
     },
     chartBarLabel: {
       fontSize: 9,
-      color: isDarkMode ? '#777' : '#999',
+      color: c.textMuted,
       marginTop: 3,
       fontWeight: '600',
     },
@@ -1378,7 +1392,7 @@ const getStyles = (isDarkMode) =>
     },
     predictionSubtext: {
       fontSize: 12,
-      color: isDarkMode ? '#999' : '#888',
+      color: c.textMuted,
       marginTop: 2,
     },
     predictionRow: {
@@ -1412,7 +1426,7 @@ const getStyles = (isDarkMode) =>
     confidenceBar: {
       width: 90,
       height: 5,
-      backgroundColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+      backgroundColor: c.border,
       borderRadius: 3,
       marginTop: 5,
       overflow: 'hidden',
@@ -1423,7 +1437,7 @@ const getStyles = (isDarkMode) =>
     },
     confidenceText: {
       fontSize: 10,
-      color: isDarkMode ? '#777' : '#999',
+      color: c.textMuted,
       marginTop: 3,
       fontWeight: '600',
     },
@@ -1443,7 +1457,7 @@ const getStyles = (isDarkMode) =>
     lockedText: {
       fontSize: 14,
       fontWeight: '700',
-      color: isDarkMode ? '#ddd' : '#333',
+      color: c.text,
       textAlign: 'center',
     },
     unlockButton: {
@@ -1489,9 +1503,9 @@ const getStyles = (isDarkMode) =>
       gap: 6,
       paddingVertical: 10,
       borderRadius: 14,
-      backgroundColor: isDarkMode ? '#1a1a2e' : '#fff',
+      backgroundColor: c.bgAlt,
       borderWidth: 1.5,
-      borderColor: isDarkMode ? '#2a2a3e' : '#e0e4f0',
+      borderColor: c.border,
     },
     changesFilterBtnActive: {
       backgroundColor: config.colors.primary,
@@ -1500,7 +1514,7 @@ const getStyles = (isDarkMode) =>
     changesFilterText: {
       fontSize: 12,
       fontWeight: '700',
-      color: isDarkMode ? '#aaa' : '#666',
+      color: c.textSecondary,
     },
     changesFilterTextActive: {
       color: '#fff',
@@ -1522,7 +1536,7 @@ const getStyles = (isDarkMode) =>
     },
     changeDateText: {
       fontSize: 10,
-      color: isDarkMode ? '#777' : '#aaa',
+      color: c.textMuted,
       marginTop: 1,
     },
     changeRight: {
@@ -1536,7 +1550,7 @@ const getStyles = (isDarkMode) =>
     },
     changeOldValue: {
       fontSize: 12,
-      color: isDarkMode ? '#888' : '#999',
+      color: c.textMuted,
       textDecorationLine: 'line-through',
     },
     changeNewValue: {
@@ -1558,7 +1572,7 @@ const getStyles = (isDarkMode) =>
     },
     changeValueType: {
       fontSize: 9,
-      color: isDarkMode ? '#777' : '#999',
+      color: c.textMuted,
       marginTop: 2,
       fontWeight: 'bold',
     },
@@ -1571,7 +1585,7 @@ const getStyles = (isDarkMode) =>
       marginTop: 10,
       paddingTop: 10,
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? '#2a2a3e' : '#e8e8f0',
+      borderTopColor: c.border,
     },
     subValueItem: {
       backgroundColor: isDarkMode ? '#15152a' : '#f5f5ff',
@@ -1581,7 +1595,7 @@ const getStyles = (isDarkMode) =>
       minWidth: 72,
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: isDarkMode ? '#2a2a3e' : '#e0e4f0',
+      borderColor: c.border,
     },
     subValueItemPrimary: {
       borderColor: config.colors.primary + '50',
@@ -1590,12 +1604,12 @@ const getStyles = (isDarkMode) =>
     subValueLabel: {
       fontSize: 10,
       fontWeight: 'bold',
-      color: isDarkMode ? '#999' : '#666',
+      color: c.textSecondary,
       marginBottom: 2,
     },
     subValueOld: {
       fontSize: 10,
-      color: isDarkMode ? '#666' : '#aaa',
+      color: c.textMuted,
       textDecorationLine: 'line-through',
     },
     subValueNew: {
@@ -1618,8 +1632,9 @@ const getStyles = (isDarkMode) =>
     },
     updatedText: {
       fontSize: 11,
-      color: isDarkMode ? '#777' : '#999',
+      color: c.textMuted,
     },
   });
+};
 
 export default AnalyticsScreen;

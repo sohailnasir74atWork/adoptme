@@ -205,12 +205,16 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
 
 
   const handleInvite = async (user) => {
-    if (!roomId || invitingIds.has(user.id) || invitedIds.has(user.id) || user.isPlaying) return;
+    if (!roomId || invitingIds.has(user.id) || invitedIds.has(user.id)) return;
 
     setInvitingIds((prev) => new Set([...prev, user.id]));
 
     try {
-      const success = await sendGameInvite(firestoreDB, roomId, currentUser, user.id);
+      const result = await sendGameInvite(firestoreDB, roomId, currentUser, user.id);
+
+      // sendGameInvite now returns { success, reason } or true/false
+      const success = result === true || result?.success;
+      const reason = result?.reason;
 
       if (success) {
         setInvitedIds((prev) => new Set([...prev, user.id]));
@@ -219,6 +223,8 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
         if (onInviteSent && typeof onInviteSent === 'function') {
           onInviteSent(user);
         }
+      } else if (reason === 'playing') {
+        showErrorMessage('Already Playing 🎮', `${user.displayName} is already in a game. Try again later!`);
       } else {
         showErrorMessage('Error', 'Failed to send invite. Please try again.');
       }
@@ -348,9 +354,9 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
                           {item.displayName}
                         </Text>
                         <View style={styles.onlineIndicator}>
-                          <View style={styles.onlineDot} />
+                          <View style={[styles.onlineDot, isPlaying && { backgroundColor: '#F59E0B' }]} />
                           <Text style={[styles.onlineText, { color: isDarkMode ? '#999' : '#666' }]}>
-                            {isPlaying ? 'Currently Playing' : 'Online'}
+                            {isPlaying ? 'Currently Playing 🎮' : 'Online'}
                           </Text>
                         </View>
                       </View>
@@ -362,7 +368,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
                         </View>
                       ) : isPlaying ? (
                         <View style={styles.playingBadge}>
-                          <Icon name="game-controller-outline" size={20} color="#F59E0B" />
+                          <Icon name="game-controller" size={22} color="#F59E0B" />
                         </View>
                       ) : (
                         <TouchableOpacity

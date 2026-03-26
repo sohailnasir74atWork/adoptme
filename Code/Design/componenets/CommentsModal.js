@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,20 @@ import {
   Image,
   Alert,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import {
   collection,
   doc,
   query,
   orderBy,
-  onSnapshot,
+  limit,
+  startAfter,
+  getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
+  deleteField,
   serverTimestamp,
   increment,
 } from '@react-native-firebase/firestore';
@@ -29,14 +34,23 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { validateContent } from '../../Helper/ContentModeration';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 import { useBanStatus } from '../../ChatScreen/utils';
+import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 
 dayjs.extend(relativeTime);
+
+const PAGE_SIZE = 15;
 
 const CommentModal = ({ visible, onClose, postId }) => {
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastDoc, setLastDoc] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null); // { id, displayName }
   const inputRef = useRef(null);
   const { user, theme, firestoreDB } = useGlobalState();
   const { localState } = useLocalState();
@@ -46,107 +60,333 @@ const CommentModal = ({ visible, onClose, postId }) => {
 
   // ✅ Check if current user is banned
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
-  // console.log('[CommentModal] firestoreDB:', !!firestoreDB);
 
-  useEffect(() => {
+  // ── Fetch initial comments (paginated) ──
+  const fetchComments = useCallback(async () => {
     if (!postId || !firestoreDB) return;
+    setLoading(true);
+    try {
+      const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
+      const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
+      const snapshot = await getDocs(q);
 
-    const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(q, snapshot => {
-      const commentsData = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setComments(commentsData);
-    });
-
-    return () => unsubscribe();
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setComments(data);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (err) {
+      console.warn('[Comments] fetch error:', err?.message);
+    } finally {
+      setLoading(false);
+    }
   }, [postId, firestoreDB]);
 
-  const handleChatNavigation = useCallback((comment) => {
-    const callback = () => {
-      if (!user?.id) {
-        Alert.alert(t('chat.sign_in_required_title'), t('feed.signin_message'));
-        return;
+  // ── Load more comments ──
+  const loadMore = useCallback(async () => {
+    if (!postId || !firestoreDB || !hasMore || !lastDoc || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
+      const q = query(commentsRef, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+      const snapshot = await getDocs(q);
+
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setComments(prev => [...prev, ...data]);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (err) {
+      console.warn('[Comments] loadMore error:', err?.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [postId, firestoreDB, hasMore, lastDoc, loadingMore]);
+
+  useEffect(() => {
+    if (visible && postId) {
+      fetchComments();
+      setReplyingTo(null);
+      setCommentText('');
+    }
+  }, [visible, postId]);
+
+  // ── Group comments into threads ──
+  const threadedComments = useMemo(() => {
+    const topLevel = [];
+    const repliesMap = {}; // parentId -> [replies]
+
+    comments.forEach(c => {
+      if (c.parentId) {
+        if (!repliesMap[c.parentId]) repliesMap[c.parentId] = [];
+        repliesMap[c.parentId].push(c);
+      } else {
+        topLevel.push(c);
       }
+    });
 
-      navigation.navigate('PrivateChatDesign', {
-        selectedUser: {
-          senderId: comment.userId,
-          sender: comment.displayName,
-          avatar: comment.avatar,
-        },
-      });
-    };
+    // Sort replies oldest first (so conversation reads naturally)
+    Object.values(repliesMap).forEach(arr =>
+      arr.sort((a, b) => {
+        const aTime = a.createdAt?.seconds || 0;
+        const bTime = b.createdAt?.seconds || 0;
+        return aTime - bTime;
+      })
+    );
 
-    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
-    callback();
-  }, [user?.id, navigation]);
+    return topLevel.map(c => ({
+      ...c,
+      replies: repliesMap[c.id] || [],
+    }));
+  }, [comments]);
 
-  const handleAddComment = useCallback(async () => {
-    const text = commentText.trim();
-    if (!text || !firestoreDB) return;
-    if (!firestoreDB || !postId) {
-      console.error('Missing firestoreDB or postId', { firestoreDB, postId });
-      Alert.alert(t('chat.error'), t('feed.cannot_post_comment'));
-      Alert.alert(t('chat.error'), t('feed.cannot_post_comment'));
+  // ── Navigate to DM ──
+  const handleChatNavigation = useCallback((comment) => {
+    if (!user?.id) {
+      Alert.alert(t('chat.sign_in_required_title'), t('feed.signin_message'));
       return;
     }
+    navigation.navigate('PrivateChatDesign', {
+      selectedUser: {
+        senderId: comment.userId,
+        sender: comment.displayName,
+        avatar: comment.avatar,
+      },
+    });
+  }, [user?.id, navigation]);
 
-    // ✅ Ban check
+  // ── Add comment or reply ──
+  const handleAddComment = useCallback(async () => {
+    const text = commentText.trim();
+    if (!text || !firestoreDB || !postId) return;
+
+    // Ban check
     if (isMeBanned) {
       const reason = myBanDetails?.reason || 'Access Denied';
       Alert.alert(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
       return;
     }
 
-    // ✅ Content moderation: Check comment for inappropriate content
+    // Content moderation
     const contentValidation = validateContent(text);
     if (!contentValidation.isValid) {
       Alert.alert(t('feed.content_not_allowed'), contentValidation.reason || t('feed.inappropriate_comment'));
       return;
     }
+
     const comment = {
       userId: user.id,
       displayName: user.displayName || t('feed.guest_user'),
       avatar: user.avatar,
       text,
       createdAt: serverTimestamp(),
+      likes: {},
+      // If replying, store parent info
+      ...(replyingTo ? {
+        parentId: replyingTo.id,
+        replyToName: replyingTo.displayName,
+      } : {}),
     };
 
     try {
       const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
       const postRef = doc(firestoreDB, 'designPosts', postId);
 
+      const newDoc = await addDoc(commentsRef, comment);
+      await updateDoc(postRef, { commentCount: increment(1) });
 
-      await addDoc(commentsRef, comment);
-      await updateDoc(postRef, {
-        commentCount: increment(1),
-      });
-
+      // Optimistic local update
+      const localComment = {
+        ...comment,
+        id: newDoc.id,
+        createdAt: { seconds: Math.floor(Date.now() / 1000) },
+      };
+      setComments(prev => [localComment, ...prev]);
       setCommentText('');
+      setReplyingTo(null);
       inputRef.current?.focus();
     } catch (error) {
       console.error('Add Comment Error:', error);
       Alert.alert(t('chat.error'), t('feed.failed_post_comment'));
     }
-  }, [commentText, user, postId, firestoreDB]);
+  }, [commentText, user, postId, firestoreDB, replyingTo, isMeBanned]);
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity onPress={() => handleChatNavigation(item)} style={styles.comment}>
-      <Image source={{ uri: item.avatar }} style={styles.avatar} />
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.name, isDarkMode && styles.textDark]}>{item.displayName}</Text>
-        {item.createdAt?.seconds && (
-          <Text style={[styles.timestamp, isDarkMode && styles.textDark]}>
-            {dayjs(item.createdAt.seconds * 1000).fromNow()}
-          </Text>
-        )}
-        <Text style={[styles.text, isDarkMode && styles.textDark]}>{item.text}</Text>
+  // ── Like a comment ──
+  const handleLikeComment = useCallback(async (commentId) => {
+    if (!user?.id || !firestoreDB || !postId) return;
+
+    const commentRef = doc(firestoreDB, 'designPosts', postId, 'comments', commentId);
+    const currentComment = comments.find(c => c.id === commentId);
+    const isLiked = currentComment?.likes?.[user.id];
+
+    // Optimistic update
+    setComments(prev => prev.map(c => {
+      if (c.id !== commentId) return c;
+      const updatedLikes = { ...(c.likes || {}) };
+      if (isLiked) {
+        delete updatedLikes[user.id];
+      } else {
+        updatedLikes[user.id] = true;
+      }
+      return { ...c, likes: updatedLikes };
+    }));
+
+    // Firestore update (fire-and-forget)
+    try {
+      if (isLiked) {
+        await updateDoc(commentRef, { [`likes.${user.id}`]: deleteField() });
+      } else {
+        await updateDoc(commentRef, { [`likes.${user.id}`]: true });
+      }
+    } catch (err) {
+      console.warn('[Comments] like error:', err?.message);
+    }
+  }, [user?.id, firestoreDB, postId, comments]);
+
+  // ── Delete own comment ──
+  const handleDeleteComment = useCallback(async (commentId, commentUserId) => {
+    if (!user?.id || user.id !== commentUserId) return;
+
+    Alert.alert(
+      t('feed.delete_post', { defaultValue: 'Delete' }),
+      t('comments.delete_confirm', { defaultValue: 'Delete this comment?' }),
+      [
+        { text: t('feed.cancel'), style: 'cancel' },
+        {
+          text: t('feed.submit', { defaultValue: 'Delete' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(firestoreDB, 'designPosts', postId, 'comments', commentId));
+              await updateDoc(doc(firestoreDB, 'designPosts', postId), { commentCount: increment(-1) });
+              setComments(prev => prev.filter(c => c.id !== commentId));
+            } catch (err) {
+              console.warn('[Comments] delete error:', err?.message);
+            }
+          },
+        },
+      ]
+    );
+  }, [user?.id, firestoreDB, postId, t]);
+
+  // ── Start reply ──
+  const startReply = useCallback((comment) => {
+    setReplyingTo({ id: comment.id, displayName: comment.displayName });
+    setCommentText('');
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  // ── Render a single comment ──
+  const renderComment = (item, isReply = false) => {
+    const likeCount = item.likes ? Object.keys(item.likes).length : 0;
+    const isLiked = item.likes?.[user?.id];
+    const isMyComment = item.userId === user?.id;
+    const timeAgo = item.createdAt?.seconds
+      ? dayjs(item.createdAt.seconds * 1000).fromNow()
+      : '';
+
+    return (
+      <View
+        key={item.id}
+        style={[
+          styles.comment,
+          isReply && styles.replyComment,
+          isReply && { borderLeftColor: isDarkMode ? '#334155' : '#e2e8f0' },
+        ]}
+      >
+        <TouchableOpacity onPress={() => handleChatNavigation(item)} activeOpacity={0.7}>
+          <Image
+            source={{ uri: item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+            style={[styles.avatar, isReply && styles.replyAvatar]}
+          />
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }}>
+          {/* Name + time */}
+          <View style={styles.commentHeader}>
+            <TouchableOpacity onPress={() => handleChatNavigation(item)} activeOpacity={0.7}>
+              <Text style={[styles.name, isDarkMode && { color: '#e2e8f0' }]}>{item.displayName}</Text>
+            </TouchableOpacity>
+            {timeAgo ? (
+              <Text style={[styles.timestamp, isDarkMode && { color: '#64748b' }]}>{timeAgo}</Text>
+            ) : null}
+          </View>
+
+          {/* Reply indicator */}
+          {item.replyToName && (
+            <Text style={[styles.replyIndicator, isDarkMode && { color: '#64748b' }]}>
+              ↳ {t('comments.replying_to', { defaultValue: 'replying to' })} {item.replyToName}
+            </Text>
+          )}
+
+          {/* Comment text */}
+          <Text style={[styles.text, isDarkMode && { color: '#cbd5e1' }]}>{item.text}</Text>
+
+          {/* Action row: Like, Reply, Delete */}
+          <View style={styles.actionRow}>
+            {/* Like */}
+            <TouchableOpacity
+              onPress={() => handleLikeComment(item.id)}
+              style={styles.commentAction}
+              activeOpacity={0.7}
+            >
+              <FontAwesome
+                name="heart"
+                size={11}
+                color={isLiked ? '#EF4444' : (isDarkMode ? '#64748b' : '#94a3b8')}
+                solid={!!isLiked}
+              />
+              {likeCount > 0 && (
+                <Text style={[styles.actionText, isLiked && { color: '#EF4444' }]}>{likeCount}</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Reply (only on top-level comments) */}
+            {!isReply && (
+              <TouchableOpacity
+                onPress={() => startReply(item)}
+                style={styles.commentAction}
+                activeOpacity={0.7}
+              >
+                <FontAwesome
+                  name="reply"
+                  size={11}
+                  color={isDarkMode ? '#64748b' : '#94a3b8'}
+                />
+                <Text style={styles.actionText}>
+                  {t('comments.reply', { defaultValue: 'Reply' })}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete (own comments only) */}
+            {isMyComment && (
+              <TouchableOpacity
+                onPress={() => handleDeleteComment(item.id, item.userId)}
+                style={styles.commentAction}
+                activeOpacity={0.7}
+              >
+                <FontAwesome
+                  name="trash"
+                  size={10}
+                  color={isDarkMode ? '#64748b' : '#94a3b8'}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
-    </TouchableOpacity>
+    );
+  };
+
+  // ── Render a thread (top-level + replies) ──
+  const renderThread = ({ item }) => (
+    <View style={styles.thread}>
+      {renderComment(item)}
+      {item.replies.length > 0 && (
+        <View style={styles.repliesContainer}>
+          {item.replies.map(reply => renderComment(reply, true))}
+        </View>
+      )}
+    </View>
   );
 
   return (
@@ -157,36 +397,91 @@ const CommentModal = ({ visible, onClose, postId }) => {
           <Pressable style={styles.backdrop} onPress={onClose} />
 
           {/* Bottom sheet */}
-          <View style={[styles.modalContent, isDarkMode && styles.darkContent]}>
+          <SwipeableBottomDrawer
+            onClose={onClose}
+            isDarkMode={isDarkMode}
+            showPill={false}
+            style={[styles.modalContent, isDarkMode && styles.darkContent]}
+          >
             <View style={styles.sheetHandle} />
 
-            <FlatList
-              data={comments}
-              keyExtractor={(item) => item.id}
-              renderItem={renderItem}
-              keyboardShouldPersistTaps="handled"
-            />
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={[styles.headerTitle, isDarkMode && { color: '#e2e8f0' }]}>
+                {t('feed.comments_title', { defaultValue: 'Comments' })}
+              </Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeIcon} activeOpacity={0.7}>
+                <FontAwesome name="xmark" size={16} color={isDarkMode ? '#94a3b8' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
 
-            <View style={styles.inputRow}>
+            {/* Comments list */}
+            {loading ? (
+              <ActivityIndicator size="small" color={isDarkMode ? '#94a3b8' : '#64748b'} style={{ marginVertical: 30 }} />
+            ) : (
+              <FlatList
+                data={threadedComments}
+                keyExtractor={(item) => item.id}
+                renderItem={renderThread}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.3}
+                ListFooterComponent={
+                  loadingMore ? (
+                    <ActivityIndicator size="small" color={isDarkMode ? '#94a3b8' : '#64748b'} style={{ marginVertical: 12 }} />
+                  ) : null
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <FontAwesome name="comment" size={28} color={isDarkMode ? '#334155' : '#cbd5e1'} />
+                    <Text style={[styles.emptyText, isDarkMode && { color: '#64748b' }]}>
+                      {t('comments.no_comments', { defaultValue: 'No comments yet. Be the first!' })}
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+
+            {/* Reply banner */}
+            {replyingTo && (
+              <View style={[styles.replyBanner, isDarkMode && { backgroundColor: '#1e3a5f', borderColor: '#3B82F6' }]}>
+                <Text style={[styles.replyBannerText, isDarkMode && { color: '#93c5fd' }]}>
+                  ↳ {t('comments.replying_to', { defaultValue: 'Replying to' })} <Text style={{ fontWeight: '800' }}>{replyingTo.displayName}</Text>
+                </Text>
+                <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <FontAwesome name="xmark" size={12} color={isDarkMode ? '#93c5fd' : '#3B82F6'} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Input row */}
+            <View style={[styles.inputRow, isDarkMode && { borderTopColor: '#1e293b' }]}>
               <TextInput
                 ref={inputRef}
-                placeholder={t('feed.write_comment')}
-                placeholderTextColor={isDarkMode ? '#ccc' : '#888'}
+                placeholder={replyingTo
+                  ? t('comments.reply_placeholder', { defaultValue: `Reply to ${replyingTo.displayName}...`, name: replyingTo.displayName })
+                  : t('feed.write_comment')
+                }
+                placeholderTextColor={isDarkMode ? '#64748b' : '#94a3b8'}
                 value={commentText}
                 onChangeText={setCommentText}
                 style={[styles.input, isDarkMode && styles.inputDark]}
                 returnKeyType="send"
                 onSubmitEditing={handleAddComment}
+                multiline
+                maxLength={300}
               />
-              <TouchableOpacity onPress={handleAddComment} style={styles.sendBtn}>
-                <Text style={styles.sendText}>{t('feed.send')}</Text>
+              <TouchableOpacity
+                onPress={handleAddComment}
+                style={[styles.sendBtn, !commentText.trim() && { opacity: 0.4 }]}
+                disabled={!commentText.trim()}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="paper-plane" size={14} color="#fff" solid />
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.sendText}>{t('feed.close')}</Text>
-            </TouchableOpacity>
-          </View>
+          </SwipeableBottomDrawer>
         </View>
       </ConditionalKeyboardWrapper>
     </Modal>
@@ -206,91 +501,189 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   modalContent: {
-    backgroundColor: 'white',
-    padding: 12,
+    backgroundColor: '#fff',
+    padding: 14,
     paddingTop: 8,
     maxHeight: '85%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
   },
   darkContent: {
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0f172a',
   },
   sheetHandle: {
     alignSelf: 'center',
-    width: 44,
+    width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#bbb',
-    marginBottom: 10,
+    backgroundColor: '#cbd5e1',
+    marginBottom: 8,
   },
-  comment: {
-    flexDirection: 'row',
-    marginBottom: 10,
 
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 8,
   },
-  avatar: {
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  closeIcon: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Threads
+  thread: {
+    marginBottom: 4,
+  },
+  repliesContainer: {
+    marginLeft: 20,
+  },
+
+  // Comment
+  comment: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 10,
+  },
+  replyComment: {
+    borderLeftWidth: 2,
+    paddingLeft: 12,
+    marginLeft: 4,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  replyAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
   },
   name: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    color: '#000',
-  },
-  text: {
-
+    fontWeight: '700',
     fontSize: 13,
-    color: '#333',
-    flex: 1,
-    flexWrap: 'wrap'
+    color: '#0f172a',
   },
   timestamp: {
     fontSize: 10,
-    color: 'gray',
-
+    color: '#94a3b8',
   },
-  inputRow: {
+  text: {
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 19,
+    marginBottom: 4,
+  },
+  replyIndicator: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginBottom: 2,
+    fontStyle: 'italic',
+  },
+
+  // Action row (like, reply, delete)
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    gap: 14,
+    marginTop: 2,
+  },
+  commentAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  actionText: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+
+  // Reply banner
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  replyBannerText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  // Input
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 8,
-    borderRadius: 5,
-    color: '#000',
-
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    fontSize: 13,
+    color: '#0f172a',
+    maxHeight: 80,
   },
   inputDark: {
-    borderColor: '#555',
-    color: '#fff',
-    backgroundColor: '#333',
+    borderColor: '#334155',
+    color: '#e2e8f0',
+    backgroundColor: '#1e293b',
   },
   sendBtn: {
-    backgroundColor: '#007AFF',
-    padding: 10,
-    marginLeft: 5,
-    borderRadius: 5,
-  },
-  closeBtn: {
-    marginTop: 10,
-    backgroundColor: '#FF3B30',
-    padding: 10,
-    borderRadius: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3B82F6',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  sendText: {
-    color: '#fff',
+
+  // Empty
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#94a3b8',
     fontWeight: '600',
-    fontWeight: 'bold',
-  },
-  textDark: {
-    color: '#fff',
   },
 });
 

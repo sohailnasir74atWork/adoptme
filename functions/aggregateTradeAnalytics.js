@@ -115,24 +115,47 @@ exports.aggregateTradeAnalytics = functions
         return counts;
       };
 
-      // ── Fetch ALL wishlist & owned pet data from reviews (paginated, no limit) ──
+      // ── Fetch wishlist & owned pet data from BOTH user_profiles + reviews (backward compat) ──
+      // 📅 2026-03-13: Migrated from reviews/{userId} → user_profiles/{userId}.
+      //    Reads BOTH collections and deduplicates by userId to avoid double-counting.
+      //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviews fetch below.
       const wishlistCounts = {};
       const ownedCounts = {};
       let totalWishlistUsers = 0;
       let totalOwnedUsers = 0;
 
       try {
-        const reviewDocs = await fetchAllDocs(
-          firestore.collection('reviews')
-            .where('updatedAt', '>=', admin.firestore.Timestamp.fromDate(
-              new Date(now - 30 * 24 * 60 * 60 * 1000) // last 30 days
-            ))
-            .orderBy('updatedAt', 'desc')
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+        const tsThirtyDays = admin.firestore.Timestamp.fromDate(thirtyDaysAgo);
+
+        // Fetch from user_profiles (last 30 days — skip inactive users)
+        const profileDocs = await fetchAllDocs(
+          firestore.collection('user_profiles')
+            .where('updatedAt', '>=', tsThirtyDays)
         );
 
-        reviewDocs.forEach(docSnap => {
-          const data = docSnap.data();
+        // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this fetch once all users updated
+        const reviewDocs = await fetchAllDocs(
+          firestore.collection('reviews')
+            .where('updatedAt', '>=', tsThirtyDays)
+        );
 
+        // Merge: user_profiles wins, fall back to reviews for users not yet migrated
+        const mergedByUserId = new Map();
+
+        // Add user_profiles first (preferred)
+        profileDocs.forEach(docSnap => {
+          mergedByUserId.set(docSnap.id, docSnap.data());
+        });
+
+        // Add reviews only for users NOT already in user_profiles
+        reviewDocs.forEach(docSnap => {
+          if (!mergedByUserId.has(docSnap.id)) {
+            mergedByUserId.set(docSnap.id, docSnap.data());
+          }
+        });
+
+        mergedByUserId.forEach((data) => {
           if (Array.isArray(data.wishlistPets) && data.wishlistPets.length > 0) {
             totalWishlistUsers++;
             data.wishlistPets.forEach(pet => {
@@ -166,18 +189,25 @@ exports.aggregateTradeAnalytics = functions
           }
         });
 
-        console.log(`📊 Reviews: ${reviewDocs.length} docs, ${totalWishlistUsers} wishlist users, ${totalOwnedUsers} owned users`);
+        console.log(`📊 Profiles: ${profileDocs.length} user_profiles, ${reviewDocs.length} reviews, ${mergedByUserId.size} unique users, ${totalWishlistUsers} wishlist, ${totalOwnedUsers} owned`);
       } catch (reviewsError) {
-        console.warn('⚠️ Could not fetch reviews data:', reviewsError.message);
+        console.warn('⚠️ Could not fetch wishlist/owned data:', reviewsError.message);
       }
 
       // ── Most traded items (both sides combined, 24h) ──
       const allItemCounts = countItems(last24hTrades, 'all');
       const topTraded = Object.values(allItemCounts)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 100);
+        .slice(0, 300);
 
-      // ── Most wanted (demand) = trade wants + wishlist (weighted 0.5x) ──
+      // ── Most wanted (demand) = trade wants + wishlist ──
+      // Trade data is more reliable — wishlist is sparse, so weight it adaptively:
+      //   If wishlist coverage is low (<50 users), weight at 0.15x
+      //   If wishlist coverage is decent (50-200), weight at 0.25x
+      //   If wishlist coverage is high (200+), weight at 0.35x
+      const wishlistWeight = totalWishlistUsers < 50 ? 0.15 :
+        totalWishlistUsers < 200 ? 0.25 : 0.35;
+
       const wantsCounts24h = countItems(last24hTrades, 'wants');
       Object.keys(wishlistCounts).forEach(key => {
         if (!wantsCounts24h[key]) {
@@ -188,14 +218,17 @@ exports.aggregateTradeAnalytics = functions
             count: 0,
           };
         }
-        wantsCounts24h[key].count += Math.round(wishlistCounts[key].count * 0.5);
+        wantsCounts24h[key].count += Math.round(wishlistCounts[key].count * wishlistWeight);
         wantsCounts24h[key].wishlistCount = wishlistCounts[key].count;
       });
       const topWanted = Object.values(wantsCounts24h)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 100);
+        .slice(0, 300);
 
-      // ── Most offered (supply) = trade has + owned (weighted 0.5x) ──
+      // ── Most offered (supply) = trade has + owned (adaptive weight like wishlist) ──
+      const ownedWeight = totalOwnedUsers < 50 ? 0.15 :
+        totalOwnedUsers < 200 ? 0.25 : 0.35;
+
       const hasCounts24h = countItems(last24hTrades, 'has');
       Object.keys(ownedCounts).forEach(key => {
         if (!hasCounts24h[key]) {
@@ -206,17 +239,17 @@ exports.aggregateTradeAnalytics = functions
             count: 0,
           };
         }
-        hasCounts24h[key].count += Math.round(ownedCounts[key].count * 0.5);
+        hasCounts24h[key].count += Math.round(ownedCounts[key].count * ownedWeight);
         hasCounts24h[key].ownedCount = ownedCounts[key].count;
       });
       const topOffered = Object.values(hasCounts24h)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 100);
+        .slice(0, 300);
 
       // ── Top wishlisted (pure wishlist ranking) ──
       const topWishlisted = Object.values(wishlistCounts)
         .sort((a, b) => b.count - a.count)
-        .slice(0, 100);
+        .slice(0, 300);
 
       // ── Demand/Supply ratio (prediction signal) ──
       // Volume-relative: only include items with meaningful activity
@@ -311,7 +344,7 @@ exports.aggregateTradeAnalytics = functions
           const scoreB = b.volumeChange * Math.log2(Math.abs(b.changePercent) + 1);
           return scoreB - scoreA;
         })
-        .slice(0, 100);
+        .slice(0, 300);
 
       const topLosers = trendItems
         .filter(i => i.direction === 'down')
@@ -320,7 +353,7 @@ exports.aggregateTradeAnalytics = functions
           const scoreB = b.volumeChange * Math.log2(Math.abs(b.changePercent) + 1);
           return scoreB - scoreA;
         })
-        .slice(0, 100);
+        .slice(0, 300);
 
       // ── Trade volume stats ──
       const tradeVolume = {
@@ -393,7 +426,7 @@ exports.aggregateTradeAnalytics = functions
         topWishlisted,
         topMovers,
         topLosers,
-        demandSupplyRatios: demandSupplyRatios.slice(0, 100),
+        demandSupplyRatios: demandSupplyRatios.slice(0, 300),
         predictions,
         tradeVolume,
         statusDistribution,

@@ -217,14 +217,15 @@ export const sendGameInvite = async (
   }
 
   try {
-    // ✅ Check if invited user is in an active game
-    const isInActiveGame = await isUserInActiveGame(firestoreDB, invitedUserId);
-    if (isInActiveGame) {
-      return false; // User is already playing, don't send invite
+    // ✅ Check if invited user is already in an active game
+    // (stale room cleanup is built into isUserInActiveGame — rooms > 30 min are auto-finished)
+    const alreadyPlaying = await isUserInActiveGame(firestoreDB, invitedUserId);
+    if (alreadyPlaying) {
+      return { success: false, reason: 'playing' };
     }
 
-    // ✅ Invitation expires after 1 minute if not received (for testing)
-    const INVITE_EXPIRY_MS = 60000; // 1 minute (for testing)
+    // ✅ Invitation expires after 30 seconds
+    const INVITE_EXPIRY_MS = 30000; // 30 seconds
     const expiresAt = Date.now() + INVITE_EXPIRY_MS;
 
     // Add to room invites in Firestore
@@ -348,7 +349,7 @@ export const acceptGameInvite = async (
     if (invite) {
       const now = Date.now();
       const inviteTimestamp = invite.timestamp?.toMillis?.() || invite.timestamp || Date.now();
-      const expiresAt = invite.expiresAt || (inviteTimestamp + 60000); // 1 minute default (for testing)
+      const expiresAt = invite.expiresAt || (inviteTimestamp + 30000); // 30 seconds default
       
       if (now > expiresAt && invite.status === 'pending') {
         // Invite expired - remove it
@@ -414,10 +415,11 @@ export const acceptGameInvite = async (
     );
     await updateDoc(userInviteRef, { status: 'accepted' });
 
-    // Auto-start game if 2 players have joined
+    // Auto-start game if 2 players have joined (only for pet guessing games)
+    // Quiz and Trade Showdown use their own auto-start countdown
     const newPlayerCount = roomData.currentPlayers + 1;
-    if (newPlayerCount >= roomData.maxPlayers && roomData.hostId) {
-      // Auto-start the game
+    if (newPlayerCount >= roomData.maxPlayers && roomData.hostId && roomData.gameType !== 'quiz' && roomData.gameType !== 'tradeShowdown') {
+      // Auto-start the game (pet guessing game only)
       await startGame(firestoreDB, roomId, roomData.hostId);
     }
 
@@ -506,7 +508,7 @@ export const listenToUserInvites = (firestoreDB, userId, callback) => {
         }
         
         const timestamp = data.timestamp?.toMillis?.() || data.timestamp || Date.now();
-        const expiresAt = data.expiresAt || (timestamp + 60000); // Default 1 minute if not set
+        const expiresAt = data.expiresAt || (timestamp + 30000); // Default 30s if not set
         
         // ✅ Filter out expired invites (not received within time limit)
         if (now > expiresAt && data.status === 'pending') {
@@ -573,7 +575,7 @@ export const cleanupExpiredInvites = async (firestoreDB, roomId) => {
     Object.keys(invites).forEach((userId) => {
       const invite = invites[userId];
       if (invite.status === 'pending') {
-        const expiresAt = invite.expiresAt || (invite.timestamp?.toMillis?.() || Date.now()) + 60000; // 1 minute (for testing)
+        const expiresAt = invite.expiresAt || (invite.timestamp?.toMillis?.() || Date.now()) + 30000; // 30 seconds
         if (now > expiresAt) {
           // Invite expired - remove it
           delete invites[userId];
@@ -620,13 +622,26 @@ export const isUserInActiveGame = async (firestoreDB, userId) => {
     );
     
     const snapshot = await getDocs(q);
+    const STALE_MS = 30 * 60 * 1000; // 30 minutes — no game lasts this long
+    const now = Date.now();
     
     if (!snapshot.empty) {
-      // Check if user is in any of these active rooms
       for (const docSnap of snapshot.docs) {
         const roomData = docSnap.data();
         if (roomData.players && roomData.players[userId]) {
-          return true;
+          // Check if room is stale (created > 30 min ago)
+          const createdAt = roomData.createdAt?.toMillis?.() || roomData.createdAt || 0;
+          if (now - createdAt > STALE_MS) {
+            // Stale room — auto-clean it up
+            try {
+              await updateDoc(doc(firestoreDB, 'petGuessingGame_rooms', docSnap.id), {
+                status: 'finished',
+                'gameData.endedAt': serverTimestamp(),
+              });
+            } catch {}
+            continue; // Skip this stale room
+          }
+          return true; // User is genuinely in an active game
         }
       }
     }

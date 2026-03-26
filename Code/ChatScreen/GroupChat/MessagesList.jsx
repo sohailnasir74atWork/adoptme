@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
   View,
@@ -21,6 +22,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 import axios from 'axios';
@@ -29,6 +31,9 @@ import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import MessageActionDrawer from './MessageActionDrawer';
+import { resolveProfile, seedFromMessage } from '../../Helper/profileCache';
+
+import FramedAvatar from './FramedAvatar';
 
 
 const MessagesList = ({
@@ -57,6 +62,7 @@ const MessagesList = ({
   onReaction, // Callback to react to a message
 
 }) => {
+  const c = getThemeColors(isDarkMode);
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
@@ -64,6 +70,7 @@ const MessagesList = ({
   const [showReportPopup, setShowReportPopup] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
+  const [frameBorderColorIndex] = useState(0); // kept for extraData compat only
   const { triggerHapticFeedback } = useHaptic();
   const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
 
@@ -167,9 +174,9 @@ const MessagesList = ({
     () => ({
       wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
       name: isDarkMode ? '#f9fafb' : '#111827',
-      value: isDarkMode ? '#e5e7eb' : '#4b5563',
+      value: c.textSecondary,
       divider: isDarkMode ? '#ffffff22' : '#00000011',
-      totalLabel: isDarkMode ? '#e5e7eb' : '#4b5563',
+      totalLabel: c.textSecondary,
       totalValue: isDarkMode ? '#f97373' : '#b91c1c',
     }),
     [isDarkMode],
@@ -336,13 +343,15 @@ const MessagesList = ({
     const totalFruitValue = hasFruits
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
-    // console.log(user.id)
 
-    // Winner badge info comes directly from message payload, similar to isPro / robloxUsernameVerified
-    const hasRecentWin =
-      !!item?.hasRecentGameWin ||
-      (typeof item?.lastGameWinAt === 'number' &&
-        Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+    // ✅ PHASE 0A: Resolve profile from message → cache → defaults
+    // Old messages have avatar/sender/isPro embedded → used first
+    // New slim messages miss these → cache fills in
+    // If cache misses too → sensible defaults (no crash)
+    const profile = resolveProfile(item);
+    seedFromMessage(item); // Free cache population from old-format messages
+
+    const hasRecentWin = profile.hasRecentGameWin;
 
     return (
       <View>
@@ -356,30 +365,27 @@ const MessagesList = ({
         {/* Render the message */}
         {!item.isReportedByUser && (
           <View
-            style={[
-              item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
-              item.senderId === user?.id ? styles.myMessage : styles.otherMessage, item.isReportedByUser && styles.reportedMessage,
-              item.id === highlightedMessageId && styles.highlightedMessage, // 👈 NEW
-            ]}
+            style={{
+              flexDirection: 'row',
+              alignSelf: item.senderId === user?.id ? 'flex-end' : 'flex-start',
+              alignItems: 'flex-end',
+              maxWidth: '82%',
+              marginBottom: 4,
+              marginHorizontal: 8,
+              ...(item.id === highlightedMessageId ? { borderWidth: 2, borderColor: '#F59E0B', borderRadius: 18 } : {}),
+            }}
           >
-            <View
-              style={[
-                styles.senderName,
-              ]}
-            >
-
-              <TouchableOpacity onPress={() => handleProfileClick(item)} style={styles.profileImagecontainer}>
-                <Image
-                  source={{
-                    uri: item.avatar
-                      ? item.avatar
-                      : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                  }}
-                  style={styles.profileImage}
+            {/* Avatar — left side for others */}
+            {item.senderId !== user?.id && (
+              <TouchableOpacity onPress={() => handleProfileClick(item)} style={{ marginRight: 6, marginBottom: 2 }}>
+                <FramedAvatar
+                  avatarUri={profile.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                  frame={profile.profileFrame}
+                  isDarkMode={isDarkMode}
+                  avatarSize={28}
                 />
               </TouchableOpacity>
-
-            </View>
+            )}
 
             <View style={styles.messageTextBox}>
               {/* Render reply context if present */}
@@ -404,95 +410,130 @@ const MessagesList = ({
                 onLongPress={() => handleLongPress(item)}
               >
 
-                <View style={[
-                  item.senderId === user?.id ? styles.mymessageBubble : styles.othermessageBubble,
-                  item.senderId === user?.id ? styles.myMessage : styles.otherMessage,
-                  item.isReportedByUser && styles.reportedMessage,
-                ]}>
-
-                  <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdminOrMod && item.strikeCount === 1
-                    ? { backgroundColor: 'pink' }
-                    : isAdminOrMod && item.strikeCount >= 2
-                      ? { backgroundColor: 'red' }
+                <View style={[item.senderId === user?.id ? styles.myMessageText : styles.otherMessageText, isAdminOrMod && item.strikeCount === 1
+                  ? { backgroundColor: 'pink' }
+                  : isAdminOrMod && item.strikeCount >= 2
+                    ? { backgroundColor: 'red' }
+                    : profile.chatBubbleBg
+                      ? { backgroundColor: isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color }
                       : null,]}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.userNameText}>{item.sender}</Text>
+                  <View style={styles.nameRow}>
+                    <TouchableOpacity onPress={() => handleProfileClick(item)} activeOpacity={0.7}>
+                      <Text style={styles.userNameText}>{profile.displayName}</Text>
+                    </TouchableOpacity>
 
-                      {item?.isPro && (
-                        <Image
-                          source={require('../../../assets/pro.png')}
-                          style={styles.icon}
-                        />
-                      )}
+                    {profile.isPro && (
+                      <Image
+                        source={require('../../../assets/pro.png')}
+                        style={styles.icon}
+                      />
+                    )}
 
-                      {!!item.isAdmin && (
-                        <View style={styles.adminContainer}>
-                          <Icon name="shield" size={10} color="#fff" />
-                          <Text style={styles.adminBadgeText}>{t("chat.admin")}</Text>
-                        </View>
-                      )}
+                    {!!item.isAdmin && (
+                      <View style={styles.adminContainer}>
+                        <Icon name="shield" size={10} color="#fff" />
+                        <Text style={styles.adminBadgeText}>{t("chat.admin")}</Text>
+                      </View>
+                    )}
 
-                      {!item.isAdmin && item.isModerator && (
-                        <View style={styles.modContainer}>
-                          <Icon name="shield-checkmark" size={10} color="#fff" />
-                          <Text style={styles.modBadgeText}>{t("chat.mod")}</Text>
-                        </View>
-                      )}
+                    {!item.isAdmin && item.isModerator && (
+                      <View style={styles.modContainer}>
+                        <Icon name="shield-checkmark" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>{t("chat.mod")}</Text>
+                      </View>
+                    )}
 
-                      {item?.robloxUsernameVerified && (
-                        <Image
-                          source={require('../../../assets/verification.png')}
-                          style={styles.icon}
-                        />
-                      )}
+                    {!item.isAdmin && !item.isModerator && item.isBabyMod && (
+                      <View style={[styles.modContainer, { backgroundColor: '#F59E0B' }]}>
+                        <Icon name="paw" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>JMD</Text>
+                      </View>
+                    )}
 
-                      {hasRecentWin && (
-                        <Image
-                          source={require('../../../assets/trophy.webp')}
-                          style={{
-                            width: 10,
-                            height: 10,
-                            marginLeft: 4,
-                          }}
-                        />
-                      )}
+                    {profile.isTrusted && (
+                      <View style={styles.trustedContainer}>
+                        <Icon name="checkmark-circle" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>Trusted</Text>
+                      </View>
+                    )}
 
-                      {isAdmin && item.OS && (
-                        <View
-                          style={[
-                            styles.platformBadge,
-                          ]}
-                        >
-                          <Icon
-                            name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
-                            size={14}
-                            color={item.OS === 'ios' ? '#007AFF' : '#34C759'}
-                          />
-                        </View>
-                      )}
-                    </View>
+                    {profile.isCMSR && (
+                      <View style={styles.cmsrContainer}>
+                        <Icon name="briefcase" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>CMSR</Text>
+                      </View>
+                    )}
+
+                    {profile.robloxUsernameVerified && (
+                      <Image
+                        source={require('../../../assets/verification.png')}
+                        style={styles.icon}
+                      />
+                    )}
+
+                    {hasRecentWin && (
+                      <Image
+                        source={require('../../../assets/trophy.webp')}
+                        style={styles.icon}
+                      />
+                    )}
 
 
 
-                    {item.gif && (
-                      <View>
-                        <Image
-                          source={{ uri: item.gif }}
-                          style={{ height: 50, width: 50, resizeMode: 'contain' }}
+                    {isAdmin && item.OS && (
+                      <View
+                        style={[
+                          styles.platformBadge,
+                        ]}
+                      >
+                        <Icon
+                          name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
+                          size={14}
+                          color={item.OS === 'ios' ? '#007AFF' : '#34C759'}
                         />
                       </View>
                     )}
-                    {/* {'\n'} */}
-                    {item?.text && (
-                      <Text style={item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>
-                        {parseMessageText(item.text)}
-                      </Text>
-                    )}
-
-
-
-
                   </View>
+
+
+
+                  {item.gif && (
+                    <View>
+                      <Image
+                        source={{ uri: item.gif }}
+                        style={{ height: 50, width: 50, resizeMode: 'contain' }}
+                      />
+                    </View>
+                  )}
+                  {/* {'\n'} */}
+                  {item?.text && (
+                    isMultiColorText(profile.chatTextColor)
+                      ? <RainbowText
+                          colors={getMultiColorPalette(profile.chatTextColor)}
+                          style={[item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly]}
+                        >{item.text}</RainbowText>
+                      : <Text style={[
+                          item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly,
+                          profile.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
+                        ]}>
+                          {parseMessageText(item.text)}
+                        </Text>
+                  )}
+
+                  {/* Timestamp inside bubble — WhatsApp style */}
+                  <Text style={{
+                    fontSize: 9,
+                    color: item.senderId === user?.id
+                      ? (isDarkMode ? '#ffffffaa' : '#00000066')
+                      : (isDarkMode ? '#ffffff77' : '#00000055'),
+                    alignSelf: 'flex-end',
+                    marginTop: 2,
+                  }}>
+                    {new Date(item.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
                 </View>
                 {hasFruits && (
                   <View
@@ -618,10 +659,10 @@ const MessagesList = ({
                           paddingHorizontal: 6,
                           paddingVertical: 2,
                           borderRadius: 999,
-                          backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                          backgroundColor: c.bgAlt,
                           gap: 3,
                           borderWidth: 1,
-                          borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                          borderColor: c.border,
                           ...(myReaction === emoji ? {
                             backgroundColor: isDarkMode ? '#1e3a5f' : '#dbeafe',
                             borderColor: isDarkMode ? '#3b82f6' : '#60a5fa',
@@ -634,7 +675,7 @@ const MessagesList = ({
                           fontWeight: '600',
                           color: myReaction === emoji
                             ? (isDarkMode ? '#93c5fd' : '#2563eb')
-                            : (isDarkMode ? '#94a3b8' : '#64748b'),
+                            : (c.textSecondary),
                         }}>{count}</Text>
                       </TouchableOpacity>
                     ))}
@@ -642,97 +683,18 @@ const MessagesList = ({
                 );
               })()}
 
-              {/* {(item.reportCount > 0 || item.isReportedByUser) && (
-              <Text style={styles.reportIcon}>Reported</Text>
-            )} */}
-
-
             </View>
 
-
-            {/* Admin Actions or Timestamp */}
-
-
-            <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-              <Text style={styles.timestamp}>
-                {new Date(item.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </Text>
-
-            </View>
-            {(!isAdminOrMod && item.senderId === user?.id) && (
-              <Menu>
-                <MenuTrigger>
-                  <Icon
-                    name="ellipsis-vertical-outline"
-                    size={16}
-                    color={config.colors.hasBlockGreen}
-                  />
-                </MenuTrigger>
-                <MenuOptions >
-                  {/* <MenuOption onSelect={() => onPinMessage(item)} style={styles.pinButton}>
-                    <Text style={styles.adminTextAction}>Pin</Text>
-                  </MenuOption> */}
-                  <MenuOption onSelect={() => onDeleteMessage(item.id)} >
-                    <Text style={[{ backgroundColor: 'red', padding: 10, color: 'white' }]}>{t('chat.delete')}</Text>
-                  </MenuOption>
-
-
-
-
-
-                  {/* {isAdmin && (
-                    <MenuOption onSelect={() => makeadmin(item.senderId)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>Make Admin</Text>
-                    </MenuOption>
-                  )}
-                  {isAdmin && (
-                    <MenuOption onSelect={() => removeAdmin(item.senderId)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>Remove Admin</Text>
-                    </MenuOption>
-                  )} */}
-                </MenuOptions>
-              </Menu>
-            )}
-            {(isAdminOrMod) && (
-              <Menu>
-                <MenuTrigger>
-                  <Icon
-                    name="ellipsis-vertical-outline"
-                    size={16}
-                    color={config.colors.hasBlockGreen}
-                  />
-                </MenuTrigger>
-                <MenuOptions>
-                  <View style={styles.adminActions}>
-                    {/* <MenuOption onSelect={() => onPinMessage(item)} style={styles.pinButton}>
-                    <Text style={styles.adminTextAction}>Pin</Text>
-                  </MenuOption> */}
-                    <MenuOption onSelect={() => onDeleteMessage(item.id)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>{t('chat.delete')}</Text>
-                    </MenuOption>
-                    <MenuOption onSelect={() => onDeleteAllMessage(item?.senderId)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>{t('chat.delete_all')}</Text>
-                    </MenuOption>
-                    <MenuOption onSelect={() => onPinMessage(item)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>{t('chat.pin_message')}</Text>
-                    </MenuOption>
-
-                    {/* {isAdmin && (
-                    <MenuOption onSelect={() => makeadmin(item.senderId)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>Make Admin</Text>
-                    </MenuOption>
-                  )}
-                  {isAdmin && (
-                    <MenuOption onSelect={() => removeAdmin(item.senderId)} style={styles.deleteButton}>
-                      <Text style={styles.adminTextAction}>Remove Admin</Text>
-                    </MenuOption>
-                  )} */}
-                  </View>
-                </MenuOptions>
-              </Menu>
+            {/* Avatar — right side for own messages */}
+            {item.senderId === user?.id && (
+              <TouchableOpacity onPress={() => handleProfileClick(item)} style={{ marginLeft: 6, marginBottom: 2 }}>
+                <FramedAvatar
+                  avatarUri={profile.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                  frame={profile.profileFrame}
+                  isDarkMode={isDarkMode}
+                  avatarSize={28}
+                />
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -768,7 +730,7 @@ const MessagesList = ({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={isDarkMode ? '#FFF' : '#000'}
+            tintColor={c.text}
           />
         }
         // onScroll={() => Keyboard.dismiss()}
@@ -852,9 +814,6 @@ export const fruitStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
-
-    flex: 1,
-
   },
   fruitImage: {
     width: 20,

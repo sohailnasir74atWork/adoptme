@@ -18,6 +18,7 @@ import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentica
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useGlobalState } from '../GlobelStats';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
+import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage, showWarningMessage } from '../Helper/MessageHelper';
 import { mixpanel } from '../AppHelper/MixPenel';
@@ -34,11 +35,17 @@ import {
   GoogleAuthProvider,
   AppleAuthProvider,
   signOut,
+  signInWithPhoneNumber,
 } from '@react-native-firebase/auth';
 
 const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);            // Google / reset
   const [isLoadingSecondary, setIsLoadingSecondary] = useState(false); // email/pass
@@ -79,6 +86,33 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       }
     });
   }, [auth]);
+
+  // Reset phone verification state
+  const resetPhoneState = () => {
+    setPhoneNumber('');
+    setOtpCode('');
+    setConfirmationResult(null);
+    setOtpSent(false);
+  };
+
+  const handleSendOtp = async () => {
+    const cleaned = phoneNumber.trim();
+    if (!cleaned || cleaned.length < 7) {
+      Alert.alert(t('home.alert.error'), 'Please enter a valid phone number with country code (e.g. +1234567890)');
+      return;
+    }
+    setIsSendingOtp(true);
+    try {
+      const result = await signInWithPhoneNumber(auth, cleaned);
+      setConfirmationResult(result);
+      setOtpSent(true);
+      showSuccessMessage('Code Sent', `Verification code sent to ${cleaned}`);
+    } catch (error) {
+      showErrorMessage(t('home.alert.error'), error?.message || 'Failed to send SMS. Check the number and try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -147,24 +181,66 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       return;
     }
 
+    // 🚫 Block disposable / temp email domains
+    const TEMP_EMAIL_DOMAINS = new Set([
+      'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'guerrillamail.org',
+      'guerrillamail.biz', 'guerrillamail.de', 'guerrillamail.info', 'grr.la',
+      'sharklasers.com', 'guerrillamailblock.com', 'spam4.me', 'trashmail.com',
+      'trashmail.at', 'trashmail.io', 'trashmail.me', 'trashmail.net', 'trashmail.org',
+      'trashmail.xyz', 'mailnull.com', 'spamgourmet.com', 'yopmail.com', 'yopmail.fr',
+      'cool.fr.nf', 'jetable.fr.nf', 'nospam.ze.tc', 'nomail.xl.cx', 'mega.zik.dj',
+      'speed.1s.fr', 'courriel.fr.nf', 'moncourrier.fr.nf', 'monemail.fr.nf',
+      'monmail.fr.nf', 'tempmail.com', 'tempmail.net', 'tempmail.org', 'temp-mail.org',
+      'temp-mail.io', 'dispostable.com', 'throwam.com', 'owlpic.com', 'fakeinbox.com',
+      'mailnesia.com', 'maildrop.cc', 'discard.email', 'spambog.com', 'spamfree24.org',
+      'getairmail.com', 'filzmail.com', 'anon-mail.de', 'rhyta.com', 'spamday.com',
+      'maileater.com', 'mailexpire.com', 'mailsac.com', 'mailslite.com', 'mailzilla.org',
+      'deadaddress.com', 'harakirimail.com', 'slopsbox.com', 'trbvm.com',
+      'trashmailer.com', 'wegwerfmail.de', 'yopmail.pp.ua',
+    ]);
+    if (isRegisterMode) {
+      const emailDomain = email.toLowerCase().split('@')[1];
+      if (TEMP_EMAIL_DOMAINS.has(emailDomain)) {
+        Alert.alert(
+          t('home.alert.error'),
+          'Temporary or disposable email addresses are not allowed. Please use a real email address (Gmail, Outlook, Yahoo, etc.).'
+        );
+        return;
+      }
+    }
+
     setIsLoadingSecondary(true);
 
     try {
       if (isRegisterMode) {
+        // Step 1: Verify phone OTP first
+        if (!confirmationResult || !otpSent) {
+          Alert.alert(t('home.alert.error'), 'Please verify your phone number first.');
+          setIsLoadingSecondary(false);
+          return;
+        }
+        try {
+          await confirmationResult.confirm(otpCode.trim());
+        } catch {
+          Alert.alert(t('home.alert.error'), 'Invalid verification code. Please try again.');
+          setIsLoadingSecondary(false);
+          return;
+        }
+
         // 🔐 Register new user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        if (!user.emailVerified) {
-          await user.sendEmailVerification();
-          await signOut(auth);
+        // Send verification email then sign out
+        await user.sendEmailVerification();
+        await signOut(auth);
 
-          Alert.alert(
-            t('signin.account_created_title'),
-            t('signin.account_created_message')
-          );
-          return;
-        }
+        Alert.alert(
+          t('signin.account_created_title'),
+          t('signin.account_created_message')
+        );
+        resetPhoneState();
+        return;
       } else {
         // 🔐 Login existing user
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -238,7 +314,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       <Pressable style={styles.modalOverlay} onPress={onClose} />
       <ConditionalKeyboardWrapper>
         <Pressable onPress={() => { }}>
-          <View style={[styles.drawer, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
+          <SwipeableBottomDrawer onClose={onClose} isDarkMode={isDarkMode} style={[styles.drawer, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
             <Text style={[styles.title, { color: selectedTheme.colors.text }]}>
               {isRegisterMode
                 ? t('signin.title_register')
@@ -273,6 +349,62 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                   placeholderTextColor={selectedTheme.colors.text}
                 />
               </>
+            )}
+
+            {/* ── Phone verification — register mode only ── */}
+            {isRegisterMode && !isForgotPasswordMode && (
+              <View style={{ marginTop: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        flex: 1, marginTop: 0, color: selectedTheme.colors.text,
+                        borderColor: otpSent ? '#29AB87' : 'grey'
+                      },
+                    ]}
+                    placeholder="+1234567890 (with country code)"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    editable={!otpSent}
+                    placeholderTextColor={selectedTheme.colors.text}
+                  />
+                  <TouchableOpacity
+                    onPress={otpSent ? () => { setOtpSent(false); setConfirmationResult(null); setOtpCode(''); } : handleSendOtp}
+                    disabled={isSendingOtp}
+                    style={{
+                      backgroundColor: otpSent ? '#555' : '#29AB87',
+                      paddingHorizontal: 12, paddingVertical: 10,
+                      borderRadius: 6, alignItems: 'center',
+                    }}
+                  >
+                    {isSendingOtp
+                      ? <ActivityIndicator size="small" color="white" />
+                      : <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                          {otpSent ? 'Resend' : 'Send Code'}
+                        </Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+
+                {otpSent && (
+                  <View style={{ marginTop: 8 }}>
+                    <TextInput
+                      style={[styles.input, { marginTop: 0, color: selectedTheme.colors.text, borderColor: '#29AB87' }]}
+                      placeholder="Enter 6-digit code"
+                      value={otpCode}
+                      onChangeText={setOtpCode}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      placeholderTextColor={selectedTheme.colors.text}
+                    />
+                    <Text style={{ fontSize: 11, color: '#29AB87', marginTop: 4 }}>
+                      ✅ Code sent! Enter it above then tap Register.
+                    </Text>
+                  </View>
+                )}
+              </View>
             )}
 
             {isForgotPasswordMode && (
@@ -367,6 +499,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               onPress={() => {
                 if (!isForgotPasswordMode) {
                   setIsRegisterMode(!isRegisterMode);
+                  resetPhoneState();
                 }
               }}
             >
@@ -376,7 +509,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                   : t('signin.button_switch_register')}
               </Text>
             </TouchableOpacity>
-          </View>
+          </SwipeableBottomDrawer>
         </Pressable>
       </ConditionalKeyboardWrapper>
     </Modal>
@@ -389,10 +522,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   drawer: {
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 0,
     position: 'absolute',
     bottom: 0,
     left: 0,

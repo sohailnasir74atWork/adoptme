@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import config from '../../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import ChatRulesModal from './ChatRuleModal';
@@ -33,6 +34,7 @@ const ChatHeaderContent = ({
   const { theme, isAdmin, user } = useGlobalState();
   const isAdminOrMod = isAdmin || !!user?.isModerator;
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const { t } = useTranslation();
   const [pinMessageOpen, setPinMessageOpen] = useState(false);
 
@@ -234,7 +236,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   topBarText: {
     fontSize: 9,
-    color: isDarkMode ? '#888' : '#999',
+    color: isDarkMode ? '#64748b' : '#9ca3b8',
   },
 
   // ── Pinned Preview Strip ──

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -296,30 +296,26 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
       }
     };
 
-    // Show ad if not Pro, then execute
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        if (!localState.isPro) {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              try {
-                InterstitialAdManager.showAd(callbackfunction);
-              } catch (err) {
-                console.warn('[AdManager] Failed to show ad:', err);
-                callbackfunction();
-              }
-            }, 400);
-          });
-        } else {
-          callbackfunction();
-        }
-      }, 500);
-    });
+    // Upload first, then show ad after
+    await callbackfunction();
+
+    // Show ad AFTER upload completes (non-blocking, for non-Pro users)
+    if (!localState.isPro) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          try {
+            InterstitialAdManager.showAd(() => {});
+          } catch (err) {
+            console.warn('[AdManager] Failed to show ad:', err);
+          }
+        }, 400);
+      });
+    }
 
   }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime]);
 
 
-  const themedStyles = getStyles(isDark);
+  const themedStyles = useMemo(() => getStyles(isDark), [isDark]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">

@@ -288,6 +288,10 @@ const ServerScreen = () => {
                         renderItem={renderItem}
                         contentContainerStyle={{ paddingBottom: 120 }}
                         showsVerticalScrollIndicator={false}
+                        removeClippedSubviews={true}
+                        maxToRenderPerBatch={8}
+                        windowSize={5}
+                        initialNumToRender={10}
                     />
 
                     <TouchableOpacity onPress={() => {

@@ -1,0 +1,49 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -workspace bloxfruitevalues.xcworkspace -scheme bloxfruitevalues -configuration Debug -sdk iphonesimulator
+
+Build settings from command line:
+    SDKROOT = iphonesimulator26.2
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, id:dvtdevice-DVTiOSDeviceSimulatorPlaceholder-iphonesimulator:placeholder, name:Any iOS Simulator Device }
+{ platform:iOS Simulator, arch:arm64, id:5A219E4E-8F48-410B-90F6-8B6CB7B22EBA, OS:26.2, name:123 }
+{ platform:iOS Simulator, arch:arm64, id:720BDEFD-B83C-4855-9B77-FE13D64ECC41, OS:18.5, name:SE }
+{ platform:iOS Simulator, arch:x86_64, id:720BDEFD-B83C-4855-9B77-FE13D64ECC41, OS:18.5, name:SE }
+{ platform:iOS Simulator, arch:arm64, id:AD2A0670-E38E-4191-AF46-B45DBE1E66FF, OS:18.5, name:iPad (A16) }
+{ platform:iOS Simulator, arch:x86_64, id:AD2A0670-E38E-4191-AF46-B45DBE1E66FF, OS:18.5, name:iPad (A16) }
+{ platform:iOS Simulator, arch:arm64, id:05D3058B-61B1-4B4D-9D3E-E27861DB8CBB, OS:18.5, name:iPad Air 11-inch (M3) }
+{ platform:iOS Simulator, arch:x86_64, id:05D3058B-61B1-4B4D-9D3E-E27861DB8CBB, OS:18.5, name:iPad Air 11-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:F13E73DD-FBFC-47C6-BECA-D3C92663BA96, OS:18.5, name:iPad Air 13-inch (M3) }
+{ platform:iOS Simulator, arch:x86_64, id:F13E73DD-FBFC-47C6-BECA-D3C92663BA96, OS:18.5, name:iPad Air 13-inch (M3) }
+{ platform:iOS Simulator, arch:arm64, id:A60942AA-A66B-4D8A-ABB4-3AA56CAFAEC4, OS:18.5, name:iPad Pro 11-inch (M4) }
+{ platform:iOS Simulator, arch:x86_64, id:A60942AA-A66B-4D8A-ABB4-3AA56CAFAEC4, OS:18.5, name:iPad Pro 11-inch (M4) }
+{ platform:iOS Simulator, arch:arm64, id:04965237-AACC-4D5B-8A76-0A66BD9836D6, OS:18.5, name:iPad Pro 13-inch (M4) }
+{ platform:iOS Simulator, arch:x86_64, id:04965237-AACC-4D5B-8A76-0A66BD9836D6, OS:18.5, name:iPad Pro 13-inch (M4) }
+{ platform:iOS Simulator, arch:arm64, id:3786E526-4A30-4D42-AEAD-8AC722A6F415, OS:18.5, name:iPad mini (A17 Pro) }
+{ platform:iOS Simulator, arch:x86_64, id:3786E526-4A30-4D42-AEAD-8AC722A6F415, OS:18.5, name:iPad mini (A17 Pro) }
+{ platform:iOS Simulator, arch:arm64, id:42EBC0DA-D78C-4F2D-B2CA-ED9EBF038293, OS:18.5, name:iPhone 16 }
+{ platform:iOS Simulator, arch:x86_64, id:42EBC0DA-D78C-4F2D-B2CA-ED9EBF038293, OS:18.5, name:iPhone 16 }
+{ platform:iOS Simulator, arch:arm64, id:B5003413-DEE7-4BC1-B827-8AC57D3AC39E, OS:18.5, name:iPhone 16 Plus }
+{ platform:iOS Simulator, arch:x86_64, id:B5003413-DEE7-4BC1-B827-8AC57D3AC39E, OS:18.5, name:iPhone 16 Plus }
+{ platform:iOS Simulator, arch:arm64, id:EFEE79F1-7A42-4FF7-9725-D65284A04E05, OS:18.5, name:iPhone 16 Pro }
+{ platform:iOS Simulator, arch:x86_64, id:EFEE79F1-7A42-4FF7-9725-D65284A04E05, OS:18.5, name:iPhone 16 Pro }
+{ platform:iOS Simulator, arch:arm64, id:A19457DB-F368-414E-A8E8-293C2451D529, OS:18.5, name:iPhone 16 Pro Max }
+{ platform:iOS Simulator, arch:x86_64, id:A19457DB-F368-414E-A8E8-293C2451D529, OS:18.5, name:iPhone 16 Pro Max }
+{ platform:iOS Simulator, arch:arm64, id:7B50CCBE-CF6B-4A8B-9AF6-E0F483340BBE, OS:18.5, name:iPhone 16e }
+{ platform:iOS Simulator, arch:x86_64, id:7B50CCBE-CF6B-4A8B-9AF6-E0F483340BBE, OS:18.5, name:iPhone 16e }
+{ platform:iOS Simulator, arch:arm64, id:19E2C364-8CE0-42EC-B95C-30FD95D3F3A5, OS:26.2, name:iPhone 17 Pro }
+{ platform:iOS Simulator, arch:arm64, id:C952A67A-4E14-45CC-9FD2-C090EC575768, OS:18.5, name:seee }
+{ platform:iOS Simulator, arch:x86_64, id:C952A67A-4E14-45CC-9FD2-C090EC575768, OS:18.5, name:seee }
+{ platform:iOS, id:dvtdevice-DVTiPhonePlaceholder-iphoneos:placeholder, name:Any iOS Device }
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+** BUILD INTERRUPTED **

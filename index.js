@@ -2,8 +2,9 @@
 import { enableScreens } from 'react-native-screens';
 enableScreens();
 
-import React, { useEffect, lazy, Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { AppRegistry, Text, Platform, StatusBar } from 'react-native';
+import crashlytics from '@react-native-firebase/crashlytics';
 import AppWrapper from './App';
 import { name as appName } from './app.json';
 import { GlobalStateProvider } from './Code/GlobelStats';
@@ -13,9 +14,10 @@ import './i18n'; // ✅ Initialize i18next BEFORE any components that use useTra
 
 // 🔁 MODULAR Firebase Messaging imports
 import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV } from 'react-native-mmkv';
 
 import FlashMessage from 'react-native-flash-message';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // 🔇 (optional) silence modular deprecation warnings globally
 // globalThis.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
@@ -34,7 +36,7 @@ const GlobalInviteToast = lazy(() =>
 const messaging = getMessaging();
 
 // ✅ Create MMKV storage instance for background access
-const storage = new MMKV();
+const storage = createMMKV();
 
 // ✅ Helper function to safely parse JSON from storage
 const safeParseJSON = (key, defaultValue) => {
@@ -83,6 +85,16 @@ setBackgroundMessageHandler(messaging, async remoteMessage => {
 const STATUS_BAR_HEIGHT =
   Platform.OS === 'android' ? StatusBar.currentHeight || 18 : 44;
 
+// 🔥 Global JS error handler → Crashlytics
+const originalHandler = ErrorUtils.getGlobalHandler();
+ErrorUtils.setGlobalHandler((error, isFatal) => {
+  try {
+    crashlytics().recordError(error);
+    crashlytics().log(`Global error | Fatal: ${isFatal} | ${error?.message || error}`);
+  } catch (_) {}
+  originalHandler(error, isFatal);
+});
+
 // 🛑 Error Boundary
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -93,6 +105,11 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Caught in ErrorBoundary:', error, info);
+    // 🔥 Report component crashes to Crashlytics
+    try {
+      crashlytics().recordError(error);
+      crashlytics().log(`ErrorBoundary: ${info?.componentStack || 'no stack'}`);
+    } catch (_) {}
   }
 
   render() {
@@ -106,32 +123,30 @@ class ErrorBoundary extends React.Component {
 
 // ✅ Memoized App component to prevent unnecessary re-renders
 const App = React.memo(() => (
-  <MenuProvider skipInstanceCheck>
-    <LocalStateProvider>
-      <GlobalStateProvider>
-        <ErrorBoundary>
-          <AppWrapper />
-        </ErrorBoundary>
+  <SafeAreaProvider>
+    <MenuProvider skipInstanceCheck>
+      <LocalStateProvider>
+        <GlobalStateProvider>
+          <ErrorBoundary>
+            <AppWrapper />
+          </ErrorBoundary>
 
-        {/* ✅ Flash Message below status bar */}
-        <FlashMessage
-          position="top"
-          floating
-          statusBarHeight={STATUS_BAR_HEIGHT}
-        />
+          {/* ✅ Flash Message below status bar */}
+          <FlashMessage
+            position="top"
+            floating
+            statusBarHeight={STATUS_BAR_HEIGHT}
+          />
 
-        {/* Lazy loaded Notification Handler */}
-        <Suspense fallback={null}>
-          <NotificationHandler />
-        </Suspense>
-
-        {/* 🎮 Global Invite Toast - Shows on any screen */}
-        <Suspense fallback={null}>
-          <GlobalInviteToast />
-        </Suspense>
-      </GlobalStateProvider>
-    </LocalStateProvider>
-  </MenuProvider>
+          {/* Lazy loaded components — single Suspense boundary for both */}
+          <Suspense fallback={null}>
+            <NotificationHandler />
+            <GlobalInviteToast />
+          </Suspense>
+        </GlobalStateProvider>
+      </LocalStateProvider>
+    </MenuProvider>
+  </SafeAreaProvider>
 ));
 
 // ✅ Register the app entry point

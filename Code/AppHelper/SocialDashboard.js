@@ -12,26 +12,27 @@ import {
     Image,
 } from 'react-native';
 import { getDatabase, ref, get, query, orderByChild, startAt, endAt, limitToFirst } from '@react-native-firebase/database';
-import { collection, getDocs, query as firestoreQuery, where, orderBy, limit, startAfter, deleteDoc, doc } from '@react-native-firebase/firestore';
+import { collection, getDocs, query as firestoreQuery, where } from '@react-native-firebase/firestore';
 import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-
-dayjs.extend(relativeTime);
 
 // ✅ Constants for optimization
-const ACTIVITY_PAGE_SIZE = 15;
 const FRIEND_PAGE_SIZE = 15;
 const SEARCH_LIMIT = 15;
 const FIRESTORE_IN_BATCH_SIZE = 10; // Smaller batch for better cost efficiency
 
 // ✅ Sanitize search query — strip chars invalid in Firebase RTDB queries
 const sanitizeSearchQuery = (q) => q.replace(/[.#$\[\]\/\\]/g, '');
+
+// ✅ Helper: check if a string looks like a Firebase user ID (not a display name)
+const looksLikeUserId = (val) => {
+    if (!val || typeof val !== 'string') return false;
+    return val.length >= 15 && /^[a-zA-Z0-9]+$/.test(val);
+};
 
 // ✅ Memoized User Card to prevent re-renders
 const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
@@ -67,39 +68,7 @@ const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
     </TouchableOpacity>
 ));
 
-// ✅ Memoized Activity Card to prevent re-renders
-const ActivityCard = memo(({ item, isDark, onPress }) => {
-    const timeAgo = item.createdAt?.toDate ? dayjs(item.createdAt.toDate()).fromNow() : 'recently';
-    const activityType = item.type === 'design_post'
-        ? 'posted a new design'
-        : item.type === 'trade_post'
-            ? 'posted a new trade'
-            : 'shared an update';
 
-    return (
-        <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={onPress}
-            style={[styles.activityCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
-        >
-            <Image source={{ uri: item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }} style={styles.activityAvatar} />
-            <View style={styles.activityContent}>
-                <Text style={[styles.activityHeader, { color: isDark ? '#FFF' : '#000' }]}>
-                    <Text style={styles.activityName}>{item.displayName}</Text> {activityType}
-                </Text>
-                {item.preview && (
-                    <Text style={[styles.activityPreview, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={2}>
-                        {item.preview}
-                    </Text>
-                )}
-                <Text style={[styles.activityTime, { color: isDark ? '#555' : '#999' }]}>{timeAgo}</Text>
-            </View>
-            {item.imagePreview && (
-                <Image source={{ uri: item.imagePreview }} style={styles.activityImage} />
-            )}
-        </TouchableOpacity>
-    );
-});
 
 const SocialDashboard = () => {
     const { theme, user: currentUser, appdatabase, firestoreDB } = useGlobalState();
@@ -108,13 +77,11 @@ const SocialDashboard = () => {
     const isDark = theme === 'dark';
     const db = useMemo(() => appdatabase || getDatabase(), [appdatabase]);
 
-    // Tabs: 'activity', 'friends', or 'search'
-    const [activeTab, setActiveTab] = useState('activity');
+    // Tabs: 'friends' or 'search'
+    const [activeTab, setActiveTab] = useState('friends');
 
     // ✅ Refs for preventing duplicate fetches
     const friendIdsCacheRef = useRef('');
-    const activitiesFetchedRef = useRef(false);
-    const lastActivityDocRef = useRef(null);
     const isMounted = useRef(true);
     const friendsRef = useRef([]); // ✅ New Ref to track friends
 
@@ -130,11 +97,7 @@ const SocialDashboard = () => {
     const [isFriendSearchActive, setIsFriendSearchActive] = useState(false);
     const [loadingFriendSearch, setLoadingFriendSearch] = useState(false);
 
-    // Activity Data
-    const [activities, setActivities] = useState([]);
-    const [loadingActivities, setLoadingActivities] = useState(false);
-    const [hasMoreActivities, setHasMoreActivities] = useState(true);
-    const [loadingMoreActivities, setLoadingMoreActivities] = useState(false);
+
 
     // Search Data
     const [searchQuery, setSearchQuery] = useState('');
@@ -253,13 +216,7 @@ const SocialDashboard = () => {
             if (!isMounted.current) return;
             setFriends(friendsData);
 
-            // ✅ Reset activities when friends change
-            if (forceRefresh) {
-                activitiesFetchedRef.current = false;
-                lastActivityDocRef.current = null;
-                setActivities([]);
-                setHasMoreActivities(true);
-            }
+
         } catch (err) {
             console.error('Error fetching friends:', err);
         } finally {
@@ -293,108 +250,14 @@ const SocialDashboard = () => {
         }
     }, [loadingMoreFriends, loadingFriends, friends.length, friendIds, fetchUsersFromRTDB, isFriendSearchActive]);
 
-    // ─────────────────────────────────────────────
-    // ✅ OPTIMIZED: Fetch Activity Feed with Pagination
-    const fetchActivities = useCallback(async (loadMore = false) => {
-        if (!currentUser?.id || !firestoreDB || friendIds.length === 0) {
-            setLoadingActivities(false);
-            return;
-        }
-
-        // ✅ Prevent duplicate initial fetches
-        if (!loadMore && activitiesFetchedRef.current) {
-            return;
-        }
-
-        if (loadMore) {
-            setLoadingMoreActivities(true);
-        } else {
-            setLoadingActivities(true);
-        }
-
-        try {
-            // ✅ Use smaller batch size for cost efficiency
-            const batchSize = FIRESTORE_IN_BATCH_SIZE;
-            const allActivities = [];
-
-            // ✅ Only fetch from first batch of friend IDs to limit reads
-            const friendBatch = friendIds.slice(0, batchSize);
-
-            let activityQuery = firestoreQuery(
-                collection(firestoreDB, 'user_activity'),
-                where('userId', 'in', friendBatch),
-                orderBy('createdAt', 'desc'),
-                limit(ACTIVITY_PAGE_SIZE)
-            );
-
-            // ✅ Pagination: use startAfter for load more
-            if (loadMore && lastActivityDocRef.current) {
-                activityQuery = firestoreQuery(
-                    collection(firestoreDB, 'user_activity'),
-                    where('userId', 'in', friendBatch),
-                    orderBy('createdAt', 'desc'),
-                    startAfter(lastActivityDocRef.current),
-                    limit(ACTIVITY_PAGE_SIZE)
-                );
-            }
-
-            const activitySnapshot = await getDocs(activityQuery);
-
-            if (!isMounted.current) return;
-
-            activitySnapshot.docs.forEach(doc => {
-                allActivities.push({ id: doc.id, ...doc.data() });
-            });
-
-            // ✅ Track last document for pagination
-            if (activitySnapshot.docs.length > 0) {
-                lastActivityDocRef.current = activitySnapshot.docs[activitySnapshot.docs.length - 1];
-            }
-
-            // ✅ Check if more data available
-            setHasMoreActivities(activitySnapshot.docs.length >= ACTIVITY_PAGE_SIZE);
-
-            if (loadMore) {
-                setActivities(prev => [...prev, ...allActivities]);
-            } else {
-                setActivities(allActivities);
-                activitiesFetchedRef.current = true;
-            }
-
-            // ✅ Auto-delete seen activities (As requested: "when seen delete from the data base")
-            if (allActivities.length > 0) {
-                // Perform deletion in background to not block UI
-                Promise.all(allActivities.map(activity =>
-                    deleteDoc(doc(firestoreDB, 'user_activity', activity.id))
-                )).catch(err => console.error('Error deleting seen activities:', err));
-            }
-        } catch (err) {
-            console.error('Error fetching activities:', err);
-        } finally {
-            if (isMounted.current) {
-                setLoadingActivities(false);
-                setLoadingMoreActivities(false);
-            }
-        }
-    }, [firestoreDB, currentUser?.id, friendIds]);
-
     // ✅ Initial fetch - only friends on mount
     useEffect(() => {
         fetchFriends();
     }, [fetchFriends]);
 
-    // ✅ Lazy load activities only when Activity tab is active AND friends loaded
-    useEffect(() => {
-        if (activeTab === 'activity' && friendIds.length > 0 && !activitiesFetchedRef.current) {
-            fetchActivities();
-        }
-    }, [activeTab, friendIds.length, fetchActivities]);
-
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        activitiesFetchedRef.current = false;
-        lastActivityDocRef.current = null;
-        fetchFriends(true); // This also resets search mode
+        fetchFriends(true);
     }, [fetchFriends]);
 
     // ─────────────────────────────────────────────
@@ -415,60 +278,51 @@ const SocialDashboard = () => {
         setFriendSearchResults([]);
 
         try {
-            const lower = raw.toLowerCase();
-            const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-            const allUpper = raw.toUpperCase();
-            const variants = [...new Set([lower, upperFirst, allUpper, raw])];
-
             const seen = new Set();
             const results = [];
 
-            for (const v of variants) {
-                if (seen.size >= 50) break;
-                try {
-                    const q = query(
-                        ref(db, 'users'),
-                        orderByChild('displayName'),
-                        startAt(v),
-                        endAt(v + "\uf8ff"),
-                        limitToFirst(50)
-                    );
-                    const snapshot = await get(q);
-                    if (!isMounted.current) return;
-                    if (snapshot.exists()) {
-                        snapshot.forEach((child) => {
-                            const id = child.key;
-                            const u = child.val();
-                            if (!friendIdSet.has(id) || seen.has(id)) return;
-                            seen.add(id);
-                            results.push({
-                                id,
-                                displayName: u.displayName || u.userName || 'Unknown',
-                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                robloxUsername: u.robloxUsername,
-                                robloxUsernameVerified: u.robloxUsernameVerified,
-                            });
+            if (looksLikeUserId(raw)) {
+                // ── ID SEARCH: direct lookup by Firebase user key ──
+                const userSnap = await get(ref(db, `users/${raw}`));
+                if (!isMounted.current) return;
+                if (userSnap.exists()) {
+                    const u = userSnap.val();
+                    const id = raw;
+                    if (friendIdSet.has(id)) {
+                        seen.add(id);
+                        results.push({
+                            id,
+                            displayName: u.displayName || u.userName || 'Unknown',
+                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                            robloxUsername: u.robloxUsername,
+                            robloxUsernameVerified: u.robloxUsernameVerified,
                         });
                     }
-                } catch (variantErr) {
-                    console.warn(`Friend search variant "${v}" failed:`, variantErr.message);
                 }
-            }
+            } else {
+                // ── NAME SEARCH: multiple case variants + client-side filter ──
+                const lower = raw.toLowerCase();
+                const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+                const allUpper = raw.toUpperCase();
+                const variants = [...new Set([lower, upperFirst, allUpper, raw])];
 
-            // Fallback: client-side contains match for symbol names
-            if (results.length < 10 && lower.length >= 2) {
-                try {
-                    const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
-                    const broadSnap = await get(broadQ);
-                    if (!isMounted.current) return;
-                    if (broadSnap.exists()) {
-                        broadSnap.forEach((child) => {
-                            if (seen.size >= 50) return;
-                            const id = child.key;
-                            const u = child.val();
-                            if (!friendIdSet.has(id) || seen.has(id)) return;
-                            const name = (u.displayName || u.userName || '').toLowerCase();
-                            if (name.includes(lower)) {
+                for (const v of variants) {
+                    if (seen.size >= 50) break;
+                    try {
+                        const q = query(
+                            ref(db, 'users'),
+                            orderByChild('displayName'),
+                            startAt(v),
+                            endAt(v + "\uf8ff"),
+                            limitToFirst(50)
+                        );
+                        const snapshot = await get(q);
+                        if (!isMounted.current) return;
+                        if (snapshot.exists()) {
+                            snapshot.forEach((child) => {
+                                const id = child.key;
+                                const u = child.val();
+                                if (!friendIdSet.has(id) || seen.has(id)) return;
                                 seen.add(id);
                                 results.push({
                                     id,
@@ -477,11 +331,41 @@ const SocialDashboard = () => {
                                     robloxUsername: u.robloxUsername,
                                     robloxUsernameVerified: u.robloxUsernameVerified,
                                 });
-                            }
-                        });
+                            });
+                        }
+                    } catch (variantErr) {
+                        console.warn(`Friend search variant "${v}" failed:`, variantErr.message);
                     }
-                } catch (broadErr) {
-                    console.warn('Broad friend search failed:', broadErr.message);
+                }
+
+                // Fallback: client-side contains match for symbol names
+                if (results.length < 10 && lower.length >= 2) {
+                    try {
+                        const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
+                        const broadSnap = await get(broadQ);
+                        if (!isMounted.current) return;
+                        if (broadSnap.exists()) {
+                            broadSnap.forEach((child) => {
+                                if (seen.size >= 50) return;
+                                const id = child.key;
+                                const u = child.val();
+                                if (!friendIdSet.has(id) || seen.has(id)) return;
+                                const name = (u.displayName || u.userName || '').toLowerCase();
+                                if (name.includes(lower)) {
+                                    seen.add(id);
+                                    results.push({
+                                        id,
+                                        displayName: u.displayName || u.userName || 'Unknown',
+                                        avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                        robloxUsername: u.robloxUsername,
+                                        robloxUsernameVerified: u.robloxUsernameVerified,
+                                    });
+                                }
+                            });
+                        }
+                    } catch (broadErr) {
+                        console.warn('Broad friend search failed:', broadErr.message);
+                    }
                 }
             }
 
@@ -507,61 +391,52 @@ const SocialDashboard = () => {
         setSearchResults([]);
 
         try {
-            const lower = raw.toLowerCase();
-            const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-            const allUpper = raw.toUpperCase();
-            const variants = [...new Set([lower, upperFirst, allUpper, raw])];
-
             const seen = new Set();
             const results = [];
-            const limitSize = 50;
 
-            for (const v of variants) {
-                if (seen.size >= 50) break;
-                try {
-                    const q = query(
-                        ref(db, 'users'),
-                        orderByChild('displayName'),
-                        startAt(v),
-                        endAt(v + "\uf8ff"),
-                        limitToFirst(limitSize)
-                    );
-                    const snapshot = await get(q);
-                    if (!isMounted.current) return;
-                    if (snapshot.exists()) {
-                        snapshot.forEach((child) => {
-                            const id = child.key;
-                            const u = child.val();
-                            if (id === currentUser?.id || seen.has(id)) return;
-                            seen.add(id);
-                            results.push({
-                                id,
-                                displayName: u.displayName || u.userName || 'Unknown',
-                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                robloxUsername: u.robloxUsername,
-                                robloxUsernameVerified: u.robloxUsernameVerified,
-                            });
+            if (looksLikeUserId(raw)) {
+                // ── ID SEARCH: direct lookup by Firebase user key ──
+                const userSnap = await get(ref(db, `users/${raw}`));
+                if (!isMounted.current) return;
+                if (userSnap.exists()) {
+                    const u = userSnap.val();
+                    const id = raw;
+                    if (id !== currentUser?.id) {
+                        seen.add(id);
+                        results.push({
+                            id,
+                            displayName: u.displayName || u.userName || 'Unknown',
+                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                            robloxUsername: u.robloxUsername,
+                            robloxUsernameVerified: u.robloxUsernameVerified,
                         });
                     }
-                } catch (variantErr) {
-                    console.warn(`Search variant "${v}" failed:`, variantErr.message);
                 }
-            }
+            } else {
+                // ── NAME SEARCH: multiple case variants + client-side filter ──
+                const lower = raw.toLowerCase();
+                const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+                const allUpper = raw.toUpperCase();
+                const variants = [...new Set([lower, upperFirst, allUpper, raw])];
+                const limitSize = 50;
 
-            // Fallback: client-side contains match for symbol names
-            if (results.length < 10 && lower.length >= 2) {
-                try {
-                    const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
-                    const broadSnap = await get(broadQ);
-                    if (!isMounted.current) return;
-                    if (broadSnap.exists()) {
-                        broadSnap.forEach((child) => {
-                            if (seen.size >= 50) return;
-                            const id = child.key;
-                            const u = child.val();
-                            if (id === currentUser?.id || seen.has(id)) return;
-                            const name = (u.displayName || u.userName || '').toLowerCase();
-                            if (name.includes(lower)) {
+                for (const v of variants) {
+                    if (seen.size >= 50) break;
+                    try {
+                        const q = query(
+                            ref(db, 'users'),
+                            orderByChild('displayName'),
+                            startAt(v),
+                            endAt(v + "\uf8ff"),
+                            limitToFirst(limitSize)
+                        );
+                        const snapshot = await get(q);
+                        if (!isMounted.current) return;
+                        if (snapshot.exists()) {
+                            snapshot.forEach((child) => {
+                                const id = child.key;
+                                const u = child.val();
+                                if (id === currentUser?.id || seen.has(id)) return;
                                 seen.add(id);
                                 results.push({
                                     id,
@@ -570,11 +445,41 @@ const SocialDashboard = () => {
                                     robloxUsername: u.robloxUsername,
                                     robloxUsernameVerified: u.robloxUsernameVerified,
                                 });
-                            }
-                        });
+                            });
+                        }
+                    } catch (variantErr) {
+                        console.warn(`Search variant "${v}" failed:`, variantErr.message);
                     }
-                } catch (broadErr) {
-                    console.warn('Broad search failed:', broadErr.message);
+                }
+
+                // Fallback: client-side contains match for symbol names
+                if (results.length < 10 && lower.length >= 2) {
+                    try {
+                        const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
+                        const broadSnap = await get(broadQ);
+                        if (!isMounted.current) return;
+                        if (broadSnap.exists()) {
+                            broadSnap.forEach((child) => {
+                                if (seen.size >= 50) return;
+                                const id = child.key;
+                                const u = child.val();
+                                if (id === currentUser?.id || seen.has(id)) return;
+                                const name = (u.displayName || u.userName || '').toLowerCase();
+                                if (name.includes(lower)) {
+                                    seen.add(id);
+                                    results.push({
+                                        id,
+                                        displayName: u.displayName || u.userName || 'Unknown',
+                                        avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                        robloxUsername: u.robloxUsername,
+                                        robloxUsernameVerified: u.robloxUsernameVerified,
+                                    });
+                                }
+                            });
+                        }
+                    } catch (broadErr) {
+                        console.warn('Broad search failed:', broadErr.message);
+                    }
                 }
             }
 
@@ -613,13 +518,6 @@ const SocialDashboard = () => {
         />
     ), [isDark, friendIdSet, handleOpenProfile]);
 
-    const renderActivityCard = useCallback(({ item }) => (
-        <ActivityCard
-            item={item}
-            isDark={isDark}
-            onPress={() => handleOpenProfile({ id: item.userId, displayName: item.displayName, avatar: item.avatar })}
-        />
-    ), [isDark, handleOpenProfile]);
 
     // ─────────────────────────────────────────────
     // Filter friends based on search (memoized)
@@ -633,18 +531,7 @@ const SocialDashboard = () => {
         );
     }, [friends, searchQuery]);
 
-    // ✅ Load More Activities Footer
-    const ActivityListFooter = useCallback(() => {
-        if (!hasMoreActivities) return null;
-        if (loadingMoreActivities) {
-            return <ActivityIndicator style={{ marginVertical: 16 }} color={config.colors.primary} />;
-        }
-        return (
-            <TouchableOpacity onPress={() => fetchActivities(true)} style={styles.loadMoreBtn}>
-                <Text style={styles.loadMoreText}>Load More</Text>
-            </TouchableOpacity>
-        );
-    }, [hasMoreActivities, loadingMoreActivities, fetchActivities]);
+
 
     // ✅ Stable key extractors
     const keyExtractor = useCallback((item) => item.id, []);
@@ -661,17 +548,6 @@ const SocialDashboard = () => {
             {/* Tabs */}
             <View style={styles.tabContainer}>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === 'activity' && styles.activeTab]}
-                    onPress={() => {
-                        setActiveTab('activity');
-                        setSearchQuery('');
-                    }}
-                >
-                    <Text style={[styles.tabText, { color: activeTab === 'activity' ? config.colors.primary : (isDark ? '#888' : '#666') }]}>
-                        Activity
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
                     style={[styles.tab, activeTab === 'friends' && styles.activeTab]}
                     onPress={() => {
                         setActiveTab('friends');
@@ -680,7 +556,7 @@ const SocialDashboard = () => {
                     }}
                 >
                     <Text style={[styles.tabText, { color: activeTab === 'friends' ? config.colors.primary : (isDark ? '#888' : '#666') }]}>
-                        Friends
+                        💛 Following
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -691,40 +567,13 @@ const SocialDashboard = () => {
                     }}
                 >
                     <Text style={[styles.tabText, { color: activeTab === 'search' ? config.colors.primary : (isDark ? '#888' : '#666') }]}>
-                        Find Users
+                        🔍 Discover
                     </Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Activity Tab */}
-            {activeTab === 'activity' && (
-                <View style={{ flex: 1 }}>
-                    {loadingActivities || loadingFriends ? (
-                        <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
-                    ) : activities.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <Ionicons name="notifications-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                            <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
-                                {friends.length === 0 ? 'Follow users to see their activity!' : 'No recent activity from friends'}
-                            </Text>
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={activities}
-                            keyExtractor={keyExtractor}
-                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? '#FFF' : '#000'} />}
-                            contentContainerStyle={styles.listContent}
-                            renderItem={renderActivityCard}
-                            ListFooterComponent={ActivityListFooter}
-                            initialNumToRender={10}
-                            maxToRenderPerBatch={10}
-                            windowSize={5}
-                        />
-                    )}
-                </View>
-            )}
 
-            {/* Friends Tab - Updated UI for Search */}
+            {/* 💛 Following Tab */}
             {activeTab === 'friends' && (
                 <View style={{ flex: 1 }}>
                     <View style={styles.searchContainer}>
@@ -774,7 +623,7 @@ const SocialDashboard = () => {
                 </View>
             )}
 
-            {/* Search Tab */}
+            {/* 🔍 Discover Tab */}
             {activeTab === 'search' && (
                 <View style={{ flex: 1 }}>
                     <View style={styles.searchContainer}>
@@ -829,13 +678,16 @@ const SocialDashboard = () => {
                 startChat={() => {
                     if (selectedUser) {
                         setIsDrawerVisible(false);
-                        navigation.navigate('PrivateChat', {
-                            selectedUser: {
-                                senderId: selectedUser.senderId,
-                                sender: selectedUser.sender,
-                                avatar: selectedUser.avatar,
-                            },
-                        });
+                        // Small delay so drawer close animation finishes before navigation
+                        setTimeout(() => {
+                            navigation.navigate('PrivateChatRoot', {
+                                selectedUser: {
+                                    senderId: selectedUser.senderId,
+                                    sender: selectedUser.sender,
+                                    avatar: selectedUser.avatar,
+                                },
+                            });
+                        }, 300);
                     }
                 }}
                 selectedUser={selectedUser}
@@ -870,15 +722,7 @@ const styles = StyleSheet.create({
     notFollowingBadge: { backgroundColor: '#8E8E93', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     notFollowingText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 
-    // Activity Card Styles
-    activityCard: { flexDirection: 'row', padding: 12, borderRadius: 16, marginBottom: 10, borderWidth: 1 },
-    activityAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#DDD' },
-    activityContent: { flex: 1, marginLeft: 12 },
-    activityHeader: { fontSize: 14 },
-    activityName: { fontWeight: '600' },
-    activityPreview: { fontSize: 13, marginTop: 4 },
-    activityTime: { fontSize: 11, marginTop: 4 },
-    activityImage: { width: 50, height: 50, borderRadius: 8, marginLeft: 8 },
+
 
     emptyState: { alignItems: 'center', marginTop: 60, opacity: 0.7, paddingHorizontal: 20 },
     emptyText: { marginTop: 16, fontSize: 16, textAlign: 'center' },

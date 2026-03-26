@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { ref, get } from '@react-native-firebase/database';
 import { collection, getDocs, query, orderBy, limit, doc, getDoc } from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
@@ -21,6 +22,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import ProfileBottomDrawer from './BottomDrawer';
 
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in milliseconds
@@ -35,6 +37,7 @@ const LeaderboardModal = ({
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
 
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -43,7 +46,7 @@ const LeaderboardModal = ({
   const [bannedUsers] = useState(Array.isArray(localState.bannedUsers) ? localState.bannedUsers : []);
 
   // ✅ Memoize styles
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   // ✅ Check if cached data is still valid (less than 2 days old)
   const isCacheValid = useCallback((cachedData) => {
@@ -253,15 +256,16 @@ const LeaderboardModal = ({
             style={{ flex: 1, justifyContent: 'flex-end' }}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           >
-            <View
+            <SwipeableBottomDrawer
+              onClose={onClose}
+              isDarkMode={isDarkMode}
               style={styles.modalContent}
-              onStartShouldSetResponder={() => true}
             >
               {/* Header */}
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>Top Rated Users</Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                  <Icon name="close" size={24} color={c.text} />
                 </TouchableOpacity>
               </View>
 
@@ -292,7 +296,7 @@ const LeaderboardModal = ({
                   Last updated: {new Date(localState.leaderboardTop50.lastFetched).toLocaleDateString()}
                 </Text>
               )}
-            </View>
+            </SwipeableBottomDrawer>
           </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
@@ -310,15 +314,13 @@ const LeaderboardModal = ({
   );
 };
 
-const getStyles = (isDarkMode) => StyleSheet.create({
+const getStyles = (isDarkMode, c) => StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: isDarkMode ? '#1e293b' : '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: c.bgAlt,
     maxHeight: '90%',
     paddingBottom: Platform.OS === 'ios' ? 20 : 10,
   },
@@ -333,7 +335,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: isDarkMode ? '#fff' : '#000',
+    color: c.text,
   },
   closeButton: {
     padding: 4,
@@ -347,7 +349,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
   },
   emptyContainer: {
@@ -359,7 +361,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   emptyText: {
     marginTop: 12,
     fontSize: 16,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
   },
   listContent: {
@@ -401,7 +403,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: isDarkMode ? '#fff' : '#000',
+    color: c.text,
     marginBottom: 4,
   },
   ratingInfo: {
@@ -410,13 +412,13 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   ratingText: {
     fontSize: 12,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
     marginLeft: 4,
   },
   cacheInfo: {
     fontSize: 10,
-    color: isDarkMode ? '#666' : '#999',
+    color: c.textMuted,
     textAlign: 'center',
     padding: 8,
 

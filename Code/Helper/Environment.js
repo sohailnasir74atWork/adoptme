@@ -12,7 +12,7 @@ const config = {
   appName: isNoman ? 'Blox Fruit Values Calc' : 'Blox Fruit Stock',
   andriodBanner: isNoman ? 'ca-app-pub-1340655056171083/3794486024' : 'ca-app-pub-3701208411582706/4133745803',
   andriodIntestial: isNoman ? 'ca-app-pub-1340655056171083/7602595440' : 'ca-app-pub-3701208411582706/2820664136',
-  andriodRewarded: isNoman ? 'ca-app-pub-1340655056171083/8848228506' : 'ca-app-pub-3701208411582706/5175818984',
+  andriodRewarded: isNoman ? 'ca-app-pub-1340655056171083/7759261705' : 'ca-app-pub-3701208411582706/5175818984',
   andriodOpenApp: isNoman ? 'ca-app-pub-1340655056171083/4976432101' : 'ca-app-pub-3701208411582706/2295931822',
   andriodNative: isNoman ? 'ca-app-pub-1340655056171083/4915996008' : 'ca-app-pub-3701208411582706/5457520430',
   IOsIntestial: isNoman ? 'ca-app-pub-5740215782746766/5910517787' : '',

@@ -8,9 +8,11 @@ import {
   Linking,
   Platform,
   Alert,
+  StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { ScrollView } from 'react-native-gesture-handler';
 import config from '../../Helper/Environment';
 import { useNavigation } from '@react-navigation/native';
@@ -35,6 +37,7 @@ const AdminHeader = ({
 }) => {
   const { theme, user, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const navigation = useNavigation();
   const { t } = useTranslation();
   const [pinMessageOpen, setPinMessageOpen] = useState(false);
@@ -180,7 +183,7 @@ const AdminHeader = ({
       <View style={{
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: .3, borderBottomColor: 'lightgrey',
       }}>
-        {/* <Text style={{ fontSize: 9, color: isDarkMode ? 'white' : 'black' }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
+        {/* <Text style={{ fontSize: 9, color: c.text }}>🚫 No Spamming ❌ No Abuse 🛑 Be Civil & Polite 😊
         </Text> */}
         <TouchableOpacity onPress={() => { setModalVisibleChatinfo(true); triggerHapticFeedback('impactLight'); }}>
 
@@ -284,7 +287,7 @@ export const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
-      paddingTop: Platform.OS === 'android' ? 60 : 60,
+      paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 60,
 
 
       // paddingVertical: 10,
@@ -297,7 +300,7 @@ export const getStyles = (isDarkMode) =>
       fontWeight: 'bold',
       fontSize: 24,
       lineHeight: 24,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
     },
     pinnedContainer: {
       // paddingHorizontal: 10,
@@ -328,7 +331,7 @@ export const getStyles = (isDarkMode) =>
     pinnedText: {
       fontSize: 12,
 
-      color: isDarkMode ? 'white' : 'black'
+      color: c.text
     },
     pinIcon: {
       marginLeft: 10,
@@ -352,7 +355,7 @@ export const getStyles = (isDarkMode) =>
       fontSize: 20,
       fontWeight: 'bold',
       marginBottom: 20,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
     },
     closeButton: {
       backgroundColor: config.colors.hasBlockGreen,

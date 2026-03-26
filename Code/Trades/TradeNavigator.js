@@ -91,39 +91,25 @@ export const TradeStack = ({ selectedTheme }) => {
           options={({ navigation }) => ({
             title: t("tabs.trade"),
             headerRight: () => (
-              <View style={{ flexDirection: 'row', }}>
-                {/* <TouchableOpacity onPress={() => navigation.navigate('Server')} style={{ marginRight: 5, backgroundColor:config.colors.hasBlockGreen, borderRadius:5, flexDirection:'row', alignItems:'center', paddingHorizontal:5}}>
-                  <Image
-                    source={
-                      isDarkMode
-                        ? require('../../assets/roblox.png')
-                        : require('../../assets/roblox.png')
-                    }
-                    style={{
-                      width: 20,
-                      height:25,
-                      // transform: [{ scale: 1.2 }],
-                      tintColor: config.colors.white,
-                      justifyContent:'center',
-                      alignItems:'center'
-                    }}
-                    resizeMode="contain"
-                  />
-                  <Text style={{color:'white', fontWeight:'bold' }}>Pvt Servers</Text>
-                </TouchableOpacity> */}
-
-                <TouchableOpacity onPress={() => navigation.navigate('Trade Notifier')} style={{ marginRight: 5 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: 4 }}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Trade Notifier')}
+                  style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                >
                   <Icon
                     name="notifications"
-                    size={24}
+                    size={22}
                     color={config.colors.primary}
                   />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => setModalVisible(true)} style={{ marginRight: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setModalVisible(true)}
+                  style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                >
                   <Icon
                     name="information-circle-outline"
-                    size={24}
+                    size={22}
                     color={config.colors.primary}
                   />
                 </TouchableOpacity>

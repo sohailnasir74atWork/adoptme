@@ -1,138 +1,267 @@
-// GlobalInviteToast.jsx - Global toast notification for game invites
-import React, { useState, useEffect, useRef } from 'react';
+// GlobalInviteToast.jsx — Global banner for game invites with Accept/Decline
+// Shows game invites on any screen. Navigates to the correct game screen on accept.
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View, Text, TouchableOpacity, Image, Animated, StyleSheet, ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useGlobalState } from '../../../GlobelStats';
-import { listenToUserInvites } from '../utils/gameInviteSystem';
-import InviteToast from './InviteToast';
+import {
+  listenToUserInvites,
+  acceptGameInvite,
+  declineGameInvite,
+} from '../utils/gameInviteSystem';
+import { doc, getDoc } from '@react-native-firebase/firestore';
+import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
+import { navigate } from '../../../Helper/navigationService';
 
-const INVITE_EXPIRY_MS = 60000; // 1 minute (same as gameInviteSystem.js)
+const TOAST_DURATION = 20000; // 20 seconds
 
 const GlobalInviteToast = () => {
-  const { firestoreDB, user, isInActiveGame = false } = useGlobalState();
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastData, setToastData] = useState(null);
-  const lastInviteIdRef = useRef(null);
-  const expiryTimerRef = useRef(null); // Ref for the expiry timeout
+  const {
+    firestoreDB, user, theme, isInActiveGame,
+    setAcceptedInviteRoom,
+  } = useGlobalState();
+  const isDarkMode = theme === 'dark';
 
+  const [invite, setInvite] = useState(null);   // current invite to show
+  const [busy, setBusy] = useState(false);       // accepting/declining
+  const slideY = useRef(new Animated.Value(-200)).current;
+  const lastIdRef = useRef(null);
+  const timerRef = useRef(null);
+
+  // ── Listen for pending invites ──
   useEffect(() => {
-    // ✅ Don't listen to Firebase if user is in active game (saves Firebase reads)
     if (!firestoreDB || !user?.id || isInActiveGame) {
-      setToastVisible(false);
-      if (expiryTimerRef.current) {
-        clearTimeout(expiryTimerRef.current);
-        expiryTimerRef.current = null;
-      }
+      hide();
       return;
     }
 
-    // Only listen to invites when NOT in active game
-    const unsubscribe = listenToUserInvites(firestoreDB, user.id, (invites) => {
-      // ✅ Hide toast if no invites (all expired or declined)
-      if (invites.length === 0) {
-        setToastVisible(false);
-        setToastData(null);
-        lastInviteIdRef.current = null;
-        if (expiryTimerRef.current) {
-          clearTimeout(expiryTimerRef.current);
-          expiryTimerRef.current = null;
-        }
-        return;
-      }
+    const unsub = listenToUserInvites(firestoreDB, user.id, (invites) => {
+      if (!invites.length) { hide(); return; }
 
-      // ✅ Filter to only show valid (non-expired) invites
       const now = Date.now();
-      const validInvites = invites.filter((invite) => {
-        const timestamp = invite.timestamp?.toMillis?.() || invite.timestamp || Date.now();
-        const expiresAt = invite.expiresAt || (timestamp + INVITE_EXPIRY_MS);
-        return now <= expiresAt && invite.status === 'pending';
+      const valid = invites.filter(i => {
+        const exp = i.expiresAt || ((i.timestamp || now) + 30000);
+        return now < exp && i.status === 'pending';
       });
+      if (!valid.length) { hide(); return; }
 
-      // If no valid invites after filtering, hide toast
-      if (validInvites.length === 0) {
-        setToastVisible(false);
-        setToastData(null);
-        lastInviteIdRef.current = null;
-        if (expiryTimerRef.current) {
-          clearTimeout(expiryTimerRef.current);
-          expiryTimerRef.current = null;
-        }
-        return;
-      }
+      const latest = valid[0];
+      const key = `${latest.roomId}_${latest.timestamp}`;
+      if (key === lastIdRef.current) return; // same invite already showing
 
-      // Show toast for newest valid invite
-      const latestInvite = validInvites[0];
-      const inviteId = `${latestInvite.roomId}-${latestInvite.timestamp}`;
-      
-      // Calculate expiry time (same pattern as InviteUsersModal.jsx)
-      const timestamp = latestInvite.timestamp?.toMillis?.() || latestInvite.timestamp || Date.now();
-      const expiresAt = latestInvite.expiresAt || (timestamp + INVITE_EXPIRY_MS);
-      
-      // ✅ Double-check expiry (safety check)
-      if (now > expiresAt) {
-        setToastVisible(false);
-        setToastData(null);
-        lastInviteIdRef.current = null;
-        if (expiryTimerRef.current) {
-          clearTimeout(expiryTimerRef.current);
-          expiryTimerRef.current = null;
-        }
-        return;
-      }
-      
-      // Only show if it's a new invite (not the same one)
-      if (inviteId !== lastInviteIdRef.current) {
-        lastInviteIdRef.current = inviteId;
-        setToastData({
-          fromUserName: latestInvite.fromUserName || 'Someone',
-          fromUserAvatar: latestInvite.fromUserAvatar || null,
-          roomId: latestInvite.roomId,
-          expiresAt: expiresAt,
-        });
-        setToastVisible(true);
+      lastIdRef.current = key;
+      setInvite(latest);
+      show();
 
-        // ✅ Set timeout to hide toast exactly when invite expires
-        if (expiryTimerRef.current) {
-          clearTimeout(expiryTimerRef.current);
-        }
-        const timeUntilExpiry = expiresAt - now;
-        if (timeUntilExpiry > 0) {
-          expiryTimerRef.current = setTimeout(() => {
-            setToastVisible(false);
-            setToastData(null);
-            lastInviteIdRef.current = null;
-            expiryTimerRef.current = null;
-          }, timeUntilExpiry);
-        }
-      }
+      // Auto-dismiss after TOAST_DURATION
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => hide(), TOAST_DURATION);
     });
 
     return () => {
-      unsubscribe();
-      if (expiryTimerRef.current) {
-        clearTimeout(expiryTimerRef.current);
-        expiryTimerRef.current = null;
-      }
+      unsub();
+      clearTimeout(timerRef.current);
     };
   }, [firestoreDB, user?.id, isInActiveGame]);
 
-  const handleToastPress = () => {
-    setToastVisible(false);
-    // Note: Navigation will be handled by the existing InviteNotification component
+  // ── Animations ──
+  const show = () => {
+    Animated.spring(slideY, {
+      toValue: 0, useNativeDriver: true, tension: 50, friction: 9,
+    }).start();
+  };
+  const hide = () => {
+    Animated.timing(slideY, {
+      toValue: -200, duration: 250, useNativeDriver: true,
+    }).start(() => {
+      setInvite(null);
+      lastIdRef.current = null;
+    });
   };
 
-  const handleToastDismiss = () => {
-    setToastVisible(false);
-  };
+  // ── Accept ──
+  const handleAccept = useCallback(async () => {
+    if (!invite || busy || !firestoreDB || !user?.id) return;
+    setBusy(true);
+    try {
+      const result = await acceptGameInvite(firestoreDB, invite.roomId, user.id, {
+        displayName: user.displayName || 'Anonymous',
+        avatar: user.avatar || null,
+      });
+      if (result.success) {
+        // Determine game type from room doc
+        let gameType = 'petGuessing';
+        try {
+          const snap = await getDoc(doc(firestoreDB, 'petGuessingGame_rooms', invite.roomId));
+          if (snap.exists) gameType = snap.data()?.gameType || 'petGuessing';
+        } catch {}
+        setAcceptedInviteRoom({ roomId: invite.roomId, gameType });
+
+        // Navigate to the correct game screen
+        const screenMap = {
+          quiz: 'QuizBattleScreen',
+          tradeShowdown: 'TradeShowdownScreen',
+          petGuessing: 'GameHub',
+        };
+        const targetScreen = screenMap[gameType] || 'GameHub';
+
+        hide();
+        // Small delay so the toast hides first
+        setTimeout(() => {
+          navigate(targetScreen);
+        }, 300);
+      } else {
+        showErrorMessage('Cannot Join', result.error || 'Failed to join');
+      }
+    } catch (e) {
+      showErrorMessage('Error', 'Failed to join game');
+    } finally {
+      setBusy(false);
+    }
+  }, [invite, busy, firestoreDB, user]);
+
+  // ── Decline ──
+  const handleDecline = useCallback(async () => {
+    if (!invite || busy || !firestoreDB || !user?.id) return;
+    setBusy(true);
+    try {
+      await declineGameInvite(firestoreDB, invite.roomId, user.id);
+    } catch {}
+    setBusy(false);
+    hide();
+  }, [invite, busy, firestoreDB, user]);
+
+  if (!invite) return null;
+
+  const bg = isDarkMode ? '#1e293b' : '#fff';
+  const txt = isDarkMode ? '#f1f5f9' : '#111';
+  const sub = isDarkMode ? '#94a3b8' : '#64748b';
 
   return (
-    <InviteToast
-      visible={toastVisible}
-      fromUserName={toastData?.fromUserName}
-      fromUserAvatar={toastData?.fromUserAvatar}
-      onPress={handleToastPress}
-      onDismiss={handleToastDismiss}
-    />
+    <Animated.View style={[styles.wrap, { transform: [{ translateY: slideY }] }]}>
+      <View style={[styles.card, { backgroundColor: bg }]}>
+
+        {/* Top row: avatar + invite text */}
+        <View style={styles.topRow}>
+          <Image
+            source={{ uri: invite.fromUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+            style={styles.avatar}
+          />
+          <View style={styles.info}>
+            <Text style={[styles.title, { color: txt }]}>
+              🎮 Game Invite!
+            </Text>
+            <Text style={[styles.sub, { color: sub }]} numberOfLines={1}>
+              {invite.fromUserName || 'Someone'} wants to play with you
+            </Text>
+          </View>
+        </View>
+
+        {/* Bottom row: Accept / Decline buttons */}
+        {busy ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color="#8B5CF6" />
+            <Text style={[styles.loadingText, { color: sub }]}>Joining game...</Text>
+          </View>
+        ) : (
+          <View style={styles.btns}>
+            <TouchableOpacity style={styles.declineBtn} onPress={handleDecline} activeOpacity={0.7}>
+              <Text style={styles.declineBtnText}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept} activeOpacity={0.7}>
+              <Text style={styles.acceptBtnText}>Accept ✓</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+      </View>
+    </Animated.View>
   );
 };
 
-export default GlobalInviteToast;
+const styles = StyleSheet.create({
+  wrap: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 42,
+    left: 12,
+    right: 12,
+    zIndex: 9999,
+  },
+  card: {
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139, 92, 246, 0.25)',
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: '#8B5CF6',
+  },
+  info: { flex: 1, minWidth: 0 },
+  title: { fontSize: 16, fontWeight: '800' },
+  sub: { fontSize: 13, marginTop: 2, fontWeight: '500' },
+  btns: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  acceptBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  acceptBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  declineBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineBtnText: {
+    color: '#EF4444',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});
 
+export default GlobalInviteToast;

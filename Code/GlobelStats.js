@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
-import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
+import { getAuth, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
@@ -8,6 +8,8 @@ import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, InteractionManager, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
+import { generateOnePieceUsername } from './Helper/RendomNamegen';
+import crashlytics from '@react-native-firebase/crashlytics';
 
 
 
@@ -41,6 +43,7 @@ export const GlobalStateProvider = ({ children }) => {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [isInActiveGame, setIsInActiveGame] = useState(false); // ✅ Track if user is in active game
+  const [acceptedInviteRoom, setAcceptedInviteRoom] = useState(null); // ✅ { roomId, gameType } from toast accept
   const [user, setUser] = useState({
     id: null,
     // selectedFruits: [],
@@ -154,7 +157,12 @@ export const GlobalStateProvider = ({ children }) => {
     updateLocalStateAndDatabaseRef.current = updateLocalStateAndDatabase;
   }, [updateLocalStateAndDatabase]);
 
-  // ✅ Handle flag setting based on user preference (saves Firebase data costs)
+  // ✅ PERF FIX #8: Removed user?.flage from deps to prevent circular re-triggering.
+  // The effect itself calls setUser({...prev, flage}), which changed user?.flage,
+  // which re-triggered this effect. Now we use a ref to track the current flag state.
+  const userFlageRef = useRef(user?.flage);
+  useEffect(() => { userFlageRef.current = user?.flage; }, [user?.flage]);
+
   useEffect(() => {
     if (!isAdmin && user?.id && appdatabase) {
       // ✅ Only set flag once per user.id to prevent infinite loop
@@ -169,12 +177,13 @@ export const GlobalStateProvider = ({ children }) => {
         // If showFlag is false, don't store flag (saves data)
       } else {
         // ✅ Handle flag toggle changes after initial setup
-        if (localState?.showFlag === false && user?.flage) {
+        const currentFlage = userFlageRef.current;
+        if (localState?.showFlag === false && currentFlage) {
           // ✅ User toggled flag off - remove it from Firebase to save data
           const userRef = ref(appdatabase, `users/${user.id}`);
           update(userRef, { flage: null }).catch(() => { });
           setUser((prev) => ({ ...prev, flage: null }));
-        } else if (localState?.showFlag !== false && !user?.flage) {
+        } else if (localState?.showFlag !== false && !currentFlage) {
           // ✅ User toggled flag on - add it
           const flagValue = getFlag();
           const userRef = ref(appdatabase, `users/${user.id}`);
@@ -183,7 +192,7 @@ export const GlobalStateProvider = ({ children }) => {
         }
       }
     }
-  }, [user?.id, isAdmin, localState?.showFlag, appdatabase, user?.flage]) // ✅ Check showFlag preference
+  }, [user?.id, isAdmin, localState?.showFlag, appdatabase]) // ✅ PERF FIX: Removed user?.flage — uses ref instead
 
   // ✅ Memoize resetUserState to prevent unnecessary re-renders
   const resetUserState = useCallback(() => {
@@ -244,6 +253,21 @@ export const GlobalStateProvider = ({ children }) => {
           createdAt: existing.createdAt || Date.now()   // fallback if missing
         };
 
+        // ✅ SELF-HEALING: Persist createdAt to RTDB if it was missing
+        // so other users (e.g. BottomDrawer) can see the joined date
+        if (!existing.createdAt && userData.createdAt) {
+          update(userRef, { createdAt: userData.createdAt }).catch(() => {});
+        }
+
+        // ✅ SELF-HEALING: Fix users stuck with 'Anonymous' or empty displayName
+        if (!userData.displayName || userData.displayName === 'Anonymous') {
+          const newName = generateOnePieceUsername();
+          if (newName) {
+            userData.displayName = newName;
+            await update(userRef, { displayName: newName }).catch(() => {});
+          }
+        }
+
       } else {
         // 🆕 NEW USER → Set createdAt once
         userData = {
@@ -256,6 +280,13 @@ export const GlobalStateProvider = ({ children }) => {
 
       setUser(userData);
 
+      // 🔥 Crashlytics: tag this user so crash reports show who was affected
+      try {
+        crashlytics().setUserId(userId);
+        if (loggedInUser.email) crashlytics().setAttribute('email', loggedInUser.email);
+        if (userData.displayName) crashlytics().setAttribute('displayName', userData.displayName);
+      } catch (_) {}
+
       // 🔥 Refresh and update FCM token
       await Promise.all([registerForNotifications(userId)]);
 
@@ -263,28 +294,17 @@ export const GlobalStateProvider = ({ children }) => {
       // console.error("❌ Auth state change error:", error);
     }
   }, [appdatabase, resetUserState]); // ✅ Uses memoized resetUserState
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const run = async () => {
-      try {
-        console.log('Registering push token for user:', user.id);
-        await registerForNotifications(user.id);
-      } catch (e) {
-        console.log('registerForNotifications error', e);
-      }
-    };
-
-    run();
-  }, [user?.id]);
+  // ✅ PERF FIX #10: Removed duplicate registerForNotifications useEffect.
+  // FCM registration is already called in handleUserLogin (line 277) and
+  // onAuthStateChanged (line 312). This extra useEffect was a 3rd redundant call.
 
 
   // ✅ Ensure useEffect runs only when necessary
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedInUser) => {
       if (loggedInUser && !loggedInUser.emailVerified) {
-        await auth().signOut();
-        // showErrorMessage("Email Not Verified", "Please check your inbox and verify your email.");
+        // ✅ BUG FIX: Was auth().signOut() (old API) — failed silently, letting unverified users slip in
+        await signOut(auth);
         return;
       }
 
@@ -391,36 +411,18 @@ export const GlobalStateProvider = ({ children }) => {
     fetchTradingServerLink();
   }, [appdatabase]); // ✅ Only re-run if appdatabase changes (once)
 
-  const updateUserProStatus = () => {
-    if (!user?.id) {
-      // console.error("User ID or database instance is missing!");
-      return;
-    }
-
-    const userIsProRef = ref(appdatabase, `/users/${user?.id}/isPro`);
-
-    set(userIsProRef, localState?.isPro)
-      .then(() => {
-      })
-      .catch((error) => {
-        // console.error("Error updating online status:", error);
-      });
-  };
-
-
-
-
+  // ✅ PERF: Memoize updateUserProStatus to prevent recreation every render
+  const updateUserProStatus = useCallback(() => {
+    if (!user?.id || !appdatabase) return;
+    const userIsProRef = ref(appdatabase, `users/${user.id}/isPro`);
+    set(userIsProRef, localState?.isPro).catch(() => {});
+  }, [user?.id, appdatabase, localState?.isPro]);
 
   useEffect(() => {
-    InteractionManager.runAfterInteractions(() => {
-      // checkInternetConnection();
-      updateUserProStatus();
-    });
-  }, [user.id, localState.isPro]);
-
+    InteractionManager.runAfterInteractions(updateUserProStatus);
+  }, [updateUserProStatus]);
 
   useEffect(() => {
-    // console.log("🕓 Saving lastActivity:", new Date().toISOString());
     updateLocalStateAndDatabase('lastActivity', new Date().toISOString());
   }, []);
 
@@ -680,8 +682,10 @@ export const GlobalStateProvider = ({ children }) => {
       robloxUsernameRef, api, currentUserEmail, single_offer_wall, tradingServerLink,
       isInActiveGame, // ✅ Game state for invite notifications
       setIsInActiveGame, // ✅ Set game state
+      acceptedInviteRoom, // ✅ Accepted invite from toast
+      setAcceptedInviteRoom, // ✅ Set accepted invite
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom]
   );
 
   return (

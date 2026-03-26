@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
+import { getThemeColors } from '../../Helper/themeColors';
 import {
     Modal,
     View,
@@ -9,6 +10,7 @@ import {
     Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 
 const REACTION_EMOJIS = ['❤️', '🔥', '😍', '💀', '🎯'];
@@ -82,10 +84,11 @@ const MessageActionDrawer = ({
             statusBarTranslucent
         >
             <Pressable style={styles.overlay} onPress={onClose}>
-                <Pressable style={styles.drawer} onPress={(e) => e.stopPropagation()}>
-                    {/* Handle bar */}
-                    <View style={styles.handleBar} />
-
+                <SwipeableBottomDrawer
+                    onClose={onClose}
+                    isDarkMode={isDarkMode}
+                    style={styles.drawer}
+                >
                     {/* ── Emoji Reaction Row ── */}
                     <View style={styles.emojiRow}>
                         {REACTION_EMOJIS.map((emoji) => {
@@ -229,7 +232,7 @@ const MessageActionDrawer = ({
                             </>
                         )}
                     </View>
-                </Pressable>
+                </SwipeableBottomDrawer>
             </Pressable>
         </Modal>
     );

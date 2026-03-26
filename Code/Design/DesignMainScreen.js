@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   FlatList,
@@ -21,12 +21,11 @@ import {
   serverTimestamp,
   updateDoc,
   deleteDoc,
-  onSnapshot,
   addDoc,
   writeBatch,
   deleteField,
-
 } from '@react-native-firebase/firestore';
+import { ref as dbRef, get } from '@react-native-firebase/database';
 
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
@@ -45,6 +44,8 @@ import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
 import { useBanStatus } from '../ChatScreen/utils';
 import PollCard from '../Trades/PollCard';
+import { awardBadge, incrementAndCheckBadge, REACTION_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
+
 
 
 const DesignFeedScreen = ({ route }) => {
@@ -67,11 +68,16 @@ const DesignFeedScreen = ({ route }) => {
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterMyPosts, setFilterMyPosts] = useState(false);
+  const [filterFollowing, setFilterFollowing] = useState(false);
+  const [followingIds, setFollowingIds] = useState([]);
+  const [followingPosts, setFollowingPosts] = useState([]);
   const [myPosts, setMyPosts] = useState([]);
   const [bannedUsers, setBannedUsers] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
   const [lastPostTime, setLastPostTime] = useState(null);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [activeSort, setActiveSort] = useState('latest');
+  const [rankedPosts, setRankedPosts] = useState([]);
   const AD_FREQUENCY = 5;
 
   // Polls
@@ -154,7 +160,90 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-  const deleteUsersLatestPosts = async (userId, n = 15) => {
+  // ── Fetch who I follow (same pattern as StatusFeed) ──
+  useEffect(() => {
+    if (!user?.id || !firestoreDB) return;
+    (async () => {
+      try {
+        const q = query(
+          collection(firestoreDB, 'following'),
+          where('followerId', '==', user.id),
+          limit(200),
+        );
+        const snap = await getDocs(q);
+        const ids = snap.docs.map(d => d.data().followingId).filter(Boolean);
+        setFollowingIds(ids);
+      } catch (err) {
+        console.warn('[Posts] Error fetching following list:', err?.message);
+      }
+    })();
+  }, [user?.id, firestoreDB]);
+
+  // ── Fetch posts from followed users (PAGINATED, 5 per page) ──
+  const lastFollowingDocRef = useRef(null);
+  const followingHasMoreRef = useRef(true);
+
+  const fetchFollowingPosts = async (isLoadMore = false) => {
+    if (!user?.id || followingIds.length === 0) {
+      setFollowingPosts([]);
+      setInitialLoading(false);
+      return;
+    }
+
+    if (isLoadMore && !followingHasMoreRef.current) return;
+    if (!isLoadMore) {
+      setInitialLoading(true);
+      lastFollowingDocRef.current = null;
+      followingHasMoreRef.current = true;
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      // Use first 30 IDs (Firestore 'in' limit)
+      const chunk = followingIds.slice(0, 30);
+      const PAGE = 5;
+
+      let q;
+      if (isLoadMore && lastFollowingDocRef.current) {
+        q = query(
+          collection(firestoreDB, 'designPosts'),
+          where('userId', 'in', chunk),
+          orderBy('createdAt', 'desc'),
+          startAfter(lastFollowingDocRef.current),
+          limit(PAGE),
+        );
+      } else {
+        q = query(
+          collection(firestoreDB, 'designPosts'),
+          where('userId', 'in', chunk),
+          orderBy('createdAt', 'desc'),
+          limit(PAGE),
+        );
+      }
+
+      const snap = await getDocs(q);
+      const newPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      lastFollowingDocRef.current = snap.docs[snap.docs.length - 1] || null;
+      followingHasMoreRef.current = snap.docs.length === PAGE;
+      setHasMore(snap.docs.length === PAGE);
+
+      if (isLoadMore) {
+        setFollowingPosts(prev => [...prev, ...newPosts]);
+      } else {
+        setFollowingPosts(newPosts);
+      }
+    } catch (err) {
+      console.error('[Posts] Error fetching following posts:', err);
+    } finally {
+      setInitialLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
+    }
+  };
+
+  const deleteUsersLatestPosts = useCallback(async (userId, n = 15) => {
     if (!userId) throw new Error('userId is required');
 
     const q = query(
@@ -177,7 +266,7 @@ const DesignFeedScreen = ({ route }) => {
 
     await batch.commit();
     return ids;
-  };
+  }, [firestoreDB]);
 
   // useEffect(() => {
   //   nativeAdPool.fillIfNeeded();
@@ -213,7 +302,7 @@ const DesignFeedScreen = ({ route }) => {
 
 
   const skeletonArray = useMemo(() => Array.from({ length: 5 }), []);
-  const handleDeletePost = async (postId) => {
+  const handleDeletePost = useCallback(async (postId) => {
     try {
       await deleteDoc(doc(firestoreDB, 'designPosts', postId));
       setPosts(prev => prev.filter(p => p.id !== postId));
@@ -221,7 +310,7 @@ const DesignFeedScreen = ({ route }) => {
     } catch (err) {
       showMessage({ message: t('feed.failed_delete_post'), type: 'danger' });
     }
-  };
+  }, [firestoreDB, t]);
 
 
 
@@ -249,38 +338,120 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
   // console.log(posts)
+  // ── Fetch ranked posts (Hot / Trending) from RTDB ──
+  const fetchRankedPosts = useCallback(async (sortKey) => {
+    if (!appdatabase || !firestoreDB) return;
+    setInitialLoading(true);
+    try {
+      // Read pre-computed ranking from RTDB
+      const rankingRef = dbRef(appdatabase, `feedRanking/${sortKey}`);
+      const snap = await get(rankingRef);
+
+      if (!snap.exists()) {
+        setRankedPosts([]);
+        setInitialLoading(false);
+        return;
+      }
+
+      const ranking = snap.val(); // Array of { postId, score, ... }
+      if (!Array.isArray(ranking) || ranking.length === 0) {
+        setRankedPosts([]);
+        setInitialLoading(false);
+        return;
+      }
+
+      // Batch fetch post documents by ID
+      const postIds = ranking.map(r => r.postId).filter(Boolean);
+      const postPromises = postIds.map(id =>
+        getDoc(doc(firestoreDB, 'designPosts', id))
+          .then(d => d.exists ? { id: d.id, ...d.data() } : null)
+          .catch(() => null)
+      );
+
+      const fetchedPosts = await Promise.all(postPromises);
+      const validPosts = fetchedPosts.filter(Boolean);
+
+      // Preserve the ranking order from RTDB
+      const orderMap = new Map(postIds.map((id, idx) => [id, idx]));
+      validPosts.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+
+      setRankedPosts(validPosts);
+      setHasMore(false); // No pagination for ranked lists
+    } catch (err) {
+      console.warn(`[Feed] Error fetching ${sortKey} posts:`, err?.message);
+      setRankedPosts([]);
+    } finally {
+      setInitialLoading(false);
+      setRefreshing(false);
+    }
+  }, [appdatabase, firestoreDB]);
+
+  // ── Handle sort mode changes ──
+  const handleSortChange = useCallback((sortKey) => {
+    setActiveSort(sortKey);
+    if (sortKey === 'latest') {
+      fetchInitialPosts();
+    } else {
+      fetchRankedPosts(sortKey);
+    }
+  }, [fetchInitialPosts, fetchRankedPosts]);
+
   useEffect(() => {
     fetchInitialPosts();
   }, []);
 
-  // PostsHeader is now rendered inline as part of the FlatList ListHeaderComponent
+  // ✅ PERF FIX: Removed per-post onSnapshot listeners that leaked memory.
+  // Reactions are now updated optimistically in handleReaction below.
+  // Lightweight 30s periodic refresh to pick up other users' reactions.
   useEffect(() => {
-    if (posts.length === 0) return;
-
-    const unsubscribers = posts.map(post =>
-      onSnapshot(doc(firestoreDB, 'designPosts', post.id), snap => {
-        if (!snap.exists) return;   // 👈 modular API uses exists()
-
-        const updatedPost = { id: snap.id, ...snap.data() };
-        setPosts(prev =>
-          prev.map(p => (p.id === updatedPost.id ? updatedPost : p))
+    if (!firestoreDB || initialLoading) return;
+    const interval = setInterval(async () => {
+      try {
+        const currentPosts = activeSort !== 'latest' ? rankedPosts : posts;
+        if (currentPosts.length === 0) return;
+        // Re-fetch the current batch of post IDs
+        const ids = currentPosts.slice(0, 10).map(p => p.id).filter(Boolean);
+        if (ids.length === 0) return;
+        const snap = await getDocs(
+          query(collection(firestoreDB, 'designPosts'), where('__name__', 'in', ids))
         );
-      })
-    );
-
-    return () => {
-      unsubscribers.forEach(unsub => {
-        if (typeof unsub === 'function') {
-          unsub();
+        const freshMap = {};
+        snap.docs.forEach(d => { freshMap[d.id] = d.data(); });
+        // Merge only reactions/likes/commentCount into local state
+        const merger = (p) => {
+          const fresh = freshMap[p.id];
+          if (!fresh) return p;
+          if (
+            p.reactions === fresh.reactions &&
+            p.likes === fresh.likes &&
+            p.commentCount === fresh.commentCount
+          ) return p; // No change
+          return { ...p, reactions: fresh.reactions || {}, likes: fresh.likes || {}, commentCount: fresh.commentCount || 0 };
+        };
+        if (activeSort !== 'latest') {
+          setRankedPosts(prev => prev.map(merger));
+        } else {
+          setPosts(prev => prev.map(merger));
         }
-      });
-    };
-  }, [JSON.stringify(posts.map(p => p.id))]);
+      } catch (e) {
+        // Silent fail — this is a background refresh
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [firestoreDB, initialLoading, activeSort, posts.length, rankedPosts.length]);
 
 
 
   const loadMorePosts = async () => {
-    if (loadingMore || !hasMore || !lastVisibleDoc) return;
+    if (loadingMore) return;
+
+    // Following filter has its own pagination
+    if (filterFollowing) {
+      fetchFollowingPosts(true);
+      return;
+    }
+
+    if (!hasMore || !lastVisibleDoc || filterMyPosts || activeSort !== 'latest') return;
 
     setLoadingMore(true);
     try {
@@ -317,7 +488,7 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-  const handleReaction = async (post, emoji) => {
+  const handleReaction = useCallback(async (post, emoji) => {
     // ✅ Ban check
     if (isMeBanned) {
       showMessage({
@@ -328,27 +499,53 @@ const DesignFeedScreen = ({ route }) => {
       return;
     }
 
-    const postRef = doc(firestoreDB, 'designPosts', post.id);
-    const currentReaction = post.reactions?.[user.id];
-    const hadOldLike = !!post.likes?.[user.id];
+    const userId = user?.id;
+    if (!userId) return;
 
-    if (currentReaction === emoji) {
-      // Same emoji tapped again → remove reaction
-      await updateDoc(postRef, {
-        [`reactions.${user.id}`]: deleteField(),
-      });
-    } else {
-      // New reaction or switching emoji
-      const updates = {
-        [`reactions.${user.id}`]: emoji,
-      };
-      // Clean up old likes entry if exists (migration)
-      if (hadOldLike) {
-        updates[`likes.${user.id}`] = deleteField();
+    const postRef = doc(firestoreDB, 'designPosts', post.id);
+    const currentReaction = post.reactions?.[userId];
+    const hadOldLike = !!post.likes?.[userId];
+
+    // ✅ PERF FIX: Optimistic local update — no need for per-post Firestore listeners
+    const optimisticUpdate = (p) => {
+      if (p.id !== post.id) return p;
+      const updatedReactions = { ...(p.reactions || {}) };
+      const updatedLikes = { ...(p.likes || {}) };
+      if (currentReaction === emoji) {
+        delete updatedReactions[userId];
+      } else {
+        updatedReactions[userId] = emoji;
+        if (hadOldLike) delete updatedLikes[userId];
       }
-      await updateDoc(postRef, updates);
+      return { ...p, reactions: updatedReactions, likes: updatedLikes };
+    };
+    setPosts(prev => prev.map(optimisticUpdate));
+    setRankedPosts(prev => prev.map(optimisticUpdate));
+
+    // Fire-and-forget Firestore update
+    try {
+      if (currentReaction === emoji) {
+        await updateDoc(postRef, {
+          [`reactions.${userId}`]: deleteField(),
+        });
+      } else {
+        const updates = {
+          [`reactions.${userId}`]: emoji,
+        };
+        if (hadOldLike) {
+          updates[`likes.${userId}`] = deleteField();
+        }
+        await updateDoc(postRef, updates);
+        // 🏅 Track reaction count for post author & award loved badge
+        if (post.userId && post.userId !== userId) {
+          incrementAndCheckBadge(appdatabase, post.userId, 'reactionCount', REACTION_BADGE_THRESHOLDS);
+        }
+      }
+    } catch (err) {
+      // Revert optimistic update on failure
+      console.warn('Reaction update failed:', err);
     }
-  };
+  }, [firestoreDB, user?.id, isMeBanned, t]);
 
   const handleUploadPost = async (desc, imageUrls, selectedTags, currentUserEmail) => {
     // ✅ Prevent multiple submissions - check if already submitting
@@ -401,26 +598,30 @@ const DesignFeedScreen = ({ route }) => {
         typeof user?.lastGameWinAt === 'number' &&
         now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
 
-      // ✅ Images are optional - posts can have text only, images only, or both
-      // ✅ Tags are always required and must be saved to database
+      // ✅ Get cosmetics for embedding
+      const { getMyCosmetics } = require('../Helper/cosmeticsCache');
+      const myCosmetics = getMyCosmetics();
+
       const post = {
-        imageUrl: imageUrlArray.length > 0 ? imageUrlArray : [], // PostCard expects imageUrl as array
+        imageUrl: imageUrlArray.length > 0 ? imageUrlArray : [],
         desc: (desc && desc.trim()) || "",
         userId: user?.id || t('feed.guest_user'),
         displayName: user?.displayName || t('feed.guest_user'),
-        avatar: user?.avatar || null,
         createdAt: serverTimestamp(),
         likes: {},
         selectedTags: Array.isArray(selectedTags) && selectedTags.length > 0
           ? selectedTags
-          : (selectedTags ? [selectedTags] : ['Discussion']), // ✅ Always ensure tags exist
+          : (selectedTags ? [selectedTags] : ['Discussion']),
         email: currentUserEmail || null,
         report: false,
-        flage: user?.flage || null,
-        robloxUsername: user?.robloxUsername || null,
-        robloxUsernameVerified: user?.robloxUsernameVerified || false,
-        hasRecentGameWin: hasRecentWin, // ✅ Game win info
-        lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
+        // ✅ Only include truthy profile fields (saves storage)
+        ...(user?.avatar ? { avatar: user.avatar } : {}),
+        ...(user?.flage ? { flage: user.flage } : {}),
+        ...(user?.robloxUsername ? { robloxUsername: user.robloxUsername } : {}),
+        ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
+        ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
+        ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
+        ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),
       };
 
       const postRef = await addDoc(collection(firestoreDB, 'designPosts'), post);
@@ -444,6 +645,9 @@ const DesignFeedScreen = ({ route }) => {
 
       // ✅ Update last post time after successful upload
       setLastPostTime(now);
+
+      // 🏅 Award "First Post" badge (fire-and-forget)
+      awardBadge(appdatabase, user.id, 'firstPost');
 
       // ✅ Refresh feed after posting
       setRefreshing(true);
@@ -472,16 +676,10 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-  const renderItem = ({ item, index }) => {
+  const renderItem = useCallback(({ item, index }) => {
     if (initialLoading) {
       return <View style={[styles.skeletonPost, isDarkMode && { backgroundColor: '#444' }]} />;
     }
-    // if (item?.__type === 'ad') {
-    //    return <NativeFeedAd mediaHeight={220} />;
-    //  }
-    //  if (item?.__type === 'ad') {
-    //    return <View style={{flex:1}}><SingleNativeAd  /></View>;
-    //  }
 
     return (
       <PostCard
@@ -492,18 +690,22 @@ const DesignFeedScreen = ({ route }) => {
         appdatabase={appdatabase}
         onDelete={handleDeletePost}
         onDeleteAll={deleteUsersLatestPosts}
-
-
       />
     );
-  };
+  }, [initialLoading, isDarkMode, user?.id, handleReaction, localState, appdatabase, handleDeletePost, deleteUsersLatestPosts]);
 
   // const dataToRender = initialLoading
   //   ? skeletonArray
   //   : filterMyPosts
   //     ? myPosts
   //     : posts;
-  const baseList = initialLoading ? skeletonArray : (filterMyPosts ? myPosts : posts);
+  const baseList = initialLoading
+    ? skeletonArray
+    : filterFollowing
+      ? followingPosts
+      : filterMyPosts
+        ? myPosts
+        : (activeSort !== 'latest' ? rankedPosts : posts);
 
   // keep ads; drop banned users' posts
   const filteredBase = useMemo(() => {
@@ -534,10 +736,15 @@ const DesignFeedScreen = ({ route }) => {
         selectedTag={selectedTag}
         filterMyPosts={filterMyPosts}
         setFilterMyPosts={setFilterMyPosts}
+        filterFollowing={filterFollowing}
+        setFilterFollowing={setFilterFollowing}
         setSelectedTag={setSelectedTag}
         fetchInitialPosts={fetchInitialPosts}
         fetchMyPosts={fetchMyPosts}
+        fetchFollowingPosts={fetchFollowingPosts}
         fetchPostsByTag={fetchPostsByTag}
+        activeSort={activeSort}
+        onSortChange={handleSortChange}
       />
 
       <FlatList
@@ -550,11 +757,15 @@ const DesignFeedScreen = ({ route }) => {
         refreshing={refreshing}
         onRefresh={() => {
           setRefreshing(true);
-          fetchInitialPosts();
+          if (activeSort !== 'latest') {
+            fetchRankedPosts(activeSort);
+          } else {
+            fetchInitialPosts();
+          }
           fetchActivePolls();
         }}
         ListFooterComponent={
-          loadingMore && !initialLoading ? (
+          loadingMore && !initialLoading && !filterMyPosts ? (
             <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 16 }} />
           ) : null
         }
@@ -563,27 +774,30 @@ const DesignFeedScreen = ({ route }) => {
             <View style={styles.emptyState}>
               <FontAwesome name="newspaper" size={48} color={isDarkMode ? '#334155' : '#cbd5e1'} />
               <Text style={styles.emptyTitle}>
-                {filterMyPosts ? t('feed.no_my_posts') : t('feed.no_posts_found')}
+              {filterFollowing ? t('feed.no_following_posts', { defaultValue: 'No posts from people you follow yet' }) : filterMyPosts ? t('feed.no_my_posts') : t('feed.no_posts_found')}
               </Text>
               <Text style={styles.emptySubtitle}>Be the first to post!</Text>
             </View>
           )
         }
         ListHeaderComponent={
-          activePolls.length > 0 ? (
-            <View style={{ paddingHorizontal: 10, paddingTop: 8 }}>
-              {activePolls.map((p) => (
-                <PollCard
-                  key={p.id}
-                  poll={p}
-                  user={user}
-                  firestoreDB={firestoreDB}
-                  isDarkMode={isDarkMode}
-                  onRequireSignIn={() => setSigninDrawerVisible(true)}
-                />
-              ))}
-            </View>
-          ) : null
+          <>
+            {/* 📊 Active Polls */}
+            {activePolls.length > 0 && (
+              <View style={{ paddingHorizontal: 10, paddingTop: 8 }}>
+                {activePolls.map((p) => (
+                  <PollCard
+                    key={p.id}
+                    poll={p}
+                    user={user}
+                    firestoreDB={firestoreDB}
+                    isDarkMode={isDarkMode}
+                    onRequireSignIn={() => setSigninDrawerVisible(true)}
+                  />
+                ))}
+              </View>
+            )}
+          </>
         }
       />
 

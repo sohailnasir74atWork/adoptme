@@ -5,9 +5,11 @@ import ViewShot from 'react-native-view-shot';
 import { useGlobalState } from '../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import config from '../Helper/Environment';
+import { getThemeColors } from '../Helper/themeColors';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { getDatabase, ref } from '@react-native-firebase/database';
+import { getDatabase, ref, update } from '@react-native-firebase/database';
+import { awardBadge, incrementAndCheckBadge, TRADE_BADGE_THRESHOLDS, checkNightOwlTrade } from '../ChatScreen/GroupChat/badgeUtils';
 import { useLocalState } from '../LocalGlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +25,7 @@ import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
+import TradeCompletion from '../Engagement/TradeCompletion';
 
 const GRID_STEPS = [9, 12, 15, 18];
 
@@ -80,10 +83,11 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user, firestoreDB, single_offer_wall, reload } = useGlobalState();
+  const { theme, user, firestoreDB, single_offer_wall, reload, appdatabase } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
   const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
+  const [showTips, setShowTips] = useState(true);
   const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
 
   const [fruitRecords, setFruitRecords] = useState([]);
@@ -100,6 +104,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [itemSelections, setItemSelections] = useState({});
   const [modalVisible, setModalVisible] = useState(false);
   const [description, setDescription] = useState('');
+  const [robloxUsername, setRobloxUsername] = useState('');
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { t, i18n } = useTranslation();
@@ -107,9 +112,11 @@ const HomeScreen = ({ selectedTheme }) => {
   const [lastTradeTime, setLastTradeTime] = useState(null);
   const [adShowen, setadShowen] = useState(false);
   const [selectedTrade, setSelectedTrade] = useState(null);
+  const [showTradeCompletion, setShowTradeCompletion] = useState(false);
   const [type, setType] = useState(null);
   const platform = Platform.OS.toLowerCase();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const viewRef = useRef();
   // ✅ Add refs to track timeouts and animation frames for cleanup
   const timeoutRefs = useRef({});
@@ -948,6 +955,7 @@ const HomeScreen = ({ selectedTheme }) => {
       }
 
       setType('create');
+      setRobloxUsername(user?.robloxUsername || ''); // Pre-fill from profile
       setModalVisible(true);
       // Clean up after execution
       delete timeoutRefs.current[timeoutKey];
@@ -956,6 +964,12 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
+
+    // ✅ Roblox username required
+    if (!robloxUsername.trim()) {
+      showErrorMessage(t('home.alert.error'), t('trade.roblox_required', { defaultValue: 'Please enter your Roblox username to post a trade.' }));
+      return;
+    }
 
     // ✅ Ban check — defense in depth (in case modal was opened before ban)
     if (isBanned) {
@@ -1047,11 +1061,13 @@ const HomeScreen = ({ selectedTheme }) => {
       const tradeStatus = getTradeStatus(hasTotal, wantsTotal);
       const statusLetter = tradeStatus === 'win' ? 'w' : tradeStatus === 'lose' ? 'l' : 'f';
 
+      // ✅ Get cosmetics for embedding
+      const { getMyCosmetics } = require('../Helper/cosmeticsCache');
+      const myCosmetics = getMyCosmetics();
+
       const newTrade = {
         userId: user?.id || "Anonymous",
         traderName: user?.displayName || "Anonymous",
-        avatar: user?.avatar || null,
-        isPro: localState.isPro,
         isFeatured: false,
         hasItems: hasItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
         wantsItems: wantsItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
@@ -1060,19 +1076,22 @@ const HomeScreen = ({ selectedTheme }) => {
         hasTotal,
         wantsTotal,
         description: description || "",
-        timestamp: timestamp, // ✅ Use serverTimestamp for Firestore
-        status: statusLetter, // ✅ Trade status: 'w' (win), 'l' (lose), 'f' (fair)
+        timestamp: timestamp,
+        status: statusLetter,
         rating: userRating,
         ratingCount,
-        ratingCount,
         isSharkMode: isSharkMode,
-        flage: user.flage ? user.flage : null,
-        robloxUsername: user?.robloxUsername || null,
-        robloxUsernameVerified: user?.robloxUsernameVerified || false,
-        hasRecentGameWin: hasRecentWin, // ✅ Game win info
-        lastGameWinAt: user?.lastGameWinAt || null, // ✅ Game win timestamp
-
-
+        // ✅ Only include truthy profile fields (saves storage)
+        ...(user?.avatar ? { avatar: user.avatar } : {}),
+        ...(localState.isPro ? { isPro: true } : {}),
+        ...(user.flage ? { flage: user.flage } : {}),
+        robloxUsername: robloxUsername.trim(),
+        ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
+        ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
+        ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
+        ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),
+        ...(myCosmetics?.chatTextColor?.color ? { chatTextColor: myCosmetics.chatTextColor.color } : {}),
+        ...(myCosmetics?.tradeCardBg ? { tradeCardBg: myCosmetics.tradeCardBg } : {}),
       };
 
       // ✅ 2-minute cooldown check (using Date.now() for accurate comparison)
@@ -1112,6 +1131,12 @@ const HomeScreen = ({ selectedTheme }) => {
       // ✅ Check if component is still mounted before updating state
       if (!isMountedRef.current) return;
 
+      // 🏅 Track trade count & award badges (firstTrade→starTrader→diamondTrader)
+      incrementAndCheckBadge(appdatabase, user.id, 'tradeCount', TRADE_BADGE_THRESHOLDS);
+
+      // 🦉 Check if trade was made after midnight (nightOwl badge)
+      checkNightOwlTrade(appdatabase, user.id);
+
       // Step 1: Close modal first
       setModalVisible(false);
 
@@ -1119,11 +1144,17 @@ const HomeScreen = ({ selectedTheme }) => {
       resetState();
       setDescription(''); // ✅ Clear description input
 
-      // Step 3: Define the success callback
-      const callbackfunction = () => {
-        if (!isMountedRef.current) return;
-        showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
-      };
+      // ✅ Save Roblox username to user profile if new/changed
+      if (robloxUsername.trim() && robloxUsername.trim() !== user?.robloxUsername) {
+        try {
+          update(ref(appdatabase, `users/${user.id}`), { robloxUsername: robloxUsername.trim() });
+        } catch (e) {
+          console.warn('[HomeScreen] Failed to save roblox username:', e?.message);
+        }
+      }
+
+      // Step 3: Show success message immediately
+      showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
 
       // Step 4: Update timestamp and analytics
       if (isMountedRef.current) {
@@ -1137,7 +1168,7 @@ const HomeScreen = ({ selectedTheme }) => {
       const rafKey2 = `createTrade_raf_${Date.now()}_2`;
       const timeoutKey2 = `createTrade_timeout_${Date.now()}_2`;
 
-      // Step 5: Wait for next frame (modal animation finish) then delay for iOS
+      // Step 5: Show ad AFTER success message (non-blocking)
       rafRefs.current[rafKey1] = requestAnimationFrame(() => {
         if (!isMountedRef.current) return;
 
@@ -1153,17 +1184,14 @@ const HomeScreen = ({ selectedTheme }) => {
                 if (!isMountedRef.current) return;
 
                 try {
-                  InterstitialAdManager.showAd(callbackfunction);
+                  InterstitialAdManager.showAd(() => {});
                 } catch (err) {
                   console.warn('[AdManager] Failed to show ad:', err);
-                  callbackfunction();
                 }
                 // Clean up after execution
                 delete timeoutRefs.current[timeoutKey2];
               }, 400); // Adjust based on animation time
             });
-          } else {
-            callbackfunction();
           }
           // Clean up after execution
           delete timeoutRefs.current[timeoutKey1];
@@ -1203,8 +1231,90 @@ const HomeScreen = ({ selectedTheme }) => {
   const isProfit = profitLoss >= 0;
   const neutral = profitLoss === 0;
 
+  // ── Smart Trade Insights (demand + hot) ──
+  const tradeInsights = useMemo(() => {
+    const myItems = hasItems.filter(Boolean);
+    const theirItems = wantsItems.filter(Boolean);
+    const empty = { myDemand: 0, theirDemand: 0, myHotCount: 0, theirHotCount: 0, tips: [] };
+    if (myItems.length === 0 && theirItems.length === 0) return empty;
 
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+    const { demandMap, hotMap } = analyticsMaps;
+
+    const getAvgDemand = (items) => {
+      const scores = items.map(i => {
+        const d = demandMap[(i.name || '').toLowerCase().trim()];
+        return d ? d.score : 0;
+      }).filter(s => s > 0);
+      return scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : 0;
+    };
+
+    const getHotCount = (items) =>
+      items.filter(i => hotMap[(i.name || '').toLowerCase().trim()]).length;
+
+    const myDemand = getAvgDemand(myItems);
+    const theirDemand = getAvgDemand(theirItems);
+    const myHotCount = getHotCount(myItems);
+    const theirHotCount = getHotCount(theirItems);
+
+    const tips = [];
+
+    // High demand analysis
+    const highGiving = myItems.filter(i => { const d = demandMap[(i.name || '').toLowerCase().trim()]; return d && d.score >= 8; });
+    const highGetting = theirItems.filter(i => { const d = demandMap[(i.name || '').toLowerCase().trim()]; return d && d.score >= 8; });
+
+    if (highGiving.length > 0 && highGetting.length === 0) {
+      tips.push({ emoji: '😱', text: t('home.insights.giving_wanted'), color: '#EF4444' });
+    } else if (highGetting.length > 0 && highGiving.length === 0) {
+      tips.push({ emoji: '🤩', text: t('home.insights.getting_wanted'), color: '#10B981' });
+    } else if (highGiving.length > 0 && highGetting.length > 0) {
+      tips.push({ emoji: '🔄', text: t('home.insights.both_wanted'), color: '#3B82F6' });
+    }
+
+    // Rising value analysis
+    if (theirHotCount > 0 && myHotCount === 0) {
+      tips.push({ emoji: '🚀', text: t('home.insights.getting_rising'), color: '#10B981' });
+    } else if (myHotCount > 0 && theirHotCount === 0) {
+      tips.push({ emoji: '📊', text: t('home.insights.giving_rising'), color: '#F59E0B' });
+    } else if (myHotCount > 0 && theirHotCount > 0) {
+      tips.push({ emoji: '📈', text: t('home.insights.both_rising'), color: '#3B82F6' });
+    }
+
+    // Combined value + demand verdict
+    if (tradeStatus === 'win' && myDemand >= theirDemand && myDemand > 0) {
+      tips.push({ emoji: '🏆', text: t('home.insights.amazing_deal'), color: '#10B981' });
+    } else if (tradeStatus === 'win' && theirDemand > myDemand) {
+      tips.push({ emoji: '💡', text: t('home.insights.good_value_want_yours'), color: '#F59E0B' });
+    } else if (tradeStatus === 'lose' && theirDemand > myDemand && theirDemand > 0) {
+      tips.push({ emoji: '🤔', text: t('home.insights.paying_extra'), color: '#3B82F6' });
+    } else if (tradeStatus === 'lose' && myDemand > theirDemand && myDemand > 0) {
+      tips.push({ emoji: '😱', text: t('home.insights.giving_a_lot'), color: '#EF4444' });
+    } else if (tradeStatus === 'lose' && myDemand > 0 && theirDemand > 0 && Math.abs(myDemand - theirDemand) < 0.5) {
+      tips.push({ emoji: '📉', text: t('home.insights.paying_more_similar'), color: '#F59E0B' });
+    } else if (tradeStatus === 'fair') {
+      if (myDemand > 0 && theirDemand > 0) {
+        tips.push({ emoji: '🤝', text: t('home.insights.fair_trade'), color: '#10B981' });
+      }
+    }
+
+    // Fallback: always show at least one tip when both sides have items
+    if (tips.length === 0 && myItems.length > 0 && theirItems.length > 0) {
+      if (myDemand > 0 || theirDemand > 0) {
+        const diff = myDemand - theirDemand;
+        if (diff > 0.5) {
+          tips.push({ emoji: '⭐', text: t('home.insights.yours_more_wanted'), color: '#F59E0B' });
+        } else if (diff < -0.5) {
+          tips.push({ emoji: '🌟', text: t('home.insights.theirs_more_wanted'), color: '#10B981' });
+        } else {
+          tips.push({ emoji: '⚖️', text: t('home.insights.equally_wanted'), color: '#3B82F6' });
+        }
+      }
+    }
+
+    return { myDemand, theirDemand, myHotCount, theirHotCount, tips: tips.slice(0, 3) };
+  }, [hasItems, wantsItems, analyticsMaps, tradeStatus, t]);
+
+
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   const lastFilledIndexHas = useMemo(() =>
     hasItems.reduce((lastIndex, item, index) => (item ? index : lastIndex), -1)
@@ -1224,48 +1334,61 @@ const HomeScreen = ({ selectedTheme }) => {
                 <View style={styles.summaryContainer}>
                   <View style={styles.summaryInner}>
                     <View style={styles.topSection}>
-                      <Text style={styles.bigNumber}>{hasTotal?.toLocaleString() || '0'}</Text>
+                      {/* Left side: value + demand */}
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={styles.bigNumber}>{hasTotal?.toLocaleString() || '0'}</Text>
+                        {tradeInsights.myDemand > 0 && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: tradeInsights.myDemand >= 7 ? '#EF4444' : tradeInsights.myDemand >= 4 ? '#F59E0B' : '#94a3b8' }}>
+                              🔥{tradeInsights.myDemand}/10
+                            </Text>
+                            {tradeInsights.myHotCount > 0 && (
+                              <Text style={{ fontSize: 9, fontWeight: '700', color: '#10B981' }}>📈{tradeInsights.myHotCount}</Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Center: status pills */}
                       <View style={styles.statusContainer}>
                         <Text style={[
                           styles.statusText,
                           tradeStatus === 'fair' ? {
                             ...styles.statusActive,
-                            backgroundColor: config.colors.secondary // Blue for fair
+                            backgroundColor: config.colors.secondary
                           } : styles.statusInactive
                         ]}>{t('home.fair').toUpperCase()}</Text>
                         <Text style={[
                           styles.statusText,
                           tradeStatus === 'win' ? {
                             ...styles.statusActive,
-                            backgroundColor: '#10B981' // Green for win
+                            backgroundColor: '#10B981'
                           } : styles.statusInactive
                         ]}>{t('home.win').toUpperCase()}</Text>
                         <Text style={[
                           styles.statusText,
                           tradeStatus === 'lose' ? {
                             ...styles.statusActive,
-                            backgroundColor: config.colors.primary // Primary color for lose
+                            backgroundColor: config.colors.primary
                           } : styles.statusInactive
                         ]}>{t('home.lose').toUpperCase()}</Text>
                       </View>
-                      <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
-                    </View>
-                    {/* <View style={styles.progressContainer}>
-                      <View style={styles.progressBar}>
-                        <View
-                          style={[
-                            styles.progressLeft,
-                            { width: progressBarStyle.left }
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.progressRight,
-                            { width: progressBarStyle.right }
-                          ]}
-                        />
+
+                      {/* Right side: value + demand */}
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={styles.bigNumber}>{wantsTotal?.toLocaleString() || '0'}</Text>
+                        {tradeInsights.theirDemand > 0 && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 1 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '800', color: tradeInsights.theirDemand >= 7 ? '#EF4444' : tradeInsights.theirDemand >= 4 ? '#F59E0B' : '#94a3b8' }}>
+                              🔥{tradeInsights.theirDemand}/10
+                            </Text>
+                            {tradeInsights.theirHotCount > 0 && (
+                              <Text style={{ fontSize: 9, fontWeight: '700', color: '#10B981' }}>📈{tradeInsights.theirHotCount}</Text>
+                            )}
+                          </View>
+                        )}
                       </View>
-                    </View> */}
+                    </View>
 
                     <View style={styles.profitLossBox}>
                       <Text style={[styles.bigNumber2, { color: isProfit ? config.colors.hasBlockGreen : config.colors.wantBlockRed }]}>
@@ -1278,17 +1401,55 @@ const HomeScreen = ({ selectedTheme }) => {
                           onTouchEnd={resetState}
                         />
                       </View>
-                      {/* Last Updated Section */}
-
                     </View>
+
+                    {/* ── Smart Tip ── */}
+                    {tradeInsights.tips.length > 0 && (() => {
+                      const mainTip = tradeInsights.tips[0];
+                      const extraTips = tradeInsights.tips.slice(1);
+                      if (!showTips) return (
+                        <TouchableOpacity onPress={() => setShowTips(true)} style={{ alignItems: 'center', marginTop: 4 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '600', color: isDarkMode ? '#475569' : '#94a3b8' }}>{t('home.insights.show_tips')}</Text>
+                        </TouchableOpacity>
+                      );
+                      return (
+                        <View style={{ alignItems: 'center', marginTop: 6 }}>
+                          <TouchableOpacity
+                            onPress={() => setShowTips(false)}
+                            activeOpacity={0.7}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 6,
+                              backgroundColor: mainTip.color + '18',
+                              paddingLeft: 12, paddingRight: 8, paddingVertical: 6,
+                              borderRadius: 20,
+                            }}
+                          >
+                            <Text style={{ fontSize: 14 }}>{mainTip.emoji}</Text>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: mainTip.color }}>
+                              {mainTip.text}
+                            </Text>
+                            <Icon name="close-circle" size={14} color={mainTip.color + '60'} />
+                          </TouchableOpacity>
+                          {extraTips.length > 0 && (
+                            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+                              {extraTips.map((tip, i) => (
+                                <Text key={i} style={{ fontSize: 9, fontWeight: '700', color: tip.color }}>
+                                  {tip.emoji} {tip.text}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })()}
                   </View>
                 </View>
               )}
 
               <View style={styles.labelContainer}>
-                <Text style={styles.offerLabel}>ME</Text>
+                <Text style={styles.offerLabel}>{t('home.labels.me')}</Text>
                 <Text style={styles.dividerText}></Text>
-                <Text style={styles.offerLabel}>YOU</Text>
+                <Text style={styles.offerLabel}>{t('home.labels.you')}</Text>
                 {/* ✅ Modern Refresh Button */}
 
               </View>
@@ -1363,7 +1524,7 @@ const HomeScreen = ({ selectedTheme }) => {
                             <Icon
                               name="add-circle"
                               size={30}
-                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'}
+                              color={isDarkMode ? "#fdf7e5" : config.colors.primary + '80'}
                             />
                           )
                         )}
@@ -1441,7 +1602,7 @@ const HomeScreen = ({ selectedTheme }) => {
                             <Icon
                               name="add-circle"
                               size={30}
-                              color={isDarkMode ? "#fdf7e5" : '#fdf7e5'}
+                              color={isDarkMode ? "#fdf7e5" : config.colors.primary + '80'}
                             />
                           )
                         )}
@@ -1522,41 +1683,24 @@ const HomeScreen = ({ selectedTheme }) => {
                 style={styles.createtradeButton}
                 onPress={() => handleCreateTradePress()}
               >
-                <Text style={{ color: 'white' }}>{t('home.create_trade')}</Text>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{t('home.create_trade')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.middleTradeButton}
+                onPress={() => setShowTradeCompletion(true)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <Icon name="book-outline" size={14} color="#fff" />
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>Log Trade</Text>
+                </View>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.shareTradeButton}
                 onPress={handleShareTrade}
               >
-                <Text style={{ color: 'white' }}>{t('home.share_trade')}</Text>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{t('home.share_trade')}</Text>
               </TouchableOpacity>
             </View>
-            {!localState.isPro && <View style={styles.createtradeAds}>
-              <TouchableOpacity
-                style={styles.removeAdsButton}
-                activeOpacity={0.9}
-                onPress={() => setShowofferwall(true)}
-              >
-                <View style={styles.removeAdsContent}>
-                  {/* Crown icon / image */}
-                  <View style={styles.crownWrapper}>
-                    {/* <Icon name="trophy" size={18} color="#3b2500" /> */}
-
-                    <Image
-                      source={require('../../assets/pro.png')}
-                      style={{ width: 20, height: 20 }}
-                      resizeMode="contain"
-                    />
-
-                  </View>
-
-                  <View style={styles.removeAdsTextWrapper}>
-                    <Text style={styles.removeAdsTitle}>{t('home.remove_ads')}</Text>
-                    {/* <Text style={styles.removeAdsSubtitle}>{t('home.unlock_clean_experience')}</Text> */}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>}
 
           </ScrollView>
           <Modal
@@ -1704,6 +1848,15 @@ const HomeScreen = ({ selectedTheme }) => {
                     value={description}
                     onChangeText={setDescription}
                   />
+                  <TextInput
+                    style={[styles.input, { marginTop: 8 }]}
+                    placeholder={t('trade.roblox_username_placeholder', { defaultValue: 'Roblox Username (required)' })}
+                    maxLength={30}
+                    value={robloxUsername}
+                    onChangeText={setRobloxUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
                   <View style={styles.buttonContainer}>
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
@@ -1746,15 +1899,26 @@ const HomeScreen = ({ selectedTheme }) => {
         wantsTotal={wantsTotal}
         description={description}
       />
+      <TradeCompletion
+        visible={showTradeCompletion}
+        onClose={() => setShowTradeCompletion(false)}
+        db={appdatabase}
+        uid={user?.id}
+        isDarkMode={isDarkMode}
+        hasItems={hasItems}
+        wantsItems={wantsItems}
+        tradeResult={tradeStatus}
+        firestoreDB={firestoreDB}
+      />
     </>
   );
 };
 
-const getStyles = (isDarkMode) =>
-  StyleSheet.create({
+const getStyles = (isDarkMode, c) => {
+  return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
+      backgroundColor: c.bg,
       paddingBottom: 5,
     },
     summaryContainer: {
@@ -1762,7 +1926,7 @@ const getStyles = (isDarkMode) =>
 
     },
     summaryInner: {
-      backgroundColor: isDarkMode ? '#5c4c49' : 'rgba(255, 255, 255, 0.9)',
+      backgroundColor: c.bgAlt,
       borderRadius: 15,
       marginBottom: 10,
 
@@ -1790,7 +1954,7 @@ const getStyles = (isDarkMode) =>
       fontWeight: 'bold',
       color: '#333',
       textAlign: 'center',
-      color: isDarkMode ? 'white' : '#333',
+      color: c.text,
       // minWidth: 100
 
     },
@@ -1799,7 +1963,7 @@ const getStyles = (isDarkMode) =>
       fontWeight: 'bold',
       color: '#333',
       textAlign: 'center',
-      color: isDarkMode ? 'white' : '#333',
+      color: c.text,
 
     },
     statusContainer: {
@@ -1818,12 +1982,12 @@ const getStyles = (isDarkMode) =>
       paddingHorizontal: 10,
     },
     statusActive: {
-      color: isDarkMode ? 'white' : 'white',
+      color: c.textInverse,
       backgroundColor: config.colors.hasBlockGreen,
       borderRadius: 20,
     },
     statusInactive: {
-      color: isDarkMode ? '#999' : '#999',
+      color: c.textMuted,
     },
     progressContainer: {
       marginVertical: 5,
@@ -1859,7 +2023,7 @@ const getStyles = (isDarkMode) =>
     },
     offerLabel: {
       fontSize: 12,
-      color: isDarkMode ? '#999' : '#666',
+      color: c.textSecondary,
       fontWeight: 'bold',
       paddingBottom: 5,
     },
@@ -1929,7 +2093,7 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       marginBottom: 5,
       borderWidth: 1,
-      borderColor: 'rgb(255, 102, 102)',
+      borderColor: isDarkMode ? 'rgb(255, 102, 102)' : config.colors.primary + '80',
       marginHorizontal: 'auto',
       borderRadius: 4,
       overflow: 'hidden',
@@ -1937,16 +2101,16 @@ const getStyles = (isDarkMode) =>
     addItemBlockNew: {
       width: '33.33%',
       height: 60,
-      backgroundColor: isDarkMode ? '#5c4c49' : '#f3d0c7',
+      backgroundColor: c.bgAlt,
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
       borderRightWidth: 1,
       borderBottomWidth: 1,
-      borderColor: 'rgb(255, 102, 102)',
+      borderColor: isDarkMode ? 'rgb(255, 102, 102)' : config.colors.primary + '80',
     },
     itemText: {
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
       textAlign: 'center',
       fontWeight: 'bold',
       fontSize: 12
@@ -1972,7 +2136,7 @@ const getStyles = (isDarkMode) =>
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: isDarkMode ? '#3B404C' : 'white',
+      backgroundColor: c.bgElevated,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       height: '80%',
@@ -1984,7 +2148,7 @@ const getStyles = (isDarkMode) =>
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: isDarkMode ? '#3B404C' : 'white',
+      backgroundColor: c.bgElevated,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       // height: '80%',
@@ -2049,7 +2213,7 @@ const getStyles = (isDarkMode) =>
     gridItemText: {
       fontSize: 11,
       marginTop: 4,
-      color: isDarkMode ? '#fff' : '#333',
+      color: c.text,
     },
     gridAnalyticsRow: {
       flexDirection: 'row',
@@ -2122,7 +2286,7 @@ const getStyles = (isDarkMode) =>
       justifyContent: 'center',
       paddingVertical: 8,
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? '#4A4A4A' : '#E0E0E0',
+      borderTopColor: c.border,
       // marginTop: 8,
     },
     badge: {
@@ -2140,7 +2304,7 @@ const getStyles = (isDarkMode) =>
       paddingVertical: 8,
       paddingHorizontal: 12,
       borderRadius: 16,
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+      backgroundColor: c.bgAlt,
     },
     badgeButtonActive: {
       backgroundColor: '#3498db',
@@ -2148,7 +2312,7 @@ const getStyles = (isDarkMode) =>
     badgeButtonText: {
       fontSize: 12,
       fontWeight: '600',
-      color: isDarkMode ? '#fff' : '#666',
+      color: c.text,
     },
     badgeButtonTextActive: {
       color: '#fff',
@@ -2198,40 +2362,48 @@ const getStyles = (isDarkMode) =>
     createtrade: {
       alignSelf: 'center',
       justifyContent: 'center',
-      flexDirection: 'row'
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      gap: 1,
     },
     createtradeButton: {
       backgroundColor: config.colors.hasBlockGreen,
-      alignSelf: 'center',
-      padding: 10,
+      flex: 1,
+      alignItems: 'center',
       justifyContent: 'center',
-      flexDirection: 'row',
-      minWidth: 120,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
       borderTopStartRadius: 20,
       borderBottomStartRadius: 20,
-      marginRight: 1
+    },
+    middleTradeButton: {
+      backgroundColor: '#10B981',
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 8,
     },
     shareTradeButton: {
       backgroundColor: config.colors.wantBlockRed,
-      alignSelf: 'center',
-      padding: 10,
-      flexDirection: 'row',
+      flex: 1,
+      alignItems: 'center',
       justifyContent: 'center',
-      minWidth: 120,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
       borderTopEndRadius: 20,
       borderBottomEndRadius: 20,
-      marginLeft: 1
     },
     modalMessage: {
       fontSize: 12,
       marginBottom: 4,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
 
     },
     modalMessagefooter: {
       fontSize: 10,
       marginBottom: 10,
-      color: isDarkMode ? 'grey' : 'grey',
+      color: c.textMuted,
 
     },
     input: {
@@ -2242,7 +2414,7 @@ const getStyles = (isDarkMode) =>
       borderRadius: 5,
       paddingHorizontal: 10,
       marginBottom: 20,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
 
     },
     buttonContainer: {
@@ -2299,6 +2471,29 @@ const getStyles = (isDarkMode) =>
       transform: [{ rotate: '-90deg' }],
       marginRight: 2,
     },
+    // ── Trade Insights ──
+    insightsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 8,
+      marginBottom: 4,
+      paddingHorizontal: 8,
+    },
+    insightPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      borderWidth: 1,
+    },
+    insightText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
     typeButtonsContainer: {
       flexDirection: 'row',
       backgroundColor: 'rgb(253, 229, 229)',
@@ -2324,7 +2519,7 @@ const getStyles = (isDarkMode) =>
     },
     valueText: {
       fontSize: 10,
-      color: isDarkMode ? '#aaa' : '#666',
+      color: c.textSecondary,
       marginTop: 2,
     },
     itemBadgesContainer: {
@@ -2359,7 +2554,7 @@ const getStyles = (isDarkMode) =>
     },
     // ✅ Favorites row layout styles - matching ValueScreen.js (compact version)
     favoriteRowItem: {
-      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+      backgroundColor: c.bgAlt,
       borderRadius: 6,
       marginHorizontal: 4,
       marginBottom: 4,
@@ -2383,7 +2578,7 @@ const getStyles = (isDarkMode) =>
       width: 36,
       height: 36,
       borderRadius: 8,
-      backgroundColor: isDarkMode ? '#2a2a2a' : '#f8f9fa',
+      backgroundColor: c.cardBg,
     },
     favoriteItemInfo: {
       flex: 1,
@@ -2392,13 +2587,13 @@ const getStyles = (isDarkMode) =>
     favoriteItemName: {
       fontSize: 11,
       fontWeight: '700',
-      color: isDarkMode ? '#ffffff' : '#000000',
+      color: c.text,
       marginBottom: 1,
       letterSpacing: -0.3,
     },
     favoriteItemValue: {
       fontSize: 9,
-      color: isDarkMode ? '#e0e0e0' : '#333333',
+      color: c.textSecondary,
       marginBottom: 1,
       fontWeight: '500',
     },
@@ -2413,7 +2608,7 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 2,
-      backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
+      backgroundColor: c.bgAlt,
       borderRadius: 8,
       padding: 4,
       marginTop: 2,
@@ -2422,7 +2617,7 @@ const getStyles = (isDarkMode) =>
       paddingVertical: 4,
       paddingHorizontal: 8,
       borderRadius: 8,
-      backgroundColor: isDarkMode ? '#3a3a3a' : '#ffffff',
+      backgroundColor: c.bgElevated,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.05,
@@ -2438,7 +2633,7 @@ const getStyles = (isDarkMode) =>
     favoriteBadgeButtonText: {
       fontSize: 8,
       fontWeight: '600',
-      color: isDarkMode ? '#ffffff' : '#666666',
+      color: c.text,
       textAlign: 'center',
     },
     favoriteBadgeButtonTextActive: {
@@ -2467,7 +2662,7 @@ const getStyles = (isDarkMode) =>
     },
     emptyFavoritesText: {
       fontSize: 16,
-      color: isDarkMode ? '#fff' : '#666',
+      color: c.text,
       marginTop: 10,
       marginBottom: 20,
     },
@@ -2475,7 +2670,7 @@ const getStyles = (isDarkMode) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+      backgroundColor: c.bgAlt,
       padding: 10,
       borderRadius: 8,
       margin: 10,
@@ -2484,7 +2679,7 @@ const getStyles = (isDarkMode) =>
     addToFavoritesText: {
       marginLeft: 8,
       fontSize: 10,
-      color: isDarkMode ? '#fff' : '#666',
+      color: c.textSecondary,
     },
     favoritesHeader: {
       padding: 10,
@@ -2493,7 +2688,7 @@ const getStyles = (isDarkMode) =>
     favoritesTitle: {
       fontSize: 16,
       fontWeight: '600',
-      color: isDarkMode ? '#fff' : '#333',
+      color: c.text,
     },
     createtradeAds: {
       paddingHorizontal: 16,
@@ -2552,5 +2747,6 @@ const getStyles = (isDarkMode) =>
     },
 
   });
+};
 
 export default HomeScreen;

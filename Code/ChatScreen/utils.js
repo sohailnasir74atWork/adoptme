@@ -460,7 +460,7 @@ export const handleDeleteLast300Messages = async (senderId, showAlert = false, c
 
 const encodeEmailForBan = (em) => (em || '').toLowerCase().trim().replace(/\./g, '(dot)');
 
-export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null) => {
+export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null) => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for banUserwithEmail');
@@ -496,13 +496,13 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
     const banData = {
       strikeCount,
       bannedUntil,
-      reason: `Strike ${strikeCount}`,
+      reason: customReason || `Strike ${strikeCount}`,
       bannedAt: Date.now(),
       userId: senderId || userInfo?.id || null,
       displayName: userInfo?.displayName || 'Unknown User',
       avatar: userInfo?.avatar || null,
       email: email,
-      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannedBy: bannerInfo?.id || bannerInfo?.displayName || 'Admin',
       bannerAvatar: bannerInfo?.avatar || null,
     };
 
@@ -532,7 +532,7 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
 };
 
 // ✅ NEW: Set specific strike count (for Admin Dashboard)
-export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null) => {
+export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null, customReason = null) => {
   // Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for setUserStrike');
@@ -570,13 +570,13 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
     const strikeData = {
       strikeCount,
       bannedUntil,
-      reason: `Strike ${strikeCount}`,
+      reason: customReason || `Strike ${strikeCount}`,
       appliedAt: Date.now(),
       userId: senderId || userInfo?.id || null,
       displayName: userInfo?.displayName || 'Unknown User',
       avatar: userInfo?.avatar || null,
       email: email,
-      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannedBy: bannerInfo?.id || bannerInfo?.displayName || 'Admin',
       bannerAvatar: bannerInfo?.avatar || null,
     };
 
@@ -610,7 +610,7 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
  * Does NOT increment strikeCount — mutes are temporary silences, not strikes.
  * Existing useBanStatus/checkBanStatus already handle time-based expiry.
  */
-export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true) => {
+export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true, customReason = null) => {
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for muteUser');
     if (showAlert) Alert.alert('Error', 'Invalid email address.');
@@ -633,13 +633,13 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
     const muteData = {
       strikeCount: existingStrikeCount,
       bannedUntil: Date.now() + minutes * 60 * 1000,
-      reason: `Muted for ${minutes} min`,
+      reason: customReason || `Muted for ${minutes} min`,
       bannedAt: Date.now(),
       userId: userInfo?.id || null,
       displayName: userInfo?.displayName || 'Unknown User',
       avatar: userInfo?.avatar || null,
       email: email,
-      bannedBy: bannerInfo?.displayName || 'Admin',
+      bannedBy: bannerInfo?.id || bannerInfo?.displayName || 'Admin',
       bannerAvatar: bannerInfo?.avatar || null,
     };
 
@@ -816,4 +816,55 @@ export const removeModerator = async (userId) => {
     Alert.alert('Error', 'Failed to demote user.');
     return false;
   }
+};
+
+
+
+// ========== Read Receipts (lastRead) ==========
+
+/**
+ * Update lastRead timestamp for the current user in a private chat.
+ * Called when user enters or is actively viewing the chat.
+ */
+export const updateLastRead = async (chatKey, userId) => {
+  if (!chatKey || !userId) return;
+
+  try {
+    const db = getDatabase();
+    const lastReadRef = ref(db, `private_messages/${chatKey}/lastRead/${userId}`);
+    await set(lastReadRef, Date.now());
+  } catch (error) {
+    console.warn('updateLastRead error:', error?.message);
+  }
+};
+
+/**
+ * Hook: listen to the OTHER user's lastRead timestamp.
+ * Returns a timestamp (number) or 0 if not yet read.
+ */
+export const useOtherLastRead = (chatKey, otherUserId) => {
+  const [lastRead, setLastRead] = useState(0);
+
+  useEffect(() => {
+    if (!chatKey || !otherUserId) {
+      setLastRead(0);
+      return;
+    }
+
+    const db = getDatabase();
+    const lastReadRef = ref(db, `private_messages/${chatKey}/lastRead/${otherUserId}`);
+
+    const unsubscribe = onValue(lastReadRef, (snapshot) => {
+      setLastRead(snapshot.exists() ? (Number(snapshot.val()) || 0) : 0);
+    }, (error) => {
+      console.warn('useOtherLastRead listener error:', error?.message);
+      setLastRead(0);
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [chatKey, otherUserId]);
+
+  return lastRead;
 };

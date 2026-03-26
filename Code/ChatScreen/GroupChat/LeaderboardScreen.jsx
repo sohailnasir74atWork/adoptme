@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +30,7 @@ const LeaderboardScreen = ({ route }) => {
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
 
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +39,7 @@ const LeaderboardScreen = ({ route }) => {
   const [bannedUsers] = useState(Array.isArray(localState.bannedUsers) ? localState.bannedUsers : []);
 
   // ✅ Memoize styles
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   // ✅ Check if cached data is still valid (less than 2 days old)
   const isCacheValid = useCallback((cachedData) => {
@@ -191,11 +193,11 @@ const LeaderboardScreen = ({ route }) => {
   const handleStartChat = useCallback(() => {
     if (!selectedUser) return;
 
-    const callbackFunction = () => {
-      setIsDrawerVisible(false);
-
+    setIsDrawerVisible(false);
+    // Small delay so drawer close animation finishes before navigation
+    setTimeout(() => {
       if (navigation && typeof navigation.navigate === 'function') {
-        navigation.navigate('PrivateChat', {
+        navigation.navigate('PrivateChatRoot', {
           selectedUser: {
             senderId: selectedUser.senderId,
             sender: selectedUser.sender,
@@ -204,10 +206,7 @@ const LeaderboardScreen = ({ route }) => {
         });
       }
       mixpanel.track("Leaderboard Start Chat");
-    };
-
-    // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
-    callbackFunction();
+    }, 300);
   }, [selectedUser, navigation]);
 
   // ✅ Render leaderboard item
@@ -298,7 +297,7 @@ const LeaderboardScreen = ({ route }) => {
   );
 };
 
-const getStyles = (isDarkMode) => StyleSheet.create({
+const getStyles = (isDarkMode, c) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: isDarkMode ? '#0f172a' : '#f2f2f7',
@@ -312,13 +311,13 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
   },
   loadingSubtext: {
     marginTop: 4,
     fontSize: 12,
-    color: isDarkMode ? '#666' : '#999',
+    color: c.textMuted,
 
   },
   emptyContainer: {
@@ -330,13 +329,13 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   emptyText: {
     marginTop: 12,
     fontSize: 16,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
   },
   emptySubtext: {
     marginTop: 6,
     fontSize: 12,
-    color: isDarkMode ? '#666' : '#999',
+    color: c.textMuted,
 
   },
   listContent: {
@@ -378,7 +377,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: isDarkMode ? '#fff' : '#000',
+    color: c.text,
     marginBottom: 4,
   },
   ratingInfo: {
@@ -387,13 +386,13 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   ratingText: {
     fontSize: 12,
-    color: isDarkMode ? '#999' : '#666',
+    color: c.textSecondary,
 
     marginLeft: 4,
   },
   cacheInfo: {
     fontSize: 10,
-    color: isDarkMode ? '#666' : '#999',
+    color: c.textMuted,
     textAlign: 'center',
     padding: 8,
 

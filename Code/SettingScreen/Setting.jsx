@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
+import { getThemeColors } from '../Helper/themeColors';
 import { getStyles } from './settingstyle';
 import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRateApp, handleadoptme, handleShareApp, imageOptions, handleBloxFruit, handleRefresh, handleReport, handleOpenPrivacy, handleOpenChild } from './settinghelper';
 import { logoutUser } from '../Firebase/UserLogics';
@@ -39,6 +40,11 @@ import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { setAppLanguage, loadLanguage } from '../../i18n';
 import { Image as CompressorImage } from 'react-native-compressor';
 import RNFS from 'react-native-fs';
+import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
+import { getMyCosmetics } from '../Helper/cosmeticsCache';
+import { addXP, getUserXP, getLevelFromXP } from '../Engagement/xpUtils';
+import { getStarBalance } from '../Engagement/starUtils';
+import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
 
 import {
@@ -56,6 +62,7 @@ import {
   startAfter,
   deleteDoc,
   writeBatch,
+  runTransaction,
 } from '@react-native-firebase/firestore';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -64,6 +71,8 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
 import PortfolioValuation from './PortfolioValuation';
+import GuidesScreen from './GuidesScreen';
+import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 // Bunny avatar upload (same zone/keys as your post uploader)
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
@@ -162,6 +171,7 @@ const EditProfileDrawerContent = ({
 }) => {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   const PROFILE_EDIT_COOLDOWN_DAYS = 10;
 
@@ -232,7 +242,7 @@ const EditProfileDrawerContent = ({
     >
       {/* Minimalist Header */}
       {/* <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold' , color: isDarkMode ? '#fff' : '#000' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold' , color: c.text }}>
           Edit Profile
         </Text>
         <View style={{
@@ -245,20 +255,20 @@ const EditProfileDrawerContent = ({
 
       {/* Display Name - Minimal Design */}
       <View style={{ marginBottom: 10 }}>
-        <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <Text style={{ fontSize: 11, fontWeight: 'bold', color: c.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           {t('settings.profile.display_name')}
         </Text>
         <TextInput
           style={{
-            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
+            backgroundColor: c.bgAlt,
             padding: 12,
             borderRadius: 10,
             fontSize: 14,
-            color: isDarkMode ? '#fff' : '#000',
+            color: c.text,
             borderWidth: 0,
           }}
           placeholder={t('settings.profile.enter_name')}
-          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          placeholderTextColor={c.textMuted}
           value={newDisplayName}
           onChangeText={setNewDisplayName}
         />
@@ -266,13 +276,13 @@ const EditProfileDrawerContent = ({
 
       {/* Profile Picture - Clean Section */}
       <View style={{ marginBottom: 10 }}>
-        <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <Text style={{ fontSize: 11, fontWeight: 'bold', color: c.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           {t('settings.profile.profile_picture')}
         </Text>
 
         <TouchableOpacity
           style={{
-            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
+            backgroundColor: c.bgAlt,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
@@ -302,23 +312,23 @@ const EditProfileDrawerContent = ({
         </TouchableOpacity>
 
         <View style={{
-          backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
+          backgroundColor: c.bgAlt,
           borderRadius: 10,
           padding: 8,
           marginBottom: 8,
           flexDirection: 'row',
           alignItems: 'center',
         }}>
-          <Icon name="search-outline" size={14} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginRight: 8 }} />
+          <Icon name="search-outline" size={14} color={c.textMuted} style={{ marginRight: 8 }} />
           <TextInput
             style={{
               flex: 1,
               fontSize: 13,
-              color: isDarkMode ? '#fff' : '#000',
+              color: c.text,
               padding: 0,
             }}
             placeholder={t('settings.profile.search_pets')}
-            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            placeholderTextColor={c.textMuted}
             value={avatarSearch}
             onChangeText={setAvatarSearch}
           />
@@ -355,12 +365,12 @@ const EditProfileDrawerContent = ({
       {/* Bio - Clean Design */}
       <View style={{ marginBottom: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text style={{ fontSize: 11, fontWeight: 'bold', color: isDarkMode ? '#9ca3af' : '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', color: c.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             {t('settings.profile.bio')}
           </Text>
           <Text style={{
             fontSize: 10,
-            color: bio.length > 120 ? '#EF4444' : (isDarkMode ? '#6b7280' : '#9ca3af'),
+            color: bio.length > 120 ? '#EF4444' : (c.textMuted),
             fontWeight: 'bold',
           }}>
             {bio.length}/120
@@ -368,17 +378,17 @@ const EditProfileDrawerContent = ({
         </View>
         <TextInput
           style={{
-            backgroundColor: isDarkMode ? '#1e293b' : '#f5f5f5',
+            backgroundColor: c.bgAlt,
             minHeight: 65,
             textAlignVertical: 'top',
             padding: 12,
             borderRadius: 10,
             fontSize: 13,
-            color: isDarkMode ? '#fff' : '#000',
+            color: c.text,
             borderWidth: 0,
           }}
           placeholder={t('settings.profile.bio_placeholder')}
-          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          placeholderTextColor={c.textMuted}
           value={bio}
           onChangeText={(text) => {
             if (text.length <= 120) {
@@ -455,6 +465,7 @@ const EditProfileDrawerContent = ({
 };
 
 export default function SettingsScreen({ selectedTheme }) {
+  const settingsNav = useNavigation();
   const [isDrawerVisible, setDrawerVisible] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
@@ -516,6 +527,25 @@ export default function SettingsScreen({ selectedTheme }) {
   const [modalLastFollowerDoc, setModalLastFollowerDoc] = useState(null);
   const [modalHasMoreFollowers, setModalHasMoreFollowers] = useState(false);
   const [loadingModalFollowers, setLoadingModalFollowers] = useState(false);
+  const [showGuidesModal, setShowGuidesModal] = useState(false);
+  const [realStarBalance, setRealStarBalance] = useState(0);
+
+  // Fetch real star balance from RTDB (not from user object)
+  useEffect(() => {
+    if (!user?.id || !appdatabase) return;
+    getStarBalance(appdatabase, user.id).then(setRealStarBalance);
+    // Real-time listener for star balance changes
+    const { ref: dbRef, onValue } = require('@react-native-firebase/database');
+    const balRef = dbRef(appdatabase, `users/${user.id}/dailyStars/starBalance`);
+    const unsub = onValue(balRef, (snap) => {
+      if (snap.exists()) setRealStarBalance(snap.val() || 0);
+    });
+    return () => unsub();
+  }, [user?.id, appdatabase]);
+
+
+  // Load user's active cosmetics from MMKV cache (instant, no DB call)
+  const myActiveCosmetics = useMemo(() => getMyCosmetics(), [activeTab]);
 
   const { t, i18n } = useTranslation();
   const language = i18n.language; // ✅ Using i18n directly
@@ -714,33 +744,9 @@ export default function SettingsScreen({ selectedTheme }) {
     updateLocalState('isHaptic', value); // Update isHaptic state globally
   };
 
-  // ✅ Handle flag visibility toggle
-  const handleToggleFlag = async (value) => {
-    // ✅ Check if user is pro - if not, show upgrade alert
-
-
-    // ✅ Pro users can toggle freely
-    updateLocalState('showFlag', value);
-
-    if (user?.id && appdatabase) {
-      try {
-        const userRef = ref(appdatabase, `users/${user.id}`);
-        if (value) {
-          // ✅ Show flag - store it
-          const flagValue = getFlag();
-          await update(userRef, { flage: flagValue });
-          // Update local user state
-          setUser((prev) => ({ ...prev, flage: flagValue }));
-        } else {
-          // ✅ Hide flag - remove it from Firebase to save data
-          await update(userRef, { flage: null });
-          // Update local user state
-          setUser((prev) => ({ ...prev, flage: null }));
-        }
-      } catch (error) {
-        console.error('Error updating flag visibility:', error);
-      }
-    }
+  // ✅ Handle read receipts toggle
+  const handleToggleReadReceipts = (value) => {
+    updateLocalState('showReadReceipts', value);
   };
 
   // ✅ Handle online status visibility toggle
@@ -941,6 +947,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const initializedUserIdRef = useRef(null); // ✅ Track which user ID we've initialized for
 
   // ✅ Initialize form values when drawer opens or user ID changes
@@ -983,52 +990,42 @@ export default function SettingsScreen({ selectedTheme }) {
       setLoadingRating(true);
       try {
         // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
-        const [summaryDocSnap, createdSnap, reviewDocSnap] = await Promise.all([
+        // 📅 2026-03-13: bio migrated from reviews/{userId} → user_profiles/{userId}.
+        //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fetch and its fallback reads.
+        const [summaryDocSnap, createdSnap, profileDocSnap, reviewDocSnap] = await Promise.all([
           getDoc(doc(firestoreDB, 'user_ratings_summary', user.id)),
           get(ref(appdatabase, `users/${user.id}/createdAt`)),
-          getDoc(doc(firestoreDB, 'reviews', user.id)), // ✅ Load bio from Firestore
+          getDoc(doc(firestoreDB, 'user_profiles', user.id)),
+          // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this line once all users updated
+          getDoc(doc(firestoreDB, 'reviews', user.id)),
         ]);
 
-        // ✅ Load bio from Firestore reviews/{userId}
-        // ✅ If bio doesn't exist, initialize it with default value in Firestore
-        if (reviewDocSnap.exists) { // ✅ Firestore: exists is a property, not a function
-          const reviewData = reviewDocSnap.data();
-          const loadedBio = (reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim())
-            ? reviewData.bio.trim()
-            : 'Hi there, I am new here';
-          setBio(loadedBio);
-
-          // ✅ If bio doesn't exist in Firestore, save default bio
-          if (!reviewData.bio || !reviewData.bio.trim()) {
-            await setDoc(
-              doc(firestoreDB, 'reviews', user.id),
-              {
-                bio: 'Hi there, I am new here',
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
+        // 📅 2026-03-13: Bio migrated from reviews/{userId} → user_profiles/{userId}.
+        //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fallback below.
+        let loadedBio = 'Hi there, I am new here';
+        if (profileDocSnap.exists) {
+          const profileData = profileDocSnap.data();
+          if (profileData && profileData.bio && typeof profileData.bio === 'string' && profileData.bio.trim()) {
+            loadedBio = profileData.bio.trim();
           }
-        } else {
-          // ✅ Bio doesn't exist - initialize with default value in Firestore
-          setBio('Hi there, I am new here');
-          await setDoc(
-            doc(firestoreDB, 'reviews', user.id),
-            {
-              bio: 'Hi there, I am new here',
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this else-if block once all users updated
+        } else if (reviewDocSnap.exists) {
+          const reviewData = reviewDocSnap.data();
+          if (reviewData && reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim()) {
+            loadedBio = reviewData.bio.trim();
+          }
         }
+        setBio(loadedBio);
 
         // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
         if (summaryDocSnap.exists) {
           const summaryData = summaryDocSnap.data();
-          setRatingSummary({
-            value: Number(summaryData.averageRating || 0),
-            count: Number(summaryData.count || 0),
-          });
+          if (summaryData) {
+            setRatingSummary({
+              value: Number(summaryData.averageRating || 0),
+              count: Number(summaryData.count || 0),
+            });
+          }
         } else {
           // ✅ COST-OPTIMIZED: Only recalculate if summary truly missing (one-time per user)
           // Check RTDB first (free) before expensive Firestore query
@@ -1291,24 +1288,22 @@ export default function SettingsScreen({ selectedTheme }) {
 
       await updateLocalStateAndDatabase(updateData);
 
-      // ✅ Save bio to Firestore reviews/{userId} (alongside ownedPets and wishlistPets)
+      // 📅 2026-03-13: Bio dual-write to user_profiles (new primary) + reviews (backward compat).
+      //    🔮 FUTURE CLEANUP: Once all users updated, remove the setDoc to 'reviews' below.
       // Bio can be changed anytime (no cooldown restriction)
       if (user?.id && firestoreDB) {
-        const userReviewRef = doc(firestoreDB, 'reviews', user.id);
-
-        // ✅ Trim bio and use default if empty/whitespace
         const trimmedBio = bio.trim();
         const bioToSave = trimmedBio || 'Hi there, I am new here';
+        const bioPayload = {
+          bio: bioToSave,
+          updatedAt: serverTimestamp(),
+        };
 
-        // Update bio in Firestore (merge to preserve existing ownedPets and wishlistPets)
-        await setDoc(
-          userReviewRef,
-          {
-            bio: bioToSave,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        await Promise.all([
+          setDoc(doc(firestoreDB, 'user_profiles', user.id), bioPayload, { merge: true }),
+          // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this line once all users updated
+          setDoc(doc(firestoreDB, 'reviews', user.id), bioPayload, { merge: true }),
+        ]);
       }
 
       setDrawerVisible(false);
@@ -1363,7 +1358,7 @@ export default function SettingsScreen({ selectedTheme }) {
           marginRight: 6,
           borderRadius: 10,
           overflow: 'hidden',
-          backgroundColor: isDarkMode ? '#0f172a' : '#e5e7eb',
+          backgroundColor: c.bg,
         }}
       >
         <Image
@@ -1946,12 +1941,12 @@ export default function SettingsScreen({ selectedTheme }) {
       <View
         key={trade.id}
         style={{
-          backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+          backgroundColor: c.bg,
           borderRadius: 12,
           padding: 12,
           marginBottom: 12,
           borderWidth: 1,
-          borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+          borderColor: c.border,
           opacity: deletingTradeId === trade.id ? 0.5 : 1,
         }}
       >
@@ -1972,7 +1967,7 @@ export default function SettingsScreen({ selectedTheme }) {
                   <Text style={{ color: 'white', fontWeight: '600', fontSize: 8, textAlign: 'center' }}>{t('trade.featured_badge')}</Text>
                 </View>
               )}
-              <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+              <Text style={{ fontSize: 10, color: c.textSecondary }}>
                 {formattedTime}
               </Text>
             </View>
@@ -2056,7 +2051,7 @@ export default function SettingsScreen({ selectedTheme }) {
             style={{
               padding: 6,
               borderRadius: 6,
-              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+              backgroundColor: c.bgAlt,
             }}
           >
             {deletingTradeId === trade.id ? (
@@ -2270,11 +2265,11 @@ export default function SettingsScreen({ selectedTheme }) {
         {trade.description && (
           <Text style={{
             fontSize: 11,
-            color: isDarkMode ? '#d1d5db' : '#4b5563',
+            color: c.textSecondary,
             marginTop: 8,
             paddingTop: 8,
             borderTopWidth: 1,
-            borderTopColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+            borderTopColor: c.border,
           }}>
             {trade.description}
           </Text>
@@ -2462,25 +2457,28 @@ export default function SettingsScreen({ selectedTheme }) {
       const ratingChanged = oldRating !== null && oldRating !== newRating;
 
       if (ratingChanged) {
-        // ✅ Update user_ratings_summary when rating changes
+        // ✅ FIX: Atomic transaction for user_ratings_summary (prevents race conditions)
         const summaryRef = doc(firestoreDB, 'user_ratings_summary', editingReview.toUserId);
-        const summarySnap = await getDoc(summaryRef);
-        const summaryData = summarySnap.exists ? summarySnap.data() : null;
-        const oldAverage = summaryData?.averageRating || 0;
-        const oldCount = summaryData?.count || 0;
 
-        // ✅ Recalculate average: remove old rating, add new rating
-        const newAverage = ((oldAverage * oldCount) - oldRating + newRating) / oldCount;
+        await runTransaction(firestoreDB, async (transaction) => {
+          const summarySnap = await transaction.get(summaryRef);
+          const summaryData = summarySnap.exists ? summarySnap.data() : null;
+          const oldAverage = summaryData?.averageRating || 0;
+          const oldCount = summaryData?.count || 1; // safety: at least 1 if updating
 
-        await setDoc(
-          summaryRef,
-          {
-            averageRating: parseFloat(newAverage.toFixed(2)),
-            count: oldCount, // Count stays the same (updating existing review)
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+          // ✅ Recalculate average: remove old rating, add new rating
+          const newAverage = ((oldAverage * oldCount) - oldRating + newRating) / oldCount;
+
+          transaction.set(
+            summaryRef,
+            {
+              averageRating: parseFloat(newAverage.toFixed(2)),
+              count: oldCount, // Count stays the same (updating existing review)
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        });
       }
 
       await setDoc(
@@ -2523,21 +2521,22 @@ export default function SettingsScreen({ selectedTheme }) {
     }
   };
 
-  // Call this after user finishes editing selection
+  // 📅 2026-03-13: Pets dual-write to user_profiles (new primary) + reviews (backward compat).
+  //    🔮 FUTURE CLEANUP: Once all users updated, remove the setDoc to 'reviews' below.
   const savePetsToReviews = async (newOwned, newWishlist) => {
     if (!user?.id || !firestoreDB) return;
 
-    const userReviewRef = doc(firestoreDB, 'reviews', user.id);
+    const payload = {
+      ownedPets: newOwned,
+      wishlistPets: newWishlist,
+      updatedAt: serverTimestamp(),
+    };
 
-    await setDoc(
-      userReviewRef,
-      {
-        ownedPets: newOwned,
-        wishlistPets: newWishlist,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
+    await Promise.all([
+      setDoc(doc(firestoreDB, 'user_profiles', user.id), payload, { merge: true }),
+      // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this line once all users updated
+      setDoc(doc(firestoreDB, 'reviews', user.id), payload, { merge: true }),
+    ]);
 
     setOwnedPets(newOwned);
     setWishlistPets(newWishlist);
@@ -2686,13 +2685,18 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   const formatPlanName = (plan) => {
-    // console.log(plan, 'plan');
+    if (!plan) return 'PRO';
+    const p = plan.toLowerCase();
 
-    if (plan === 'MONTHLY' || plan === 'Blox_values_199_1m') return '1 MONTH';
-    if (plan === 'QUARTERLY' || plan === 'Blox_values_499_3m') return '3 MONTHS';
-    if (plan === 'YEARLY' || plan === 'Blox_values_999_1y') return '1 YEAR';
+    // Match by keywords in the product ID (covers all RevenueCat naming patterns)
+    if (p.includes('week'))  return '1 WEEK';
+    if (p.includes('1m') || p.includes('month'))  return '1 MONTH';
+    if (p.includes('3m') || p.includes('quarter')) return '3 MONTHS';
+    if (p.includes('6m'))  return '6 MONTHS';
+    if (p.includes('1y') || p.includes('year') || p.includes('annual')) return '1 YEAR';
+    if (p.includes('lifetime')) return 'LIFETIME';
 
-    return t('settings.anonymous_plan');
+    return 'PRO';
   };
 
 
@@ -2706,17 +2710,22 @@ export default function SettingsScreen({ selectedTheme }) {
         <View style={styles.cardContainer}>
           <View style={[styles.optionuserName, styles.option]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Image
-                source={
-                  typeof selectedImage === 'string' && selectedImage.trim()
-                    ? { uri: selectedImage }
-                    : user?.avatar && typeof user.avatar === 'string' && user.avatar.trim()
-                      ? { uri: user.avatar.trim() }
-                      : { uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }
-                }
-                style={styles.profileImage}
-              />
-              <TouchableOpacity onPress={user?.id ? () => { } : () => { setOpenSignin(true) }} disabled={user?.id !== null}>
+              {(() => {
+                const avatarUrl = typeof selectedImage === 'string' && selectedImage.trim()
+                  ? selectedImage
+                  : user?.avatar && typeof user.avatar === 'string' && user.avatar.trim()
+                    ? user.avatar.trim()
+                    : 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png';
+                return (
+                  <FramedAvatar
+                    avatarUri={avatarUrl}
+                    frame={myActiveCosmetics?.profileFrame || null}
+                    isDarkMode={isDarkMode}
+                    avatarSize={56}
+                  />
+                );
+              })()}
+              <TouchableOpacity onPress={user?.id ? () => { } : () => { setOpenSignin(true) }} disabled={user?.id !== null} style={{ paddingLeft: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                   <Text style={!user?.id ? styles.userNameLogout : styles.userName}>
                     {!user?.id ? t("settings.login_register") : displayName}
@@ -2730,7 +2739,7 @@ export default function SettingsScreen({ selectedTheme }) {
                   {user?.isPro &&
                     <Image
                       source={require('../../assets/pro.png')}
-                      style={{ width: 14, height: 14, marginLeft: 4 }}
+                      style={{ width: 11, height: 11, marginLeft: 4 }}
                     />
                   }
                   {/* ✅ Roblox Verification Badge */}
@@ -2765,13 +2774,47 @@ export default function SettingsScreen({ selectedTheme }) {
 
                 {!user?.id && <Text style={styles.rewardLogout}>{t('settings.login_description')}</Text>}
                 {user?.id && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <Text style={styles.reward}>{t("settings.my_points")}: {user?.rewardPoints || 0}</Text>
-                    {/* {user?.robloxUsername && (
-                    <Text style={[styles.reward, { marginLeft: 8, fontSize: 11, opacity: 0.7 }]}>
-                      • Roblox: {user.robloxUsername}
-                    </Text>
-                  )} */}
+                  <View style={{ marginTop: 4 }}>
+                    {(user?.rewardPoints || 0) > 0 ? (
+                      /* User has old points — show convert button */
+                      <TouchableOpacity
+                        onPress={async () => {
+                          const pts = user?.rewardPoints || 0;
+                          const xpToAdd = Math.floor(pts / 4);
+                          if (xpToAdd <= 0) return;
+                          try {
+                            // Add XP
+                            await addXP(appdatabase, user.id, xpToAdd);
+                            // Zero out reward points
+                            await update(ref(appdatabase, `users/${user.id}`), { rewardPoints: 0 });
+                            updateLocalStateAndDatabase('rewardPoints', 0);
+                            showSuccessMessage(
+                              '🎉 Converted!',
+                              `${pts.toLocaleString()} points → ${xpToAdd.toLocaleString()} XP`
+                            );
+                          } catch (e) {
+                            showErrorMessage('Error', 'Could not convert points');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                          backgroundColor: '#F59E0B', paddingHorizontal: 8, paddingVertical: 4,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10 }}>💎</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#fff' }}>
+                          {(user?.rewardPoints || 0).toLocaleString()} pts → Convert to {Math.floor((user?.rewardPoints || 0) / 4).toLocaleString()} XP
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      /* No points — show XP & stars */
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.reward, { fontSize: 10 }]}>⚡ XP: {(user?.xp?.total || 0).toLocaleString()}</Text>
+                        <Text style={[styles.reward, { fontSize: 10 }]}>⭐ Stars: {realStarBalance.toLocaleString()}</Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </TouchableOpacity>
@@ -2791,7 +2834,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 marginBottom: 12,
                 paddingVertical: 8,
                 paddingHorizontal: 12,
-                backgroundColor: isDarkMode ? '#1b1b1b' : '#f2f2f2',
+                backgroundColor: c.bgAlt,
                 borderRadius: 8,
               }}
             >
@@ -2807,7 +2850,7 @@ export default function SettingsScreen({ selectedTheme }) {
                     style={{
                       marginLeft: 6,
                       fontSize: 12,
-                      color: isDarkMode ? '#e5e7eb' : '#4b5563',
+                      color: c.textSecondary,
                     }}
                   >
                     {ratingSummary.value.toFixed(1)} / 5 ·{' '}
@@ -2819,7 +2862,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 <Text
                   style={{
                     fontSize: 12,
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
+                    color: c.textSecondary,
                   }}
                 >
                   {t('settings.not_rated')}
@@ -2850,7 +2893,7 @@ export default function SettingsScreen({ selectedTheme }) {
               style={{
                 borderRadius: 12,
                 padding: 12,
-                backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6',
+                backgroundColor: c.bg,
                 marginBottom: 12,
               }}
             >
@@ -2859,7 +2902,7 @@ export default function SettingsScreen({ selectedTheme }) {
                   fontSize: 14,
                   fontWeight: 'bold',
                   marginBottom: 6,
-                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  color: c.text,
                 }}
               >
                 {t('settings.profile.bio')}
@@ -2867,7 +2910,7 @@ export default function SettingsScreen({ selectedTheme }) {
               <Text
                 style={{
                   fontSize: 13,
-                  color: isDarkMode ? '#e5e7eb' : '#111827',
+                  color: c.text,
                   lineHeight: 18,
                 }}
               >
@@ -2876,20 +2919,20 @@ export default function SettingsScreen({ selectedTheme }) {
             </View>
           )}
 
-          {/* Flag Visibility Toggle */}
+          {/* Read Receipts Toggle */}
           {user?.id && (
             <View style={styles.option}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
                 <TouchableOpacity
                   style={{ flexDirection: 'row', alignItems: 'center' }}
-                  onPress={() => handleToggleFlag(!localState.showFlag)}
+                  onPress={() => handleToggleReadReceipts(!(localState.showReadReceipts ?? true))}
                 >
-                  <Icon name="flag-outline" size={18} color={'white'} style={{ backgroundColor: '#FF6B6B', padding: 5, borderRadius: 5 }} />
-                  <Text style={styles.optionText}>{t('settings.country_flag')}</Text>
+                  <Icon name="checkmark-done-outline" size={18} color={'white'} style={{ backgroundColor: '#3B82F6', padding: 5, borderRadius: 5 }} />
+                  <Text style={styles.optionText}>{t('settings.read_receipts')}</Text>
                 </TouchableOpacity>
                 <Switch
-                  value={localState.showFlag ?? true}
-                  onValueChange={handleToggleFlag}
+                  value={localState.showReadReceipts ?? true}
+                  onValueChange={handleToggleReadReceipts}
                 />
               </View>
             </View>
@@ -2956,8 +2999,8 @@ export default function SettingsScreen({ selectedTheme }) {
                     style={{
                       flex: 1,
                       marginRight: 8,
-                      backgroundColor: isDarkMode ? '#1b1b1b' : '#f2f2f2',
-                      color: isDarkMode ? '#fff' : '#000',
+                      backgroundColor: c.bgAlt,
+                      color: c.text,
                       paddingVertical: 8,
                       paddingHorizontal: 12,
                       borderRadius: 6,
@@ -2965,7 +3008,7 @@ export default function SettingsScreen({ selectedTheme }) {
                       height: 30,
                     }}
                     placeholder={t('settings.roblox.enter_username_placeholder')}
-                    placeholderTextColor={isDarkMode ? '#888' : '#999'}
+                    placeholderTextColor={c.textMuted}
                     value={robloxUsername}
                     onChangeText={setRobloxUsername}
                     autoCapitalize="none"
@@ -3016,112 +3059,11 @@ export default function SettingsScreen({ selectedTheme }) {
             </View>
           )}
 
-          <View style={styles.petsSection}>
-            {/* Owned Pets */}
-            <View style={[styles.petsColumn]}>
-              <View style={styles.petsHeaderRow}>
-                <Text style={styles.petsTitle}>
-                  {t('settings.pets.owned_title')}
-                </Text>
-                {user?.id && (
-                  <TouchableOpacity onPress={() => handleManagePets('owned')}>
-                    {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
-                  </TouchableOpacity>
-                )}
-              </View>
 
-              {ownedPets.length === 0 ? (
-                <Text style={styles.petsEmptyText}>
-                  {user?.id ? t('settings.pets.owned_empty') : t('settings.pets.owned_login')}
-                </Text>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 6 }}
-                >
-                  <View style={{ flexDirection: 'row' }}>
-                    {ownedPets.map((pet, index) => renderPetBubble(pet, index))}
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-
-            {/* Wishlist */}
-            <View style={styles.petsColumn}>
-              <View style={styles.petsHeaderRow}>
-                <Text style={styles.petsTitle}>
-                  {t('settings.pets.wishlist_title')}
-                </Text>
-                {user?.id && (
-                  <TouchableOpacity onPress={() => handleManagePets('wish')}>
-                    {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {wishlistPets.length === 0 ? (
-                <Text style={styles.petsEmptyText}>
-                  {user?.id ? t('settings.pets.wishlist_empty') : t('settings.pets.wishlist_login')}
-                </Text>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 6 }}
-                >
-                  <View style={{ flexDirection: 'row' }}>
-                    {wishlistPets.map((pet, index) => renderPetBubble(pet, index))}
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-          </View>
-
-          {/* Portfolio Valuation Section */}
-          <PortfolioValuation
-            ownedPets={ownedPets}
-            wishlistPets={wishlistPets}
-            isDarkMode={isDarkMode}
-            t={t}
-          />
-
-          {/* My Trades Section - Below Reviews */}
-          <View style={styles.reviewsSection}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 12 }}>
-              {t('settings.trades.title')}
-            </Text>
-
-            {!user?.id ? (
-              <Text style={styles.reviewsEmptyText}>
-                {t('settings.trades.login_msg')}
-              </Text>
-            ) : (
-              <TouchableOpacity
-                onPress={() => setShowMyTradesModal(true)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
-                  borderWidth: 1,
-                  borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-                }}
-              >
-                <Icon name="swap-horizontal-outline" size={18} color="#FF9500" style={{ marginRight: 6 }} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }}>
-                  {t('settings.trades.view_button')}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
 
           {/* Followers Section */}
           <View style={styles.reviewsSection}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 12 }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: c.text, marginBottom: 12 }}>
               {t('settings.followers.title')}
             </Text>
 
@@ -3136,16 +3078,16 @@ export default function SettingsScreen({ selectedTheme }) {
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                  backgroundColor: c.bg,
                   borderRadius: 10,
                   paddingVertical: 12,
                   paddingHorizontal: 12,
                   borderWidth: 1,
-                  borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                  borderColor: c.border,
                 }}
               >
                 <Icon name="people-outline" size={18} color="#4A90E2" style={{ marginRight: 6 }} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
                   {t('settings.followers.view_button')}
                 </Text>
               </TouchableOpacity>
@@ -3154,7 +3096,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
           {/* Reviews Section - Two Small Modern Buttons */}
           <View style={styles.reviewsSection}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 12 }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: c.text, marginBottom: 12 }}>
               {t('settings.reviews.title')}
             </Text>
 
@@ -3172,16 +3114,16 @@ export default function SettingsScreen({ selectedTheme }) {
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                    backgroundColor: c.bg,
                     borderRadius: 10,
                     paddingVertical: 12,
                     paddingHorizontal: 12,
                     borderWidth: 1,
-                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                    borderColor: c.border,
                   }}
                 >
                   <Icon name="star" size={18} color="#4A90E2" style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
                     {t('settings.reviews.i_gave')}
                   </Text>
                 </TouchableOpacity>
@@ -3194,16 +3136,16 @@ export default function SettingsScreen({ selectedTheme }) {
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                    backgroundColor: c.bg,
                     borderRadius: 10,
                     paddingVertical: 12,
                     paddingHorizontal: 12,
                     borderWidth: 1,
-                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                    borderColor: c.border,
                   }}
                 >
                   <Icon name="heart" size={18} color="#9B59B6" style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
                     {t('settings.reviews.i_received')}
                   </Text>
                 </TouchableOpacity>
@@ -3279,13 +3221,13 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
           <Text style={styles.subtitle}>{t('settings.pro_subscription')}</Text>
-          <View style={[styles.cardContainer, { backgroundColor: '#ffb700be' }]}>
+          <View style={[styles.cardContainer, { backgroundColor: isDarkMode ? '#1e1040' : '#fff8e5', borderWidth: 1, borderColor: isDarkMode ? '#3b2e6e' : '#ffcc4d' }]}>
 
             <TouchableOpacity style={[styles.optionLast]} onPress={() => {
               setShowofferWall(true);
             }}>
               <Icon name="prism-outline" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
-              <Text style={[styles.optionText, { color: 'black' }]}>
+              <Text style={[styles.optionText, { color: isDarkMode ? '#FFD93D' : '#8B6914' }]}>
                 {t('settings.active_plan')} : {localState.isPro ? t('settings.paid') : t('settings.free')}
               </Text>
             </TouchableOpacity>
@@ -3333,6 +3275,14 @@ export default function SettingsScreen({ selectedTheme }) {
               <Icon name="star-outline" size={18} color={'white'} style={{ backgroundColor: '#A2B38B', padding: 5, borderRadius: 5 }} />
               <Text style={styles.optionText}>{t('settings.rate_us')}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.option} onPress={() => { setShowGuidesModal(true); triggerHapticFeedback('impactLight'); }}>
+              <Icon name="book-outline" size={18} color={'white'} style={{ backgroundColor: '#6366F1', padding: 5, borderRadius: 5 }} />
+              <Text style={styles.optionText}>{t('settings.how_it_works', { defaultValue: 'How It Works' })}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.option} onPress={() => { settingsNav.navigate('BadgesScreen'); triggerHapticFeedback('impactLight'); }}>
+              <Icon name="trophy-outline" size={18} color={'white'} style={{ backgroundColor: '#f59e0b', padding: 5, borderRadius: 5 }} />
+              <Text style={styles.optionText}>{t('settings.badges', { defaultValue: 'Badges & Achievements' })}</Text>
+            </TouchableOpacity>
             {/* <TouchableOpacity style={styles.option} onPress={() => {
             handleOpenFacebook(); triggerHapticFeedback('impactLight');
           }}>
@@ -3367,6 +3317,11 @@ export default function SettingsScreen({ selectedTheme }) {
             </TouchableOpacity>}
 
           </View>
+
+          {/* 📖 Guides Modal */}
+          <GuidesScreen visible={showGuidesModal} onClose={() => setShowGuidesModal(false)} />
+          {/* 🏆 Badges Modal */}
+
 
           <Text style={styles.subtitle}>{t('settings.other_apps')}</Text>
 
@@ -3452,6 +3407,7 @@ export default function SettingsScreen({ selectedTheme }) {
         />
         <ConditionalKeyboardWrapper>
           <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <SwipeableBottomDrawer onClose={() => setDrawerVisible(false)} isDarkMode={isDarkMode} showPill={true} style={{ backgroundColor: c.bg, padding: 20 }}>
             <EditProfileDrawerContent
               isDarkMode={isDarkMode}
               newDisplayName={newDisplayName}
@@ -3470,6 +3426,7 @@ export default function SettingsScreen({ selectedTheme }) {
               config={config}
               user={user}
             />
+            </SwipeableBottomDrawer>
           </View>
         </ConditionalKeyboardWrapper>
       </Modal>
@@ -3483,8 +3440,7 @@ export default function SettingsScreen({ selectedTheme }) {
         message={t('signin.access_all_features')}
         screen='Setting'
       />
-      <PetModal fromSetting={true} ownedPets={ownedPets} setOwnedPets={setOwnedPets} wishlistPets={wishlistPets} setWishlistPets={setWishlistPets} onClose={async () => { { setPetModalVisible(false); await savePetsToReviews(ownedPets, wishlistPets) } }} visible={petModalVisible} owned={owned}
-      />
+
 
       {/* Reviews I Gave Modal */}
       <Modal
@@ -3512,7 +3468,7 @@ export default function SettingsScreen({ selectedTheme }) {
           justifyContent: 'flex-end',
           backgroundColor: 'rgba(0,0,0,0.5)'
         }}>
-          <View style={[styles.drawer, { maxHeight: '90%' }]}>
+          <SwipeableBottomDrawer onClose={() => { setShowGaveReviewsModal(false); setModalGaveReviews([]); setModalLastGaveDoc(null); setModalHasMoreGave(false); }} isDarkMode={isDarkMode} style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={styles.drawerSubtitle}>{t('settings.reviews.gave_title')}</Text>
               <TouchableOpacity onPress={() => {
@@ -3521,7 +3477,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 setModalLastGaveDoc(null);
                 setModalHasMoreGave(false);
               }}>
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
             </View>
 
@@ -3529,7 +3485,7 @@ export default function SettingsScreen({ selectedTheme }) {
               {loadingModalGaveReviews && modalGaveReviews.length === 0 ? (
                 <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
               ) : modalGaveReviews.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
+                <Text style={{ textAlign: 'center', color: c.textSecondary, marginVertical: 20 }}>
                   {t('settings.reviews.no_reviews')}
                 </Text>
               ) : (
@@ -3538,17 +3494,17 @@ export default function SettingsScreen({ selectedTheme }) {
                     <View
                       key={review.id}
                       style={{
-                        backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                        backgroundColor: c.bg,
                         borderRadius: 12,
                         padding: 8,
                         marginBottom: 8,
                         borderWidth: 1,
-                        borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                        borderColor: c.border,
                       }}
                     >
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 4 }}>
                             {review.reviewedUserName || t('settings.profile.unknown_user')}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -3562,7 +3518,7 @@ export default function SettingsScreen({ selectedTheme }) {
                               />
                             ))}
                             {review.edited && (
-                              <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280', marginLeft: 6 }}>
+                              <Text style={{ fontSize: 10, color: c.textSecondary, marginLeft: 6 }}>
                                 {t('settings.reviews.edited')}
                               </Text>
                             )}
@@ -3587,7 +3543,7 @@ export default function SettingsScreen({ selectedTheme }) {
                           </TouchableOpacity>
                         </View>
                       </View>
-                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18 }}>
+                      <Text style={{ fontSize: 13, color: c.textSecondary, lineHeight: 18 }}>
                         {review.review}
                       </Text>
                     </View>
@@ -3619,7 +3575,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 </>
               )}
             </ScrollView>
-          </View>
+          </SwipeableBottomDrawer>
         </View>
       </Modal>
 
@@ -3649,7 +3605,7 @@ export default function SettingsScreen({ selectedTheme }) {
           justifyContent: 'flex-end',
           backgroundColor: 'rgba(0,0,0,0.5)'
         }}>
-          <View style={[styles.drawer, { maxHeight: '90%' }]}>
+          <SwipeableBottomDrawer onClose={() => { setShowReceivedReviewsModal(false); setModalReceivedReviews([]); setModalLastReceivedDoc(null); setModalHasMoreReceived(false); }} isDarkMode={isDarkMode} style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={styles.drawerSubtitle}>{t('settings.reviews.received_title')}</Text>
               <TouchableOpacity onPress={() => {
@@ -3658,7 +3614,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 setModalLastReceivedDoc(null);
                 setModalHasMoreReceived(false);
               }}>
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
             </View>
 
@@ -3666,7 +3622,7 @@ export default function SettingsScreen({ selectedTheme }) {
               {loadingModalReceivedReviews && modalReceivedReviews.length === 0 ? (
                 <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
               ) : modalReceivedReviews.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
+                <Text style={{ textAlign: 'center', color: c.textSecondary, marginVertical: 20 }}>
                   {t('settings.reviews.no_reviews')}
                 </Text>
               ) : (
@@ -3675,17 +3631,17 @@ export default function SettingsScreen({ selectedTheme }) {
                     <View
                       key={review.id}
                       style={{
-                        backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                        backgroundColor: c.bg,
                         borderRadius: 12,
                         padding: 8,
                         marginBottom: 8,
                         borderWidth: 1,
-                        borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                        borderColor: c.border,
                       }}
                     >
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 4 }}>
                             {review.reviewerName || t('settings.profile.unknown_user')}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -3699,7 +3655,7 @@ export default function SettingsScreen({ selectedTheme }) {
                               />
                             ))}
                             {review.edited && (
-                              <Text style={{ fontSize: 10, color: isDarkMode ? '#9ca3af' : '#6b7280', marginLeft: 6 }}>
+                              <Text style={{ fontSize: 10, color: c.textSecondary, marginLeft: 6 }}>
                                 {t('settings.reviews.edited')}
                               </Text>
                             )}
@@ -3713,7 +3669,7 @@ export default function SettingsScreen({ selectedTheme }) {
                           </Text>
                         )}
                       </View>
-                      <Text style={{ fontSize: 13, color: isDarkMode ? '#d1d5db' : '#4b5563', lineHeight: 18 }}>
+                      <Text style={{ fontSize: 13, color: c.textSecondary, lineHeight: 18 }}>
                         {review.review}
                       </Text>
                     </View>
@@ -3745,7 +3701,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 </>
               )}
             </ScrollView>
-          </View>
+          </SwipeableBottomDrawer>
         </View>
       </Modal>
 
@@ -3770,7 +3726,7 @@ export default function SettingsScreen({ selectedTheme }) {
         />
         <ConditionalKeyboardWrapper>
           <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <View style={styles.drawer}>
+            <SwipeableBottomDrawer onClose={() => { setEditingReview(null); setEditReviewText(''); setEditReviewRating(0); }} isDarkMode={isDarkMode} style={styles.drawer}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <Text style={styles.drawerSubtitle}>{t('settings.reviews.edit_title')}</Text>
                 <TouchableOpacity
@@ -3780,7 +3736,7 @@ export default function SettingsScreen({ selectedTheme }) {
                     setEditReviewRating(0);
                   }}
                 >
-                  <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                  <Icon name="close" size={24} color={c.text} />
                 </TouchableOpacity>
               </View>
 
@@ -3818,117 +3774,12 @@ export default function SettingsScreen({ selectedTheme }) {
               >
                 <Text style={styles.saveButtonText}>{t('settings.reviews.save_button')}</Text>
               </TouchableOpacity>
-            </View>
+            </SwipeableBottomDrawer>
           </View>
         </ConditionalKeyboardWrapper>
       </Modal>
 
-      {/* My Trades Modal */}
-      <Modal
-        visible={showMyTradesModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowMyTradesModal(false);
-          setModalMyTrades([]);
-          setModalLastTradeDoc(null);
-          setModalHasMoreTrades(false);
-        }}
-      >
-        <Pressable
-          style={styles.overlay}
-          onPress={() => {
-            setShowMyTradesModal(false);
-            setModalMyTrades([]);
-            setModalLastTradeDoc(null);
-            setModalHasMoreTrades(false);
-          }}
-        />
-        <View style={{
-          flex: 1,
-          justifyContent: 'flex-end',
-          backgroundColor: 'rgba(0,0,0,0.5)'
-        }}>
-          <View style={[styles.drawer, { maxHeight: '90%' }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={styles.drawerSubtitle}>{t('settings.trades.title')}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {modalMyTrades.length > 0 && (
-                  <TouchableOpacity
-                    onPress={handleDeleteAllTrades}
-                    disabled={isDeletingAll}
-                    style={{
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      borderRadius: 6,
-                      backgroundColor: isDeletingAll ? (isDarkMode ? '#374151' : '#9ca3af') : '#EF4444',
-                      opacity: isDeletingAll ? 0.6 : 1,
-                    }}
-                  >
-                    {isDeletingAll ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                        {t('trade.delete_all')}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => {
-                  setShowMyTradesModal(false);
-                  setModalMyTrades([]);
-                  setModalLastTradeDoc(null);
-                  setModalHasMoreTrades(false);
-                }}>
-                  <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
-                </TouchableOpacity>
-              </View>
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {loadingModalMyTrades && modalMyTrades.length === 0 ? (
-                <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
-              ) : modalMyTrades.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
-                  {t('trade.no_trades')}
-                </Text>
-              ) : (
-                <>
-                  {modalMyTrades.map((trade) => (
-                    <React.Fragment key={trade.id}>
-                      {renderTradeItem(trade)}
-                    </React.Fragment>
-                  ))}
-
-                  {modalHasMoreTrades && (
-                    <TouchableOpacity
-                      style={{
-                        backgroundColor: config.colors.primary,
-                        paddingVertical: 12,
-                        paddingHorizontal: 16,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                        marginTop: 8,
-                        marginBottom: 16,
-                      }}
-                      onPress={loadMoreMyTrades}
-                      disabled={loadingModalMyTrades}
-                    >
-                      {loadingModalMyTrades ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-                          {t('settings.reviews.load_more')}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Followers Modal */}
       <Modal
@@ -3956,7 +3807,7 @@ export default function SettingsScreen({ selectedTheme }) {
           justifyContent: 'flex-end',
           backgroundColor: 'rgba(0,0,0,0.5)'
         }}>
-          <View style={[styles.drawer, { maxHeight: '90%' }]}>
+          <SwipeableBottomDrawer onClose={() => { setShowFollowersModal(false); setModalFollowers([]); setModalLastFollowerDoc(null); setModalHasMoreFollowers(false); }} isDarkMode={isDarkMode} style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={styles.drawerSubtitle}>{t('settings.followers.title')}</Text>
               <TouchableOpacity onPress={() => {
@@ -3965,7 +3816,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 setModalLastFollowerDoc(null);
                 setModalHasMoreFollowers(false);
               }}>
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
             </View>
 
@@ -3973,7 +3824,7 @@ export default function SettingsScreen({ selectedTheme }) {
               {loadingModalFollowers && modalFollowers.length === 0 ? (
                 <ActivityIndicator size="small" color={config.colors.primary} style={{ marginVertical: 20 }} />
               ) : modalFollowers.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: isDarkMode ? '#9ca3af' : '#6b7280', marginVertical: 20 }}>
+                <Text style={{ textAlign: 'center', color: c.textSecondary, marginVertical: 20 }}>
                   {t('settings.followers.no_followers')}
                 </Text>
               ) : (
@@ -3987,7 +3838,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         paddingVertical: 12,
                         paddingHorizontal: 8,
                         borderBottomWidth: 1,
-                        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+                        borderBottomColor: c.border,
                       }}
                       activeOpacity={0.7}
                     >
@@ -3995,7 +3846,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         source={{ uri: follower.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                         style={{ width: 44, height: 44, borderRadius: 22 }}
                       />
-                      <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: '600', color: isDarkMode ? '#e5e7eb' : '#111827' }} numberOfLines={1}>
+                      <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: '600', color: c.text }} numberOfLines={1}>
                         {follower.displayName}
                       </Text>
                     </TouchableOpacity>
@@ -4027,7 +3878,7 @@ export default function SettingsScreen({ selectedTheme }) {
                 </>
               )}
             </ScrollView>
-          </View>
+          </SwipeableBottomDrawer>
         </View>
       </Modal>
 

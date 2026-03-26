@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ad-services-config>
+    <!-- Required by Google Mobile Ads SDK 16+ for Android Privacy Sandbox -->
+    <includes>
+        <topics enabled="true" />
+        <attribution enabled="true" />
+    </includes>
+</ad-services-config>

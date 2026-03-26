@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { Appearance } from 'react-native';
-import { MMKV } from 'react-native-mmkv';
+
 import Purchases from 'react-native-purchases';
 import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +8,20 @@ import { mixpanel } from './AppHelper/MixPenel';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
 
-const storage = new MMKV();
+let storage;
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  storage = createMMKV();
+} catch (e) {
+  console.warn('[LocalGlobelStats] MMKV not available:', e.message);
+  storage = {
+    getString: () => undefined,
+    getBoolean: () => undefined,
+    set: () => {},
+    delete: () => {},
+    clearAll: () => {},
+  };
+}
 const LocalStateContext = createContext();
 
 export const useLocalState = () => useContext(LocalStateContext);
@@ -58,6 +70,7 @@ export const LocalStateProvider = ({ children }) => {
     lastServerFetch: storage.getString('lastServerFetch') || null,
     showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
     showOnlineStatus: storage.getBoolean('showOnlineStatus') ?? true, // ✅ Default true (show online), user can hide to save Firebase costs
+    showReadReceipts: storage.getBoolean('showReadReceipts') ?? true, // ✅ Default true (show read ticks), user can toggle off/on
     gameMusicEnabled: storage.getBoolean('gameMusicEnabled') ?? true, // ✅ Default true (music on), user can toggle off/on
 
   }));
@@ -139,38 +152,63 @@ export const LocalStateProvider = ({ children }) => {
   // console.log(localState.data)
   // console.log(isPro)
   // Initialize RevenueCat
-  const initRevenueCat = async () => {
+  // ✅ PERF: Memoize RevenueCat functions
+  const fetchOfferings = useCallback(async () => {
+    try {
+      const offerings = await Purchases.getOfferings();
+      if (offerings.current?.availablePackages?.length > 0) {
+        setPackages(offerings.current.availablePackages);
+      }
+    } catch (error) {
+      // Silently handle
+    }
+  }, []);
+
+  const checkEntitlements = useCallback(async () => {
+    try {
+      const customerInfo = await Purchases.getCustomerInfo();
+      const entitlements = customerInfo.entitlements.active;
+      const proKey = Object.keys(entitlements).find(
+        (key) => key.toLowerCase() === 'pro'
+      );
+      const proStatus = !!(proKey && entitlements[proKey]);
+      updateLocalState('isPro', proStatus);
+
+      setMySubscriptions(
+        proStatus
+          ? customerInfo.activeSubscriptions.map((sub) => ({
+              plan: sub,
+              expiry: customerInfo.allExpirationDates[sub] || null,
+            }))
+          : []
+      );
+    } catch (error) {
+      // Silently handle
+    }
+  }, [updateLocalState]);
+
+  const initRevenueCat = useCallback(async () => {
     try {
       await Purchases.configure({ apiKey: config.apiKey, usesStoreKit2IfAvailable: false });
       const userID = await Purchases.getAppUserID();
       setCustomerId(userID);
 
-      // Run these in parallel for better performance
       await Promise.all([
-        fetchOfferings().catch(error => {
-          // console.error('❌ Error fetching offerings:', error.message);
-          return null; // Return null instead of throwing
-        }),
-        checkEntitlements().catch(error => {
-          // console.error('❌ Error checking entitlements:', error.message);
-          return null; // Return null instead of throwing
-        }),
+        fetchOfferings().catch(() => null),
+        checkEntitlements().catch(() => null),
         preloadOfferings().catch(() => null),
       ]);
     } catch (error) {
-      // console.error('❌ Error initializing RevenueCat:', error.message);
-      // Set a default state in case of failure
       setCustomerId(null);
       setPackages([]);
       setMySubscriptions([]);
     }
-  };
+  }, [fetchOfferings, checkEntitlements]);
+
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      initRevenueCat();
-    });
+    const task = InteractionManager.runAfterInteractions(initRevenueCat);
     return () => task.cancel();
-  }, []);
+  }, [initRevenueCat]);
 
   // ✅ Listen for real-time subscription changes (purchase, renewal, expiry)
   useEffect(() => {
@@ -196,25 +234,8 @@ export const LocalStateProvider = ({ children }) => {
     return () => { if (listener && typeof listener.remove === 'function') listener.remove(); };
   }, [updateLocalState]);
 
-  // console.log(isPro)
-  // Fetch available subscriptions
-  const fetchOfferings = async () => {
-    try {
-      const offerings = await Purchases.getOfferings();
-      if (offerings.current?.availablePackages?.length > 0) {
-        setPackages(offerings.current.availablePackages);
-      } else {
-        console.warn('⚠️ No offerings found in RevenueCat.');
-      }
-    } catch (error) {
-      console.error('❌ Fetch Offerings Error:', error.message);
-    }
-  };
 
-  // console.log(packages)
-
-
-  const restorePurchases = async (setLoadingReStore) => {
+  const restorePurchases = useCallback(async (setLoadingReStore) => {
     setLoadingReStore(true);
     try {
       const customerInfo = await Purchases.restorePurchases();
@@ -228,47 +249,20 @@ export const LocalStateProvider = ({ children }) => {
       setMySubscriptions(
         proStatus
           ? customerInfo.activeSubscriptions.map((plan) => ({
-            plan,
-            expiry: customerInfo.allExpirationDates[plan] || null,
-          }))
+              plan,
+              expiry: customerInfo.allExpirationDates[plan] || null,
+            }))
           : []
       );
     } catch (error) {
-      // console.error('❌ Restore Purchases Error:', error);
+      // Silently handle
     } finally {
-      setLoadingReStore(false); // Ensure loading state resets
+      setLoadingReStore(false);
     }
-  };
+  }, [updateLocalState]);
 
-
-  // Check if the user has an active subscription
-  const checkEntitlements = async () => {
-    try {
-      const customerInfo = await Purchases.getCustomerInfo();
-      const entitlements = customerInfo.entitlements.active;
-      const proKey = Object.keys(entitlements).find(
-        (key) => key.toLowerCase() === 'pro'
-      );
-
-      const proStatus = !!(proKey && entitlements[proKey]);
-      // ✅ Always update isPro — both true AND false (handles expiry)
-      updateLocalState('isPro', proStatus);
-
-      if (proStatus) {
-        const activePlansWithExpiry = customerInfo.activeSubscriptions.map((subscription) => ({
-          plan: subscription,
-          expiry: customerInfo.allExpirationDates[subscription],
-        }));
-        setMySubscriptions(activePlansWithExpiry);
-      } else {
-        setMySubscriptions([]);
-      }
-    } catch (error) {
-      // console.error('❌ Error checking entitlements:', error);
-    }
-  };
   // Handle in-app purchase
-  const purchaseProduct = async (packageToPurchase, setLoading, track) => {
+  const purchaseProduct = useCallback(async (packageToPurchase, setLoading, track) => {
     setLoading(true);
     try {
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
@@ -282,9 +276,9 @@ export const LocalStateProvider = ({ children }) => {
       setMySubscriptions(
         proStatus
           ? customerInfo.activeSubscriptions.map((plan) => ({
-            plan,
-            expiry: customerInfo.allExpirationDates[plan] || null,
-          }))
+              plan,
+              expiry: customerInfo.allExpirationDates[plan] || null,
+            }))
           : []
       );
 
@@ -296,34 +290,29 @@ export const LocalStateProvider = ({ children }) => {
         });
       }
 
-      showSuccessMessage("Success", "Purchase completed successfully!");
+      showSuccessMessage('Success', 'Purchase completed successfully!');
     } catch (error) {
       if (!error.userCancelled) {
-        // console.error('❌ Purchase Error:', error);
-        showErrorMessage("Error", "Failed to complete purchase. Please try again.");
+        showErrorMessage('Error', 'Failed to complete purchase. Please try again.');
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [updateLocalState]);
 
-
-  // Clear a specific key
-  const clearKey = (key) => {
+  const clearKey = useCallback((key) => {
     setLocalState((prevState) => {
       const newState = { ...prevState };
       delete newState[key];
       return newState;
     });
-
     storage.delete(key);
-  };
+  }, []);
 
-  // Clear all local state and MMKV storage
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     setLocalState({});
     storage.clearAll();
-  };
+  }, []);
 
   const getRemainingTranslationTries = useCallback(() => {
     const today = new Date().toDateString();
@@ -343,11 +332,13 @@ export const LocalStateProvider = ({ children }) => {
       mySubscriptions,
       purchaseProduct,
       restorePurchases,
+      refreshCustomerInfo: checkEntitlements,
       canTranslate,
       incrementTranslationCount,
-      getRemainingTranslationTries, toggleAd
+      getRemainingTranslationTries,
+      toggleAd,
     }),
-    [localState, customerId, packages, mySubscriptions]
+    [localState, customerId, packages, mySubscriptions, updateLocalState, clearKey, clearAll, purchaseProduct, restorePurchases, checkEntitlements, canTranslate, incrementTranslationCount, getRemainingTranslationTries, toggleAd]
   );
 
   return (

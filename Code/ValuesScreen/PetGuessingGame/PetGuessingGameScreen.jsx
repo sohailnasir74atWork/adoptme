@@ -21,6 +21,7 @@ import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper
 import { useBackgroundMusic } from '../../Helper/useBackgroundMusic';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { fetchAnalyticsData, normalizeName } from '../../Helper/analyticsDataHelper';
 import OnlineUsersList from '../../ChatScreen/GroupChat/OnlineUsersList';
 import InviteNotification from './components/InviteNotification';
 import PlayerCards from './components/PlayerCards';
@@ -41,10 +42,18 @@ import {
 } from './utils/gameInviteSystem';
 
 const PetGuessingGameScreen = () => {
-  const { appdatabase, firestoreDB, theme, user, setIsInActiveGame } = useGlobalState();
+  const { appdatabase, firestoreDB, theme, user, setIsInActiveGame, acceptedInviteRoom, setAcceptedInviteRoom } = useGlobalState();
   const { localState, updateLocalState } = useLocalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
+
+  // Demand map for filtering pets to only those with demand
+  const [demandMap, setDemandMap] = useState({});
+  useEffect(() => {
+    fetchAnalyticsData().then(maps => {
+      if (maps?.demandMap) setDemandMap(maps.demandMap);
+    }).catch(() => {});
+  }, []);
 
   const [currentRoomId, setCurrentRoomId] = useState(null);
   const [roomData, setRoomData] = useState(null);
@@ -54,6 +63,16 @@ const PetGuessingGameScreen = () => {
   const musicEnabled = localState?.gameMusicEnabled ?? true;
   // ✅ Track pending invitations (temporary UI state, not in database)
   const [pendingInvites, setPendingInvites] = useState([]);
+
+  // ── Auto-join from global toast accept ──
+  useEffect(() => {
+    if (acceptedInviteRoom && acceptedInviteRoom.gameType !== 'quiz' && acceptedInviteRoom.roomId) {
+      setCurrentRoomId(acceptedInviteRoom.roomId);
+      setShowInviteModal(false);
+      setPendingInvites([]);
+      setAcceptedInviteRoom(null); // consume it
+    }
+  }, [acceptedInviteRoom]);
   const processedGameFinishRef = useRef(new Set()); // Track processed game finishes
   const gameEndAdShownRef = useRef(new Set()); // ✅ Track which games already showed an ad per player
   const timeoutCheckIntervalRef = useRef(null); // For timeout checking
@@ -73,7 +92,7 @@ const PetGuessingGameScreen = () => {
     0.5 // Volume (0.0 to 1.0)
   );
 
-  // Get pet data from localState (only PETS type)
+  // Get pet data from localState (only PETS type) — filtered to only pets with demand
   const petData = useMemo(() => {
     try {
       const rawData = localState.data;
@@ -83,14 +102,20 @@ const PetGuessingGameScreen = () => {
       const allItems = typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
 
       // Filter only pets
-      return allItems.filter(item =>
+      const pets = allItems.filter(item =>
         item?.type?.toLowerCase() === 'pets' || item?.type?.toLowerCase() === 'pet'
       );
+      // Filter to only pets with demand score ≥ 1
+      if (Object.keys(demandMap).length > 0) {
+        const demanded = pets.filter(p => demandMap[normalizeName(p.name)]);
+        if (demanded.length >= 10) return demanded;
+      }
+      return pets;
     } catch (error) {
       console.error('Error parsing pet data:', error);
       return [];
     }
-  }, [localState.data]);
+  }, [localState.data, demandMap]);
 
   // Get image URL helper
   const getImageUrl = useCallback((item) => {
@@ -310,7 +335,7 @@ const PetGuessingGameScreen = () => {
     }
 
     const now = Date.now();
-    const expiresAt = now + 60000; // 1 minute expiry
+    const expiresAt = now + 30000; // 30 seconds expiry
 
     setPendingInvites((prev) => {
       // Check if this user is already in the list (avoid duplicates)
@@ -694,7 +719,7 @@ const PetGuessingGameScreen = () => {
                     {pendingInvites.map((invite, index) => {
                       const now = Date.now();
                       const timeRemaining = Math.max(0, invite.expiresAt - now);
-                      const progress = Math.max(0, Math.min(1, timeRemaining / 60000)); // 0 to 1 (1 minute)
+                      const progress = Math.max(0, Math.min(1, timeRemaining / 30000)); // 0 to 1 (30 seconds)
                       const secondsRemaining = Math.ceil(timeRemaining / 1000);
                       const isLastItem = index === pendingInvites.length - 1;
 

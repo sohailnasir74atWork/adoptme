@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useState, useCallback } from 'react';
+import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
   View,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { getStyles } from '../Style';
 import { useTranslation } from 'react-i18next';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -22,6 +24,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { parseMessageText } from '../ChatHelper';
 import MessageActionDrawer from './MessageActionDrawer';
+import { resolveProfile, seedFromMessage } from '../../Helper/profileCache';
 
 const GroupMessageList = ({
   messages,
@@ -47,6 +50,7 @@ const GroupMessageList = ({
 }) => {
   const { theme, isAdmin } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const isAdminOrMod = isAdmin || !!user?.isModerator;
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   const { t } = useTranslation();
@@ -55,14 +59,23 @@ const GroupMessageList = ({
 
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
+  const [frameBorderColorIndex, setFrameBorderColorIndex] = useState(0);
+
+  // 🌈 Rainbow cycling for multi-color profile frames
+  React.useEffect(() => {
+    const timer = setInterval(() => setFrameBorderColorIndex(p => p + 1), 1200);
+    return () => clearInterval(timer);
+  }, []);
+  const frameBorderColorIndexRef = React.useRef(frameBorderColorIndex);
+  frameBorderColorIndexRef.current = frameBorderColorIndex;
 
   const fruitColors = useMemo(
     () => ({
       wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
       name: isDarkMode ? '#f9fafb' : '#111827',
-      value: isDarkMode ? '#e5e7eb' : '#4b5563',
+      value: c.textSecondary,
       divider: isDarkMode ? '#ffffff22' : '#00000011',
-      totalLabel: isDarkMode ? '#e5e7eb' : '#4b5563',
+      totalLabel: c.textSecondary,
       totalValue: isDarkMode ? '#f97373' : '#b91c1c',
     }),
     [isDarkMode],
@@ -113,6 +126,12 @@ const GroupMessageList = ({
     return [...messages].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
   }, [messages]);
 
+  // ✅ PERF FIX: Use ref for filteredMessages inside renderMessage
+  // This avoids adding filteredMessages to renderMessage's deps,
+  // which would cause all messages to re-render on every new message.
+  const filteredMessagesRef = React.useRef(filteredMessages);
+  filteredMessagesRef.current = filteredMessages;
+
   // ✅ Date separator helper
   const getDateLabel = useCallback((timestamp) => {
     if (!timestamp) return '';
@@ -130,9 +149,14 @@ const GroupMessageList = ({
       if (!item || typeof item !== 'object') return null;
 
       const isMyMessage = item.senderId === userId;
-      const senderName = item.sender || 'Anonymous';
+
+      // ✅ PHASE 0A: Resolve profile from message → cache → defaults
+      const profile = resolveProfile(item);
+      seedFromMessage(item); // Free cache population from old-format messages
+
+      const senderName = profile.displayName;
       const senderAvatar =
-        item.avatar ||
+        profile.avatar ||
         groupData?.members?.[item.senderId]?.avatar ||
         'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
 
@@ -142,49 +166,55 @@ const GroupMessageList = ({
         ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
         : 0;
 
-      // Check for recent win
-      const hasRecentWin =
-        item?.hasRecentGameWin ||
-        (typeof item?.lastGameWinAt === 'number' &&
-          Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
+      // Check for recent win — from resolved profile
+      const hasRecentWin = profile.hasRecentGameWin;
 
       const msgBubble = (
         <View
-          style={[
-            isMyMessage ? styles.mymessageBubble : styles.othermessageBubble,
-            isMyMessage ? styles.myMessage : styles.otherMessage,
-            item.id === highlightedMessageId && {
-              backgroundColor: isDarkMode ? '#3a2a10' : '#fef3c7',
+          style={{
+            flexDirection: 'row',
+            alignSelf: isMyMessage ? 'flex-end' : 'flex-start',
+            alignItems: 'flex-end',
+            maxWidth: '82%',
+            marginBottom: 4,
+            marginHorizontal: 8,
+            ...(item.id === highlightedMessageId ? {
               borderWidth: 2,
               borderColor: '#F59E0B',
-            },
-          ]}
+              borderRadius: 18,
+            } : {}),
+          }}
         >
-          {/* Avatar Container - matching main chat structure */}
-          <View style={styles.senderName}>
+          {/* Avatar — left side for others */}
+          {!isMyMessage && (
             <TouchableOpacity
               onPress={() => {
                 if (onUserPress && item.senderId) {
-                  onUserPress({
-                    senderId: item.senderId,
-                    sender: senderName,
-                    avatar: senderAvatar,
-                  });
+                  onUserPress({ senderId: item.senderId, sender: senderName, avatar: senderAvatar });
                 }
               }}
               disabled={!onUserPress}
-              activeOpacity={0.7}
-              style={{ alignItems: 'center', justifyContent: 'center' }}
+              style={{ marginRight: 6, marginBottom: 2 }}
             >
-              <Image
-                source={{
-                  uri: senderAvatar ||
-                    'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                }}
-                style={styles.profileImage}
-              />
+              <View style={profile.profileFrame ? {
+                borderWidth: 1.5,
+                borderColor: (profile.profileFrame.borderColors?.length > 1)
+                  ? profile.profileFrame.borderColors[frameBorderColorIndexRef.current % profile.profileFrame.borderColors.length]
+                  : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
+                borderRadius: 16,
+                padding: 1,
+                shadowColor: profile.profileFrame.glowColor || 'transparent',
+                shadowOpacity: profile.profileFrame.glowColor ? 0.4 : 0,
+                shadowRadius: 3,
+                elevation: profile.profileFrame.glowColor ? 2 : 0,
+              } : null}>
+                <Image
+                  source={{ uri: senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e2e8f0' }}
+                />
+              </View>
             </TouchableOpacity>
-          </View>
+          )}
 
           {/* Message Content Container */}
           <View style={styles.messageTextBox}>
@@ -193,12 +223,12 @@ const GroupMessageList = ({
               <TouchableOpacity
                 style={[
                   styles.replyContainer,
-                  { backgroundColor: isDarkMode ? '#374151' : '#E5E7EB' },
+                  { backgroundColor: c.border },
                 ]}
                 activeOpacity={0.7}
                 onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
               >
-                <Text style={[styles.replyText, { color: isDarkMode ? '#9CA3AF' : '#6B7280' }]} numberOfLines={2}>
+                <Text style={[styles.replyText, { color: c.textSecondary }]} numberOfLines={2}>
                   Replying to: {'\n'}
                   {getReplyPreview(item.replyTo)}
                 </Text>
@@ -223,7 +253,9 @@ const GroupMessageList = ({
                   ? { backgroundColor: 'pink' }
                   : isAdminOrMod && item.strikeCount >= 2
                     ? { backgroundColor: 'red' }
-                    : null,
+                    : profile.chatBubbleBg
+                      ? { backgroundColor: isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color }
+                      : null,
               ]}>
                 <TouchableOpacity
                   onPress={() => {
@@ -255,18 +287,18 @@ const GroupMessageList = ({
                     </Text>
 
                     {/* Pro badge */}
-                    {item?.isPro && (
+                    {profile.isPro && (
                       <Image
                         source={require('../../../assets/pro.png')}
-                        style={{ width: 16, height: 16, marginLeft: 4 }}
+                        style={styles.icon}
                       />
                     )}
 
                     {/* Verified badge */}
-                    {item?.robloxUsernameVerified && (
+                    {profile.robloxUsernameVerified && (
                       <Image
                         source={require('../../../assets/verification.png')}
-                        style={{ width: 16, height: 16, marginLeft: 4 }}
+                        style={styles.icon}
                       />
                     )}
 
@@ -274,7 +306,7 @@ const GroupMessageList = ({
                     {hasRecentWin && (
                       <Image
                         source={require('../../../assets/trophy.webp')}
-                        style={{ width: 10, height: 10, marginLeft: 4 }}
+                        style={styles.icon}
                       />
                     )}
 
@@ -292,6 +324,30 @@ const GroupMessageList = ({
                           fontSize: 9,
                           fontWeight: '600',
                         }}>Creator</Text>
+                      </View>
+                    )}
+
+                    {/* Baby Mod badge */}
+                    {!item.isAdmin && !item.isModerator && item.isBabyMod && (
+                      <View style={[styles.modContainer, { backgroundColor: '#F59E0B' }]}>
+                        <Icon name="paw" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>JMD</Text>
+                      </View>
+                    )}
+
+                    {/* Trusted badge */}
+                    {profile.isTrusted && (
+                      <View style={styles.trustedContainer}>
+                        <Icon name="checkmark-circle" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>Trusted</Text>
+                      </View>
+                    )}
+
+                    {/* CMSR badge */}
+                    {profile.isCMSR && (
+                      <View style={styles.cmsrContainer}>
+                        <Icon name="briefcase" size={10} color="#fff" />
+                        <Text style={styles.modBadgeText}>CMSR</Text>
                       </View>
                     )}
                   </View>
@@ -432,10 +488,35 @@ const GroupMessageList = ({
 
                 {/* Normal text (can be empty if only fruits) - matching main chat */}
                 {!!item.text && (
-                  <Text style={isMyMessage ? styles.myMessageTextOnly : styles.otherMessageTextOnly}>
-                    {parseMessageText(item.text)}
-                  </Text>
+                  isMultiColorText(profile.chatTextColor)
+                    ? <RainbowText
+                        colors={getMultiColorPalette(profile.chatTextColor)}
+                        style={[isMyMessage ? styles.myMessageTextOnly : styles.otherMessageTextOnly]}
+                      >{typeof parseMessageText === 'function' ? item.text : item.text}</RainbowText>
+                    : <Text style={[
+                        isMyMessage ? styles.myMessageTextOnly : styles.otherMessageTextOnly,
+                        profile.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
+                      ]}>
+                        {parseMessageText(item.text)}
+                      </Text>
                 )}
+
+                {/* Timestamp inside bubble — WhatsApp style */}
+                <Text style={{
+                  fontSize: 10,
+                  color: isMyMessage
+                    ? (isDarkMode ? '#ffffffaa' : '#00000066')
+                    : (isDarkMode ? '#ffffff77' : '#00000055'),
+                  alignSelf: 'flex-end',
+                  marginTop: 2,
+                }}>
+                  {item.timestamp
+                    ? new Date(item.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                    : ''}
+                </Text>
               </View>
             </TouchableOpacity>
 
@@ -466,10 +547,10 @@ const GroupMessageList = ({
                         paddingHorizontal: 6,
                         paddingVertical: 2,
                         borderRadius: 999,
-                        backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                        backgroundColor: c.bgAlt,
                         gap: 3,
                         borderWidth: 1,
-                        borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                        borderColor: c.border,
                         ...(myReaction === emoji ? {
                           backgroundColor: isDarkMode ? '#1e3a5f' : '#dbeafe',
                           borderColor: isDarkMode ? '#3b82f6' : '#60a5fa',
@@ -482,7 +563,7 @@ const GroupMessageList = ({
                         fontWeight: '600',
                         color: myReaction === emoji
                           ? (isDarkMode ? '#93c5fd' : '#2563eb')
-                          : (isDarkMode ? '#94a3b8' : '#64748b'),
+                          : (c.textSecondary),
                       }}>{count}</Text>
                     </TouchableOpacity>
                   ))}
@@ -491,19 +572,43 @@ const GroupMessageList = ({
             })()}
           </View>
 
-          <Text style={styles.timestamp}>
-            {item.timestamp
-              ? new Date(item.timestamp).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-              : ''}
-          </Text>
+          {/* Avatar — right side for own messages */}
+          {isMyMessage && (
+            <TouchableOpacity
+              onPress={() => {
+                if (onUserPress && item.senderId) {
+                  onUserPress({ senderId: item.senderId, sender: senderName, avatar: senderAvatar });
+                }
+              }}
+              disabled={!onUserPress}
+              style={{ marginLeft: 6, marginBottom: 2 }}
+            >
+              <View style={profile.profileFrame ? {
+                borderWidth: 1.5,
+                borderColor: (profile.profileFrame.borderColors?.length > 1)
+                  ? profile.profileFrame.borderColors[frameBorderColorIndexRef.current % profile.profileFrame.borderColors.length]
+                  : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
+                borderRadius: 16,
+                padding: 1,
+                shadowColor: profile.profileFrame.glowColor || 'transparent',
+                shadowOpacity: profile.profileFrame.glowColor ? 0.4 : 0,
+                shadowRadius: 3,
+                elevation: profile.profileFrame.glowColor ? 2 : 0,
+              } : null}>
+                <Image
+                  source={{ uri: senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e2e8f0' }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       );
 
       // Date separator: in inverted list, next item in array is older
-      const nextMsg = filteredMessages[index + 1];
+      // ✅ PERF FIX: Use ref to avoid filteredMessages in deps
+      const currentMessages = filteredMessagesRef.current;
+      const nextMsg = currentMessages[index + 1];
       const showDateSep = !nextMsg || getDateLabel(item.timestamp) !== getDateLabel(nextMsg.timestamp);
 
       return (
@@ -511,8 +616,8 @@ const GroupMessageList = ({
           {msgBubble}
           {showDateSep && (
             <View style={{ alignItems: 'center', marginVertical: 10 }}>
-              <View style={{ backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
-                <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: '600' }}>
+              <View style={{ backgroundColor: c.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
+                <Text style={{ fontSize: 11, color: c.textSecondary, fontWeight: '600' }}>
                   {getDateLabel(item.timestamp)}
                 </Text>
               </View>
@@ -521,7 +626,9 @@ const GroupMessageList = ({
         </>
       );
     },
-    [userId, user, groupData, styles, fruitColors, handleCopy, navigation, triggerHapticFeedback, onUserPress, isDarkMode, onReply, scrollToMessage, highlightedMessageId, getReplyPreview, t, isAdmin, isAdminOrMod, onDeleteMessage, onDeleteAllMessages, onReaction, filteredMessages, getDateLabel]
+    // ✅ PERF FIX: Reduced from 24 deps to 14.
+    // Removed: filteredMessages (uses ref), user, handleCopy, t, isAdmin (unused directly or stable).
+    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel]
   );
 
   const keyExtractor = useCallback((item, index) => {
@@ -556,7 +663,7 @@ const GroupMessageList = ({
         inverted={true} // ✅ Latest messages at bottom
         style={messageListStyles}
         contentContainerStyle={messageListContentStyles}
-        extraData={highlightedMessageId} // Re-render when highlight changes
+        extraData={`${highlightedMessageId}_${frameBorderColorIndex}`} // Re-render when highlight changes
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
         }
@@ -591,13 +698,13 @@ const GroupMessageList = ({
           setSelectedMessage(null);
         }}
         onReaction={onReaction}
-        onCopy={(msg) => handleCopy(msg)}
-        onReply={onReply ? (msg) => onReply(msg) : null}
-        onTranslate={onTranslate ? (msg) => onTranslate(msg) : null}
-        onReport={onReport ? (msg) => onReport(msg) : null}
-        onDelete={onDeleteMessage ? (msgId) => onDeleteMessage(msgId) : null}
-        onDeleteAll={onDeleteAllMessages ? (senderId) => onDeleteAllMessages(senderId) : null}
-        onPinMessage={onPinMessage ? (msg) => onPinMessage(msg) : null}
+        onCopy={handleCopy}
+        onReply={onReply || null}
+        onTranslate={onTranslate || null}
+        onReport={onReport || null}
+        onDelete={onDeleteMessage || null}
+        onDeleteAll={onDeleteAllMessages || null}
+        onPinMessage={onPinMessage || null}
         isAdminOrMod={isAdminOrMod}
         userId={userId}
         isDarkMode={isDarkMode}

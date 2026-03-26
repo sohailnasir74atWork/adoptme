@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import ValueScreen from '../../ValuesScreen/ValueScreen';
 import { useGlobalState } from '../../GlobelStats';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -51,7 +52,7 @@ const PetModal = ({
         <Pressable style={styles.backdrop} onPress={handleClose} />
 
         {/* Bottom drawer */}
-        <View style={[styles.drawer, { backgroundColor: drawerBackgroundColor }]}>
+        <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDark} style={[styles.drawer, { backgroundColor: drawerBackgroundColor }]}>
           <ValueScreen 
             fromChat={fromChat} 
             selectedFruits={selectedFruits} 
@@ -64,7 +65,7 @@ const PetModal = ({
             wishlistPets={wishlistPets} 
             setWishlistPets={setWishlistPets}
           />
-        </View>
+        </SwipeableBottomDrawer>
       </View>
     </Modal>
   );
@@ -83,11 +84,8 @@ const styles = StyleSheet.create({
   },
   drawer: {
     height: 500,
-    // backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
     paddingBottom: 16,
-    paddingTop: 8,
+    paddingTop: 0,
     paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOpacity: 0.2,

@@ -52,24 +52,30 @@ exports.notifyPostComment = functions.firestore
 
       console.log(`✅ Post found. Creator: ${postCreatorId}, New commenter: ${newCommenterId}`);
 
-      // Early exit: if creator is the new commenter, check if anyone else has commented
+      // Early exit: if creator is the new commenter, check if anyone else has commented or liked
       if (postCreatorId === newCommenterId) {
-        // Quick check: get first comment that's not from the creator
-        const commentsSnapshot = await admin.firestore()
-          .collection(`designPosts/${postId}/comments`)
-          .limit(10)
-          .get();
+        // Check for likers first (cheap — already in postData)
+        const hasLikers = postData.likes && typeof postData.likes === 'object'
+          && Object.keys(postData.likes).some(uid => uid !== newCommenterId);
 
-        let hasOtherCommenters = false;
-        commentsSnapshot.forEach((doc) => {
-          if (doc.id !== commentId && doc.data().userId !== newCommenterId) {
-            hasOtherCommenters = true;
+        if (!hasLikers) {
+          // No likers — check for other commenters
+          const commentsSnapshot = await admin.firestore()
+            .collection(`designPosts/${postId}/comments`)
+            .limit(10)
+            .get();
+
+          let hasOtherCommenters = false;
+          commentsSnapshot.forEach((doc) => {
+            if (doc.id !== commentId && doc.data().userId !== newCommenterId) {
+              hasOtherCommenters = true;
+            }
+          });
+
+          if (!hasOtherCommenters) {
+            console.log('ℹ️ Only creator has commented, no likers. No one to notify.');
+            return null;
           }
-        });
-
-        if (!hasOtherCommenters) {
-          console.log('ℹ️ Only creator has commented. No one to notify.');
-          return null;
         }
       }
 

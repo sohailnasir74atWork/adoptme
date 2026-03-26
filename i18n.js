@@ -1,13 +1,24 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import * as RNLocalize from "react-native-localize";
-import { MMKV } from "react-native-mmkv";
+
 
 // ✅ Only import English at startup (fallback language)
 import en from "./Code/Translation/en.json";
 
 // Initialize MMKV storage
-const storage = new MMKV();
+let storage;
+try {
+  const { createMMKV } = require("react-native-mmkv");
+  storage = createMMKV();
+} catch (e) {
+  console.warn("[i18n] MMKV not available:", e.message);
+  storage = {
+    getString: () => undefined,
+    set: () => {},
+    delete: () => {},
+  };
+}
 
 // Map country codes to languages
 const countryToLanguage = {

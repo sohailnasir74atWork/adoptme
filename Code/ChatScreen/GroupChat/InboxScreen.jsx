@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
@@ -18,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 import database, { ref, get, update } from '@react-native-firebase/database';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
+import FramedAvatar from '../GroupChat/FramedAvatar';
+import { getCachedProfile } from '../../Helper/profileCache';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
 const INITIAL_LOAD = 15; // ✅ Initial chats to display
@@ -95,7 +98,7 @@ const InboxScreen = ({ bannedUsers }) => {
           lastMessage: chatData.lastMessage || 'No messages yet',
           lastMessageTimestamp: chatData.timestamp || 0,
           unreadCount: isBlocked ? 0 : rawUnread,
-          otherUserAvatar: chatData.receiverAvatar || 'https://example.com/default-avatar.jpg',
+          otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
           otherUserName: chatData.receiverName || 'Anonymous',
         });
 
@@ -161,8 +164,9 @@ const InboxScreen = ({ bannedUsers }) => {
 
   // const [loading, setLoading] = useState(false);
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   // ✅ Memoize styles
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
 
   // ✅ Memoize handleDelete with useCallback
@@ -296,12 +300,19 @@ const InboxScreen = ({ bannedUsers }) => {
           style={styles.chatItem}
           onPress={() => handleOpenChat(chatId, otherUserId, otherUserName, otherUserAvatar)}
         >
-          <Image
-            source={{
-              uri: otherUserId !== user?.id ? otherUserAvatar : userAvatar
-            }}
-            style={styles.avatar}
-          />
+          {(() => {
+            const profile = getCachedProfile(otherUserId);
+            return (
+              <View style={{ marginRight: 10 }}>
+                <FramedAvatar
+                  avatarUri={otherUserId !== user?.id ? otherUserAvatar : userAvatar}
+                  frame={profile?.profileFrame || null}
+                  isDarkMode={isDarkMode}
+                  avatarSize={46}
+                />
+              </View>
+            );
+          })()}
           <View style={styles.textContainer}>
             <Text style={styles.userName}>
               {otherUserName}
@@ -333,7 +344,19 @@ const InboxScreen = ({ bannedUsers }) => {
               style={{ paddingLeft: 10 }}
             />
           </MenuTrigger>
-          <MenuOptions>
+          <MenuOptions customStyles={{
+            optionsContainer: {
+              borderRadius: 8,
+              padding: 4,
+              backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 5,
+              width: 150,
+            },
+          }}>
             <MenuOption onSelect={() => handleDelete(chatId)}>
               <Text style={{ color: 'red', fontSize: 16, padding: 10 }}> {t("chat.delete")}</Text>
             </MenuOption>
@@ -378,7 +401,7 @@ const InboxScreen = ({ bannedUsers }) => {
 };
 
 // Styles
-const getStyles = (isDarkMode) =>
+const getStyles = (isDarkMode, c) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -437,7 +460,7 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
     },
     emptyText: {
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
       textAlign: 'center'
     },
     loadMoreContainer: {
@@ -448,7 +471,7 @@ const getStyles = (isDarkMode) =>
     loadMoreText: {
       marginTop: 8,
       fontSize: 12,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
 
     }
   });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Modal,
   View,
@@ -62,7 +62,7 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
       });
   };
 
-  const styles = getStyles(isDarkMode);
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>

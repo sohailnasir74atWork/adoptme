@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal,
   View,
@@ -53,7 +53,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
     </View>
   );
 
-  const styles = getStyles(isDarkMode);
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   return (
     <Modal

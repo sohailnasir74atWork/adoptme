@@ -14,16 +14,20 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { ref, get, query, orderByValue, equalTo, limitToFirst, startAfter, orderByChild, startAt, endAt } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
+import FramedAvatar from './FramedAvatar';
+import { getCachedProfile } from '../../Helper/profileCache';
 import CreateGroupModal from './CreateGroupModal';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { getUserAdminGroup, addMembersToGroup } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { sendGameInvite, isUserInActiveGame } from '../../ValuesScreen/PetGuessingGame/utils/gameInviteSystem';
 const INITIAL_LOAD = 5; // Fetch first 10 online users
 const LOAD_MORE = 5; // Load 5 more on scroll
@@ -36,6 +40,8 @@ const OnlineUsersList = ({
   // Game invitation props (only used when mode === 'gameInvite')
   roomId = null,
   onInviteSent = null,
+  maxInvites = 3,
+  pendingInviteCount = 0,
   // Group creation props (only used when mode === 'select')
   // ... existing props work for this
 }) => {
@@ -48,6 +54,7 @@ const OnlineUsersList = ({
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
 
   // ✅ Store online users from RTDB (id, displayName, avatar, etc.)
   const [allOnlineUsers, setAllOnlineUsers] = useState([]);
@@ -130,7 +137,7 @@ const OnlineUsersList = ({
         try {
           // ✅ Fetch only the fields we need (parallel requests to specific child paths)
           const [displayNameSnap, avatarSnap, isProSnap, robloxUsernameVerifiedSnap,
-            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap, isModeratorSnap] = await Promise.all([
+            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
               get(ref(appdatabase, `users/${userId}/displayName`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/avatar`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/isPro`)).catch(() => null),
@@ -140,6 +147,8 @@ const OnlineUsersList = ({
               get(ref(appdatabase, `users/${userId}/OS`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/isModerator`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isTrusted`)).catch(() => null),
+              get(ref(appdatabase, `users/${userId}/isCMSR`)).catch(() => null),
             ]);
 
           // ✅ Extract values (only if snapshots exist)
@@ -162,6 +171,8 @@ const OnlineUsersList = ({
             OS: OSSnap?.exists() ? OSSnap.val() : null,
             isPlaying: isPlayingSnap?.exists() ? isPlayingSnap.val() : false,
             isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
+            isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
+            isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
           };
         } catch (error) {
           console.error(`Error fetching user ${userId}:`, error);
@@ -463,25 +474,18 @@ const OnlineUsersList = ({
       }
       return;
     }
-    if (invitingIds.has(selectedUser.id) || invitedIds.has(selectedUser.id) || selectedUser.isPlaying) {
+    if (invitingIds.has(selectedUser.id) || invitedIds.has(selectedUser.id)) {
+      return;
+    }
+    // Enforce max invite limit (invitedIds = sent this session, pendingInviteCount = parent's active pending)
+    if (invitedIds.size + pendingInviteCount >= maxInvites) {
+      showErrorMessage('Limit Reached', `You can only send ${maxInvites} invites at a time`);
       return;
     }
 
     setInvitingIds((prev) => new Set([...prev, selectedUser.id]));
 
     try {
-      // Check if user is in active game
-      const isInActiveGame = await isUserInActiveGame(firestoreDB, selectedUser.id);
-      if (isInActiveGame) {
-        showErrorMessage(t('chat.error'), t('chat.status_playing'));
-        setInvitingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(selectedUser.id);
-          return next;
-        });
-        return;
-      }
-
       // Send game invitation
       const success = await sendGameInvite(
         firestoreDB,
@@ -583,7 +587,7 @@ const OnlineUsersList = ({
         style={[styles.userItem, isSelected && styles.userItemSelected]}
         onPress={() => handleStartChat(item)}
         activeOpacity={0.7}
-        disabled={mode === 'gameInvite' && (isInviting || isInvited || isPlaying)}
+        disabled={mode === 'gameInvite' && (isInviting || isInvited || invitedIds.size + pendingInviteCount >= maxInvites)}
       >
         {mode === 'select' && (
           <View style={styles.checkboxContainer}>
@@ -593,15 +597,18 @@ const OnlineUsersList = ({
           </View>
         )}
         <View style={styles.userItemLeft}>
-          <Image
-            source={{ uri: item.avatar }}
-            style={styles.avatar}
-            defaultSource={{ uri: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
-          />
-          <View style={[
-            styles.onlineIndicator,
-            item.isOnline === false && { backgroundColor: '#ef4444' }
-          ]} />
+          {(() => {
+            const profile = getCachedProfile(item.id);
+            return (
+              <FramedAvatar
+                avatarUri={item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                frame={profile?.profileFrame || null}
+                isDarkMode={isDarkMode}
+                avatarSize={44}
+                isOnline={item.isOnline !== false}
+              />
+            );
+          })()}
         </View>
         <View style={styles.userInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -613,7 +620,7 @@ const OnlineUsersList = ({
             {item?.isPro && (
               <Image
                 source={require('../../../assets/pro.png')}
-                style={{ width: 12, height: 12, marginLeft: 4 }}
+                style={{ width: 11, height: 11, marginLeft: 4 }}
               />
             )}
 
@@ -621,7 +628,7 @@ const OnlineUsersList = ({
             {item?.robloxUsernameVerified && (
               <Image
                 source={require('../../../assets/verification.png')}
-                style={{ width: 12, height: 12, marginLeft: 4 }}
+                style={{ width: 11, height: 11, marginLeft: 4 }}
               />
             )}
 
@@ -631,7 +638,7 @@ const OnlineUsersList = ({
                 Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000)) && (
                 <Image
                   source={require('../../../assets/trophy.webp')}
-                  style={{ width: 10, height: 10, marginLeft: 4 }}
+                  style={styles.icon}
                 />
               )}
 
@@ -648,6 +655,22 @@ const OnlineUsersList = ({
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
                 <Icon name="shield-checkmark" size={10} color="#fff" />
                 <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
+              </View>
+            )}
+
+            {/* Trusted Badge */}
+            {item?.isTrusted && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                <Icon name="checkmark-circle" size={10} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
+              </View>
+            )}
+
+            {/* CMSR Badge */}
+            {item?.isCMSR && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+                <Icon name="briefcase" size={10} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
               </View>
             )}
 
@@ -671,13 +694,13 @@ const OnlineUsersList = ({
             )}
           </View>
           {mode === 'gameInvite' && (
-            <Text style={[styles.statusText, { color: isDarkMode ? '#9CA3AF' : '#6B7280' }]}>
+            <Text style={[styles.statusText, { color: c.textSecondary }]}>
               {isPlaying ? t('chat.status_playing') : t('chat.status_online')}
             </Text>
           )}
         </View>
         {mode === 'view' && (
-          <Icon name="chatbubble-outline" size={18} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+          <Icon name="chatbubble-outline" size={18} color={c.textSecondary} />
         )}
         {mode === 'gameInvite' && (
           <>
@@ -686,10 +709,6 @@ const OnlineUsersList = ({
             ) : isInvited ? (
               <View style={styles.invitedBadge}>
                 <Icon name="checkmark-circle" size={20} color="#10B981" />
-              </View>
-            ) : isPlaying ? (
-              <View style={styles.playingBadge}>
-                <Icon name="game-controller-outline" size={18} color="#F59E0B" />
               </View>
             ) : (
               <TouchableOpacity
@@ -725,9 +744,10 @@ const OnlineUsersList = ({
           style={{ flex: 1, justifyContent: 'flex-end' }}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          <View
+          <SwipeableBottomDrawer
+            onClose={onClose}
+            isDarkMode={isDarkMode}
             style={styles.modalContent}
-            onStartShouldSetResponder={() => true}
           >
             {/* Header */}
             <View style={styles.header}>
@@ -759,7 +779,7 @@ const OnlineUsersList = ({
                 ) : (
                   // View mode or game invite mode header (just close button)
                   <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                    <Icon name="close" size={22} color={isDarkMode ? '#FFFFFF' : '#000000'} />
+                    <Icon name="close" size={22} color={c.text} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -795,8 +815,8 @@ const OnlineUsersList = ({
                     fontSize: 13,
                     fontWeight: activeTab === 'online' ? '600' : '400',
                     color: activeTab === 'online'
-                      ? (isDarkMode ? '#FFFFFF' : '#000000')
-                      : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+                      ? (c.text)
+                      : (c.textSecondary),
                   }}>
                     {t('chat.online_users')}
                   </Text>
@@ -817,8 +837,8 @@ const OnlineUsersList = ({
                     fontSize: 13,
                     fontWeight: activeTab === 'search' ? '600' : '400',
                     color: activeTab === 'search'
-                      ? (isDarkMode ? '#FFFFFF' : '#000000')
-                      : (isDarkMode ? '#9CA3AF' : '#6B7280'),
+                      ? (c.text)
+                      : (c.textSecondary),
                   }}>
                     {t('chat.search_database')}
                   </Text>
@@ -840,7 +860,7 @@ const OnlineUsersList = ({
                   paddingLeft: 12,
                   height: 44,
                 }}>
-                  <Icon name="search-outline" size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+                  <Icon name="search-outline" size={20} color={c.textSecondary} />
                   <TextInput
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -850,7 +870,7 @@ const OnlineUsersList = ({
                       flex: 1,
                       marginLeft: 8,
                       fontSize: 14,
-                      color: isDarkMode ? '#FFFFFF' : '#000000',
+                      color: c.text,
                     }}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -920,6 +940,7 @@ const OnlineUsersList = ({
                 style={styles.list}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
                 removeClippedSubviews={true}
                 maxToRenderPerBatch={5}
                 windowSize={5}
@@ -956,7 +977,7 @@ const OnlineUsersList = ({
                 }
               </Text>
             </View>
-          </View>
+          </SwipeableBottomDrawer>
         </KeyboardAvoidingView>
       </TouchableOpacity>
 
@@ -983,8 +1004,6 @@ const getStyles = (isDark) =>
     },
     modalContent: {
       backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
       maxHeight: 500,
       minHeight: 400,
     },
@@ -1051,6 +1070,11 @@ const getStyles = (isDark) =>
       backgroundColor: isDark ? '#4B5563' : '#E0E7FF',
       borderWidth: 2,
       borderColor: '#8B5CF6',
+    },
+    icon: {
+      width: 11,
+      height: 11,
+      marginLeft: 4,
     },
     list: {
       flex: 1,

@@ -51,7 +51,7 @@ const InviteNotification = ({ currentUser, onAccept, isInActiveGame = false }) =
       // ✅ Check if current invite has expired
       const latestInvite = invites[0];
       const now = Date.now();
-      const expiresAt = latestInvite.expiresAt || (latestInvite.timestamp + 60000);
+      const expiresAt = latestInvite.expiresAt || (latestInvite.timestamp + 30000);
       if (now > expiresAt) {
         // Invite expired - hide notification
         setCurrentInvite(null);
@@ -86,7 +86,7 @@ const InviteNotification = ({ currentUser, onAccept, isInActiveGame = false }) =
     if (!currentInvite || isInActiveGame) return;
 
     const now = Date.now();
-    const expiresAt = currentInvite.expiresAt || (currentInvite.timestamp + 60000);
+    const expiresAt = currentInvite.expiresAt || (currentInvite.timestamp + 30000);
     const timeUntilExpiry = expiresAt - now;
 
     // If already expired, hide immediately

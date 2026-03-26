@@ -10,13 +10,15 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
-import { ref, get } from '@react-native-firebase/database';
+import { ref, get, set } from '@react-native-firebase/database';
 
 const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { updateLocalState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
-  const { appdatabase } = useGlobalState();
+  const { appdatabase, user } = useGlobalState();
+
+  const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
 
   // ✅ State for fetched user data (roblox username, etc.)
   const [userData, setUserData] = useState(null);
@@ -47,7 +49,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       try {
         // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
         const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap,
-          isProSnap, lastGameWinAtSnap, isAdminSnap, isModeratorSnap] = await Promise.all([
+          isProSnap, lastGameWinAtSnap, isAdminSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
             get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
@@ -55,6 +57,8 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isAdmin`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
           ]);
 
         if (!isMounted) return;
@@ -68,6 +72,8 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
           isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
           isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
+          isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
+          isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
         });
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
@@ -98,6 +104,8 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         : userData.lastGameWinAt,
       isAdmin: selectedUser?.isAdmin !== undefined ? selectedUser.isAdmin : userData.isAdmin,
       isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
+      isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
+      isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
     };
   }, [selectedUser, userData]);
 
@@ -112,9 +120,8 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     [mergedUser?.sender]
   );
 
-  // ✅ FIXED: Real-time online status listener instead of one-shot get()
-  const selectedUserId = mergedUser?.senderId || mergedUser?.id || null;
   const isOnline = useOnlineStatus(selectedUserId);
+
 
   // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {
@@ -158,6 +165,18 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
               if (updateLocalState && typeof updateLocalState === 'function') {
                 await updateLocalState('bannedUsers', updatedBannedUsers);
               }
+
+              // ✅ Sync to RTDB for server-side notification filtering
+              if (user?.id && appdatabase) {
+                const blockedRef = ref(appdatabase, `users/${user.id}/blocked_users/${selectedUserId}`);
+                if (isBanned) {
+                  // Unblocking — remove from DB
+                  await set(blockedRef, null);
+                } else {
+                  // Blocking — add to DB
+                  await set(blockedRef, true);
+                }
+              }
             } catch (error) {
               console.error('❌ Error toggling ban status:', error);
             }
@@ -182,30 +201,22 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer}>
         <Text style={[styles.userName, { color: selectedTheme?.colors?.text || '#000' }]}>
           {userName}
+          {' '}
+
           {mergedUser?.isPro && (
             <Image
               source={require('../../../assets/pro.png')}
-              style={{ width: 12, height: 12, marginLeft: 4 }}
+              style={{ width: 11, height: 11, marginLeft: 4 }}
             />
           )}
+          {' '}
           {mergedUser?.robloxUsernameVerified && (
             <Image
               source={require('../../../assets/verification.png')}
-              style={{ width: 12, height: 12, marginLeft: 4 }}
+              style={{ width: 11, height: 11, marginLeft: 4 }}
             />
           )}
-          {mergedUser?.isAdmin && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="shield" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
-            </View>
-          )}
-          {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="shield-checkmark" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
-            </View>
-          )}
+          {' '}
           {(() => {
             const hasRecentWin =
               !!mergedUser?.hasRecentGameWin ||
@@ -214,10 +225,40 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             return hasRecentWin ? (
               <Image
                 source={require('../../../assets/trophy.webp')}
-                style={{ width: 10, height: 10, marginLeft: 4 }}
+                style={styles.icon}
               />
             ) : null;
           })()}
+          {' '}
+          {mergedUser?.isAdmin && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+              <Icon name="shield" size={10} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
+            </View>
+          )}
+
+          {!mergedUser?.isAdmin && mergedUser?.isModerator && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+              <Icon name="shield-checkmark" size={10} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
+            </View>
+          )}
+
+          {mergedUser?.isTrusted && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+              <Icon name="checkmark-circle" size={10} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
+            </View>
+          )}
+
+          {mergedUser?.isCMSR && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
+              <Icon name="briefcase" size={10} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
+            </View>
+          )}
+
+
           {'  '}
           <Icon
             name="copy-outline"
@@ -277,6 +318,10 @@ const styles = StyleSheet.create({
   banIcon: {
     marginLeft: 10,
   },
+  icon: {
+    width: 11, height: 11, marginLeft: 4
+
+  }
 });
 
 export default PrivateChatHeader;

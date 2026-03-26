@@ -1,4 +1,5 @@
-import React, { memo, useMemo, useState, useCallback } from 'react';
+import React, { memo, useMemo, useState, useCallback, useRef } from 'react';
+import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
   View,
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { getStyles } from '../Style';
 import ReportPopup from '../ReportPopUp';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +30,7 @@ import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import ScamSafetyBox from './Scamwarning';
 import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
+import { getCachedProfile } from '../../Helper/profileCache';
 
 
 
@@ -48,9 +51,11 @@ const PrivateMessageList = ({
   setShowRatingModal,
   isPaginating,
   chatKey, // 👈 Add chatKey to construct messagePath for private messages
+  otherLastRead, // 👈 Other user's lastRead timestamp for read receipts
 }) => {
   const { theme, isAdmin, api, freeTranslation } = useGlobalState();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
@@ -58,9 +63,9 @@ const PrivateMessageList = ({
     () => ({
       wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
       name: isDarkMode ? '#f9fafb' : '#111827',
-      value: isDarkMode ? '#e5e7eb' : '#4b5563',
+      value: c.textSecondary,
       divider: isDarkMode ? '#ffffff22' : '#00000011',
-      totalLabel: isDarkMode ? '#e5e7eb' : '#4b5563',
+      totalLabel: c.textSecondary,
       totalValue: isDarkMode ? '#f97373' : '#b91c1c',
     }),
     [isDarkMode],
@@ -81,6 +86,22 @@ const PrivateMessageList = ({
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showReportPopup, setShowReportPopup] = useState(false);
   const { triggerHapticFeedback } = useHaptic();
+
+  // Get reply preview text (matching group chat)
+  const getReplyPreview = useCallback((replyTo) => {
+    if (!replyTo || typeof replyTo !== 'object') return '[Deleted message]';
+    if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
+      return replyTo.text;
+    }
+    if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
+      return '[Image]';
+    }
+    if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
+      const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
+      return count > 0 ? `[${count} pet(s) message]` : '[Pets message]';
+    }
+    return '[Deleted message]';
+  }, []);
   const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
   const navigation = useNavigation()
 
@@ -214,15 +235,12 @@ const PrivateMessageList = ({
   }, [t]);
 
   // ✅ Memoize renderMessage
-  const renderMessage = useCallback(({ item, index }) => {
+  const renderMessage = useCallback(({ item, index, scrollToMessage, highlightedMessageId }) => {
     // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
     const isMyMessage = item.senderId === userId;
-
-    const avatarUri = item.senderId !== userId
-      ? selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'
-      : user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+    const isHighlighted = highlightedMessageId === item.id;
 
     // fruits helpers
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
@@ -231,19 +249,60 @@ const PrivateMessageList = ({
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
 
+    const profile = getCachedProfile(item.senderId);
+    const bubbleBg = profile?.chatBubbleBg;
+
     const msgBubble = (
       <View
-        style={
-          isMyMessage
-            ? [styles.mymessageBubble, styles.myMessage, { width: '80%' }]
-            : [styles.othermessageBubble, styles.otherMessage, { width: '80%' }]
-        }
+        style={{
+          alignSelf: isMyMessage ? 'flex-end' : 'flex-start',
+          maxWidth: '80%',
+          marginBottom: 4,
+          marginHorizontal: 10,
+        }}
       >
-        {/* Avatar */}
-        <Image
-          source={{ uri: avatarUri }}
-          style={styles.profileImagePvtChat}
-        />
+        {/* WhatsApp-style bubble — no avatar */}
+        <View style={{
+          backgroundColor: isHighlighted
+            ? (isDarkMode ? '#ffffff30' : '#00000015')
+            : bubbleBg
+              ? (isDarkMode ? bubbleBg.darkColor : bubbleBg.color)
+              : isMyMessage
+                ? (isDarkMode ? '#0B5E3F' : '#DCF8C6')
+                : (isDarkMode ? '#1E293B' : '#FFFFFF'),
+          borderRadius: 16,
+          borderTopLeftRadius: isMyMessage ? 16 : 4,
+          borderTopRightRadius: isMyMessage ? 4 : 16,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          shadowColor: '#000',
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          shadowOffset: { width: 0, height: 1 },
+          elevation: 1,
+        }}>
+
+          {/* Reply Preview */}
+          {item.replyTo && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
+              style={{
+                backgroundColor: isDarkMode ? '#ffffff15' : '#00000008',
+                borderLeftWidth: 3,
+                borderLeftColor: '#1E88E5',
+                borderRadius: 6,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                marginBottom: 4,
+              }}
+            >
+              <Text style={{ fontSize: 11, color: c.textSecondary }} numberOfLines={2}>
+                {t('chat.replying_to')}: {'\n'}
+                {getReplyPreview(item.replyTo)}
+              </Text>
+            </TouchableOpacity>
+          )}
 
         {/* Message Content */}
 
@@ -396,11 +455,19 @@ const PrivateMessageList = ({
 
             {/* Normal text (can be empty if only fruits) */}
             {!!item.text && (
-              <Text
-                style={isMyMessage ? styles.myMessageText : styles.otherMessageText}
-              >
-                {item.text}
-              </Text>
+              isMultiColorText(profile?.chatTextColor)
+                ? <RainbowText
+                    colors={getMultiColorPalette(profile.chatTextColor)}
+                    style={[{ fontSize: 13, color: c.text, lineHeight: 18 }]}
+                  >{item.text}</RainbowText>
+                : <Text
+                    style={[
+                      { fontSize: 13, color: c.text, lineHeight: 18 },
+                      profile?.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile?.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
+                    ]}
+                  >
+                    {item.text}
+                  </Text>
             )}
           </MenuTrigger>
 
@@ -418,6 +485,14 @@ const PrivateMessageList = ({
             <MenuOption onSelect={() => handleTranslate(item)}>
               <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
             </MenuOption>
+            <MenuOption onSelect={() => {
+              if (onReply) {
+                triggerHapticFeedback('impactLight');
+                onReply(item);
+              }
+            }}>
+              <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
+            </MenuOption>
             {!isMyMessage && (
               <MenuOption onSelect={() => handleReport(item)}>
                 <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
@@ -426,12 +501,34 @@ const PrivateMessageList = ({
           </MenuOptions>
         </Menu>
 
-        <Text style={styles.timestamp}>
-          {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }) : ''}
-        </Text>
+          {/* Timestamp + Read receipts inside bubble — WhatsApp style */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 2, gap: 3 }}>
+            <Text style={{
+              fontSize: 10,
+              color: isMyMessage
+                ? (isDarkMode ? '#ffffffaa' : '#00000066')
+                : (isDarkMode ? '#ffffff77' : '#00000055'),
+            }}>
+              {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              }) : ''}
+            </Text>
+            {/* ✅ Read receipt ticks for own messages (respects settings toggle) */}
+            {isMyMessage && (localState?.showReadReceipts ?? true) && (
+              <Text style={{
+                fontSize: 12,
+                fontWeight: '700',
+                color: (otherLastRead && item.timestamp && item.timestamp <= otherLastRead)
+                  ? '#53BDEB'  // Blue ticks = read
+                  : (isDarkMode ? '#ffffff77' : '#00000044'), // Grey ticks = delivered
+                marginLeft: 1,
+              }}>
+                ✓✓
+              </Text>
+            )}
+          </View>
+        </View>
       </View>
     );
 
@@ -444,8 +541,8 @@ const PrivateMessageList = ({
         {msgBubble}
         {showDateSep && (
           <View style={{ alignItems: 'center', marginVertical: 10 }}>
-            <View style={{ backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
-              <Text style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: '600' }}>
+            <View style={{ backgroundColor: c.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 11, color: c.textSecondary, fontWeight: '600' }}>
                 {getDateLabel(item.timestamp)}
               </Text>
             </View>
@@ -453,7 +550,34 @@ const PrivateMessageList = ({
         )}
       </>
     );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, filteredMessages, getDateLabel, isDarkMode]);
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, filteredMessages, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
+
+  // ✅ Add FlatList reference and scrollToMessage functionality
+  const flatListRef = useRef(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+
+  const scrollToMessage = useCallback((messageId) => {
+    if (!flatListRef.current || !filteredMessages || filteredMessages.length === 0) return;
+    
+    // Find the index of the message in the reversed list
+    const index = filteredMessages.findIndex(msg => String(msg?.id) === String(messageId));
+    
+    if (index !== -1) {
+      setHighlightedMessageId(messageId);
+      
+      flatListRef.current.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    } else {
+      Alert.alert(t('chat.message_not_found', { defaultValue: 'Message not found or too old.' }));
+    }
+  }, [filteredMessages, t]);
 
   // ✅ Memoize keyExtractor
   const keyExtractor = useCallback((item, index) => {
@@ -465,15 +589,16 @@ const PrivateMessageList = ({
       {loading && messages.length === 0 ? (
         <ActivityIndicator size="large" color="#1E88E5" style={styles.loader} />
       ) : (
-        <View style={{ paddingBottom: 140 }}>
+        <View style={{ flex: 1 }}>
           <>
             <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} />
 
             <FlatList
+              ref={flatListRef}
               data={filteredMessages}
               removeClippedSubviews={true}
               keyExtractor={keyExtractor}
-              renderItem={renderMessage}
+              renderItem={({ item, index }) => renderMessage({ item, index, scrollToMessage, highlightedMessageId })}
               inverted
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.3}
@@ -519,10 +644,6 @@ export const fruitStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     marginBottom: 3,
-
-    flex: 1,
-
-
   },
   fruitImage: {
     width: 20,

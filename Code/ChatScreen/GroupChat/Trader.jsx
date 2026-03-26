@@ -31,8 +31,21 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { showMessage } from 'react-native-flash-message';
 import PetModal from '../PrivateChat/PetsModel';
-import { MMKV } from 'react-native-mmkv';
-const storage = new MMKV();
+
+import { incrementAndCheckBadge, MESSAGE_BADGE_THRESHOLDS } from './badgeUtils';
+import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
+
+let storage;
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  storage = createMMKV();
+} catch (e) {
+  console.warn('[Trader] MMKV not available:', e.message);
+  storage = {
+    getString: () => undefined,
+    set: () => {},
+  };
+}
 leoProfanity.add(['hell', 'shit']);
 leoProfanity.loadDictionary('en');
 
@@ -75,6 +88,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const [selectedFruits, setSelectedFruits] = useState([]);
   const [device, setDevice] = useState(null)
 
+
   const [selectedEmoji, setSelectedEmoji] = useState(null);
   // ✅ Remember user's preferred chat language (persisted in MMKV)
   const [activeChannel, setActiveChannel] = useState(() => {
@@ -115,6 +129,17 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
   }, [isAtBottom, pendingMessages]);
 
+  // ✅ PHASE 0B: Seed current user's profile into cache on mount
+  // This ensures the user's OWN slim messages show correct avatar/name
+  useEffect(() => {
+    if (user?.id) {
+      seedCurrentUser(user, localState, appdatabase);
+      // Sync own cosmetics to MMKV (once, if stale)
+      const { syncMyCosmetics } = require('../../Helper/cosmeticsCache');
+      syncMyCosmetics(appdatabase, user.id);
+    }
+  }, [user?.id, user?.avatar]);
+
 
   const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
   const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
@@ -124,7 +149,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const openProfileDrawer = useCallback(async (userData) => {
     if (!userData || !userData.senderId) return;
 
-    setSelectedUser(userData);
+    // ✅ Enrich with cached avatar so drawer shows it instantly (no flash)
+    const cached = getCachedProfile(userData.senderId);
+    const enriched = cached?.avatar && !userData.avatar
+      ? { ...userData, avatar: cached.avatar }
+      : userData;
+
+    setSelectedUser(enriched);
     setIsDrawerVisible(true);
   }, []);
 
@@ -238,6 +269,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           // Use the last key from the newly fetched messages
           setLastLoadedKey(parsedMessages[parsedMessages.length - 1].id);
 
+          // Profile cache warming removed — messages embed full profile data
+          // seedFromMessage() in render populates cache for free
         }
       } catch (error) {
       } finally {
@@ -263,7 +296,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
               ...value,
             };
           })
-          .filter(Boolean);
+          .filter(Boolean)
+          .sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
 
         setPinnedMessages(pinnedMessagesArray);
       } catch (error) {
@@ -282,7 +316,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       setPinnedMessages((prev) => {
         // ✅ Prevent duplicates
         const exists = prev.some(msg => msg.firebaseKey === snapshot.key);
-        return exists ? prev : [...prev, newPinnedMessage];
+        return exists ? prev : [newPinnedMessage, ...prev];
       });
     });
 
@@ -414,6 +448,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           const newMessage = validateMessage({ id: snapshot.key, ...data });
           if (!newMessage || !newMessage.id) return;
 
+
           const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
           if (banned.includes(newMessage.senderId)) return;
 
@@ -445,6 +480,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
           if (!data || typeof data !== 'object') return;
           const newMessage = validateMessage({ id: snapshot.key, ...data });
           if (!newMessage || !newMessage.id) return;
+
           const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
           if (banned.includes(newMessage.senderId)) return;
           setMessages((prev) => {
@@ -737,42 +773,56 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         return;
       }
 
-      // Push to Firebase Realtime Database
-      const now = Date.now();
-      const hasRecentWin =
-        typeof user?.lastGameWinAt === 'number' &&
-        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+      // ✅ Embed profile info — only send truthy values (null = not stored in RTDB = saves bytes)
+      const myProfile = getCachedProfile(user.id);
+      const myCosmetics = require('../../Helper/cosmeticsCache').getMyCosmetics();
+
+      const avatar = user.avatar || myProfile?.avatar || null;
+      const isPro = !!localState?.isPro || !!myProfile?.isPro;
+      const verified = !!user.robloxUsernameVerified || !!myProfile?.robloxUsernameVerified;
+      const topBadge = myProfile?.topBadge || null;
+      const hasWin = !!(myProfile?.hasRecentGameWin || (myProfile?.lastGameWinAt && Date.now() - myProfile.lastGameWinAt <= 24 * 60 * 60 * 1000));
+      const frame = myCosmetics?.profileFrame || myProfile?.profileFrame || null;
+      const txtColor = myCosmetics?.chatTextColor?.color || myProfile?.chatTextColor || null;
+      const bubbleBg = myCosmetics?.chatBubbleBg || myProfile?.chatBubbleBg || null;
 
       await chatRef.push({
-        text: trimmedInput || null, // allow fruits-only messages
+        text: trimmedInput || null,
         timestamp: database.ServerValue.TIMESTAMP,
-        sender: user.displayName || t('chat.anonymous'),
         senderId: user.id,
-        avatar:
-          user.avatar ||
-          'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+        sender: user.displayName || t('chat.anonymous'),
+        // Only include truthy profile fields (saves ~50-200 bytes per message)
+        ...(avatar ? { avatar } : {}),
+        ...(isPro ? { isPro: true } : {}),
+        ...(verified ? { robloxUsernameVerified: true } : {}),
+        ...(topBadge ? { topBadge } : {}),
+        ...(hasWin ? { hasRecentGameWin: true } : {}),
+        ...(frame ? { profileFrame: frame } : {}),
+        ...(txtColor ? { chatTextColor: txtColor } : {}),
+        ...(bubbleBg ? { chatBubbleBg: bubbleBg } : {}),
         replyTo: replyToArg
           ? { id: replyToArg.id, text: replyToArg.text }
           : null,
         reportCount: 0,
         containsLink,
-        isPro: !!localState?.isPro,
         isAdmin: !!isAdmin,
         isModerator: !!user?.isModerator,
+        ...(user?.isBabyMod ? { isBabyMod: true } : {}),
+        ...(user?.isTrusted ? { isTrusted: true } : {}),
+        ...(user?.isCMSR ? { isCMSR: true } : {}),
         strikeCount: strikeInfo?.strikeCount ?? null,
         fruits: hasFruits ? fruits : [],
         gif: hasEmoji ? emojiUrl : null,
         flage: user.flage ? user.flage : null,
-        OS: Platform.OS, // ✅ Store platform (Android/iOS) - only visible to admins
-        robloxUsername: user?.robloxUsername || null,
-        robloxUsernameVerified: user?.robloxUsernameVerified || false,
-        robloxUserId: user?.robloxUserId || null, // ✅ Store userId for profile link
-        hasRecentGameWin: hasRecentWin,
-        lastGameWinAt: user?.lastGameWinAt || null,
+        OS: Platform.OS,
       });
 
       // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
       lastSentMessageRef.current = currentMessage;
+
+      // 🏅 Track message count & award chatty badge (fire-and-forget)
+      incrementAndCheckBadge(appdatabase, user.id, 'messageCount', MESSAGE_BADGE_THRESHOLDS);
+
 
       // Reset local input state
       setInput('');

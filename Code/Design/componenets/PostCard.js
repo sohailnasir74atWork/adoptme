@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useNavigation } from '@react-navigation/native';
 import CommentModal from './CommentsModal';
@@ -17,6 +18,9 @@ import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
 import { banUserwithEmail as banUtils } from '../../ChatScreen/utils';
 import { useTranslation } from 'react-i18next';
+import { BADGE_IMAGES } from '../../ChatScreen/GroupChat/badgeUtils';
+import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
+import { getCachedProfile } from '../../Helper/profileCache';
 
 const REACTION_EMOJIS = ['❤️', '🔥', '😍', '💀', '🎯'];
 
@@ -143,7 +147,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
     }
   }, [myReaction, item, onReaction]);
 
-  const s = getStyles(isDark);
+  const s = useMemo(() => getStyles(isDark), [isDark]);
   const formattedTime = item.createdAt
     ? dayjs(item.createdAt.toDate()).fromNow()
     : t('chat.anonymous');
@@ -156,8 +160,12 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
       <View style={s.header}>
         <TouchableOpacity onPress={openProfileDrawer} activeOpacity={0.8}>
           <View style={s.avatarWrapper}>
-            <Image source={{ uri: item.avatar }} style={s.avatar} />
-            {/* Online indicator dot - decorative */}
+            <FramedAvatar
+              avatarUri={item.avatar}
+              frame={item.profileFrame || null}
+              isDarkMode={isDark}
+              avatarSize={40}
+            />
           </View>
         </TouchableOpacity>
 
@@ -178,6 +186,47 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
               return hasRecentWin ? (
                 <Image source={require('../../../assets/trophy.webp')} style={s.badge} />
               ) : null;
+            })()}
+            {item.topBadge && BADGE_IMAGES[item.topBadge] && (
+              <Image source={BADGE_IMAGES[item.topBadge]} style={{ width: 14, height: 14, borderRadius: 7 }} />
+            )}
+            {(() => {
+              const p = getCachedProfile(item.userId);
+              if (!p) return null;
+              return (
+                <>
+                  {p.isAdmin && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
+                      <Ionicons name="shield" size={10} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Admin</Text>
+                    </View>
+                  )}
+                  {!p.isAdmin && p.isModerator && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
+                      <Ionicons name="shield-checkmark" size={10} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Mod</Text>
+                    </View>
+                  )}
+                  {!p.isAdmin && !p.isModerator && item.isBabyMod && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
+                      <Ionicons name="paw" size={10} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>JMD</Text>
+                    </View>
+                  )}
+                  {p.isTrusted && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
+                      <Ionicons name="checkmark-circle" size={10} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
+                    </View>
+                  )}
+                  {p.isCMSR && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
+                      <Ionicons name="briefcase" size={10} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
+                    </View>
+                  )}
+                </>
+              );
             })()}
           </View>
           <Text style={s.time}>{formattedTime}</Text>
@@ -323,8 +372,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         <Animated.View style={{ transform: [{ scale: heartScale }] }}>
           <TouchableOpacity
             style={[s.actionBtn, myReaction && s.actionBtnActive]}
-            onPress={handleQuickReact}
-            onLongPress={() => setShowEmojiPicker(v => !v)}
+            onPress={() => setShowEmojiPicker(v => !v)}
             activeOpacity={0.75}
           >
             <Text style={{ fontSize: 14 }}>{myReaction || '🤍'}</Text>
@@ -345,7 +393,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         <View style={{ flex: 1 }} />
 
         {/* Chat / DM button */}
-        <TouchableOpacity style={s.chatBtn} onPress={openProfileDrawer} activeOpacity={0.8}>
+        <TouchableOpacity style={s.chatBtn} onPress={handleChatNavigation} activeOpacity={0.8}>
           <Icon name="paper-plane" size={11} color="#fff" />
           <Text style={s.chatBtnLabel}>{t('feed.chat')}</Text>
         </TouchableOpacity>
@@ -425,8 +473,8 @@ const getStyles = (isDark) =>
       borderColor: config.colors.primary,
     },
     badge: {
-      width: 14,
-      height: 14,
+      width: 11,
+      height: 11,
     },
     name: {
       fontWeight: '800',
@@ -684,13 +732,21 @@ const getStyles = (isDark) =>
     },
   });
 
+// ✅ PERF FIX #11: More complete memo comparison.
+// Added item.commentCount (re-render on new comments), item.imageUrl,
+// and callback refs to ensure PostCard updates when it should and skips when it shouldn't.
 export default memo(PostCard, (prevProps, nextProps) => {
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.likes === nextProps.item.likes &&
     prevProps.item.reactions === nextProps.item.reactions &&
+    prevProps.item.commentCount === nextProps.item.commentCount &&
+    prevProps.item.imageUrl === nextProps.item.imageUrl &&
     prevProps.userId === nextProps.userId &&
     prevProps.localState?.isPro === nextProps.localState?.isPro &&
-    prevProps.appdatabase === nextProps.appdatabase
+    prevProps.appdatabase === nextProps.appdatabase &&
+    prevProps.onReaction === nextProps.onReaction &&
+    prevProps.onDelete === nextProps.onDelete &&
+    prevProps.onDeleteAll === nextProps.onDeleteAll
   );
 });

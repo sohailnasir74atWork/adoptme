@@ -10,10 +10,22 @@
  * duplicate CDN requests.
  */
 
-import { MMKV } from 'react-native-mmkv';
+
 
 // ── Same cache instance & keys as AnalyticsScreen.js ──
-const analyticsCache = new MMKV({ id: 'analytics-cache' });
+let analyticsCache;
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  analyticsCache = createMMKV({ id: 'analytics-cache' });
+} catch (e) {
+  console.warn('[analyticsDataHelper] MMKV not available:', e.message);
+  analyticsCache = {
+    getString: () => undefined,
+    getNumber: () => undefined,
+    set: () => {},
+    delete: () => {},
+  };
+}
 const ANALYTICS_CACHE_KEY = 'analytics';
 const ANALYTICS_TS_KEY = 'analytics_ts';
 const CHANGES_CACHE_KEY = 'value_changes';
@@ -73,6 +85,14 @@ const VALUE_KEY_MAP = {
 const SKIP_KEYS = new Set(['key', 'name', 'type', 'image']);
 
 const normalizeDiffItem = (item) => {
+    // Adoptme format: score: {oldVal, newVal}
+    if (item.score && typeof item.score === 'object' && 'oldVal' in item.score && 'newVal' in item.score) {
+        const diff = item.score.newVal - item.score.oldVal;
+        const pct = item.score.oldVal > 0 ? Math.round((diff / item.score.oldVal) * 100) : 0;
+        return { oldVal: item.score.oldVal, newVal: item.score.newVal, pct };
+    }
+
+    // MM2 format: inline value keys
     let primaryOld = 0;
     let primaryNew = 0;
     let foundPrimary = false;
@@ -97,7 +117,7 @@ const normalizeDiffItem = (item) => {
     return { oldVal: primaryOld, newVal: primaryNew, pct };
 };
 
-const normalizeName = (name) => (name || '').toLowerCase().trim();
+export const normalizeName = (name) => (name || '').toLowerCase().trim();
 
 const isCacheFresh = (tsKey) => {
     const ts = analyticsCache.getNumber(tsKey);
@@ -136,6 +156,16 @@ const buildMaps = (analyticsRaw, changesRaw) => {
                 const name = normalizeName(item.name);
                 if (!name) return;
 
+                // Adoptme format: score: {oldVal, newVal}
+                if (item.score && typeof item.score === 'object' && 'oldVal' in item.score && 'newVal' in item.score) {
+                    if (item.score.newVal > item.score.oldVal) {
+                        const pct = item.score.oldVal > 0 ? Math.round(((item.score.newVal - item.score.oldVal) / item.score.oldVal) * 100) : 0;
+                        result.hotMap[name] = { pct, isHot: true };
+                    }
+                    return;
+                }
+
+                // MM2 format: item.values
                 if (item.values) {
                     const primary = item.primary || 'd_nopotion';
                     const v = item.values[primary];

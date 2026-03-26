@@ -8,11 +8,12 @@ import {
   StyleSheet,
 
 } from 'react-native';
-import { get, ref } from '@react-native-firebase/database';
+import { get, ref, set } from '@react-native-firebase/database';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 
@@ -24,8 +25,9 @@ const BlockedUsersScreen = () => {
 
 
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   // ✅ Memoize styles
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   const [blockedUsers, setBlockedUsers] = useState([]);
 
@@ -115,6 +117,12 @@ const BlockedUsersScreen = () => {
         await updateLocalState('bannedUsers', updatedBannedUsers);
       }
 
+      // ✅ Sync unblock to RTDB (remove from blocked_users)
+      if (user?.id && appdatabase) {
+        const blockedRef = ref(appdatabase, `users/${user.id}/blocked_users/${selectedUserId}`);
+        await set(blockedRef, null);
+      }
+
       // ✅ Update UI immediately
       setBlockedUsers(prevBlockedUsers => {
         if (!Array.isArray(prevBlockedUsers)) return [];
@@ -148,7 +156,7 @@ const BlockedUsersScreen = () => {
             style={styles.unblockButton}
             onPress={() => handleUnblockUser(userId)}
           >
-            <Icon name="person-remove-outline" size={20} color={isDarkMode ? 'white' : 'black'} />
+            <Icon name="person-remove-outline" size={20} color={c.text} />
             <Text style={styles.unblockText}>{t("chat.unblock")}</Text>
           </TouchableOpacity>
         </View>
@@ -177,7 +185,7 @@ const BlockedUsersScreen = () => {
   );
 };
 
-export const getStyles = (isDarkMode) =>
+export const getStyles = (isDarkMode, c) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -191,7 +199,7 @@ export const getStyles = (isDarkMode) =>
     },
     emptyText: {
       fontSize: 16,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
       textAlign: 'center',
     },
     userContainer: {
@@ -202,7 +210,7 @@ export const getStyles = (isDarkMode) =>
       backgroundColor: config.colors.card,
       borderRadius: 10,
       borderBottomWidth: 1,
-      borderColor: isDarkMode ? 'white' : 'black',
+      borderColor: c.text,
     },
     avatar: {
       width: 50,
@@ -219,7 +227,7 @@ export const getStyles = (isDarkMode) =>
     },
     userName: {
       fontSize: 16,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
     },
     unblockButton: {
       flexDirection: 'row',
@@ -231,7 +239,7 @@ export const getStyles = (isDarkMode) =>
     },
     unblockText: {
       marginLeft: 5,
-      color: isDarkMode ? 'white' : 'black',
+      color: c.text,
       fontSize: 14,
     },
   });

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getThemeColors } from '../../Helper/themeColors';
 import {
     View,
     Text,
@@ -24,6 +25,7 @@ const formatValue = (value) => {
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+    if (value < 1) return value.toFixed(2);
     return value.toLocaleString();
 };
 
@@ -48,6 +50,7 @@ const CompactPortfolio = ({
     t,
     loadingPets,
     renderPetBubble,
+    lookupPetValue,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -55,7 +58,8 @@ const CompactPortfolio = ({
     const portfolio = useMemo(() => {
         if (!ownedPets || ownedPets.length === 0) return null;
 
-        const totalValue = ownedPets.reduce((s, p) => s + (Number(p.value) || 0), 0);
+        const getVal = (p) => lookupPetValue ? lookupPetValue(p) : (Number(p.value) || 0);
+        const totalValue = ownedPets.reduce((s, p) => s + getVal(p), 0);
         const totalItems = ownedPets.length;
         const avgValue = totalItems > 0 ? totalValue / totalItems : 0;
 
@@ -63,7 +67,7 @@ const CompactPortfolio = ({
         ownedPets.forEach((p) => {
             const c = (p.category || 'Other').toLowerCase();
             if (!catMap[c]) catMap[c] = { value: 0, count: 0 };
-            catMap[c].value += Number(p.value) || 0;
+            catMap[c].value += getVal(p);
             catMap[c].count += 1;
         });
 
@@ -76,7 +80,7 @@ const CompactPortfolio = ({
             .sort((a, b) => b.value - a.value);
 
         const wishVal = (wishlistPets || []).reduce(
-            (s, p) => s + (Number(p.value) || 0), 0,
+            (s, p) => s + (lookupPetValue ? lookupPetValue(p) : (Number(p.value) || 0)), 0,
         );
 
         return { totalValue, totalItems, avgValue, categories, wishVal };
@@ -119,7 +123,13 @@ const CompactPortfolio = ({
                 style={styles.summaryRow}
             >
                 <View style={styles.summaryLeft}>
-                    <Icon name="diamond-outline" size={14} color={config.colors.primary} />
+                    <View style={{
+                        width: 24, height: 24, borderRadius: 8,
+                        backgroundColor: isDarkMode ? 'rgba(236,72,153,0.15)' : 'rgba(236,72,153,0.1)',
+                        alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <Icon name="diamond" size={12} color="#ec4899" />
+                    </View>
                     <Text style={styles.summaryTitle}>
                         {t('settings.portfolio.title')}
                     </Text>
@@ -209,22 +219,13 @@ const CompactPortfolio = ({
 
                     {/* ── Valuation card ── */}
                     <View style={styles.valCard}>
-                        <View style={styles.valCardRow}>
-                            <View>
-                                <Text style={styles.valLabel}>
-                                    {t('settings.portfolio.total_value')}
-                                </Text>
-                                <Text style={styles.valNum}>
-                                    {formatValue(portfolio.totalValue)}
-                                </Text>
-                            </View>
-                            <View style={styles.avgBox}>
-                                <Icon name="analytics-outline" size={10} color={isDarkMode ? '#64748b' : '#9ca3af'} />
-                                <Text style={styles.avgText}>
-                                    {t('settings.portfolio.avg_value')}{'\n'}
-                                    {formatValue(portfolio.avgValue)}
-                                </Text>
-                            </View>
+                        <View>
+                            <Text style={styles.valLabel}>
+                                {t('settings.portfolio.total_value')}
+                            </Text>
+                            <Text style={styles.valNum}>
+                                {formatValue(portfolio.totalValue)}
+                            </Text>
                         </View>
                     </View>
 
@@ -278,9 +279,9 @@ const getStyles = (dark) =>
     StyleSheet.create({
         wrap: {
             backgroundColor: dark ? '#1e293b' : '#f8fafc',
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 12,
+            borderRadius: 14,
+            padding: 12,
+            marginBottom: 8,
         },
 
         /* empty */

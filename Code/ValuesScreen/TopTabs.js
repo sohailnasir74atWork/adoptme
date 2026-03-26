@@ -14,9 +14,11 @@ import {
   Animated,
   StyleSheet,
   Platform,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from "react-native-vector-icons/Ionicons";
-import ValueScreen from "./ValueScreen";
+
 import config from "../Helper/Environment";
 import HDWallpaperScreen from "./HDwallpaper";
 import NewsScreen from "./News";
@@ -25,7 +27,7 @@ import NewsFeedbackReport from "./AdminReport";
 import ServerScreen from "./ServerScreen";
 import ScammerDatabaseScreen from "./ScammerDatabaseScreen";
 
-const MemoValueScreen = React.memo(ValueScreen);
+
 
 const CustomTopTabs = ({ selectedTheme }) => {
   const indicatorX = useRef(new Animated.Value(0)).current;
@@ -36,16 +38,10 @@ const CustomTopTabs = ({ selectedTheme }) => {
   const tabs = useMemo(() => {
     const base = [
       {
-        label: "Items",
-        key: "values",
-        icon: "pricetags-outline",
-        iconActive: "pricetags",
-      },
-      {
-        label: "Scammer DB",
-        key: "scammer",
-        icon: "shield-outline",
-        iconActive: "shield",
+        label: "HD Wallpaper",
+        key: "wallpaper",
+        icon: "image-outline",
+        iconActive: "image",
       },
       {
         label: "Server",
@@ -54,10 +50,10 @@ const CustomTopTabs = ({ selectedTheme }) => {
         iconActive: "server",
       },
       {
-        label: "HD Wallpaper",
-        key: "wallpaper",
-        icon: "image-outline",
-        iconActive: "image",
+        label: "Scammer DB",
+        key: "scammer",
+        icon: "shield-outline",
+        iconActive: "shield",
       },
       {
         label: "News",
@@ -153,8 +149,10 @@ const CustomTopTabs = ({ selectedTheme }) => {
   const inactiveBorder = "grey";
   const inactiveText = "grey";
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { paddingTop: Platform.OS === 'ios' ? insets.top : (StatusBar.currentHeight || 24) + 12 }]}>
       {/* Tabs header */}
       <View style={styles.container}>
         <ScrollView
@@ -215,16 +213,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
 
       {/* Screens */}
       <View style={styles.contentContainer}>
-        {mountedTabs.values && (
-          <View
-            style={[
-              styles.screen,
-              activeKey !== "values" && styles.hiddenScreen,
-            ]}
-          >
-            <MemoValueScreen selectedTheme={selectedTheme} />
-          </View>
-        )}
+
         {mountedTabs.server && (
           <View
             style={[
@@ -292,7 +281,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     padding: 8,
-    paddingTop: Platform.OS !== 'ios' ? 60 : 0, // ✅ Add top padding since header is hidden
+    paddingTop: 0, // handled dynamically via useSafeAreaInsets
   },
   container: {
     paddingBottom: 8,

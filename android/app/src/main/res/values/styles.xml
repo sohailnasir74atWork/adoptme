@@ -2,10 +2,12 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:navigationBarColor">#0f172a</item>
     </style>
 
     <style name="BootTheme" parent="Theme.BootSplash">
         <item name="android:statusBarColor">@color/bootsplash_background</item>
+        <item name="android:navigationBarColor">@color/bootsplash_background</item>
 
         <item name="bootSplashBackground">@color/bootsplash_background</item>
         <item name="bootSplashLogo">@drawable/bootsplash_logo</item>

@@ -18,8 +18,8 @@ android {
         applicationId "com.adoptmevaluescalc"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 60
-        versionName "1.6.0"
+        versionCode 71
+        versionName "1.7.2"
 
         // ⭐ ADD: ship only ARM. Add "armeabi-v7a" if you still support 32-bit.
         ndk {
@@ -69,7 +69,6 @@ dependencies {
         implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
         implementation("com.google.firebase:firebase-analytics")
         implementation("com.google.firebase:firebase-messaging")
-        implementation("androidx.activity:activity:1.9.+")
     } else {
         implementation jscFlavor
     }

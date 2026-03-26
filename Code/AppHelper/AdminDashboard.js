@@ -153,21 +153,167 @@ const AdminDashboard = () => {
   // Tabs
   const [activeTab, setActiveTab] = useState('banned');
 
-  // Banned Data
-  const [bannedUsers, setBannedUsers] = useState([]);
+  // Banned Data — single fetch, client-side filtering
+  const [allBannedUsers, setAllBannedUsers] = useState([]); // full list
   const [loadingBanned, setLoadingBanned] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastBannedKey, setLastBannedKey] = useState(null);
-  const [lastBannedTime, setLastBannedTime] = useState(null);
-  const [hasMoreBanned, setHasMoreBanned] = useState(true);
-
-  // Search Data
-  const [searchQuery, setSearchQuery] = useState('');
   const [bannedSearchQuery, setBannedSearchQuery] = useState('');
+  const [strikeFilter, setStrikeFilter] = useState('all'); // 'all' | '1' | '2' | '3+'
+
+  // Ban Summary Stats (computed from allBannedUsers)
+  const [banSummary, setBanSummary] = useState(null); // { total, byMod: { modName: count } }
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+
+  // ─────────────────────────────────────────────
+  // Helper: check if a string looks like a Firebase user ID (not a display name)
+  const looksLikeUserId = (val) => {
+    if (!val || typeof val !== 'string') return false;
+    return val.length >= 15 && /^[a-zA-Z0-9]+$/.test(val);
+  };
+
+  // ─────────────────────────────────────────────
+  // Fetch ALL banned users once — builds list + summary in one pass
+  const fetchAllBanned = useCallback(async () => {
+    if (loadingBanned) return;
+    setLoadingBanned(true);
+    try {
+      const bannedRef = ref(db, 'banned_users_by_email');
+      const snapshot = await get(bannedRef);
+
+      if (!snapshot.exists()) {
+        setAllBannedUsers([]);
+        setBanSummary({ total: 0, byMod: {} });
+        return;
+      }
+
+      const list = [];
+      const now = Date.now();
+      let total = 0;
+      const byModId = {};
+      const idsToResolve = new Set();
+
+      snapshot.forEach((child) => {
+        const encodedEmail = child.key;
+        if (BAD_KEYS.has(encodedEmail)) return;
+        const entry = child.val();
+        const sc = entry?.strikeCount || 0;
+
+        // Skip 0-strike entries (expired mutes)
+        if (sc < 1) return;
+
+        // Skip expired non-permanent bans
+        const until = entry?.bannedUntil;
+        if (until !== 'permanent' && typeof until === 'number' && until < now) return;
+
+        const rawBannedBy = typeof entry?.bannedBy === 'string'
+          ? entry.bannedBy
+          : entry?.bannedBy?.displayName || 'Unknown';
+
+        list.push({
+          isBanned: true,
+          email: decodeEmail(encodedEmail),
+          encodedEmail,
+          reason: entry?.reason ?? '—',
+          strikeCount: sc,
+          bannedUntil: until ?? null,
+          displayName: entry?.displayName || 'Unknown',
+          avatar: getAvatarSafe(entry),
+          bannedBy: rawBannedBy,
+          bannedAt: entry?.bannedAt ?? null,
+          id: entry?.userId || null,
+        });
+
+        total++;
+        byModId[rawBannedBy] = (byModId[rawBannedBy] || 0) + 1;
+        if (looksLikeUserId(rawBannedBy)) {
+          idsToResolve.add(rawBannedBy);
+        }
+      });
+
+      // Sort by most recent first
+      list.sort((a, b) => (b.bannedAt || 0) - (a.bannedAt || 0));
+
+      // Batch-resolve mod IDs → display names
+      const idToName = {};
+      if (idsToResolve.size > 0) {
+        const resolvePromises = [...idsToResolve].map(async (uid) => {
+          try {
+            const userSnap = await get(ref(db, `users/${uid}/displayName`));
+            idToName[uid] = userSnap.exists() ? userSnap.val() : uid;
+          } catch {
+            idToName[uid] = uid;
+          }
+        });
+        await Promise.all(resolvePromises);
+
+        // Resolve IDs in the list items too
+        list.forEach((item) => {
+          if (idToName[item.bannedBy]) {
+            item.bannedByName = idToName[item.bannedBy];
+          }
+        });
+      }
+
+      // Build summary with resolved names
+      const byMod = {};
+      for (const [key, count] of Object.entries(byModId)) {
+        const displayName = idToName[key] || key;
+        byMod[displayName] = (byMod[displayName] || 0) + count;
+      }
+
+      setAllBannedUsers(list);
+      setBanSummary({ total, byMod });
+    } catch (err) {
+      console.error('Fetch banned error:', err);
+    } finally {
+      setLoadingBanned(false);
+      setRefreshing(false);
+    }
+  }, [db, loadingBanned]);
+
+  // Load once on mount
+  useEffect(() => {
+    fetchAllBanned();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchAllBanned();
+  };
+
+  // ─────────────────────────────────────────────
+  // Client-side filtered + searched banned list
+  const filteredBannedUsers = useMemo(() => {
+    let list = allBannedUsers;
+
+    // Apply strike filter
+    if (strikeFilter === '1') {
+      list = list.filter((u) => u.strikeCount === 1);
+    } else if (strikeFilter === '2') {
+      list = list.filter((u) => u.strikeCount === 2);
+    } else if (strikeFilter === '3+') {
+      list = list.filter((u) => u.strikeCount >= 3);
+    }
+
+    // Apply search (name + email)
+    const q = bannedSearchQuery.trim().toLowerCase();
+    if (q.length >= 1) {
+      list = list.filter((u) => {
+        const name = (u.displayName || '').toLowerCase();
+        const email = (u.email || '').toLowerCase();
+        return name.includes(q) || email.includes(q);
+      });
+    }
+
+    return list;
+  }, [allBannedUsers, strikeFilter, bannedSearchQuery]);
+
+  // Search Data (for the "Search DB" tab)
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [userBanStatus, setUserBanStatus] = useState({}); // ✅ Track ban status for searched users
+  const [userBanStatus, setUserBanStatus] = useState({});
 
   // Modal
   const [selectedUser, setSelectedUser] = useState(null);
@@ -180,7 +326,7 @@ const AdminDashboard = () => {
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [hasMoreReviews, setHasMoreReviews] = useState(true);
-  const [lastReviewKey, setLastReviewKey] = useState(null); // Firestore doc snapshot cursor
+  const [lastReviewKey, setLastReviewKey] = useState(null);
 
   // Strike History
   const [strikeHistory, setStrikeHistory] = useState([]);
@@ -210,164 +356,6 @@ const AdminDashboard = () => {
   const [uploadingPollImage, setUploadingPollImage] = useState(false);
 
   // ─────────────────────────────────────────────
-  // Fetch Banned Users (Paginated)
-  const fetchBannedUsers = useCallback(async (reset = false) => {
-    if ((!reset && !hasMoreBanned) || loadingBanned) return;
-
-    setLoadingBanned(true);
-    try {
-      const limitSize = 10;
-      const bannedRef = ref(db, 'banned_users_by_email');
-
-      // 1) SEARCH MODE (case-insensitive via dual query)
-      if (bannedSearchQuery.trim().length >= 1) {
-        if (reset) setBannedUsers([]);
-
-        const lower = sanitizeSearchQuery(bannedSearchQuery.trim().toLowerCase());
-        if (!lower) {
-          setLoadingBanned(false);
-          return;
-        }
-        const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-        const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
-
-        const seen = new Set();
-        const list = [];
-
-        for (const v of variants) {
-          const q = query(
-            bannedRef,
-            orderByChild('displayName'),
-            startAt(v),
-            endAt(v + '\uf8ff'),
-            limitToFirst(limitSize)
-          );
-          const snapshot = await get(q);
-          if (snapshot.exists()) {
-            snapshot.forEach((child) => {
-              const encodedEmail = child.key;
-              if (BAD_KEYS.has(encodedEmail) || seen.has(encodedEmail)) return;
-              seen.add(encodedEmail);
-              const entry = child.val();
-              list.push({
-                isBanned: true,
-                email: decodeEmail(encodedEmail),
-                encodedEmail,
-                reason: entry?.reason ?? '—',
-                strikeCount: entry?.strikeCount ?? 0,
-                bannedUntil: entry?.bannedUntil ?? null,
-                displayName: entry?.displayName || 'Unknown',
-                avatar: getAvatarSafe(entry),
-                bannedBy: entry?.bannedBy || null,
-                bannedAt: entry?.bannedAt ?? null,
-                id: entry?.userId || null
-              });
-            });
-          }
-        }
-
-        setBannedUsers(list);
-        setHasMoreBanned(false);
-        return;
-      }
-
-      // 2) PAGINATION MODE (Newest first by bannedAt)
-      let q;
-      if (reset) {
-        setBannedUsers([]);
-        setLastBannedTime(null);
-        setLastBannedKey(null);
-        setHasMoreBanned(true);
-        q = query(bannedRef, orderByChild('bannedAt'), limitToLast(limitSize));
-      } else {
-        if (lastBannedKey === null) return;
-        q = query(
-          bannedRef,
-          orderByChild('bannedAt'),
-          endAt(lastBannedTime, lastBannedKey),
-          limitToLast(limitSize + 1)
-        );
-      }
-
-      const snapshot = await get(q);
-      if (!snapshot.exists()) {
-        if (reset) setBannedUsers([]);
-        setHasMoreBanned(false);
-        return;
-      }
-
-      const list = [];
-      snapshot.forEach((child) => {
-        const encodedEmail = child.key;
-        if (BAD_KEYS.has(encodedEmail)) return;
-        const entry = child.val();
-        list.push({
-          isBanned: true,
-          email: decodeEmail(encodedEmail),
-          encodedEmail,
-          reason: entry?.reason ?? '—',
-          strikeCount: entry?.strikeCount ?? 0,
-          bannedUntil: entry?.bannedUntil ?? null,
-          displayName: entry?.displayName || 'Unknown',
-          avatar: getAvatarSafe(entry),
-          bannedBy: entry?.bannedBy || null,
-          bannedAt: entry?.bannedAt ?? null,
-          id: entry?.userId || null
-        });
-      });
-
-      let sortedList = list.reverse();
-      if (!reset && lastBannedKey) {
-        sortedList = sortedList.filter((item) => item.encodedEmail !== lastBannedKey);
-      }
-      if (sortedList.length === 0) {
-        setHasMoreBanned(false);
-        return;
-      }
-
-      const oldestItem = sortedList[sortedList.length - 1];
-      setLastBannedTime(oldestItem.bannedAt);
-      setLastBannedKey(oldestItem.encodedEmail);
-
-      const effectiveLimit = reset ? limitSize : limitSize + 1;
-      setHasMoreBanned(snapshot.numChildren() >= effectiveLimit);
-
-      setBannedUsers((prev) => {
-        if (reset) return sortedList;
-
-        const existing = new Set(prev.map((u) => u.encodedEmail));
-        const newUnique = sortedList.filter((u) => !existing.has(u.encodedEmail));
-        if (newUnique.length === 0) {
-          setHasMoreBanned(false);
-          return prev;
-        }
-        return [...prev, ...newUnique];
-      });
-    } catch (err) {
-      console.error('Fetch banned error:', err);
-    } finally {
-      setLoadingBanned(false);
-      setRefreshing(false);
-    }
-  }, [db, bannedSearchQuery, lastBannedTime, lastBannedKey, hasMoreBanned, loadingBanned]);
-
-  useEffect(() => {
-    fetchBannedUsers(true);
-  }, [bannedSearchQuery]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    setHasMoreBanned(true);
-    fetchBannedUsers(true);
-  };
-
-  const loadMoreBanned = () => {
-    if (!loadingBanned && hasMoreBanned && !bannedSearchQuery) {
-      fetchBannedUsers(false);
-    }
-  };
-
-  // ─────────────────────────────────────────────
   // Search Users (RTDB) — fool-proof: email, special chars, case-insensitive
   const handleSearch = async () => {
     const raw = searchQuery.trim();
@@ -382,9 +370,26 @@ const AdminDashboard = () => {
     try {
       const results = [];
       const seen = new Set();
-      const isEmailSearch = raw.includes('@') || raw.includes('(dot)');
+      const isEmailSearch = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) || raw.includes('(dot)');
+      const isIdSearch = looksLikeUserId(raw);
 
-      if (isEmailSearch) {
+      if (isIdSearch) {
+        // ── ID SEARCH: direct lookup by Firebase user key ──
+        const userRef = ref(db, `users/${raw}`);
+        const userSnap = await get(userRef);
+        if (userSnap.exists()) {
+          const u = userSnap.val();
+          const id = u.id || raw;
+          seen.add(id);
+          results.push({
+            isBanned: false, id,
+            displayName: u.displayName || u.userName || 'Unknown',
+            email: u.email, avatar: getAvatarSafe(u),
+            robloxUsername: u.robloxUsername,
+            isAdmin: u.admin || false, isModerator: u.isModerator || false,
+          });
+        }
+      } else if (isEmailSearch) {
         // ── EMAIL SEARCH: exact lookup by encoded key ──
         const email = raw.toLowerCase().trim();
         const encodedEmail = email.replace(/\./g, '(dot)');
@@ -551,7 +556,7 @@ const AdminDashboard = () => {
       const success = await unbanUserWithEmail(email);
       if (success) {
         setSelectedUser(null);
-        fetchBannedUsers(true);
+        fetchAllBanned();
         if (activeTab === 'search') {
           setSearchResults((prev) => prev.map((u) => (u.email === email ? { ...u, isBanned: false } : u)));
           // ✅ Clear cached ban status for this user
@@ -590,7 +595,7 @@ const AdminDashboard = () => {
     const success = await banUserwithEmail(userItem.email, isAdmin, userItem.id, userInfo, bannerInfo, isStaff, isStaff);
     if (success) {
       setSelectedUser(null);
-      fetchBannedUsers(true);
+      fetchAllBanned();
       setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
       // ✅ Refresh cached ban status for this user
       checkUserBanStatus(userItem.email).then((banData) => {
@@ -625,7 +630,7 @@ const AdminDashboard = () => {
     const success = await setUserStrike(userItem.email, strikeCount, userItem.id, isStaff, bannerInfo, userInfo, isStaff);
     if (success) {
       setSelectedUser(null);
-      fetchBannedUsers(true);
+      fetchAllBanned();
       if (activeTab === 'search') {
         setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
         // ✅ Refresh cached ban status for this user
@@ -661,7 +666,7 @@ const AdminDashboard = () => {
     const success = await muteUser(userItem.email, minutes, userInfo, bannerInfo, true);
     if (success) {
       setSelectedUser(null);
-      fetchBannedUsers(true);
+      fetchAllBanned();
       if (activeTab === 'search') {
         setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
         checkUserBanStatus(userItem.email).then((banData) => {
@@ -813,12 +818,27 @@ const AdminDashboard = () => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         if (data.strikeCount) {
+          // Resolve bannedBy: could be a user ID (new) or display name (old)
+          let appliedByName = null;
+          const rawBannedBy = typeof data.bannedBy === 'string' ? data.bannedBy : data.bannedBy?.displayName || null;
+
+          if (rawBannedBy && looksLikeUserId(rawBannedBy)) {
+            try {
+              const modSnap = await get(ref(db, `users/${rawBannedBy}/displayName`));
+              appliedByName = modSnap.exists() ? modSnap.val() : rawBannedBy;
+            } catch {
+              appliedByName = rawBannedBy;
+            }
+          } else {
+            appliedByName = rawBannedBy;
+          }
+
           setStrikeHistory([{
             id: 'current',
             strikeCount: data.strikeCount,
             reason: data.reason || '—',
             timestamp: data.bannedAt || null,
-            appliedBy: data.bannedBy?.displayName || null,
+            appliedBy: appliedByName,
             bannedUntil: data.bannedUntil || null,
           }]);
         } else {
@@ -1070,7 +1090,7 @@ const AdminDashboard = () => {
         voters: {},
         active: true,
         createdAt: Timestamp.now(),
-        createdBy: currentUser?.uid || 'admin',
+        createdBy: currentUser?.id || 'admin',
         imageUrl: pollImageUrl.trim() || null,
       };
       await addDoc(pollsRef, newPoll);
@@ -1190,7 +1210,7 @@ const AdminDashboard = () => {
         banInfo = cachedBan;
       } else {
         // Also check in bannedUsers list as fallback
-        const foundBan = bannedUsers.find((b) => b.email === item.email);
+        const foundBan = allBannedUsers.find((b) => b.email === item.email);
         if (foundBan) {
           isBanned = true;
           banInfo = foundBan;
@@ -1307,11 +1327,70 @@ const AdminDashboard = () => {
       {/* Content */}
       {activeTab === 'banned' ? (
         <View style={{ flex: 1 }}>
+          {/* Ban Summary Card */}
+          {banSummary && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setSummaryExpanded(!summaryExpanded)}
+              style={{
+                marginHorizontal: 16, marginBottom: 10, padding: 14, borderRadius: 14,
+                backgroundColor: isDark ? '#1C1C1E' : '#FFF',
+                borderWidth: 1, borderColor: isDark ? '#2C2C2E' : '#E5E5EA',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#FF3B3015', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                    <Ionicons name="shield" size={18} color="#FF3B30" />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 20, fontWeight: '800', color: isDark ? '#FFF' : '#000' }}>
+                      {banSummary.total}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: isDark ? '#888' : '#666', fontWeight: '500' }}>
+                      Total Banned Users
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: '#007AFF', fontWeight: '600', marginRight: 4 }}>
+                    {Object.keys(banSummary.byMod).length} Mods
+                  </Text>
+                  <Ionicons name={summaryExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={isDark ? '#666' : '#999'} />
+                </View>
+              </View>
+
+              {summaryExpanded && (
+                <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: isDark ? '#2C2C2E' : '#F2F2F7' }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+                    Actions by Moderator
+                  </Text>
+                  {Object.entries(banSummary.byMod)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([modName, count]) => (
+                      <View key={modName} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Ionicons name="person-circle" size={20} color={isDark ? '#555' : '#CCC'} style={{ marginRight: 8 }} />
+                          <Text style={{ color: isDark ? '#CCC' : '#333', fontSize: 14, fontWeight: '500' }}>{modName}</Text>
+                        </View>
+                        <View style={{ backgroundColor: '#FF3B3015', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 }}>
+                          <Text style={{ color: '#FF3B30', fontSize: 13, fontWeight: '700' }}>{count}</Text>
+                        </View>
+                      </View>
+                    ))}
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          {loadingBanned && !banSummary && allBannedUsers.length === 0 && (
+            <ActivityIndicator size="small" color="#007AFF" style={{ marginBottom: 10 }} />
+          )}
+
           <View style={styles.searchContainer}>
             <TextInput
               value={bannedSearchQuery}
               onChangeText={setBannedSearchQuery}
-              placeholder="Search banned users..."
+              placeholder="Search by name or email..."
               placeholderTextColor={isDark ? '#666' : '#999'}
               style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
             />
@@ -1320,27 +1399,50 @@ const AdminDashboard = () => {
             </View>
           </View>
 
-          {loadingBanned && !refreshing && bannedUsers.length === 0 ? (
+          {/* Strike Filter Pills */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10, gap: 8 }}>
+            {[
+              { key: 'all', label: 'All' },
+              { key: '1', label: 'Strike 1' },
+              { key: '2', label: 'Strike 2' },
+              { key: '3+', label: 'Permanent' },
+            ].map((f) => {
+              const isActive = strikeFilter === f.key;
+              return (
+                <TouchableOpacity
+                  key={f.key}
+                  onPress={() => setStrikeFilter(f.key)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                    backgroundColor: isActive ? '#007AFF' : (isDark ? '#1C1C1E' : '#F2F2F7'),
+                    borderWidth: 1, borderColor: isActive ? '#007AFF' : (isDark ? '#2C2C2E' : '#E5E5EA'),
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 12, fontWeight: '600',
+                    color: isActive ? '#FFF' : (isDark ? '#AAA' : '#666'),
+                  }}>
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {loadingBanned && !refreshing && allBannedUsers.length === 0 ? (
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={bannedUsers}
+              data={filteredBannedUsers}
               keyExtractor={(item) => item.encodedEmail}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? '#FFF' : '#000'} />}
               contentContainerStyle={styles.listContent}
               renderItem={renderItem}
-              onEndReached={loadMoreBanned}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={
-                loadingBanned && hasMoreBanned ? (
-                  <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 20 }} />
-                ) : null
-              }
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons name="shield-checkmark-outline" size={48} color={isDark ? '#333' : '#CCC'} />
                   <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
-                    {bannedSearchQuery ? 'No matching users found' : 'No banned users'}
+                    {bannedSearchQuery || strikeFilter !== 'all' ? 'No matching users found' : 'No banned users'}
                   </Text>
                 </View>
               }

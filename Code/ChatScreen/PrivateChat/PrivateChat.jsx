@@ -8,6 +8,7 @@ import {
   TouchableOpacity, TextInput,
 
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { getStyles } from '../Style';
 import PrivateMessageInput from './PrivateMessageInput';
@@ -40,8 +41,9 @@ import { updateStreak } from '../../Helper/StreakHelper';
 const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
-const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
+const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
+  const insets = useSafeAreaInsets();
 
   const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB } = useGlobalState();
   const [trade, setTrade] = useState(null)
@@ -555,7 +557,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
 
   // ✅ Memoize sendMessage
-  const sendMessage = useCallback(async (text, image, fruits) => {
+  const sendMessage = useCallback(async (text, image, fruits, replyToMsg) => {
     const trimmedText = (text || '').trim(); // safe guard
     // Handle both single image (string) and multiple images (array)
     const hasImage = !!image && (typeof image === 'string' || (Array.isArray(image) && image.length > 0));
@@ -640,6 +642,18 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       timestamp,
       // flage: user.flage ? user.flage : null,
     };
+
+    if (replyToMsg) {
+      messageData.replyTo = {
+        id: replyToMsg.id,
+        text: replyToMsg.text || '',
+        senderId: replyToMsg.senderId,
+        imageUrl: replyToMsg.imageUrl || null,
+        imageUrls: replyToMsg.imageUrls || null,
+        hasFruits: replyToMsg.fruits && replyToMsg.fruits.length > 0,
+        fruitsCount: replyToMsg.fruits ? replyToMsg.fruits.length : 0,
+      };
+    }
 
     if (hasImage) {
       // Store as array if multiple images, single string if one image
@@ -789,7 +803,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       <GestureHandlerRootView>
 
 
-        <View style={[styles.container,]}>
+        <View style={[styles.container, noTabBar && { paddingBottom: insets.bottom }]}>
 
           <ConditionalKeyboardWrapper style={{ flex: 1 }} privatechatscreen={true}>
             {/* <View style={{ flex: 1 }}> */}

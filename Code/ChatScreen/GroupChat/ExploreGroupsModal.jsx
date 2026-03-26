@@ -12,16 +12,19 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { useLocalState } from '../../LocalGlobelStats';
 import { getAllGroups, sendJoinRequest } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import config from '../../Helper/Environment';
 
 const ExploreGroupsModal = ({ visible, onClose }) => {
   const { firestoreDB, user } = useGlobalState();
   const { theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const c = getThemeColors(isDarkMode);
+  const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -188,28 +191,28 @@ const ExploreGroupsModal = ({ visible, onClose }) => {
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
+        <SwipeableBottomDrawer onClose={onClose} isDarkMode={isDarkMode} style={styles.modalContent}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Explore Groups</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+              <Icon name="close" size={24} color={c.text} />
             </TouchableOpacity>
           </View>
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
-            <Icon name="search" size={20} color={isDarkMode ? '#999' : '#666'} style={styles.searchIcon} />
+            <Icon name="search" size={20} color={c.textSecondary} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by group name..."
-              placeholderTextColor={isDarkMode ? '#999' : '#666'}
+              placeholderTextColor={c.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Icon name="close-circle" size={20} color={isDarkMode ? '#999' : '#666'} />
+                <Icon name="close-circle" size={20} color={c.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -254,13 +257,13 @@ const ExploreGroupsModal = ({ visible, onClose }) => {
               showsVerticalScrollIndicator={false}
             />
           )}
-        </View>
+        </SwipeableBottomDrawer>
       </View>
     </Modal>
   );
 };
 
-const getStyles = (isDarkMode) =>
+const getStyles = (isDarkMode, c) =>
   StyleSheet.create({
     modalContainer: {
       flex: 1,
@@ -269,8 +272,6 @@ const getStyles = (isDarkMode) =>
     },
     modalContent: {
       backgroundColor: isDarkMode ? '#1F2937' : '#fff',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
       maxHeight: '90%',
       paddingBottom: 20,
     },
@@ -280,12 +281,12 @@ const getStyles = (isDarkMode) =>
       alignItems: 'center',
       padding: 20,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+      borderBottomColor: c.border,
     },
     headerTitle: {
       fontSize: 20,
       fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
     },
     closeButton: {
       padding: 4,
@@ -296,7 +297,7 @@ const getStyles = (isDarkMode) =>
       marginHorizontal: 16,
       marginTop: 12,
       marginBottom: 10,
-      backgroundColor: isDarkMode ? '#374151' : '#F3F4F6',
+      backgroundColor: c.border,
       borderRadius: 8,
       paddingHorizontal: 10,
       paddingVertical: 6,
@@ -308,7 +309,7 @@ const getStyles = (isDarkMode) =>
       flex: 1,
       fontSize: 14,
 
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
     },
     clearButton: {
       padding: 4,
@@ -323,7 +324,7 @@ const getStyles = (isDarkMode) =>
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 12,
-      backgroundColor: isDarkMode ? '#374151' : '#F3F4F6',
+      backgroundColor: c.border,
     },
     filterButtonActive: {
       backgroundColor: config.colors.primary,
@@ -331,7 +332,7 @@ const getStyles = (isDarkMode) =>
     filterText: {
       fontSize: 11,
       fontWeight: 'bold',
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
     filterTextActive: {
       color: '#fff',
@@ -347,14 +348,14 @@ const getStyles = (isDarkMode) =>
       paddingVertical: 10,
       paddingHorizontal: 4,
       borderBottomWidth: 1,
-      borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB',
+      borderBottomColor: c.border,
     },
     groupAvatar: {
       width: 44,
       height: 44,
       borderRadius: 22,
       marginRight: 10,
-      backgroundColor: isDarkMode ? '#374151' : '#F3F4F6',
+      backgroundColor: c.border,
     },
     groupInfo: {
       flex: 1,
@@ -363,13 +364,13 @@ const getStyles = (isDarkMode) =>
     groupName: {
       fontSize: 14,
       fontWeight: 'bold',
-      color: isDarkMode ? '#fff' : '#000',
+      color: c.text,
       marginBottom: 3,
     },
     groupDescription: {
       fontSize: 11,
 
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
       marginBottom: 4,
       lineHeight: 14,
     },
@@ -381,16 +382,16 @@ const getStyles = (isDarkMode) =>
     creatorName: {
       fontSize: 10,
 
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
     metaSeparator: {
       fontSize: 10,
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
     memberCount: {
       fontSize: 10,
 
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
     },
     actionContainer: {
       marginLeft: 8,
@@ -415,7 +416,7 @@ const getStyles = (isDarkMode) =>
     statusText: {
       fontSize: 10,
 
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
       textAlign: 'center',
     },
     loadingContainer: {
@@ -433,7 +434,7 @@ const getStyles = (isDarkMode) =>
     emptyText: {
       fontSize: 14,
 
-      color: isDarkMode ? '#9CA3AF' : '#6B7280',
+      color: c.textSecondary,
       textAlign: 'center',
     },
   });

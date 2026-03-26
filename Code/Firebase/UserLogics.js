@@ -1,11 +1,10 @@
-// Firebase/UserLogics.js
-
 import { getApp } from '@react-native-firebase/app';
 import {
   getAuth,
   signOut,
   deleteUser as fbDeleteUser,
 } from '@react-native-firebase/auth';
+import { clearMyCosmetics } from '../Helper/cosmeticsCache';
 
 /**
  * Log out the current user and reset local user state.
@@ -16,6 +15,9 @@ export const logoutUser = async (setUser) => {
     const auth = getAuth(app);         // get Auth instance for that app
 
     await signOut(auth);               // modular signOut
+
+    // Clear all MMKV caches (cosmetics, avatar, username, egg data)
+    clearMyCosmetics();
 
     // Reset your global user state
     setUser({

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { createGroup, updateGroupName, updateGroupDescription, updateGroupAvatar } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { useHaptic } from '../../Helper/HepticFeedBack';
@@ -22,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { useBanStatus } from '../utils';
+import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
@@ -74,6 +76,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
   const { triggerHapticFeedback } = useHaptic();
   const navigation = useNavigation();
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const [groupName, setGroupName] = useState('');
@@ -434,11 +437,11 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
         style={styles.keyboardAvoidingView}
       >
         <View style={styles.overlay}>
-          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
+          <SwipeableBottomDrawer onClose={onClose} isDarkMode={isDarkMode} style={[styles.container, { backgroundColor: c.bgAlt }]}>
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>{isEditMode ? t('chat.edit_group') : t('chat.create_group')}</Text>
               <View style={styles.placeholder} />
@@ -456,7 +459,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
                   <Image source={{ uri: groupAvatarUri }} style={styles.avatarPreview} />
                 ) : (
                   <View style={[styles.avatarPlaceholder, { backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5' }]}>
-                    <Icon name="camera" size={32} color={isDarkMode ? '#666' : '#999'} />
+                    <Icon name="camera" size={32} color={c.textMuted} />
                   </View>
                 )}
                 {uploadingAvatar && (
@@ -483,11 +486,11 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
                   styles.input,
                   {
                     backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5',
-                    color: isDarkMode ? '#fff' : '#000',
+                    color: c.text,
                   },
                 ]}
                 placeholder={t('chat.group_name_placeholder')}
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                placeholderTextColor={c.textMuted}
                 value={groupName}
                 onChangeText={setGroupName}
                 maxLength={50}
@@ -498,20 +501,20 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
                 Description {!isEditMode && <Text style={{ color: '#EF4444' }}>*</Text>}
-                {isEditMode && <Text style={{ fontSize: 12, color: isDarkMode ? '#9CA3AF' : '#6B7280' }}>{t('chat.group_desc_max_chars')}</Text>}
+                {isEditMode && <Text style={{ fontSize: 12, color: c.textSecondary }}>{t('chat.group_desc_max_chars')}</Text>}
               </Text>
               <TextInput
                 style={[
                   styles.input,
                   {
                     backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5',
-                    color: isDarkMode ? '#fff' : '#000',
+                    color: c.text,
                     minHeight: 80,
                     textAlignVertical: 'top',
                   },
                 ]}
                 placeholder={isEditMode ? t('chat.group_desc_placeholder_edit') : t('chat.group_desc_placeholder_create')}
-                placeholderTextColor={isDarkMode ? '#666' : '#999'}
+                placeholderTextColor={c.textMuted}
                 value={groupDescription}
                 onChangeText={setGroupDescription}
                 multiline
@@ -587,7 +590,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
                 )}
               </TouchableOpacity>
             </View>
-          </View>
+          </SwipeableBottomDrawer>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -606,8 +609,6 @@ const getStyles = (isDark) =>
       justifyContent: 'flex-end',
     },
     container: {
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
       padding: 20,
       maxHeight: '90%',
     },

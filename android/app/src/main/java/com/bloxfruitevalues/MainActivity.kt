@@ -16,7 +16,11 @@ class MainActivity : ReactActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        RNBootSplash.init(this, R.style.BootTheme); 
-        super.onCreate(null); 
+        try {
+            RNBootSplash.init(this, R.style.BootTheme)
+        } catch (e: Exception) {
+            // Guard against NullPointerException on 16 KB page-size devices
+        }
+        super.onCreate(null)
     }
 }

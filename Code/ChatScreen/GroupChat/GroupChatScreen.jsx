@@ -15,9 +15,10 @@ import { getStyles } from '../Style';
 import GroupMessageInput from './GroupMessageInput';
 import GroupMessageList from './GroupMessageList';
 import { useGlobalState } from '../../GlobelStats';
+import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
-import { get, ref, update, query as dbQuery, orderByKey, limitToLast, orderByValue, equalTo, onValue } from '@react-native-firebase/database';
+import { get, ref, update, set, query as dbQuery, orderByKey, limitToLast, orderByValue, equalTo, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -31,6 +32,8 @@ import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
+
 
 const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
@@ -91,7 +94,13 @@ const GroupChatScreen = () => {
     return () => unsubscribe();
   }, [user?.email, appdatabase]);
 
+  // ✅ PHASE 0B: Seed current user's profile into cache on mount
+  useEffect(() => {
+    if (user?.id) seedCurrentUser(user, null, appdatabase);
+  }, [user?.id, user?.avatar]);
+
   const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const messagesRef = useMemo(
@@ -427,6 +436,8 @@ const GroupChatScreen = () => {
           lastLoadedKeyRef.current = null;
           newestMessageIdRef.current = null;
         }
+
+        // Profile cache warming removed — messages embed full profile data
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
@@ -525,10 +536,33 @@ const GroupChatScreen = () => {
       hasSentMessageRef.current = 0;
       chatEnterTimeRef.current = Date.now();
 
-      // Reset unreadCount when entering chat
+      // Reset unreadCount when entering chat + ensure metadata exists (admin fix)
       const groupMetaRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}`);
-      update(groupMetaRef, { unreadCount: 0 }).catch((error) => {
-        console.error('Error resetting unread count:', error);
+      get(groupMetaRef).then((snap) => {
+        if (!snap.exists() || !snap.val()?.groupName) {
+          // Entry doesn't exist or missing groupName — write full metadata
+          // This fixes the bug where admin/mod entering a group creates a
+          // nameless entry in the joined groups list
+          const metaUpdate = {
+            unreadCount: 0,
+            groupName: groupData?.name || route?.params?.groupName || 'Group',
+            groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
+            memberCount: groupData?.memberIds?.length || 0,
+            lastMessage: 'No messages yet',
+            lastMessageTimestamp: Date.now(),
+            createdBy: groupData?.createdBy || null,
+          };
+          set(groupMetaRef, metaUpdate).catch((error) => {
+            console.error('Error writing group meta:', error);
+          });
+        } else {
+          // Entry exists with name — just reset unread
+          update(groupMetaRef, { unreadCount: 0 }).catch((error) => {
+            console.error('Error resetting unread count:', error);
+          });
+        }
+      }).catch((error) => {
+        console.error('Error checking group meta:', error);
       });
 
       return () => {
@@ -695,12 +729,12 @@ const GroupChatScreen = () => {
       const now = Date.now();
       const hasRecentWin =
         typeof user?.lastGameWinAt === 'number' &&
-        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
+        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000;
 
       // Check if user is creator
       const isCreator = groupData?.createdBy === user.id;
 
-      // Build message payload
+      // Build message payload (full profile — matches community chat)
       const messageData = {
         text: trimmedText,
         senderId: user.id,
@@ -760,6 +794,7 @@ const GroupChatScreen = () => {
           // Clear reply after successful send
           setReplyTo(null);
           hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
+
         }
       } catch (error) {
         console.error('Error sending message:', error);
@@ -986,6 +1021,12 @@ const GroupChatScreen = () => {
         showSuccessMessage('Success', 'You joined the group!');
         setPendingInvite(null);
         setIsMember(true);
+
+        // 🐝 Track group joins for socialBee badge (5+ groups)
+        try {
+          const { incrementAndCheckBadge, GROUP_CHAT_BADGE_THRESHOLDS } = require('./badgeUtils');
+          incrementAndCheckBadge(appdatabase, user.id, 'groupJoinCount', GROUP_CHAT_BADGE_THRESHOLDS);
+        } catch (e) {}
       } else {
         showErrorMessage('Error', result.error || 'Failed to accept invitation');
       }
@@ -1062,10 +1103,14 @@ const GroupChatScreen = () => {
   const handleUserPress = useCallback(async (userData) => {
     if (!userData || !userData.senderId) return;
 
+    // ✅ Enrich with cached avatar so drawer shows it instantly (no flash)
+    const cached = getCachedProfile(userData.senderId);
+    const resolvedAvatar = userData.avatar || cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+
     setSelectedUserForDrawer({
       senderId: userData.senderId,
       sender: userData.sender || 'Anonymous',
-      avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+      avatar: resolvedAvatar,
     });
 
     setIsDrawerVisible(true);
@@ -1094,7 +1139,7 @@ const GroupChatScreen = () => {
           style={{
             fontSize: 18,
             fontWeight: 'bold',
-            color: isDarkMode ? '#fff' : '#000',
+            color: c.text,
             textAlign: 'center',
           }}
           numberOfLines={1}
@@ -1109,8 +1154,8 @@ const GroupChatScreen = () => {
           onPress={() => setShowMembersModal(true)}
           style={{ flexDirection: 'row', alignItems: 'center', marginRight: 15 }}
         >
-          <Icon name="people" size={20} color={isDarkMode ? '#fff' : '#000'} />
-          <Text style={{ marginLeft: 6, color: isDarkMode ? '#fff' : '#000', fontWeight: '500', fontSize: 14 }}>
+          <Icon name="people" size={20} color={c.text} />
+          <Text style={{ marginLeft: 6, color: c.text, fontWeight: '500', fontSize: 14 }}>
             {memberCount}
           </Text>
         </TouchableOpacity>
@@ -1153,10 +1198,10 @@ const GroupChatScreen = () => {
               paddingHorizontal: 30,
               paddingVertical: 12,
               borderRadius: 8,
-              backgroundColor: isDarkMode ? '#374151' : '#E5E7EB',
+              backgroundColor: c.border,
             }}
           >
-            <Text style={{ color: isDarkMode ? '#fff' : '#000', fontWeight: '500', }}>Decline</Text>
+            <Text style={{ color: c.text, fontWeight: '500', }}>Decline</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleAcceptInvite}
@@ -1178,7 +1223,7 @@ const GroupChatScreen = () => {
   if (!isMember && !pendingInvite) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-        <Icon name="lock-closed-outline" size={64} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+        <Icon name="lock-closed-outline" size={64} color={c.textSecondary} />
         <Text style={[styles.text, { fontSize: 24, fontWeight: 'bold', marginTop: 20, marginBottom: 10 }]}>
           Access Denied
         </Text>
@@ -1262,12 +1307,12 @@ const GroupChatScreen = () => {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB' }}>
-              <Text style={{ fontSize: 20, fontWeight: 'bold', color: isDarkMode ? '#fff' : '#000' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: c.border }}>
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: c.text }}>
                 Members ({memberCount})
               </Text>
               <TouchableOpacity onPress={() => setShowMembersModal(false)}>
-                <Icon name="close" size={24} color={isDarkMode ? '#fff' : '#000'} />
+                <Icon name="close" size={24} color={c.text} />
               </TouchableOpacity>
             </View>
 
@@ -1308,16 +1353,16 @@ const GroupChatScreen = () => {
                   // ✅ Render pending invitation - Shows the INVITED USER (the person who was invited)
                   const inviteData = item.inviteData;
                   return (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: c.border }}>
                       <Image
                         source={{ uri: inviteData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                         style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12, opacity: 0.6 }}
                       />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: '500', color: isDarkMode ? '#fff' : '#000' }}>
+                        <Text style={{ fontSize: 16, fontWeight: '500', color: c.text }}>
                           {inviteData.displayName || 'Anonymous'}
                         </Text>
-                        <Text style={{ fontSize: 12, color: isDarkMode ? '#9CA3AF' : '#6B7280', marginTop: 2 }}>
+                        <Text style={{ fontSize: 12, color: c.textSecondary, marginTop: 2 }}>
                           Pending to Join
                         </Text>
                       </View>
@@ -1335,21 +1380,21 @@ const GroupChatScreen = () => {
                 const canMakeCreator = isCreator && !isCurrentUser && !isMemberCreator;
 
                 return (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: c.border }}>
                     <Image
                       source={{ uri: member.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                       style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12 }}
                     />
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 16, fontWeight: '500', color: isDarkMode ? '#fff' : '#000' }}>
+                        <Text style={{ fontSize: 16, fontWeight: '500', color: c.text }}>
                           {member.displayName || 'Anonymous'}
                         </Text>
                         {isOnline && (
                           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', marginLeft: 8 }} />
                         )}
                       </View>
-                      <Text style={{ fontSize: 12, color: isDarkMode ? '#9CA3AF' : '#6B7280', marginTop: 2 }}>
+                      <Text style={{ fontSize: 12, color: c.textSecondary, marginTop: 2 }}>
                         {isMemberCreator ? 'Creator' : 'Member'}
                         {isOnline && ' · Online'}
                       </Text>
@@ -1377,7 +1422,7 @@ const GroupChatScreen = () => {
               }}
               ListEmptyComponent={
                 <View style={{ padding: 40, alignItems: 'center' }}>
-                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#6B7280' }}>No members found</Text>
+                  <Text style={{ color: c.textSecondary }}>No members found</Text>
                 </View>
               }
             />

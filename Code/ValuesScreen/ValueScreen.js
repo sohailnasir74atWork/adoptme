@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { debounce } from '../Helper/debounce';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import config from '../Helper/Environment';
+import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import CodesDrawer from './Code';
 import { useHaptic } from '../Helper/HepticFeedBack';
@@ -94,7 +95,118 @@ const ItemImage = React.memo(({ uri, badges, styles }) => (
   </View>
 ));
 
+// ✅ PERF FIX: Moved to module level (was inside ValueScreen, recreated every render)
+const getImageUrl = (item, baseImgUrl) => {
+  if (!item || !item.name) return '';
+  if (!item.image || !baseImgUrl) return '';
+  return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+};
 
+// ✅ PERF FIX: Moved to module level so React.memo actually works.
+// When defined inside the component body, React creates a new component type every render,
+// which defeats React.memo entirely.
+const HIDE_BADGE_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'];
+
+const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, fromChat, fromSetting, imgurl, t }) => {
+  const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
+  const badges = [];
+
+  // Only show badges if the item type is not in hideBadge
+  if (!HIDE_BADGE_TYPES.includes(item.type?.toUpperCase())) {
+    if (itemSelection.isFly) {
+      badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
+    }
+    if (itemSelection.isRide) {
+      badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
+    }
+    if (itemSelection.valueType !== 'd') {
+      badges.push(
+        <ItemBadge
+          key="value"
+          type={itemSelection.valueType.toUpperCase()}
+          style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
+          styles={styles}
+        />
+      );
+    }
+  }
+
+  return (
+    <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
+      <View style={styles.imageContainer}>
+        <ItemImage
+          uri={getImageUrl(item, imgurl)}
+          badges={badges}
+          styles={styles}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.value}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
+          {item.rarity && (
+            <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
+              <View style={[styles.rarityDot, { backgroundColor: getRarityColor(item.rarity) }]} />
+              <Text style={[styles.rarityText, { color: getRarityColor(item.rarity) }]}>
+                {t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}
+              </Text>
+            </View>
+          )}
+          <View style={styles.analyticsRow}>
+            {(() => {
+              const demand = getDemandScore(item.name, demandMap);
+              if (demand) {
+                return (
+                  <View style={[styles.demandBadge, demand.score >= 8 && styles.demandBadgeHigh]}>
+                    <Text style={{ fontSize: 8 }}>{'\u{1F525}'}</Text>
+                    <Text style={[styles.demandText, demand.score >= 8 && styles.demandTextHigh]}>
+                      {demand.label}
+                    </Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
+            {(() => {
+              const hot = getHotStatus(item.name, hotMap);
+              if (hot) {
+                return (
+                  <View style={styles.hotBadge}>
+                    <Text style={{ fontSize: 8 }}>{'\u{1F4C8}'}</Text>
+                    <Text style={styles.hotText}>+{hot.pct}%</Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
+          </View>
+        </View>
+      </View>
+
+      {!HIDE_BADGE_TYPES.includes(item.type?.toUpperCase()) && (
+        <View style={styles.badgesContainer}>
+          {VALUE_TYPES.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={itemSelection.valueType === badge.toLowerCase()}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+          {MODIFIERS.map((badge) => (
+            <BadgeButton
+              key={badge}
+              badge={badge}
+              isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
+              onPress={() => onBadgePress(item.id, badge)}
+              styles={styles}
+            />
+          ))}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
 
 const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSelectedFruits, onRequestClose, fromSetting, ownedPets, setOwnedPets, wishlistPets, setWishlistPets, owned }) => {
   const [searchText, setSearchText] = useState('');
@@ -145,119 +257,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const debounceTimeoutRef = useRef(null);
 
 
-  // ✅ Memoize categories to prevent recreation
-  const hideBadge = useMemo(() =>
-    ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'],
-    []
-  );
-
-  const CATEGORIES = useMemo(() =>
-    ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'],
-    []
-  );
-
-  // console.log(selectedFruits)
-
-  const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap }) => {
-    const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
-    const { localState } = useLocalState()
-    const badges = [];
-
-    // Only show badges if the item type is not in hideBadge
-    if (!hideBadge.includes(item.type?.toUpperCase())) {
-      if (itemSelection.isFly) {
-        badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
-      }
-      if (itemSelection.isRide) {
-        badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
-      }
-      if (itemSelection.valueType !== 'd') {
-        badges.push(
-          <ItemBadge
-            key="value"
-            type={itemSelection.valueType.toUpperCase()}
-            style={itemSelection.valueType === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
-            styles={styles}
-          />
-        );
-      }
-    }
-
-    return (
-      <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
-        <View style={styles.imageContainer}>
-          <ItemImage
-            uri={getImageUrl(item, localState.imgurl)}
-            badges={badges}
-            styles={styles}
-          />
-          <View style={styles.itemInfo}>
-            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.value}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
-            {item.rarity && (
-              <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
-                <View style={[styles.rarityDot, { backgroundColor: getRarityColor(item.rarity) }]} />
-                <Text style={[styles.rarityText, { color: getRarityColor(item.rarity) }]}>
-                  {t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}
-                </Text>
-              </View>
-            )}
-            <View style={styles.analyticsRow}>
-              {(() => {
-                const demand = getDemandScore(item.name, demandMap);
-                if (demand) {
-                  return (
-                    <View style={[styles.demandBadge, demand.score >= 8 && styles.demandBadgeHigh]}>
-                      <Text style={{ fontSize: 8 }}>{'\u{1F525}'}</Text>
-                      <Text style={[styles.demandText, demand.score >= 8 && styles.demandTextHigh]}>
-                        {demand.label}
-                      </Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
-              {(() => {
-                const hot = getHotStatus(item.name, hotMap);
-                if (hot) {
-                  return (
-                    <View style={styles.hotBadge}>
-                      <Text style={{ fontSize: 8 }}>{'\u{1F4C8}'}</Text>
-                      <Text style={styles.hotText}>+{hot.pct}%</Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
-            </View>
-          </View>
-        </View>
-
-        {!hideBadge.includes(item.type?.toUpperCase()) && (
-          <View style={styles.badgesContainer}>
-            {VALUE_TYPES.map((badge) => (
-              <BadgeButton
-                key={badge}
-                badge={badge}
-                isActive={itemSelection.valueType === badge.toLowerCase()}
-                onPress={() => onBadgePress(item.id, badge)}
-                styles={styles}
-              />
-            ))}
-            {MODIFIERS.map((badge) => (
-              <BadgeButton
-                key={badge}
-                badge={badge}
-                isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
-                onPress={() => onBadgePress(item.id, badge)}
-                styles={styles}
-              />
-            ))}
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  });
+  // ✅ PERF FIX: hideBadge moved to module-level HIDE_BADGE_TYPES
+  const hideBadge = HIDE_BADGE_TYPES;
 
   const editValuesRef = useRef({
     Value: '',
@@ -344,12 +345,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     }
   }, [localState.data]);
 
-  const getImageUrl = (item, baseImgUrl) => {
-    if (!item || !item.name) return '';
-
-    if (!item.image || !baseImgUrl) return '';
-    return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-  };
+  // ✅ PERF FIX: getImageUrl moved to module level
   // Memoize the parsed codes data
   const parsedCodesData = useMemo(() => {
     if (!localState.codes) return [];
@@ -382,7 +378,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
     const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
     if (simpleValueCategories.includes(item.type?.toLowerCase())) {
-      return Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2);
+      return parseFloat(Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2));
     }
 
     if (!selectedValueType) return 0;
@@ -395,7 +391,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
         isRideSelected ? ' - ride' : ' - nopotion';
 
     const value = Number(item[valueKey + modifierSuffix]) || 0;
-    return Number(value).toFixed(2);
+    return parseFloat(Number(value).toFixed(2));
   }, []);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
@@ -536,6 +532,10 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           onPress={handlePress}
           demandMap={analyticsMaps.demandMap}
           hotMap={analyticsMaps.hotMap}
+          fromChat={fromChat}
+          fromSetting={fromSetting}
+          imgurl={localState.imgurl}
+          t={t}
         />
       );
     },
@@ -545,7 +545,11 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       getItemValue,
       styles,
       setWishlistPets,
-      analyticsMaps
+      analyticsMaps,
+      fromChat,
+      fromSetting,
+      localState.imgurl,
+      t
     ]
   );
 
@@ -793,10 +797,12 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     </>
   );
 });
-export const getStyles = (isDarkMode) => StyleSheet.create({
+export const getStyles = (isDarkMode) => {
+  const c = getThemeColors(isDarkMode);
+  return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: isDarkMode ? '#0f172a' : '#f8f9fa',
+    backgroundColor: c.bg,
     // paddingTop: 16,
   },
   columnWrapper: {
@@ -814,10 +820,10 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   searchInput: {
     height: 40,
-    backgroundColor: isDarkMode ? '#2a2a2a' : '#ffffff',
+    backgroundColor: c.bgAlt,
     borderRadius: 8,
     paddingHorizontal: 20,
-    color: isDarkMode ? '#ffffff' : '#000000',
+    color: c.text,
     flex: 1,
     fontSize: 12,
     shadowColor: "#000",
@@ -828,7 +834,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
 
   itemContainer: {
-    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+    backgroundColor: c.bgAlt,
     borderRadius: 10,
     marginBottom: 8,
     padding: 10,
@@ -850,7 +856,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: isDarkMode ? '#2a2a2a' : '#f8f9fa',
+    backgroundColor: c.cardBg,
   },
   icon: {
     width: '100%',
@@ -864,13 +870,13 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   name: {
     fontSize: 14,
     fontWeight: '700',
-    color: isDarkMode ? '#ffffff' : '#000000',
+    color: c.text,
     marginBottom: 2,
     letterSpacing: -0.5,
   },
   value: {
     fontSize: 12,
-    color: isDarkMode ? '#e0e0e0' : '#333333',
+    color: c.textSecondary,
     marginBottom: 2,
     fontWeight: '500',
   },
@@ -970,7 +976,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 3,
-    backgroundColor: isDarkMode ? '#2a2a2a' : '#f0f0f0',
+    backgroundColor: c.bgAlt,
     // padding: 16,
     borderRadius: 16,
     marginTop: 8,
@@ -979,7 +985,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 15,
     borderRadius: 15,
-    backgroundColor: isDarkMode ? '#3a3a3a' : '#ffffff',
+    backgroundColor: c.bgElevated,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -992,7 +998,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   badgeButtonText: {
     fontSize: 10,
     fontWeight: '600',
-    color: isDarkMode ? '#ffffff' : '#666666',
+    color: c.text,
     textAlign: 'center',
   },
   badgeButtonTextActive: {
@@ -1008,14 +1014,14 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   filterOptionText: {
     fontSize: 14,
     padding: 10,
-    color: isDarkMode ? '#fff' : '#333',
+    color: c.text,
   },
   selectedOption: {
     fontWeight: '700',
     color: config.colors.primary,
   },
   menuOptions: {
-    backgroundColor: isDarkMode ? '#2a2a2a' : '#ffffff',
+    backgroundColor: c.bgAlt,
     borderRadius: 16,
     padding: 8,
     shadowColor: "#000",
@@ -1028,7 +1034,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 24,
-    color: isDarkMode ? '#888888' : '#666666',
+    color: c.textSecondary,
     fontWeight: '500',
   },
   modalContainer: {
@@ -1087,7 +1093,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   pointsBox: {
     width: '49%', // Ensures even spacing
-    backgroundColor: isDarkMode ? '#34495E' : '#f3d0c7', // Dark: darker contrast, Light: White
+    backgroundColor: c.bgAlt, // Dark: darker contrast, Light: White
     borderRadius: 8,
     padding: 10,
   },
@@ -1163,7 +1169,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: isDarkMode ? '#4A4A4A' : '#E0E0E0',
+    borderTopColor: c.border,
     marginTop: 8,
   },
   badgeButton: {
@@ -1171,7 +1177,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderRadius: 12,
-    backgroundColor: isDarkMode ? '#2A2A2A' : '#f0f0f0',
+    backgroundColor: c.bgAlt,
   },
   badgeButtonActive: {
     backgroundColor: '#FF6666',
@@ -1179,7 +1185,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   badgeButtonText: {
     fontSize: 10,
     fontWeight: '600',
-    color: isDarkMode ? '#fff' : '#666',
+    color: c.text,
   },
   badgeButtonTextActive: {
     color: '#fff',
@@ -1230,7 +1236,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   categoryBar: {
     marginBottom: 8,
     paddingVertical: 4,
-    backgroundColor: isDarkMode ? '#181c22' : '#f8f9fa',
+    backgroundColor: c.bg,
   },
   categoryBarContent: {
     paddingHorizontal: 8,
@@ -1240,7 +1246,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: isDarkMode ? '#23272f' : '#f0f0f0',
+    backgroundColor: c.bgAlt,
     marginRight: 8,
   },
   categoryButtonActive: {
@@ -1248,7 +1254,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
   categoryButtonText: {
     fontSize: 13,
-    color: isDarkMode ? '#bbb' : '#333',
+    color: c.textSecondary,
     fontWeight: '600',
   },
   categoryButtonTextActive: {
@@ -1280,7 +1286,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   adTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: isDarkMode ? '#bbb' : '#333',
+    color: c.textSecondary,
     // marginBottom: 5, // Adds space below the title
   },
   tryNowText: {
@@ -1315,12 +1321,12 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   selectedPetsTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: isDarkMode ? '#ffffff' : '#111827',
+    color: c.text,
   },
   selectedPetsCount: {
     fontSize: 11,
     fontWeight: '600',
-    color: isDarkMode ? '#9ca3af' : '#6b7280',
+    color: c.textSecondary,
   },
   selectedPetsList: {
     paddingVertical: 4,
@@ -1330,7 +1336,7 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     marginRight: 8,
     borderRadius: 10,
     padding: 6,
-    backgroundColor: isDarkMode ? '#1f2933' : '#ffffff',
+    backgroundColor: c.bgAlt,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -1342,12 +1348,12 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
     height: 15,
     borderRadius: 8,
     marginBottom: 1,
-    backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
+    backgroundColor: c.bg,
   },
   selectedPetName: {
     fontSize: 8,
     fontWeight: '500',
-    color: isDarkMode ? '#e5e7eb' : '#111827',
+    color: c.text,
   },
   removePetButton: {
     position: 'absolute',
@@ -1362,5 +1368,6 @@ export const getStyles = (isDarkMode) => StyleSheet.create({
   },
 
 });
+};
 
 export default ValueScreen;

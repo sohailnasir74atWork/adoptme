@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { useGlobalState } from '../GlobelStats';
+import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
 export default function EditProfileModal({
   visible,
@@ -51,14 +52,10 @@ export default function EditProfileModal({
         keyboardVerticalOffset={60} // Adjust offset as needed
       >
 
-      <View
-        style={{
+      <SwipeableBottomDrawer onClose={onClose} style={{
           backgroundColor: '#fff',
           padding: 20,
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
-        }}
-      >
+        }}>
         <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 15 }}>
           Edit Profile
         </Text>
@@ -111,7 +108,7 @@ export default function EditProfileModal({
         >
           <Text style={{ color: '#fff', textAlign: 'center' }}>Save Changes</Text>
         </TouchableOpacity>
-      </View>
+      </SwipeableBottomDrawer>
       </KeyboardAvoidingView>
 
     </Modal>

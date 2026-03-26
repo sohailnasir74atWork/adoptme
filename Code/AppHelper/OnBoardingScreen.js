@@ -8,7 +8,9 @@ import {
   StatusBar,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
+import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { useGlobalState } from '../GlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
@@ -33,6 +35,13 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   // const platform = Platform.OS.toLowerCase();
   const { updateLocalState, localState } = useLocalState();
+
+  // ── Set Android system navigation bar color for dark theme ──
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      SystemNavigationBar.setNavigationColor(isDarkMode ? '#0f172a' : '#f2f2f7', isDarkMode ? 'light' : 'dark');
+    }
+  }, [isDarkMode]);
 
 
 
@@ -130,7 +139,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <View style={styles.sliderContainer}>{renderSlider(translateX3, thirdSliderImages)}</View></View> */}
             <View>
               {/* <View style={styles.spacer}></View> */}
-              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Adopt Me Values</Text>
+              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Petfolio AMV</Text>
               <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>Track pets values & optimize your trades.</Text>
             </View>
           </View>
@@ -165,7 +174,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
         //   }, []);
         //   return null;
         // }
-        return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />;
+        return <SubscriptionScreen visible={true} onClose={onFinish} track="On Boarding" oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} inline={true} />;
       default:
         return null;
     }
@@ -182,12 +191,12 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
 
 
-          <TouchableOpacity style={styles.button} onPress={handleNext}>
+          <TouchableOpacity style={styles.button} onPress={screenIndex === 1 && user?.id ? handleGuest : handleNext}>
             <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("first.signin") : t("first.continue")}</Text>
           </TouchableOpacity>
           {screenIndex === 1 && !user?.id && (
             <TouchableOpacity style={styles.buttonOutline} onPress={handleGuest}>
-              <Text style={styles.buttonTextOutline}>{t("first.guest_user")}</Text>
+              <Text style={styles.buttonTextOutline}>{t("first.continue")}</Text>
             </TouchableOpacity>
           )}
         </View>}
