@@ -153,7 +153,7 @@ const QuizBattle = () => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', user.id));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         if (data.lastQuizBattleAdAt) {
           const d = data.lastQuizBattleAdAt?.toDate ? data.lastQuizBattleAdAt.toDate() : new Date(data.lastQuizBattleAdAt);
           const now = new Date();

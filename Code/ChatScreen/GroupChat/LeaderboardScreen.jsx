@@ -97,7 +97,7 @@ const LeaderboardScreen = ({ route }) => {
       const cacheDocSnap = await getDoc(cacheDocRef);
 
       // ✅ Firestore: exists is a property, not a function
-      if (!cacheDocSnap.exists) {
+      if (!cacheDocSnap.exists()) {
         console.log('⚠️ [Leaderboard] Cache not found - leaderboard may not be initialized yet');
         setLeaderboardData([]);
         setLoading(false);

@@ -18,7 +18,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
-import { get, ref, update, set, query as dbQuery, orderByKey, limitToLast, orderByValue, equalTo, onValue } from '@react-native-firebase/database';
+import { get, ref, update, set, remove, child, query as dbQuery, orderByKey, limitToLast, endAt, onValue, onChildAdded } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -73,26 +73,29 @@ const GroupChatScreen = () => {
   const initialLoadDoneRef = useRef(false); // ✅ Track if initial load is complete (prevents duplicate messages)
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
+  const highlightTimerRef = useRef(null); // Track highlight timeout for cleanup
 
   const { t } = useTranslation();
 
   // ✅ Check if current user is banned
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
 
-  // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
-  useEffect(() => {
-    if (!user?.email || !appdatabase) return;
+  // ✅ Load strike/ban info from Firebase — paused when screen loses focus to prevent freeze
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.email || !appdatabase) return;
 
-    const encodeEmail = (email) => email.replace(/\./g, '(dot)');
-    const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
+      const encodeEmail = (email) => email.replace(/\./g, '(dot)');
+      const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
 
-    const unsubscribe = onValue(banRef, (snapshot) => {
-      const banData = snapshot.val();
-      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
-    });
+      const unsubscribe = onValue(banRef, (snapshot) => {
+        const banData = snapshot.val();
+        setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
+      });
 
-    return () => unsubscribe();
-  }, [user?.email, appdatabase]);
+      return () => unsubscribe();
+    }, [user?.email, appdatabase])
+  );
 
   // ✅ PHASE 0B: Seed current user's profile into cache on mount
   useEffect(() => {
@@ -117,7 +120,7 @@ const GroupChatScreen = () => {
     const unsubscribe = onSnapshot(
       groupRef,
       async (snapshot) => {
-        if (snapshot.exists) {
+        if (snapshot.exists()) {
           const data = snapshot.data();
           setGroupData(data);
 
@@ -362,23 +365,17 @@ const GroupChatScreen = () => {
       }
 
       try {
-        // ✅ Use same query pattern as private chat for consistency
-        let query = messagesRef.orderByKey();
-
         const lastKey = lastLoadedKeyRef.current;
-        if (!reset && lastKey) {
-          // ✅ Get older messages (messages before lastKey)
-          // endAt includes lastKey, but we'll filter it out to avoid duplicates
-          query = query.endAt(lastKey);
-        }
-
         // ✅ Apply limit ONLY ONCE, at the end
         // limitToLast gets the last N messages from the query result
         // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
-        query = query.limitToLast(limitSize);
+        // ✅ Use same query pattern as private chat for consistency
+        const q = (!reset && lastKey)
+          ? dbQuery(messagesRef, orderByKey(), endAt(lastKey), limitToLast(limitSize))
+          : dbQuery(messagesRef, orderByKey(), limitToLast(limitSize));
 
-        const snapshot = await query.once('value');
+        const snapshot = await get(q);
         const data = snapshot.val() || {};
 
         let parsedMessages = Object.entries(data)
@@ -468,60 +465,47 @@ const GroupChatScreen = () => {
   }, [groupId, messagesRef, loadMessages, isMember]);
 
   // ✅ OPTIMIZED: Listen to new messages in real-time (only newest message)
-  // This prevents child_added from firing for all existing messages when listener is attached
-  // This significantly reduces Firebase read costs
-  useEffect(() => {
-    if (!messagesRef || !isMember) {
-      // Clear messages if user is not a member
-      setMessages([]);
-      return;
-    }
+  // Uses useFocusEffect to detach listener when navigating away (prevents freeze)
+  useFocusEffect(
+    useCallback(() => {
+      if (!messagesRef || !isMember) return;
 
-    let isMounted = true;
+      let isMounted = true;
 
-    // ✅ Use limitToLast(1) to only listen to the newest message
-    // This ensures we only get NEW messages, not all existing ones
-    const limitedRef = messagesRef.limitToLast(1);
+      const limitedRef = dbQuery(messagesRef, limitToLast(1));
 
-    const handleChildAdded = (snapshot) => {
-      if (!isMounted || !snapshot || !snapshot.key) return;
-      // ✅ Skip messages until initial load is complete to prevent duplicates
-      if (!initialLoadDoneRef.current) return;
-      const data = snapshot.val();
-      if (!data || typeof data !== 'object') return;
+      const handleChildAdded = (snapshot) => {
+        if (!isMounted || !snapshot || !snapshot.key) return;
+        if (!initialLoadDoneRef.current) return;
+        const data = snapshot.val();
+        if (!data || typeof data !== 'object') return;
 
-      const newMessage = { id: snapshot.key, ...data };
-      if (!newMessage.timestamp) {
-        newMessage.timestamp = Date.now();
-      }
-
-      setMessages((prev) => {
-        if (!Array.isArray(prev)) return [newMessage];
-        const exists = prev.some((m) => String(m?.id) === String(newMessage.id));
-        if (exists) return prev; // don't duplicate
-
-        // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
-        // This matches private chat exactly
-        const updated = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-        // ✅ Update newest message ID for tracking
-        if (updated.length > 0) {
-          newestMessageIdRef.current = updated[0]?.id;
+        const newMessage = { id: snapshot.key, ...data };
+        if (!newMessage.timestamp) {
+          newMessage.timestamp = Date.now();
         }
-        return updated;
-      });
-    };
 
-    // ✅ OPTIMIZED: Only listen to the last message to avoid duplicate reads
-    // This ensures new messages are added in real-time without reading all existing messages
-    const listener = limitedRef.on('child_added', handleChildAdded);
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [newMessage];
+          const exists = prev.some((m) => String(m?.id) === String(newMessage.id));
+          if (exists) return prev;
 
-    return () => {
-      isMounted = false;
-      if (limitedRef) {
-        limitedRef.off('child_added', listener);
-      }
-    };
-  }, [messagesRef, isMember]); // Re-run when messagesRef or isMember changes
+          const updated = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          if (updated.length > 0) {
+            newestMessageIdRef.current = updated[0]?.id;
+          }
+          return updated;
+        });
+      };
+
+      const unsubscribe = onChildAdded(limitedRef, handleChildAdded);
+
+      return () => {
+        isMounted = false;
+        unsubscribe();
+      };
+    }, [messagesRef, isMember])
+  );
 
   // Set active chat and reset unread count
   useFocusEffect(
@@ -536,40 +520,44 @@ const GroupChatScreen = () => {
       hasSentMessageRef.current = 0;
       chatEnterTimeRef.current = Date.now();
 
-      // Reset unreadCount when entering chat + ensure metadata exists (admin fix)
-      const groupMetaRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}`);
-      get(groupMetaRef).then((snap) => {
-        if (!snap.exists() || !snap.val()?.groupName) {
-          // Entry doesn't exist or missing groupName — write full metadata
-          // This fixes the bug where admin/mod entering a group creates a
-          // nameless entry in the joined groups list
-          const metaUpdate = {
-            unreadCount: 0,
-            groupName: groupData?.name || route?.params?.groupName || 'Group',
-            groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
-            memberCount: groupData?.memberIds?.length || 0,
-            lastMessage: 'No messages yet',
-            lastMessageTimestamp: Date.now(),
-            createdBy: groupData?.createdBy || null,
-          };
-          set(groupMetaRef, metaUpdate).catch((error) => {
-            console.error('Error writing group meta:', error);
-          });
-        } else {
-          // Entry exists with name — just reset unread
-          update(groupMetaRef, { unreadCount: 0 }).catch((error) => {
-            console.error('Error resetting unread count:', error);
-          });
-        }
-      }).catch((error) => {
-        console.error('Error checking group meta:', error);
-      });
+      // Only write/reset metadata if user is an actual member (in memberIds).
+      // Admins/mods can view groups without joining — skip metadata writes to
+      // prevent ghost entries in the "joined groups" list.
+      const isRealMember = groupData?.memberIds?.includes(user.id);
+      if (isRealMember) {
+        const groupMetaRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}`);
+        get(groupMetaRef).then((snap) => {
+          if (!snap.exists() || !snap.val()?.groupName) {
+            // Entry doesn't exist or missing groupName — write full metadata
+            const metaUpdate = {
+              unreadCount: 0,
+              groupName: groupData?.name || route?.params?.groupName || 'Group',
+              groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
+              memberCount: groupData?.memberIds?.length || 0,
+              lastMessage: 'No messages yet',
+              lastMessageTimestamp: Date.now(),
+              createdBy: groupData?.createdBy || null,
+            };
+            set(groupMetaRef, metaUpdate).catch((error) => {
+              console.error('Error writing group meta:', error);
+            });
+          } else {
+            // Entry exists with name — just reset unread
+            update(groupMetaRef, { unreadCount: 0 }).catch((error) => {
+              console.error('Error resetting unread count:', error);
+            });
+          }
+        }).catch((error) => {
+          console.error('Error checking group meta:', error);
+        });
+      }
 
       return () => {
         clearActiveChat(user.id);
         clearActiveGroupChat(user.id, groupId);
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       };
-    }, [user?.id, groupId, appdatabase, localState?.isPro])
+    }, [user?.id, groupId, appdatabase, groupData?.name, groupData?.avatar, groupData?.memberIds?.length, groupData?.createdBy])
   );
 
   // Handle refresh
@@ -608,7 +596,10 @@ const GroupChatScreen = () => {
         // Highlight the scrolled-to message
         setHighlightedMessageId(targetId);
 
-        setTimeout(() => {
+        // Clear any previous highlight timer before setting a new one
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = setTimeout(() => {
+          highlightTimerRef.current = null;
           setHighlightedMessageId((current) =>
             current === targetId ? null : current,
           );
@@ -785,7 +776,8 @@ const GroupChatScreen = () => {
             id: user.id,
             displayName: user.displayName || 'Anonymous',
             avatar: user.avatar || null,
-          }
+          },
+          groupData
         );
 
         if (!result.success) {
@@ -817,7 +809,7 @@ const GroupChatScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await messagesRef.child(String(messageId)).remove();
+              await remove(child(messagesRef, String(messageId)));
               setMessages((prev) => prev.filter((m) => String(m?.id) !== String(messageId)));
               showSuccessMessage('Success', 'Message deleted');
             } catch (error) {
@@ -844,7 +836,7 @@ const GroupChatScreen = () => {
           onPress: async () => {
             try {
               // Get all messages, find ones from this sender, delete them
-              const snapshot = await messagesRef.orderByKey().limitToLast(300).once('value');
+              const snapshot = await get(dbQuery(messagesRef, orderByKey(), limitToLast(300)));
               const data = snapshot.val();
               if (!data) return;
 
@@ -856,7 +848,7 @@ const GroupChatScreen = () => {
               });
 
               if (Object.keys(updates).length > 0) {
-                await messagesRef.update(updates);
+                await update(messagesRef, updates);
                 setMessages((prev) => prev.filter((m) => m?.senderId !== senderId));
                 showSuccessMessage('Success', `Deleted ${Object.keys(updates).length} messages`);
               }
@@ -875,13 +867,13 @@ const GroupChatScreen = () => {
     if (!messagesRef || !messageId || !user?.id) return;
 
     try {
-      const reactionRef = messagesRef.child(`${messageId}/reactions/${user.id}`);
-      const snapshot = await reactionRef.once('value');
+      const reactionRef = child(messagesRef, `${messageId}/reactions/${user.id}`);
+      const snapshot = await get(reactionRef);
       const currentReaction = snapshot.val();
 
       if (currentReaction === emoji) {
         // Same emoji → remove reaction
-        await reactionRef.remove();
+        await remove(reactionRef);
         // Optimistic update
         setMessages(prev => prev.map(m => {
           if (String(m.id) !== String(messageId)) return m;
@@ -891,7 +883,7 @@ const GroupChatScreen = () => {
         }));
       } else {
         // New or different emoji → set reaction
-        await reactionRef.set(emoji);
+        await set(reactionRef, emoji);
         // Optimistic update
         setMessages(prev => prev.map(m => {
           if (String(m.id) !== String(messageId)) return m;
@@ -1306,7 +1298,7 @@ const GroupChatScreen = () => {
         onRequestClose={() => setShowMembersModal(false)}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', overflow: 'hidden' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: c.border }}>
               <Text style={{ fontSize: 20, fontWeight: 'bold', color: c.text }}>
                 Members ({memberCount})
@@ -1317,11 +1309,15 @@ const GroupChatScreen = () => {
             </View>
 
             <FlatList
+              style={{ flexGrow: 1 }}
+              contentContainerStyle={{ flexGrow: 0 }}
               data={[
-                // Actual members
-                ...(groupData?.memberIds || []).map(id => ({ type: 'member', id })),
-                // Pending invitations
-                ...pendingInvitations.map(inv => ({ type: 'pending', id: inv.invitedUserId, inviteData: inv }))
+                // Actual members (deduplicated to prevent duplicate key errors)
+                ...[...new Set(groupData?.memberIds || [])].map(id => ({ type: 'member', id })),
+                // Pending invitations (exclude users already in memberIds)
+                ...pendingInvitations
+                  .filter(inv => !(groupData?.memberIds || []).includes(inv.invitedUserId))
+                  .map(inv => ({ type: 'pending', id: inv.invitedUserId, inviteData: inv }))
               ]}
               keyExtractor={(item) => `${item.type}-${item.id}`}
               onEndReached={() => {
@@ -1338,8 +1334,9 @@ const GroupChatScreen = () => {
                   loadMemberStatusesBatch(nextBatch);
                 }
               }}
-              onEndReachedThreshold={0.1}
+              onEndReachedThreshold={0.5}
               scrollEnabled={true}
+              nestedScrollEnabled={true}
               removeClippedSubviews={false}
               ListFooterComponent={
                 loadingMemberStatuses ? (

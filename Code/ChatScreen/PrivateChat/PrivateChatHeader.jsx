@@ -11,12 +11,22 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
+import { getThemeColors } from '../../Helper/themeColors';
+
+const Badge = ({ icon, label, color }) => (
+  <View style={[styles.badge, { backgroundColor: color }]}>
+    <Icon name={icon} size={9} color="#fff" />
+    <Text style={styles.badgeText}>{label}</Text>
+  </View>
+);
 
 const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers, isDrawerVisible, setIsDrawerVisible }) => {
   const { updateLocalState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
-  const { appdatabase, user } = useGlobalState();
+  const { appdatabase, user, theme } = useGlobalState();
+  const isDarkMode = theme === 'dark';
+  const c = getThemeColors(isDarkMode);
 
   const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
 
@@ -122,6 +132,12 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
   const isOnline = useOnlineStatus(selectedUserId);
 
+  const hasRecentWin = useMemo(() =>
+    !!mergedUser?.hasRecentGameWin ||
+    (typeof mergedUser?.lastGameWinAt === 'number' &&
+      Date.now() - mergedUser.lastGameWinAt <= 24 * 60 * 60 * 1000),
+    [mergedUser?.hasRecentGameWin, mergedUser?.lastGameWinAt]
+  );
 
   // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {
@@ -135,7 +151,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
   const handleBanToggle = useCallback(async () => {
     const selectedUserId = mergedUser?.senderId || mergedUser?.id;
     if (!selectedUserId) {
-      console.warn('⚠️ Invalid user ID for ban toggle');
+      console.warn('Invalid user ID for ban toggle');
       return;
     }
 
@@ -154,31 +170,25 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
               let updatedBannedUsers;
 
               if (isBanned) {
-                // 🔹 Unban: Remove from bannedUsers
                 updatedBannedUsers = currentBanned.filter(id => id !== selectedUserId);
               } else {
-                // 🔹 Ban: Add to bannedUsers
                 updatedBannedUsers = [...currentBanned, selectedUserId];
               }
 
-              // ✅ Update local storage & state
               if (updateLocalState && typeof updateLocalState === 'function') {
                 await updateLocalState('bannedUsers', updatedBannedUsers);
               }
 
-              // ✅ Sync to RTDB for server-side notification filtering
               if (user?.id && appdatabase) {
                 const blockedRef = ref(appdatabase, `users/${user.id}/blocked_users/${selectedUserId}`);
                 if (isBanned) {
-                  // Unblocking — remove from DB
                   await set(blockedRef, null);
                 } else {
-                  // Blocking — add to DB
                   await set(blockedRef, true);
                 }
               }
             } catch (error) {
-              console.error('❌ Error toggling ban status:', error);
+              console.error('Error toggling ban status:', error);
             }
           },
         },
@@ -195,99 +205,80 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={handleOpenDrawer}>
-        <Image source={{ uri: avatarUri }} style={styles.avatar} />
+      {/* Avatar with online indicator */}
+      <TouchableOpacity onPress={handleOpenDrawer} activeOpacity={0.7}>
+        <View style={styles.avatarWrapper}>
+          <Image source={{ uri: avatarUri }} style={[styles.avatar, { borderColor: c.border }]} />
+          <View style={[
+            styles.onlineDot,
+            { backgroundColor: isOnline ? '#22c55e' : '#94a3b8' },
+            isOnline && styles.onlineDotGlow,
+          ]} />
+        </View>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer}>
-        <Text style={[styles.userName, { color: selectedTheme?.colors?.text || '#000' }]}>
-          {userName}
-          {' '}
+
+      {/* Name + badges + status */}
+      <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer} activeOpacity={0.7}>
+        {/* Top row: name + inline icons */}
+        <View style={styles.nameRow}>
+          <Text style={[styles.userName, { color: c.text }]} numberOfLines={1}>
+            {userName}
+          </Text>
 
           {mergedUser?.isPro && (
-            <Image
-              source={require('../../../assets/pro.png')}
-              style={{ width: 11, height: 11, marginLeft: 4 }}
-            />
+            <Image source={require('../../../assets/pro.png')} style={styles.inlineIcon} />
           )}
-          {' '}
           {mergedUser?.robloxUsernameVerified && (
-            <Image
-              source={require('../../../assets/verification.png')}
-              style={{ width: 11, height: 11, marginLeft: 4 }}
-            />
+            <Image source={require('../../../assets/verification.png')} style={styles.inlineIcon} />
           )}
-          {' '}
-          {(() => {
-            const hasRecentWin =
-              !!mergedUser?.hasRecentGameWin ||
-              (typeof mergedUser?.lastGameWinAt === 'number' &&
-                Date.now() - mergedUser.lastGameWinAt <= 24 * 60 * 60 * 1000);
-            return hasRecentWin ? (
-              <Image
-                source={require('../../../assets/trophy.webp')}
-                style={styles.icon}
-              />
-            ) : null;
-          })()}
-          {' '}
-          {mergedUser?.isAdmin && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="shield" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
-            </View>
+          {hasRecentWin && (
+            <Image source={require('../../../assets/trophy.webp')} style={styles.inlineIcon} />
           )}
 
-          {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="shield-checkmark" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
-            </View>
-          )}
-
-          {mergedUser?.isTrusted && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="checkmark-circle" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
-            </View>
-          )}
-
-          {mergedUser?.isCMSR && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-              <Icon name="briefcase" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
-            </View>
-          )}
-
-
-          {'  '}
-          <Icon
-            name="copy-outline"
-            size={16}
-            color="#007BFF"
+          <TouchableOpacity
             onPress={() => copyToClipboard(userName)}
-          />
-        </Text>
-        <Text style={[
-          styles.drawerSubtitleUser,
-          {
-            color: isOnline
-              ? '#22c55e'
-              : '#ef4444',
-            fontSize: 10,
-            marginTop: 2,
-          },
-        ]}
-        >
-          {isOnline ? t('chat.online') : t('chat.offline')}
-        </Text>
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.copyBtn}
+          >
+            <Icon name="copy-outline" size={13} color={c.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
+        {/* Bottom row: status + role badges */}
+        <View style={styles.metaRow}>
+          <Text style={[styles.statusText, { color: isOnline ? '#22c55e' : c.textMuted }]}>
+            {isOnline ? t('chat.online') : t('chat.offline')}
+          </Text>
+
+          {mergedUser?.isAdmin && (
+            <Badge icon="shield" label={t('chat.admin')} color="#EF4444" />
+          )}
+          {!mergedUser?.isAdmin && mergedUser?.isModerator && (
+            <Badge icon="shield-checkmark" label={t('chat.mod')} color="#8B5CF6" />
+          )}
+          {mergedUser?.isTrusted && (
+            <Badge icon="checkmark-circle" label="Trusted" color="#10B981" />
+          )}
+          {mergedUser?.isCMSR && (
+            <Badge icon="briefcase" label="CMSR" color="#F97316" />
+          )}
+        </View>
       </TouchableOpacity>
-      <TouchableOpacity onPress={handleBanToggle}>
+
+      {/* Block/Unblock button */}
+      <TouchableOpacity
+        onPress={handleBanToggle}
+        activeOpacity={0.6}
+        style={[
+          styles.actionBtn,
+          { backgroundColor: isBanned ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)' },
+        ]}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
         <Icon
           name={isBanned ? 'shield-checkmark-outline' : 'ban-outline'}
-          size={24}
-          color={isBanned ? config.colors.hasBlockGreen : config.colors.wantBlockRed}
-          style={styles.banIcon}
+          size={18}
+          color={isBanned ? '#22c55e' : '#ef4444'}
         />
       </TouchableOpacity>
     </View>
@@ -298,30 +289,91 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
-    // backgroundColor:'red'
+    paddingVertical: 2,
+    gap: 8,
+  },
+  avatarWrapper: {
+    position: 'relative',
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: 'white',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#0f172a',
+  },
+  onlineDotGlow: {
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 3,
+    elevation: 3,
   },
   infoContainer: {
     flex: 1,
+    justifyContent: 'center',
+    gap: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   userName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
+    flexShrink: 1,
+    letterSpacing: -0.2,
   },
-  banIcon: {
-    marginLeft: 10,
+  inlineIcon: {
+    width: 13,
+    height: 13,
   },
-  icon: {
-    width: 11, height: 11, marginLeft: 4
-
-  }
+  copyBtn: {
+    padding: 2,
+    marginLeft: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 5,
+    gap: 2,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  actionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default PrivateChatHeader;

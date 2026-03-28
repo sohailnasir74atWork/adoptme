@@ -13,7 +13,7 @@ import {
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
-import database from '@react-native-firebase/database';
+import { getDatabase, ref, get } from '@react-native-firebase/database';
 
 const ServerScreen = ({ selectedTheme }) => {
   const { theme } = useGlobalState();
@@ -29,8 +29,8 @@ const ServerScreen = ({ selectedTheme }) => {
     const fetchServers = async () => {
       try {
         setLoading(true);
-        const serverRef = database().ref('server');
-        const snapshot = await serverRef.once('value');
+        const serverRef = ref(getDatabase(), 'server');
+        const snapshot = await get(serverRef);
 
         if (!snapshot.exists()) {
           setServers([]);

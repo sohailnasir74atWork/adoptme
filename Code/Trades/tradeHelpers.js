@@ -95,7 +95,7 @@ const _countByType = async (appdatabase, myUid, type) => {
  * Accept a trade — saves lightweight ref to RTDB + creates Firestore notification for poster
  * Max 10 accepted trades at a time.
  */
-export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade) => {
+export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade, myExtras = {}) => {
   // ✅ Enforce max limit
   const count = await _countByType(appdatabase, myUid, 'accepted');
   if (count >= MAX_ACCEPTED) {
@@ -112,6 +112,18 @@ export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade
     traderRobloxUsername: trade.robloxUsername || '',
     savedAt: rtdbTimestamp(),
   });
+
+  // Also record this acceptance under the trade itself so the poster can see who accepted
+  try {
+    await set(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`), {
+      name: myName,
+      robloxUsername: myExtras.robloxUsername || '',
+      avatar: myExtras.avatar || '',
+      acceptedAt: rtdbTimestamp(),
+    });
+  } catch (e) {
+    console.warn('[tradeHelpers] Failed to write tradeAcceptors:', e?.message);
+  }
 
   // Build a short trade summary for the notification
   const tradeSummary = _buildTradeSummary(trade);
@@ -157,11 +169,15 @@ export const saveTrade = async (appdatabase, myUid, trade) => {
 };
 
 /**
- * Remove a saved/accepted trade
+ * Remove a saved/accepted trade — also cleans up tradeAcceptors if it was an accepted trade
  */
 export const unsaveTrade = async (appdatabase, myUid, tradeId) => {
   const tradeRef = ref(appdatabase, `savedTrades/${myUid}/${tradeId}`);
   await remove(tradeRef);
+  // Also remove from tradeAcceptors (safe no-op if path doesn't exist)
+  try {
+    await remove(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`));
+  } catch {}
 };
 
 const PING_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
@@ -233,6 +249,29 @@ const _buildTradeSummary = (trade) => {
   } catch {
     return '';
   }
+};
+
+/**
+ * Fetch all acceptors for a single trade
+ * Returns object: { acceptorUid: { name, robloxUsername, avatar, acceptedAt } }
+ */
+export const fetchTradeAcceptors = async (appdatabase, tradeId) => {
+  try {
+    const snap = await get(ref(appdatabase, `tradeAcceptors/${tradeId}`));
+    if (snap.exists()) return snap.val();
+    return {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Remove all acceptors for a trade (called when trade is completed/deleted)
+ */
+export const removeAllTradeAcceptors = async (appdatabase, tradeId) => {
+  try {
+    await remove(ref(appdatabase, `tradeAcceptors/${tradeId}`));
+  } catch {}
 };
 
 /**

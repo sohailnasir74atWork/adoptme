@@ -197,7 +197,7 @@ const WordScramble = ({ visible, onClose }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         const today = isSameDay(data.lastScrambleAt);
         const plays = today ? (data.scramblePlaysToday || 0) : 0;
         const maxP = today ? (data.scrambleMaxPlays || FREE_PLAYS) : FREE_PLAYS;

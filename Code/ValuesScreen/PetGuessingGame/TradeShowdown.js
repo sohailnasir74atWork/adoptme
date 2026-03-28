@@ -125,7 +125,7 @@ const TradeShowdown = () => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', user.id));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         if (data.lastTradeShowdownAdAt) {
           const d = data.lastTradeShowdownAdAt?.toDate ? data.lastTradeShowdownAdAt.toDate() : new Date(data.lastTradeShowdownAdAt);
           const now = new Date();

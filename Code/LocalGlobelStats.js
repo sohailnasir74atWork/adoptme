@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 import Purchases from 'react-native-purchases';
 import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
-import { InteractionManager } from 'react-native';
 import { mixpanel } from './AppHelper/MixPenel';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
@@ -49,7 +48,7 @@ export const LocalStateProvider = ({ children }) => {
     consentStatus: storage.getString('consentStatus') || 'UNKNOWN',
     isPro: storage.getBoolean('isPro') ?? false,
     fetchDataTime: storage.getString('fetchDataTime') || null,
-    data: safeParseJSON('data', {}),
+    data: null, // Loaded async to avoid blocking cold start
 
     codes: safeParseJSON('codes', {}),
     normalStock: safeParseJSON('normalStock', []),
@@ -88,10 +87,34 @@ export const LocalStateProvider = ({ children }) => {
   // No listener needed here — storing 'system' in MMKV is correct,
   // GlobelStats resolves it to 'light'/'dark' at render time
 
+  // ✅ PERF: Load heavy pet data asynchronously after interactions to avoid blocking cold start
+  const dataLoadedRef = useRef(false);
   useEffect(() => {
-    if (localState.data) {
-      storage.set('data', JSON.stringify(localState.data)); // Force store
-    }
+    const id = requestIdleCallback(() => {
+      try {
+        const raw = storage.getString('data');
+        const parsed = raw ? JSON.parse(raw) : {};
+        dataLoadedRef.current = true;
+        setLocalState(prev => ({ ...prev, data: parsed }));
+      } catch (e) {
+        dataLoadedRef.current = true;
+        setLocalState(prev => ({ ...prev, data: {} }));
+      }
+    });
+    return () => cancelIdleCallback(id);
+  }, []);
+
+  // ✅ PERF: Serialize data to MMKV off the main thread using setTimeout
+  useEffect(() => {
+    if (!dataLoadedRef.current || !localState.data) return;
+    const timeoutId = setTimeout(() => {
+      try {
+        storage.set('data', JSON.stringify(localState.data));
+      } catch (e) {
+        // Silently handle serialization errors
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [localState.data]);
 
   // console.log(localState.isPro)
@@ -206,8 +229,8 @@ export const LocalStateProvider = ({ children }) => {
   }, [fetchOfferings, checkEntitlements]);
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(initRevenueCat);
-    return () => task.cancel();
+    const id = requestIdleCallback(initRevenueCat);
+    return () => cancelIdleCallback(id);
   }, [initRevenueCat]);
 
   // ✅ Listen for real-time subscription changes (purchase, renewal, expiry)

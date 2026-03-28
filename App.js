@@ -4,7 +4,6 @@ import {
   StatusBar,
   ActivityIndicator,
   Appearance,
-  InteractionManager,
   TouchableOpacity,
   Platform,
 } from 'react-native';
@@ -312,9 +311,10 @@ export default function AppWrapper() {
   const { theme } = useGlobalState();
   useEffect(() => {
     if (localState.isAppReady) {
-      InteractionManager.runAfterInteractions(() => {
+      const id = requestIdleCallback(() => {
         RNBootSplash.hide({ fade: true });
       });
+      return () => cancelIdleCallback(id);
     }
   }, [localState.isAppReady]);
   useEffect(() => {

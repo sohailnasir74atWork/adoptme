@@ -25,7 +25,7 @@ export const getStyles = (isDarkMode) => {
       paddingHorizontal: 10,
       borderRadius: 15,
       flexDirection: "row-reverse",
-      marginBottom: 10,
+      marginBottom: 6,
       alignItems: 'flex-end'
     },
     othermessageBubble: {
@@ -33,7 +33,7 @@ export const getStyles = (isDarkMode) => {
       // paddingHorizontal: 10,
       borderRadius: 15,
       flexDirection: 'row',
-      marginBottom: 5,
+      marginBottom: 6,
       alignItems: 'flex-start',
 
     },
@@ -49,7 +49,7 @@ export const getStyles = (isDarkMode) => {
       marginHorizontal: 5,
     },
     senderNameText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: 'bold',
       color: 'grey',
     },
@@ -65,54 +65,55 @@ export const getStyles = (isDarkMode) => {
 
     },
     myMessageText: {
-      fontSize: 10,
+      fontSize: 15,
       color: c.text,
       backgroundColor: isDarkMode ? '#0B5E3F' : '#DCF8C6',
       paddingVertical: 6,
       paddingHorizontal: 10,
       borderRadius: 16,
       borderTopRightRadius: 4,
-      lineHeight: 14,
+      lineHeight: 20,
     },
     otherMessageText: {
-      fontSize: 10,
+      fontSize: 15,
       color: c.text,
       backgroundColor: c.bgAlt,
       paddingHorizontal: 10,
       borderRadius: 16,
       borderTopLeftRadius: 4,
       paddingVertical: 6,
-      lineHeight: 14,
+      lineHeight: 20,
     },
     myMessageTextOnly: {
-      fontSize: 10,
+      fontSize: 15,
       color: c.text,
 
-      lineHeight: 14,
+      lineHeight: 20,
       textAlign: 'left',
     },
     otherMessageTextOnly: {
-      fontSize: 10,
+      fontSize: 15,
       color: c.text,
 
-      lineHeight: 14,
+      lineHeight: 20,
       textAlign: 'left',
     },
     timestamp: {
-      fontSize: 5,
+      fontSize: 10,
       color: c.textMuted,
       textAlign: 'right',
       paddingHorizontal: 5
     },
     input: {
-      flex: 1, // Ensures the input takes available space
-      borderRadius: 20,
-      padding: 5,
-      marginRight: 10,
-      fontSize: 16,
-      minHeight: 30, // ✅ Fixed typo: heighteight -> minHeight
-      maxHeight: 120, // Limit input growth to a max height
-      textAlignVertical: 'top', // Ensures text starts at the top
+      flex: 1,
+      borderRadius: 16,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      marginRight: 6,
+      fontSize: 15,
+      minHeight: 36,
+      maxHeight: 100,
+      textAlignVertical: 'top',
       backgroundColor: c.bgAlt,
     },
 
@@ -197,13 +198,11 @@ export const getStyles = (isDarkMode) => {
 
     },
     inputWrapper: {
-      paddingHorizontal: 10,
-      paddingVertical: 3,
-      borderTopWidth: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderTopWidth: 0.5,
       borderTopColor: c.border,
       backgroundColor: c.bgAlt,
-      // backgroundColor:'red',
-
     },
     cancelReplyButton: {
       alignSelf: 'flex-end',
@@ -211,7 +210,7 @@ export const getStyles = (isDarkMode) => {
     },
     cancelReplyText: {
       color: '#E74C3C',
-      fontSize: 10,
+      fontSize: 12,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -226,31 +225,32 @@ export const getStyles = (isDarkMode) => {
     //   fontSize: 16,
     // },
     sendButton: {
-      marginLeft: 5,
-      borderRadius: 20,
-      paddingHorizontal: 20,
-      paddingVertical: 5,
+      marginLeft: 4,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
     },
     sendButtonText: {
       color: '#fff',
-      fontSize: 16,
+      fontSize: 14,
+      fontWeight: '600',
     },
     replyContainer: {
       backgroundColor: c.bgAlt,
-      borderLeftWidth: 3,
+      borderLeftWidth: 2,
       borderLeftColor: isDarkMode ? '#1E88E5' : '#007BFF',
-      padding: 5,
-      marginBottom: 5,
-      borderRadius: 5,
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      marginBottom: 3,
+      borderRadius: 4,
     },
     replyText: {
-      fontSize: 10,
+      fontSize: 12,
       color: isDarkMode ? '#1E88E5' : '#007BFF',
       width: '95%'
-
     },
     replySenderText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: 'bold',
       color: c.text,
     },
@@ -316,24 +316,20 @@ export const getStyles = (isDarkMode) => {
 
     },
     menuoptions: {
-      // flexDirection:'row',
-      // justifyContent:'space-evenly',
-      maxWidth: 150,
-      borderRadius: 10,
-      marginLeft: 50
-
+      maxWidth: 140,
+      borderRadius: 8,
+      marginLeft: 50,
     },
     menuOption: {
       paddingHorizontal: 10,
-      paddingVertical: 15,
-      borderBottomWidth: 1,
+      paddingVertical: 10,
+      borderBottomWidth: 0.5,
       borderColor: 'lightgrey',
       backgroundColor: 'white',
-      borderRadius: 10,
-
+      borderRadius: 8,
     },
     menuOptionText: {
-      fontSize: 16,
+      fontSize: 13,
       color: '#000',
     },
     reportIcon: {
@@ -481,88 +477,44 @@ export const getStyles = (isDarkMode) => {
     },
     nameRow: {
       flexDirection: 'row',
-      alignItems: 'center',      // vertical alignment (text + images)
-      // justifyContent: 'center',  // center the whole row horizontally
+      alignItems: 'center',
+      gap: 3,
     },
 
     userNameText: {
       color: c.textMuted,
-      fontSize: 9,
-      lineHeight: 14,
-      paddingTop: 2
+      fontSize: 11,
+      fontWeight: '600',
+      lineHeight: 16,
     },
     userNameAdmin: {
       color: c.textMuted,
-      fontSize: 9,
-      lineHeight: 11,
-      // paddingTop:2
+      fontSize: 11,
+      lineHeight: 14,
     },
 
     icon: {
-      width: 11,
-      height: 11,
-      marginLeft: 4,
-      // paddingBottom:5
+      width: 10,
+      height: 10,
     },
 
-    adminContainer: {
+    roleBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: config.colors.primary, // Red-500
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 12, // Pill shape
-      marginLeft: 6,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 5,
+      gap: 2,
     },
-    modContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#8B5CF6', // Violet-500
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 12, // Pill shape
-      marginLeft: 6,
-    },
-    trustedContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#10B981', // Emerald-500
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 12,
-      marginLeft: 6,
-    },
-    cmsrContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#F97316', // Orange-500
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 12,
-      marginLeft: 6,
-    },
-    adminBadgeText: {
-      color: '#FFFFFF',
-      fontSize: 9,
+    roleBadgeText: {
+      color: '#fff',
+      fontSize: 7,
       fontWeight: '700',
-      marginLeft: 2,
-      textTransform: 'uppercase', // Modern touch
-      letterSpacing: 0.5,
-    },
-    modBadgeText: {
-      color: '#FFFFFF',
-      fontSize: 9,
-      fontWeight: '700',
-      marginLeft: 2,
-      textTransform: 'uppercase', // Modern touch
-      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
     },
 
     platformBadge: {
-      marginLeft: 6,
-      // paddingHorizontal: 3,
-      // paddingVertical: 1,
-      borderRadius: '50%',
       alignItems: 'center',
       justifyContent: 'center',
     },

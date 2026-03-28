@@ -15,7 +15,8 @@ import {
   View, Text, TouchableOpacity, FlatList, Image,
   StyleSheet, Dimensions, ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   collection, query, where, orderBy, limit, getDocs, startAfter,
   doc, updateDoc, getDoc, setDoc, deleteDoc, serverTimestamp as fsServerTimestamp,
@@ -28,7 +29,7 @@ import PetModal from '../ChatScreen/PrivateChat/PetsModel';
 import { useLocalState } from '../LocalGlobelStats';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 import { getThemeColors } from '../Helper/themeColors';
-import { fetchSavedTradeRefs, unsaveTrade, pingTrader } from '../Trades/tradeHelpers';
+import { fetchSavedTradeRefs, unsaveTrade, pingTrader, fetchTradeAcceptors, removeAllTradeAcceptors } from '../Trades/tradeHelpers';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -71,8 +72,10 @@ const TradeJournal = ({
 }) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
+  const route = useRoute();
   const visible = useIsFocused();
-  const [tab, setTab] = useState('pets');
+  const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState(route.params?.initialTab || 'pets');
   const [ownedPets, setOwnedPets] = useState([]);
   const [wishlistPets, setWishlistPets] = useState([]);
   const [activeTrades, setActiveTrades] = useState([]);
@@ -100,6 +103,10 @@ const TradeJournal = ({
   const [savedDrawerTrade, setSavedDrawerTrade] = useState(null);
   const [savedDrawerVisible, setSavedDrawerVisible] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState('mine'); // 'mine' | 'saved'
+  const [acceptorCounts, setAcceptorCounts] = useState({}); // { tradeId: count }
+  const [acceptorListTradeId, setAcceptorListTradeId] = useState(null); // trade ID for acceptors modal
+  const [acceptorList, setAcceptorList] = useState([]); // array of acceptor objects for modal
+  const [acceptorListLoading, setAcceptorListLoading] = useState(false);
 
   // Refs to avoid stale closures in PetModal onClose
   const ownedPetsRef = useRef(ownedPets);
@@ -127,10 +134,10 @@ const TradeJournal = ({
     try {
       let snap = await getDoc(doc(firestoreDB, 'user_profiles', uid));
       // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this fallback once all users updated
-      if (!snap.exists) {
+      if (!snap.exists()) {
         snap = await getDoc(doc(firestoreDB, 'reviews', uid));
       }
-      if (snap.exists) {
+      if (snap.exists()) {
         const data = snap.data();
         setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
         setWishlistPets(Array.isArray(data?.wishlistPets) ? data.wishlistPets : []);
@@ -192,7 +199,7 @@ const TradeJournal = ({
         entries.map(async ([tradeId, refData]) => {
           try {
             const snap = await getDoc(doc(firestoreDB, 'trades_new', tradeId));
-            if (snap.exists) {
+            if (snap.exists()) {
               return { id: tradeId, ...snap.data(), _savedRef: refData };
             } else {
               // Trade was deleted by poster
@@ -208,6 +215,37 @@ const TradeJournal = ({
       console.warn('[MyStuff] fetch saved trades error:', e?.message);
     }
   }, [db, uid, firestoreDB]);
+
+  // ── Fetch acceptor counts for all active trades ──
+  const fetchAcceptorCounts = useCallback(async (trades) => {
+    if (!db || !trades || trades.length === 0) return;
+    const counts = {};
+    await Promise.all(
+      trades.map(async (trade) => {
+        const acceptors = await fetchTradeAcceptors(db, trade.id);
+        const count = Object.keys(acceptors).length;
+        if (count > 0) counts[trade.id] = count;
+      })
+    );
+    setAcceptorCounts(counts);
+  }, [db]);
+
+  // ── Open acceptors list modal ──
+  const openAcceptorList = useCallback(async (tradeId) => {
+    if (!db) return;
+    setAcceptorListTradeId(tradeId);
+    setAcceptorListLoading(true);
+    const acceptors = await fetchTradeAcceptors(db, tradeId);
+    const list = Object.entries(acceptors).map(([uid, data]) => ({
+      uid,
+      name: data.name || 'Unknown',
+      robloxUsername: data.robloxUsername || '',
+      avatar: data.avatar || '',
+      acceptedAt: data.acceptedAt || 0,
+    })).sort((a, b) => (b.acceptedAt || 0) - (a.acceptedAt || 0));
+    setAcceptorList(list);
+    setAcceptorListLoading(false);
+  }, [db]);
 
   // ── Trade stats (lightweight separate node) ──
   const [tradeStats, setTradeStats] = useState(null);
@@ -314,14 +352,17 @@ const TradeJournal = ({
         onPress: async () => {
           try {
             if (firestoreDB && item.id) await deleteDoc(doc(firestoreDB, 'trades_new', item.id));
+            // Clean up acceptors for this deleted trade
+            if (db && item.id) await removeAllTradeAcceptors(db, item.id);
             setActiveTrades(prev => prev.filter(t => t.id !== item.id));
+            setAcceptorCounts(prev => { const next = { ...prev }; delete next[item.id]; return next; });
           } catch {
             Alert.alert(t('trade_journal.alerts.error'), t('trade_journal.alerts.could_not_delete'));
           }
         },
       },
     ]);
-  }, [firestoreDB, t]);
+  }, [firestoreDB, db, t]);
 
   // ── Clear all active trades ──
   const clearActiveTrades = useCallback(() => {
@@ -337,7 +378,10 @@ const TradeJournal = ({
               await Promise.all(
                 activeTrades.map(tData => deleteDoc(doc(firestoreDB, 'trades_new', tData.id)))
               );
+              // Clean up acceptors for all deleted trades
+              if (db) await Promise.all(activeTrades.map(tData => removeAllTradeAcceptors(db, tData.id)));
               setActiveTrades([]);
+              setAcceptorCounts({});
               Alert.alert(t('trade_journal.alerts.done'), t('trade_journal.alerts.all_active_deleted'));
             } catch {
               Alert.alert(t('trade_journal.alerts.error'), t('trade_journal.alerts.could_not_delete'));
@@ -346,7 +390,7 @@ const TradeJournal = ({
         },
       ]
     );
-  }, [firestoreDB, activeTrades, t]);
+  }, [firestoreDB, db, activeTrades, t]);
 
   useEffect(() => {
     if (visible) {
@@ -366,6 +410,11 @@ const TradeJournal = ({
       hasFetchedRef.current = false;
     }
   }, [visible, fetchPets, fetchActiveTrades, fetchHistory, fetchTradeStats, fetchSavedTrades]);
+
+  // ── Fetch acceptor counts whenever active trades change ──
+  useEffect(() => {
+    if (activeTrades.length > 0) fetchAcceptorCounts(activeTrades);
+  }, [activeTrades, fetchAcceptorCounts]);
 
   // ── Save pets to Firestore ──
   // 📅 2026-03-13: Dual-write to user_profiles (new primary) + reviews (backward compat).
@@ -495,6 +544,10 @@ const TradeJournal = ({
             completed: true, completedAt: new Date().toISOString(), completionResult: rating,
           });
         } catch {}
+        // Clean up all acceptors for this trade since it's now completed
+        await removeAllTradeAcceptors(db, trade.id);
+        setAcceptorCounts(prev => { const next = { ...prev }; delete next[trade.id]; return next; });
+        if (acceptorListTradeId === trade.id) { setAcceptorListTradeId(null); setAcceptorList([]); }
       } else {
         // Accepted/saved trade from another user — remove from saved list after completing
         try {
@@ -559,7 +612,7 @@ const TradeJournal = ({
       Alert.alert(t('trade_journal.alerts.error'), t('trade_journal.alerts.could_not_complete'));
       setCompleting(null);
     }
-  }, [db, uid, firestoreDB, ownedPets, wishlistPets, savePets, fetchActiveTrades, fetchHistory, editGave, editGot, getImgUrl, updateTradeStats, t]);
+  }, [db, uid, firestoreDB, ownedPets, wishlistPets, savePets, fetchActiveTrades, fetchHistory, editGave, editGot, getImgUrl, updateTradeStats, t, acceptorListTradeId]);
 
   // ── Real-time pet value lookup from RTDB data ──
   const parsedPetData = useMemo(() => {
@@ -1080,6 +1133,25 @@ const TradeJournal = ({
                   <Text style={[styles.editHint, { color: subtextColor }]}>
                     {t('trade_journal.active.edit_hint')}
                   </Text>
+                )}
+
+                {/* Acceptors badge — shows how many people accepted this trade */}
+                {!isCompleting && (acceptorCounts[item.id] || 0) > 0 && (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      marginTop: 8, paddingHorizontal: 10, paddingVertical: 7,
+                      backgroundColor: '#10B98118', borderRadius: 10,
+                      alignSelf: 'flex-start',
+                    }}
+                    onPress={() => openAcceptorList(item.id)}
+                  >
+                    <Text style={{ fontSize: 13 }}>🤝</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981' }}>
+                      {acceptorCounts[item.id]} {acceptorCounts[item.id] === 1 ? 'person' : 'people'} accepted
+                    </Text>
+                    <FontAwesome name="chevron-right" size={10} color="#10B981" />
+                  </TouchableOpacity>
                 )}
 
                 {/* Completion flow */}
@@ -1893,6 +1965,78 @@ const TradeJournal = ({
 
 
       </View>
+
+      {/* Acceptors List — absolute overlay (avoids iOS nested Modal issues) */}
+      {!!acceptorListTradeId && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => { setAcceptorListTradeId(null); setAcceptorList([]); }} />
+          <View style={{
+            backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+            borderTopLeftRadius: 20, borderTopRightRadius: 20,
+            maxHeight: '60%', paddingBottom: Math.max(insets.bottom, 30),
+          }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#334155' : '#e2e8f0' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>
+                {t('trade_journal.active.people_accepted', { defaultValue: 'People who accepted' })}
+              </Text>
+              <TouchableOpacity onPress={() => { setAcceptorListTradeId(null); setAcceptorList([]); }}>
+                <FontAwesome name="xmark" size={18} color={subtextColor} />
+              </TouchableOpacity>
+            </View>
+            {/* List */}
+            {acceptorListLoading ? (
+              <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 30 }} />
+            ) : acceptorList.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: subtextColor, marginTop: 30 }}>
+                {t('trade_journal.active.no_acceptors', { defaultValue: 'No one has accepted yet' })}
+              </Text>
+            ) : (
+              <FlatList
+                data={acceptorList}
+                keyExtractor={item => item.uid}
+                renderItem={({ item: acceptor }) => (
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12,
+                    borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#334155' : '#f1f5f9',
+                  }}>
+                    <Image
+                      source={{ uri: acceptor.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
+                      style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#e2e8f0' }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: textColor }}>{acceptor.name}</Text>
+                      {acceptor.robloxUsername ? (
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }} onPress={() => { Clipboard.setString(acceptor.robloxUsername); showSuccessMessage('Copied', acceptor.robloxUsername); }}>
+                          <Text style={{ fontSize: 11, color: '#3B82F6' }}>🎮 {acceptor.robloxUsername}</Text>
+                          <FontAwesome name="copy" size={9} color="#3B82F680" />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                    {/* Chat button */}
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#3B82F618', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, marginLeft: 8 }}
+                      onPress={() => {
+                        setAcceptorListTradeId(null);
+                        setAcceptorList([]);
+                        navigation.navigate('PrivateChatRoot', {
+                          selectedUser: {
+                            senderId: acceptor.uid,
+                            sender: acceptor.name,
+                            avatar: acceptor.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                          },
+                        });
+                      }}
+                    >
+                      <FontAwesome name="comment" size={14} color="#3B82F6" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Pet Picker Modal */}
       <PetModal

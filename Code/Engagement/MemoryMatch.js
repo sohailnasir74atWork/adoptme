@@ -158,7 +158,7 @@ const MemoryMatch = ({ visible, onClose }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         const today = isSameDay(data.lastMemoryAt);
         const plays = today ? (data.memoryPlaysToday || 0) : 0;
         setPlaysToday(plays);

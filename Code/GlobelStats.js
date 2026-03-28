@@ -6,10 +6,10 @@ import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore'
 import { createNewUser, registerForNotifications } from './Globelhelper';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
-import { useColorScheme, InteractionManager, AppState, Appearance } from 'react-native';
+import { useColorScheme, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
-import crashlytics from '@react-native-firebase/crashlytics';
+import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute } from '@react-native-firebase/crashlytics';
 
 
 
@@ -282,9 +282,10 @@ export const GlobalStateProvider = ({ children }) => {
 
       // 🔥 Crashlytics: tag this user so crash reports show who was affected
       try {
-        crashlytics().setUserId(userId);
-        if (loggedInUser.email) crashlytics().setAttribute('email', loggedInUser.email);
-        if (userData.displayName) crashlytics().setAttribute('displayName', userData.displayName);
+        const crashlyticsInstance = getCrashlytics();
+        setCrashlyticsUserId(crashlyticsInstance, userId);
+        if (loggedInUser.email) setCrashlyticsAttribute(crashlyticsInstance, 'email', loggedInUser.email);
+        if (userData.displayName) setCrashlyticsAttribute(crashlyticsInstance, 'displayName', userData.displayName);
       } catch (_) {}
 
       // 🔥 Refresh and update FCM token
@@ -308,7 +309,7 @@ export const GlobalStateProvider = ({ children }) => {
         return;
       }
 
-      InteractionManager.runAfterInteractions(async () => {
+      requestIdleCallback(async () => {
         await handleUserLogin(loggedInUser);
 
         if (loggedInUser?.uid) {
@@ -419,7 +420,8 @@ export const GlobalStateProvider = ({ children }) => {
   }, [user?.id, appdatabase, localState?.isPro]);
 
   useEffect(() => {
-    InteractionManager.runAfterInteractions(updateUserProStatus);
+    const id = requestIdleCallback(updateUserProStatus);
+    return () => cancelIdleCallback(id);
   }, [updateUserProStatus]);
 
   useEffect(() => {
@@ -500,11 +502,11 @@ export const GlobalStateProvider = ({ children }) => {
 
   // ✅ Run the function only if needed
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
+    const id = requestIdleCallback(() => {
       fetchStockData();
     });
 
-    return () => task.cancel();
+    return () => cancelIdleCallback(id);
   }, [fetchStockData]);
 
   const reload = useCallback(() => {

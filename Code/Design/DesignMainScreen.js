@@ -364,7 +364,7 @@ const DesignFeedScreen = ({ route }) => {
       const postIds = ranking.map(r => r.postId).filter(Boolean);
       const postPromises = postIds.map(id =>
         getDoc(doc(firestoreDB, 'designPosts', id))
-          .then(d => d.exists ? { id: d.id, ...d.data() } : null)
+          .then(d => d.exists() ? { id: d.id, ...d.data() } : null)
           .catch(() => null)
       );
 
@@ -621,6 +621,12 @@ const DesignFeedScreen = ({ route }) => {
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
         ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
+        ...(user?.isAdmin ? { isAdmin: true } : {}),
+        ...(user?.isModerator ? { isModerator: true } : {}),
+        ...(user?.isTrusted ? { isTrusted: true } : {}),
+        ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isBabyMod ? { isBabyMod: true } : {}),
+        ...(localState?.isPro ? { isPro: true } : {}),
         ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),
       };
 

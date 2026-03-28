@@ -25,9 +25,9 @@ const CommunityChatHeader = ({
   const isDarkMode = theme === 'dark';
   const badgePulse = useRef(new Animated.Value(1)).current;
 
-  // Badge pulse animation
+  // Badge pulse animation — only react to presence/absence, not exact count
+  const hasNotif = unreadcount > 0 || pendingGroupInvitationsCount > 0 || groupUnreadCount > 0;
   useEffect(() => {
-    const hasNotif = unreadcount > 0 || pendingGroupInvitationsCount > 0 || groupUnreadCount > 0;
     if (hasNotif) {
       const pulse = Animated.loop(
         Animated.sequence([
@@ -38,7 +38,7 @@ const CommunityChatHeader = ({
       pulse.start();
       return () => pulse.stop();
     }
-  }, [unreadcount, pendingGroupInvitationsCount, groupUnreadCount]);
+  }, [hasNotif]);
 
   // Listen to pending group invitations
   useEffect(() => {
@@ -109,9 +109,9 @@ const CommunityChatHeader = ({
     >
       <View style={[styles.iconCircle, { backgroundColor: bg }]}>
         {emoji ? (
-          <Text style={{ fontSize: 18 }}>{emoji}</Text>
+          <Text style={{ fontSize: 15 }}>{emoji}</Text>
         ) : (
-          <Icon name={icon} size={22} color={color} />
+          <Icon name={icon} size={18} color={color} />
         )}
       </View>
       {badge > 0 || badge === '!' ? (
@@ -142,7 +142,6 @@ const CommunityChatHeader = ({
         animated
         onPress={() => {
           navigation.navigate('Inbox');
-          setunreadcount(0);
         }}
       />
 
@@ -156,7 +155,6 @@ const CommunityChatHeader = ({
         animated
         onPress={() => {
           navigation.navigate('Groups');
-          if (typeof setGroupUnreadCount === 'function') setGroupUnreadCount(0);
         }}
       />
 
@@ -208,34 +206,34 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     position: 'relative',
-    padding: 3,
+    padding: 6,
     overflow: 'visible',
   },
   iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   badge: {
     position: 'absolute',
-    top: 1,
-    right: 1,
-    borderRadius: 5,
-    minWidth: 10,
-    height: 10,
+    top: 2,
+    right: 2,
+    borderRadius: 7,
+    minWidth: 14,
+    height: 14,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#fff',
   },
   badgeText: {
     color: '#fff',
-    fontSize: 5,
+    fontSize: 8,
     fontWeight: '800',
   },
 });
 
-export default CommunityChatHeader;
+export default React.memo(CommunityChatHeader);

@@ -265,7 +265,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginRight: 10,
   },
   pinnedStripLabel: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '700',
     color: config.colors.primary,
     textTransform: 'uppercase',
@@ -283,11 +283,11 @@ const getStyles = (isDarkMode) => StyleSheet.create({
   },
   pinnedBadgeText: {
     color: '#fff',
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '700',
   },
   pinnedStripText: {
-    fontSize: 10,
+    fontSize: 13,
     color: isDarkMode ? '#ccc' : '#555',
     marginTop: 1,
   },
@@ -357,23 +357,23 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     marginRight: 12,
   },
   pinnedCardSender: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: config.colors.primary,
   },
   pinnedCardDate: {
-    fontSize: 9,
+    fontSize: 11,
     color: isDarkMode ? '#666' : '#bbb',
   },
   pinnedCardText: {
-    fontSize: 11,
+    fontSize: 14,
     color: isDarkMode ? '#f0f0f5' : '#333',
-    lineHeight: 16,
+    lineHeight: 20,
   },
   pinnedText: {
-    fontSize: 11,
+    fontSize: 14,
     color: isDarkMode ? '#f0f0f5' : '#333',
-    lineHeight: 16,
+    lineHeight: 20,
   },
 
   // ── Unpin Button ──

@@ -6,9 +6,8 @@ import {
   Text,
   Image,
   TouchableOpacity, TextInput,
-
+  Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { getStyles } from '../Style';
 import PrivateMessageInput from './PrivateMessageInput';
@@ -17,7 +16,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
-import { get, increment, ref, update, onValue } from '@react-native-firebase/database';
+import { get, increment, ref, update, set, remove, onValue, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { showMessage } from 'react-native-flash-message';
@@ -43,7 +42,6 @@ const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
-  const insets = useSafeAreaInsets();
 
   const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB } = useGlobalState();
   const [trade, setTrade] = useState(null)
@@ -83,19 +81,22 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
 
   // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
-  useEffect(() => {
-    if (!user?.email || !appdatabase) return;
+  // Uses useFocusEffect to detach listener when navigating away
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.email || !appdatabase) return;
 
-    const encodeEmail = (email) => email.replace(/\./g, '(dot)');
-    const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
+      const encodeEmail = (email) => email.replace(/\./g, '(dot)');
+      const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
 
-    const unsubscribe = onValue(banRef, (snapshot) => {
-      const banData = snapshot.val();
-      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
-    });
+      const unsubscribe = onValue(banRef, (snapshot) => {
+        const banData = snapshot.val();
+        setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
+      });
 
-    return () => unsubscribe();
-  }, [user?.email, appdatabase]);
+      return () => unsubscribe();
+    }, [user?.email, appdatabase])
+  );
 
 
   // ✅ Detect if item is a trade or a post
@@ -137,7 +138,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     getDoc(reviewRef)
       .then(snapshot => {
-        if (snapshot.exists && snapshot.data()?.rating) {
+        if (snapshot.exists() && snapshot.data()?.rating) {
           setHasRated(true);
         } else {
           setHasRated(false);
@@ -233,12 +234,12 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       const reviewDocId = `${selectedUserId}_${myUserId}`; // toUser_fromUser
       const reviewRef = doc(firestoreDB, "reviews", reviewDocId);
       const existingReviewSnap = await getDoc(reviewRef);
-      const oldRating = existingReviewSnap.exists ? existingReviewSnap.data()?.rating : undefined;
+      const oldRating = existingReviewSnap.exists() ? existingReviewSnap.data()?.rating : undefined;
 
       // ✅ FIRESTORE ONLY: Read current summary from user_ratings_summary
       const summaryRef = doc(firestoreDB, 'user_ratings_summary', selectedUserId);
       const summarySnap = await getDoc(summaryRef);
-      const summaryData = summarySnap.exists ? summarySnap.data() : null;
+      const summaryData = summarySnap.exists() ? summarySnap.data() : null;
       const oldAverage = summaryData?.averageRating || 0;
       const oldCount = summaryData?.count || 0;
 
@@ -268,7 +269,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // ✅ FIRESTORE ONLY: Save/update rating in reviews collection (even without text review)
       // This ensures we track who rated whom, even if they didn't write a review
       const now = serverTimestamp();
-      const isUpdate = existingReviewSnap.exists;
+      const isUpdate = existingReviewSnap.exists();
 
       await setDoc(
         reviewRef,
@@ -362,21 +363,15 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       }
 
       try {
-        let query = messagesRef.orderByKey();
-
         const lastKey = lastLoadedKeyRef.current;
-        if (!reset && lastKey) {
-          // get older messages including lastKey – we'll filter overlap
-          query = query.endAt(lastKey);
-        }
-
         // ✅ Apply limit ONLY ONCE, at the end
         // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
-        query = query.limitToLast(limitSize);
+        const q = (!reset && lastKey)
+          ? dbQuery(messagesRef, orderByKey(), endAt(lastKey), limitToLast(limitSize))
+          : dbQuery(messagesRef, orderByKey(), limitToLast(limitSize));
 
-
-        const snapshot = await query.once('value');
+        const snapshot = await get(q);
         const data = snapshot.val() || {};
 
         let parsedMessages = Object.entries(data)
@@ -446,6 +441,17 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // If chatKey hasn't changed, don't reload (preserves existing messages)
   }, [chatKey, messagesRef, loadMessages]);
 
+  const handleDeleteMessage = useCallback(async (messageId) => {
+    if (!messageId || !chatKey || !appdatabase) return;
+    try {
+      const messageRef = ref(appdatabase, `private_messages/${chatKey}/messages/${messageId}`);
+      await remove(messageRef);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (e) {
+      Alert.alert('Error', 'Failed to delete message.');
+    }
+  }, [chatKey, appdatabase]);
+
   const handleLoadMore = useCallback(() => {
     // ✅ Prevent loading if already paginating or no more messages
     if (isPaginating || !lastLoadedKeyRef.current) {
@@ -493,14 +499,14 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         // ✅ Trade item — persist to trade ref
         setTrade(item);
         setPost(null);
-        tradeRef.set(item).catch((error) => {
+        set(tradeRef, item).catch((error) => {
           console.error("Error updating trade in Firebase:", error);
         });
       } else if (item.desc !== undefined || item.imageUrl) {
         // ✅ Post item — persist to post ref
         setPost(item);
         setTrade(null);
-        postRef.set({
+        set(postRef, {
           desc: item.desc || '',
           imageUrl: Array.isArray(item.imageUrl) ? item.imageUrl.slice(0, 1) : [],
           displayName: item.displayName || '',
@@ -511,13 +517,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       } else {
         setTrade(item);
         setPost(null);
-        tradeRef.set(item).catch((error) => {
+        set(tradeRef, item).catch((error) => {
           console.error("Error updating trade in Firebase:", error);
         });
       }
     } else {
       // ✅ No item in props — check Firebase for trade or post
-      tradeRef.once('value')
+      get(tradeRef)
         .then((snapshot) => {
           if (snapshot.exists()) {
             const tradeData = snapshot.val();
@@ -529,7 +535,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         .catch((error) => {
           console.error("Error fetching trade from Firebase:", error);
         });
-      postRef.once('value')
+      get(postRef)
         .then((snapshot) => {
           if (snapshot.exists()) {
             const postData = snapshot.val();
@@ -677,14 +683,14 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     try {
       // Save the message
-      await messageRef.set(messageData);
+      await set(messageRef, messageData);
 
       // Check if receiver is currently in the chat
-      const snapshot = await receiverStatusRef.once('value');
+      const snapshot = await get(receiverStatusRef);
       const isReceiverInChat = snapshot.val() === chatId;
 
       // Update sender's chat metadata
-      await senderChatRef.update({
+      await update(senderChatRef, {
         chatId,
         receiverId: selectedUserId,
         receiverName: selectedUser?.sender || t('chat.anonymous'),
@@ -695,7 +701,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       });
 
       // Update receiver's chat metadata
-      await receiverChatRef.update({
+      await update(receiverChatRef, {
         chatId,
         receiverId: myUserId,
         receiverName: user?.displayName || t('chat.anonymous'),
@@ -725,7 +731,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       const chatMetaRef = ref(appdatabase, `chat_meta_data/${user.id}/${selectedUserId}`);
 
       // ✅ Reset unreadCount when entering chat
-      chatMetaRef.update({ unreadCount: 0 });
+      update(chatMetaRef, { unreadCount: 0 });
 
       setActiveChat(user.id, chatKey);
 
@@ -747,51 +753,45 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     setRefreshing(false);
   }, [loadMessages]);
 
-  useEffect(() => {
-    if (user?.id && chatKey) {
-      setActiveChat(user.id, chatKey);
-    }
-  }, [user?.id, chatKey]);
 
 
 
   // ✅ OPTIMIZED: Only listen to the newest message to avoid duplicate reads
-  // This prevents child_added from firing for all existing messages when listener is attached
-  useEffect(() => {
-    if (!messagesRef) return;
+  // Uses useFocusEffect to detach listener when navigating away (prevents freeze on rapid nav)
+  useFocusEffect(
+    useCallback(() => {
+      if (!messagesRef) return;
 
-    // ✅ Use limitToLast(1) to only listen to the newest message
-    // This ensures we only get NEW messages, not all existing ones
-    const limitedRef = messagesRef.limitToLast(1);
+      // ✅ Use limitToLast(1) to only listen to the newest message
+      const limitedRef = dbQuery(messagesRef, limitToLast(1));
 
-    const handleChildAdded = snapshot => {
-      if (!snapshot || !snapshot.key) return;
-      const data = snapshot.val();
-      if (!data || typeof data !== 'object') return;
+      const handleChildAdded = snapshot => {
+        if (!snapshot || !snapshot.key) return;
+        const data = snapshot.val();
+        if (!data || typeof data !== 'object') return;
 
-      const newMessage = { id: snapshot.key, ...data };
-      if (!newMessage.timestamp) {
-        newMessage.timestamp = Date.now();
-      }
+        const newMessage = { id: snapshot.key, ...data };
+        if (!newMessage.timestamp) {
+          newMessage.timestamp = Date.now();
+        }
 
-      setMessages(prev => {
-        if (!Array.isArray(prev)) return [newMessage];
-        const exists = prev.some(m => String(m?.id) === String(newMessage.id));
-        if (exists) return prev; // don't duplicate
+        setMessages(prev => {
+          if (!Array.isArray(prev)) return [newMessage];
+          const exists = prev.some(m => String(m?.id) === String(newMessage.id));
+          if (exists) return prev; // don't duplicate
 
-        // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
-        return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-      });
-    };
+          // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
+          return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+        });
+      };
 
-    const listener = limitedRef.on('child_added', handleChildAdded);
+      const unsubscribe = onChildAdded(limitedRef, handleChildAdded);
 
-    return () => {
-      if (limitedRef) {
-        limitedRef.off('child_added', listener);
-      }
-    };
-  }, [messagesRef]);
+      return () => {
+        unsubscribe();
+      };
+    }, [messagesRef])
+  );
 
 
 
@@ -803,90 +803,86 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       <GestureHandlerRootView>
 
 
-        <View style={[styles.container, noTabBar && { paddingBottom: insets.bottom }]}>
+        <View style={[styles.container, noTabBar && { paddingBottom: Platform.OS === 'ios' ? 34 : 48 }]}>
 
           <ConditionalKeyboardWrapper style={{ flex: 1 }} privatechatscreen={true}>
             {/* <View style={{ flex: 1 }}> */}
             {trade && (
-              <View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, borderBottomColor: !isDarkMode ? 'lightgrey' : 'grey', borderBottomWidth: 1 }}>
-                  <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
-                    {groupedHasItems?.map((hasItem, index) => (
-                      <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: '19%', alignItems: 'center' }}>
-                        <Image
-                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${hasItem.image?.replace(/^\//, "")}` }}
-                          style={{ width: 30, height: 30 }}
-                        />
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                          {hasItem.isFly && (
-                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>F</Text>
-                            </View>
-                          )}
-                          {hasItem.isRide && (
-                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>R</Text>
-                            </View>
-                          )}
-                          {hasItem.valueType === 'm' && (
-                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>M</Text>
-                            </View>
-                          )}
-                          {hasItem.valueType === 'n' && (
-                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>N</Text>
-                            </View>
-                          )}
-                        </View>
-                        {hasItem.count > 1 && (
-                          <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 1, paddingVertical: 1 }}>
-                            <Text style={{ color: 'white', fontSize: 7 }}>{hasItem.count}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 4, borderBottomColor: isDarkMode ? '#333' : '#e5e7eb', borderBottomWidth: 0.5 }}>
+                <View style={{ flex: 1, flexWrap: 'wrap', flexDirection: 'row', gap: 3 }}>
+                  {groupedHasItems?.map((hasItem) => (
+                    <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: 28, alignItems: 'center' }}>
+                      <Image
+                        source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${hasItem.image?.replace(/^\//, "")}` }}
+                        style={{ width: 24, height: 24 }}
+                      />
+                      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 1, marginTop: 1 }}>
+                        {hasItem.isFly && (
+                          <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>F</Text>
+                          </View>
+                        )}
+                        {hasItem.isRide && (
+                          <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>R</Text>
+                          </View>
+                        )}
+                        {hasItem.valueType === 'm' && (
+                          <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>M</Text>
+                          </View>
+                        )}
+                        {hasItem.valueType === 'n' && (
+                          <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>N</Text>
                           </View>
                         )}
                       </View>
-                    ))}
-                  </View>
-                  <View style={{ width: '2%', justifyContent: 'center', alignItems: 'center' }}>
-                    <Image source={require('../../../assets/transfer.png')} style={{ width: 10, height: 10 }} />
-                  </View>
-                  <View style={{ width: '48%', flexWrap: 'wrap', flexDirection: 'row', gap: 4 }}>
-                    {groupedWantsItems?.map((wantitem, index) => (
-                      <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: '19%', alignItems: 'center' }}>
-                        <Image
-                          source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${wantitem.image?.replace(/^\//, "")}` }}
-                          style={{ width: 35, height: 35 }}
-                        />
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 2, marginTop: 2 }}>
-                          {wantitem.isFly && (
-                            <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 7, textAlign: 'center' }}>F</Text>
-                            </View>
-                          )}
-                          {wantitem.isRide && (
-                            <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>R</Text>
-                            </View>
-                          )}
-                          {wantitem.valueType === 'm' && (
-                            <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>M</Text>
-                            </View>
-                          )}
-                          {wantitem.valueType === 'n' && (
-                            <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, paddingVertical: 1, borderRadius: 8 }}>
-                              <Text style={{ color: 'white', fontSize: 6, textAlign: 'center' }}>N</Text>
-                            </View>
-                          )}
+                      {hasItem.count > 1 && (
+                        <View style={{ position: 'absolute', top: -2, right: -2, backgroundColor: '#e74c3c', borderRadius: 6, paddingHorizontal: 2 }}>
+                          <Text style={{ color: 'white', fontSize: 6 }}>{hasItem.count}</Text>
                         </View>
-                        {wantitem.count > 1 && (
-                          <View style={{ position: 'absolute', top: 0, right: 0, backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 1, paddingVertical: 1 }}>
-                            <Text style={{ color: 'white', fontSize: 6 }}>{wantitem.count}</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+                <Image source={require('../../../assets/transfer.png')} style={{ width: 8, height: 8, marginHorizontal: 4 }} />
+                <View style={{ flex: 1, flexWrap: 'wrap', flexDirection: 'row', gap: 3 }}>
+                  {groupedWantsItems?.map((wantitem) => (
+                    <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: 28, alignItems: 'center' }}>
+                      <Image
+                        source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${wantitem.image?.replace(/^\//, "")}` }}
+                        style={{ width: 24, height: 24 }}
+                      />
+                      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 1, marginTop: 1 }}>
+                        {wantitem.isFly && (
+                          <View style={{ backgroundColor: '#3498db', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>F</Text>
+                          </View>
+                        )}
+                        {wantitem.isRide && (
+                          <View style={{ backgroundColor: '#e74c3c', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>R</Text>
+                          </View>
+                        )}
+                        {wantitem.valueType === 'm' && (
+                          <View style={{ backgroundColor: '#9b59b6', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>M</Text>
+                          </View>
+                        )}
+                        {wantitem.valueType === 'n' && (
+                          <View style={{ backgroundColor: '#2ecc71', paddingHorizontal: 1, borderRadius: 3 }}>
+                            <Text style={{ color: 'white', fontSize: 5 }}>N</Text>
                           </View>
                         )}
                       </View>
-                    ))}
-                  </View>
+                      {wantitem.count > 1 && (
+                        <View style={{ position: 'absolute', top: -2, right: -2, backgroundColor: '#e74c3c', borderRadius: 6, paddingHorizontal: 2 }}>
+                          <Text style={{ color: 'white', fontSize: 6 }}>{wantitem.count}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
                 </View>
               </View>
             )}
@@ -896,35 +892,36 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               <View style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                padding: 8,
-                borderBottomColor: isDarkMode ? 'grey' : 'lightgrey',
-                borderBottomWidth: 1,
+                paddingHorizontal: 6,
+                paddingVertical: 4,
+                borderBottomColor: isDarkMode ? '#333' : '#e5e7eb',
+                borderBottomWidth: 0.5,
                 backgroundColor: isDarkMode ? '#1a1a2e' : '#F0F4FF',
-                gap: 8,
+                gap: 6,
               }}>
                 {Array.isArray(post.imageUrl) && post.imageUrl.length > 0 && (
                   <Image
                     source={{ uri: post.imageUrl[0] }}
-                    style={{ width: 36, height: 36, borderRadius: 6 }}
+                    style={{ width: 28, height: 28, borderRadius: 4 }}
                   />
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 10, color: isDarkMode ? '#8B9DC3' : '#6B7280', fontWeight: '600' }}>
+                  <Text style={{ fontSize: 9, color: isDarkMode ? '#8B9DC3' : '#6B7280', fontWeight: '600' }}>
                     {t('feed.about_post') || 'About a post'}
                   </Text>
                   {post.desc ? (
                     <Text
                       numberOfLines={1}
-                      style={{ fontSize: 12, color: isDarkMode ? '#ddd' : '#333', marginTop: 1 }}
+                      style={{ fontSize: 11, color: isDarkMode ? '#ddd' : '#333' }}
                     >
                       {post.desc}
                     </Text>
                   ) : null}
                   {post.selectedTags?.length > 0 && (
-                    <View style={{ flexDirection: 'row', gap: 4, marginTop: 2 }}>
+                    <View style={{ flexDirection: 'row', gap: 3, marginTop: 1 }}>
                       {post.selectedTags.slice(0, 3).map((tag, idx) => (
-                        <View key={idx} style={{ backgroundColor: isDarkMode ? '#333' : '#E5E7EB', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 }}>
-                          <Text style={{ fontSize: 9, color: isDarkMode ? '#aaa' : '#666' }}>{tag}</Text>
+                        <View key={idx} style={{ backgroundColor: isDarkMode ? '#333' : '#E5E7EB', paddingHorizontal: 3, borderRadius: 3 }}>
+                          <Text style={{ fontSize: 8, color: isDarkMode ? '#aaa' : '#666' }}>{tag}</Text>
                         </View>
                       ))}
                     </View>
@@ -960,6 +957,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 selectedUser={selectedUser}
                 user={user}
                 onReply={(message) => setReplyTo(message)}
+                onDeleteMessage={handleDeleteMessage}
                 canRate={canRate}
                 hasRated={hasRated}
                 setShowRatingModal={setShowRatingModal}

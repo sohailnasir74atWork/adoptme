@@ -14,6 +14,7 @@ import {
   Dimensions,
   Animated,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
@@ -742,6 +743,7 @@ const ProfileBottomDrawer = ({
             // Update mergedUser isn't possible from here, so use it directly
             setReasonActionType({ type: 'strike', value: strikeCount, email: emailSnap.val() });
             setAdminReason('');
+            toggleModal();
             setShowReasonModal(true);
             return;
           }
@@ -754,6 +756,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'strike', value: strikeCount });
     setAdminReason('');
+    toggleModal();
     setShowReasonModal(true);
   };
 
@@ -765,6 +768,7 @@ const ProfileBottomDrawer = ({
           if (emailSnap.exists() && emailSnap.val()) {
             setReasonActionType({ type: 'mute', value: minutes, email: emailSnap.val() });
             setAdminReason('');
+            toggleModal();
             setShowReasonModal(true);
             return;
           }
@@ -777,6 +781,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'mute', value: minutes });
     setAdminReason('');
+    toggleModal();
     setShowReasonModal(true);
   };
 
@@ -788,6 +793,7 @@ const ProfileBottomDrawer = ({
           if (emailSnap.exists() && emailSnap.val()) {
             setReasonActionType({ type: 'ban', email: emailSnap.val() });
             setAdminReason('');
+            toggleModal();
             setShowReasonModal(true);
             return;
           }
@@ -800,6 +806,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'ban' });
     setAdminReason('');
+    toggleModal();
     setShowReasonModal(true);
   };
 
@@ -1612,7 +1619,7 @@ const ProfileBottomDrawer = ({
     if (!pet || typeof pet !== 'object') return null;
 
     const valueType = (pet.valueType || 'd').toLowerCase();
-    const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+    const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
     const isPet = !NON_PET_TYPES.includes((pet.category || '').toUpperCase());
     let rarityBg = '#FF6666';
     if (valueType === 'n') rarityBg = '#2ecc71';
@@ -2946,50 +2953,52 @@ const ProfileBottomDrawer = ({
             </ScrollView >
           </SwipeableBottomDrawer >
 
-          {/* Admin Reason Modal - rendered inside drawer modal to avoid RN 0.83 stacking issue */}
-          {showReasonModal && (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20, zIndex: 9999 }}>
-              <View style={{ width: '100%', backgroundColor: c.bg, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: c.border }}>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 10 }}>
-                  {reasonActionType?.type === 'strike' && `Apply Strike ${reasonActionType.value}`}
-                  {reasonActionType?.type === 'mute' && `Mute User for ${reasonActionType.value}m`}
-                  {reasonActionType?.type === 'ban' && `Ban User`}
-                </Text>
-                <Text style={{ fontSize: 12, color: c.textMuted, marginBottom: 15 }}>
-                  Please provide a reason for this action. This will be visible in the Admin Dashboard.
-                </Text>
-                <TextInput
-                  style={{
-                    backgroundColor: c.bgAlt,
-                    color: c.text,
-                    borderRadius: 10,
-                    padding: 12,
-                    minHeight: 80,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                    textAlignVertical: 'top'
-                  }}
-                  placeholder="e.g. Scammer, inappropriate language, spamming..."
-                  placeholderTextColor={c.textMuted}
-                  multiline
-                  value={adminReason}
-                  onChangeText={setAdminReason}
-                  autoFocus
-                />
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-                  <TouchableOpacity onPress={() => setShowReasonModal(false)} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }}>
-                    <Text style={{ color: c.text, fontWeight: '600' }}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={confirmAdminAction} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ef4444' }}>
-                    <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-
         </View >
       </Modal >
+
+      {/* Admin Reason Modal - standalone modal shown after profile drawer closes */}
+      <Modal visible={showReasonModal} transparent animationType="fade" onRequestClose={() => setShowReasonModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable onPress={() => setShowReasonModal(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
+            <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', backgroundColor: c.bg, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: c.border }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 10 }}>
+                {reasonActionType?.type === 'strike' && `Apply Strike ${reasonActionType.value}`}
+                {reasonActionType?.type === 'mute' && `Mute User for ${reasonActionType.value}m`}
+                {reasonActionType?.type === 'ban' && `Ban User`}
+              </Text>
+              <Text style={{ fontSize: 12, color: c.textMuted, marginBottom: 15 }}>
+                Please provide a reason for this action. This will be visible in the Admin Dashboard.
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: c.bgAlt,
+                  color: c.text,
+                  borderRadius: 10,
+                  padding: 12,
+                  minHeight: 80,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  textAlignVertical: 'top'
+                }}
+                placeholder="e.g. Scammer, inappropriate language, spamming..."
+                placeholderTextColor={c.textMuted}
+                multiline
+                value={adminReason}
+                onChangeText={setAdminReason}
+                autoFocus
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <TouchableOpacity onPress={() => setShowReasonModal(false)} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }}>
+                  <Text style={{ color: c.text, fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmAdminAction} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ef4444' }}>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Admin Reason Modal */}
 

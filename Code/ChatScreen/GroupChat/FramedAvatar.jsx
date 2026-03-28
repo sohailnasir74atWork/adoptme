@@ -311,6 +311,9 @@ const getShapePath = (shape, cx, cy, size) => {
   }
 };
 
+// Unique ID counter for SVG ClipPath/gradient IDs to avoid collisions in lists
+let _framedAvatarIdCounter = 0;
+
 // ════════════════════════════════════════════════════════════
 //  FRAMED AVATAR COMPONENT
 // ════════════════════════════════════════════════════════════
@@ -322,6 +325,7 @@ const FramedAvatar = ({
   isOnline,
 }) => {
   const c = getThemeColors(isDarkMode);
+  const instanceId = useMemo(() => `fa-${++_framedAvatarIdCounter}`, []);
   const def = frame?.id ? (FRAME_DEFS[frame.id] || DEFAULT_DEF) : null;
   const borderColors = frame?.borderColors || [];
   const glowColor = frame?.glowColor || null;
@@ -392,7 +396,7 @@ const FramedAvatar = ({
   //  LOTTIE FRAME — simple circular avatar + Lottie overlay, NO SVG
   // ══════════════════════════════════════════════════
   if (lottieSource) {
-    const lottieSize = avatarSize * 1.65;
+    const lottieSize = avatarSize * 1.3;
     return (
       <View style={{ position: 'relative', width: lottieSize, height: lottieSize, alignItems: 'center', justifyContent: 'center' }}>
         {/* Lottie animation — the frame itself */}
@@ -469,11 +473,11 @@ const FramedAvatar = ({
       <Svg width={svgSize} height={svgSize}>
         {/* Defs — clip path + glow */}
         <Defs>
-          <ClipPath id={`clip-${frame.id}`}>
+          <ClipPath id={`clip-${instanceId}`}>
             <Path d={innerPath} />
           </ClipPath>
           {glowColor && def.glowRadius > 0 && (
-            <RadialGradient id={`glow-${frame.id}`} cx="50%" cy="50%" r="50%">
+            <RadialGradient id={`glow-${instanceId}`} cx="50%" cy="50%" r="50%">
               <Stop offset="50%" stopColor={glowColor} stopOpacity={(def.glowOpacity || 0.4) * 0.8} />
               <Stop offset="100%" stopColor={glowColor} stopOpacity={0} />
             </RadialGradient>
@@ -485,7 +489,7 @@ const FramedAvatar = ({
           <SvgCircle
             cx={cx} cy={cy}
             r={svgSize / 2 - 1}
-            fill={`url(#glow-${frame.id})`}
+            fill={`url(#glow-${instanceId})`}
           />
         )}
 
@@ -528,7 +532,7 @@ const FramedAvatar = ({
             y={cy - innerSize / 2}
             width={innerSize}
             height={innerSize}
-            clipPath={`url(#clip-${frame.id})`}
+            clipPath={`url(#clip-${instanceId})`}
             preserveAspectRatio="xMidYMid slice"
           />
         )}

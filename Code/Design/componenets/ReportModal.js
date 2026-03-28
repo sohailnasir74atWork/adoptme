@@ -4,7 +4,7 @@ import {
   Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import { showMessage } from 'react-native-flash-message';
-import firestore from '@react-native-firebase/firestore';
+import { getFirestore, collection, doc, runTransaction } from '@react-native-firebase/firestore';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
 
@@ -70,13 +70,14 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
     }
 
     setSubmitting(true);
-    const postRef = firestore().collection('designPosts').doc(item.id);
+    const db = getFirestore();
+    const postRef = doc(db, 'designPosts', item.id);
 
     try {
       // 1) Atomically check 'report' and update/delete
-      const txResult = await firestore().runTransaction(async (tx) => {
+      const txResult = await runTransaction(db, async (tx) => {
         const snap = await tx.get(postRef);
-        if (!snap.exists) {
+        if (!snap.exists()) {
           return { status: 'missing' };
         }
 

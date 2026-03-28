@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
@@ -6,7 +6,6 @@ import {
   Text,
   TouchableOpacity,
   RefreshControl,
-  Vibration,
   Image,
   Alert,
   Keyboard,
@@ -70,9 +69,13 @@ const MessagesList = ({
   const [showReportPopup, setShowReportPopup] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
-  const [frameBorderColorIndex] = useState(0); // kept for extraData compat only
+  // frameBorderColorIndex removed — was causing unnecessary FlatList re-renders
   const { triggerHapticFeedback } = useHaptic();
   const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
+
+  // ✅ PERF: Store messages in a ref so renderMessage doesn't depend on the array
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const { t } = useTranslation();
   const { isAdmin, api, freeTranslation } = useGlobalState();
@@ -107,11 +110,12 @@ const MessagesList = ({
 
 
 
+  const scrollToMessageTimerRef = useRef(null);
   const scrollToMessage = useCallback(
     (targetId) => {
       if (!flatListRef?.current || !targetId) return;
 
-      const index = messages.findIndex((m) => m.id === targetId);
+      const index = messagesRef.current.findIndex((m) => m.id === targetId);
       if (index === -1) return;
 
       try {
@@ -124,7 +128,8 @@ const MessagesList = ({
         // highlight only the scrolled-to message
         setHighlightedMessageId(targetId);
 
-        setTimeout(() => {
+        if (scrollToMessageTimerRef.current) clearTimeout(scrollToMessageTimerRef.current);
+        scrollToMessageTimerRef.current = setTimeout(() => {
           setHighlightedMessageId((current) =>
             current === targetId ? null : current,
           );
@@ -133,8 +138,15 @@ const MessagesList = ({
         console.log('scrollToIndex error:', e);
       }
     },
-    [flatListRef, messages],
+    [flatListRef],
   );
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollToMessageTimerRef.current) clearTimeout(scrollToMessageTimerRef.current);
+    };
+  }, []);
 
   // ✅ Scroll to bottom handler
   const handleScrollToBottom = useCallback(() => {
@@ -331,7 +343,7 @@ const MessagesList = ({
     // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
-    const previousMessage = messages[index + 1];
+    const previousMessage = messagesRef.current[index + 1];
     const currentDate = item.timestamp ? new Date(item.timestamp).toDateString() : null;
     const previousDate = previousMessage?.timestamp
       ? new Date(previousMessage.timestamp).toDateString()
@@ -368,9 +380,9 @@ const MessagesList = ({
             style={{
               flexDirection: 'row',
               alignSelf: item.senderId === user?.id ? 'flex-end' : 'flex-start',
-              alignItems: 'flex-end',
+              alignItems: 'flex-start',
               maxWidth: '82%',
-              marginBottom: 4,
+              marginBottom: 6,
               marginHorizontal: 8,
               ...(item.id === highlightedMessageId ? { borderWidth: 2, borderColor: '#F59E0B', borderRadius: 18 } : {}),
             }}
@@ -423,72 +435,51 @@ const MessagesList = ({
                     </TouchableOpacity>
 
                     {profile.isPro && (
-                      <Image
-                        source={require('../../../assets/pro.png')}
-                        style={styles.icon}
-                      />
+                      <Image source={require('../../../assets/pro.png')} style={styles.icon} />
+                    )}
+                    {profile.robloxUsernameVerified && (
+                      <Image source={require('../../../assets/verification.png')} style={styles.icon} />
+                    )}
+                    {hasRecentWin && (
+                      <Image source={require('../../../assets/trophy.webp')} style={styles.icon} />
                     )}
 
                     {!!item.isAdmin && (
-                      <View style={styles.adminContainer}>
-                        <Icon name="shield" size={10} color="#fff" />
-                        <Text style={styles.adminBadgeText}>{t("chat.admin")}</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#EF4444' }]}>
+                        <Icon name="shield" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>{t("chat.admin")}</Text>
                       </View>
                     )}
-
                     {!item.isAdmin && item.isModerator && (
-                      <View style={styles.modContainer}>
-                        <Icon name="shield-checkmark" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>{t("chat.mod")}</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
+                        <Icon name="shield-checkmark" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>{t("chat.mod")}</Text>
                       </View>
                     )}
-
                     {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                      <View style={[styles.modContainer, { backgroundColor: '#F59E0B' }]}>
-                        <Icon name="paw" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>JMD</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#F59E0B' }]}>
+                        <Icon name="paw" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>JMD</Text>
                       </View>
                     )}
-
                     {profile.isTrusted && (
-                      <View style={styles.trustedContainer}>
-                        <Icon name="checkmark-circle" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>Trusted</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#10B981' }]}>
+                        <Icon name="checkmark-circle" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>Trusted</Text>
                       </View>
                     )}
-
                     {profile.isCMSR && (
-                      <View style={styles.cmsrContainer}>
-                        <Icon name="briefcase" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>CMSR</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#F97316' }]}>
+                        <Icon name="briefcase" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>CMSR</Text>
                       </View>
                     )}
-
-                    {profile.robloxUsernameVerified && (
-                      <Image
-                        source={require('../../../assets/verification.png')}
-                        style={styles.icon}
-                      />
-                    )}
-
-                    {hasRecentWin && (
-                      <Image
-                        source={require('../../../assets/trophy.webp')}
-                        style={styles.icon}
-                      />
-                    )}
-
-
 
                     {isAdmin && item.OS && (
-                      <View
-                        style={[
-                          styles.platformBadge,
-                        ]}
-                      >
+                      <View style={styles.platformBadge}>
                         <Icon
                           name={item.OS === 'ios' ? 'logo-apple' : 'logo-android'}
-                          size={14}
+                          size={12}
                           color={item.OS === 'ios' ? '#007AFF' : '#34C759'}
                         />
                       </View>
@@ -522,17 +513,19 @@ const MessagesList = ({
 
                   {/* Timestamp inside bubble — WhatsApp style */}
                   <Text style={{
-                    fontSize: 9,
+                    fontSize: 10,
                     color: item.senderId === user?.id
                       ? (isDarkMode ? '#ffffffaa' : '#00000066')
                       : (isDarkMode ? '#ffffff77' : '#00000055'),
                     alignSelf: 'flex-end',
                     marginTop: 2,
                   }}>
-                    {new Date(item.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {item.timestamp
+                      ? new Date(item.timestamp).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                      : ''}
                   </Text>
                 </View>
                 {hasFruits && (
@@ -545,7 +538,7 @@ const MessagesList = ({
                     {fruits.map((fruit, index) => {
                       const { name: nameColor, value: valueColor } = fruitColors;
                       const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
-                      const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+                      const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
                       const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
 
                       let valueBadgeStyle = fruitStyles.badgeDefault;
@@ -700,20 +693,20 @@ const MessagesList = ({
         )}
       </View>
     );
-  }, [messages, highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onReaction, isDarkMode]);
+  }, [highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onReaction, isDarkMode]);
 
   return (
     <>
       <FlatList
         data={messages}
         keyExtractor={(item, index) => `${item.id}-${index}`}
-        renderItem={({ item, index }) => renderMessage({ item, index })}
+        renderItem={renderMessage}
         contentContainerStyle={styles.chatList}
         inverted
         extraData={highlightedMessageId}
         ref={flatListRef}
         scrollEventThrottle={16}
-        removeClippedSubviews={false}
+        removeClippedSubviews={true}
         onScroll={({ nativeEvent }) => {
           const { contentOffset } = nativeEvent;
           const atBottom = contentOffset.y <= 60;
@@ -893,4 +886,4 @@ export const fruitStyles = StyleSheet.create({
     color: '#FF6666',
   },
 });
-export default MessagesList;
+export default React.memo(MessagesList);

@@ -121,7 +121,7 @@ const DailyQuiz = ({ visible, onClose }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         const played = isSameDay(data.lastQuizAt);
         setHasPlayedToday(played);
         setBestScore(data.quizBestScore || 0);

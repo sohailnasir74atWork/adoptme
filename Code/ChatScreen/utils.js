@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo, limitToLast, onValue } from '@react-native-firebase/database';
 import { Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Initialize the database reference
 const database = getDatabase();
@@ -268,24 +269,26 @@ export const isUserOnline = async (userId) => {
 export const useOnlineStatus = (userId) => {
   const [isOnline, setIsOnline] = useState(false);
 
-  useEffect(() => {
-    if (!userId) {
-      setIsOnline(false);
-      return;
-    }
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) {
+        setIsOnline(false);
+        return;
+      }
 
-    const presenceRef = ref(getDatabase(), `presence/${userId}`);
-    const unsubscribe = onValue(presenceRef, (snapshot) => {
-      setIsOnline(snapshot.val() === true);
-    }, (error) => {
-      console.error('useOnlineStatus listener error:', error);
-      setIsOnline(false);
-    });
+      const presenceRef = ref(getDatabase(), `presence/${userId}`);
+      const unsubscribe = onValue(presenceRef, (snapshot) => {
+        setIsOnline(snapshot.val() === true);
+      }, (error) => {
+        console.error('useOnlineStatus listener error:', error);
+        setIsOnline(false);
+      });
 
-    return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
-    };
-  }, [userId]);
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }, [userId])
+  );
 
   return isOnline;
 };
@@ -693,38 +696,40 @@ export const useBanStatus = (email) => {
   const [isBanned, setIsBanned] = useState(false);
   const [banDetails, setBanDetails] = useState(null);
 
-  useEffect(() => {
-    if (!email) {
-      setIsBanned(false);
-      setBanDetails(null);
-      return;
-    }
-
-    const db = getDatabase();
-    const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
-
-    const unsubscribe = onValue(banRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        const now = Date.now();
-
-        let active = false;
-        if (data.bannedUntil === 'permanent') {
-          active = true;
-        } else if (typeof data.bannedUntil === 'number' && data.bannedUntil > now) {
-          active = true;
-        }
-
-        setIsBanned(active);
-        setBanDetails(active ? data : null);
-      } else {
+  useFocusEffect(
+    useCallback(() => {
+      if (!email) {
         setIsBanned(false);
         setBanDetails(null);
+        return;
       }
-    });
 
-    return () => unsubscribe();
-  }, [email]);
+      const db = getDatabase();
+      const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
+
+      const unsubscribe = onValue(banRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const now = Date.now();
+
+          let active = false;
+          if (data.bannedUntil === 'permanent') {
+            active = true;
+          } else if (typeof data.bannedUntil === 'number' && data.bannedUntil > now) {
+            active = true;
+          }
+
+          setIsBanned(active);
+          setBanDetails(active ? data : null);
+        } else {
+          setIsBanned(false);
+          setBanDetails(null);
+        }
+      });
+
+      return () => unsubscribe();
+    }, [email])
+  );
 
   return { isBanned, banDetails };
 };

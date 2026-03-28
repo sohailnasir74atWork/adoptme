@@ -4,7 +4,7 @@ enableScreens();
 
 import React, { lazy, Suspense } from 'react';
 import { AppRegistry, Text, Platform, StatusBar } from 'react-native';
-import crashlytics from '@react-native-firebase/crashlytics';
+import { getCrashlytics, recordError, log as crashlyticsLog } from '@react-native-firebase/crashlytics';
 import AppWrapper from './App';
 import { name as appName } from './app.json';
 import { GlobalStateProvider } from './Code/GlobelStats';
@@ -85,12 +85,13 @@ setBackgroundMessageHandler(messaging, async remoteMessage => {
 const STATUS_BAR_HEIGHT =
   Platform.OS === 'android' ? StatusBar.currentHeight || 18 : 44;
 
-// 🔥 Global JS error handler → Crashlytics
+// 🔥 Global JS error handler → Crashlytics (modular API)
+const crashlyticsInstance = getCrashlytics();
 const originalHandler = ErrorUtils.getGlobalHandler();
 ErrorUtils.setGlobalHandler((error, isFatal) => {
   try {
-    crashlytics().recordError(error);
-    crashlytics().log(`Global error | Fatal: ${isFatal} | ${error?.message || error}`);
+    recordError(crashlyticsInstance, error);
+    crashlyticsLog(crashlyticsInstance, `Global error | Fatal: ${isFatal} | ${error?.message || error}`);
   } catch (_) {}
   originalHandler(error, isFatal);
 });
@@ -105,10 +106,10 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Caught in ErrorBoundary:', error, info);
-    // 🔥 Report component crashes to Crashlytics
+    // 🔥 Report component crashes to Crashlytics (modular API)
     try {
-      crashlytics().recordError(error);
-      crashlytics().log(`ErrorBoundary: ${info?.componentStack || 'no stack'}`);
+      recordError(crashlyticsInstance, error);
+      crashlyticsLog(crashlyticsInstance, `ErrorBoundary: ${info?.componentStack || 'no stack'}`);
     } catch (_) {}
   }
 

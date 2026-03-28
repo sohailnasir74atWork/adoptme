@@ -25,7 +25,7 @@ import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { onValue, ref, remove } from '@react-native-firebase/database';
+import database, { onValue, ref, remove, get, set, push, child, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
@@ -184,7 +184,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   }, [selectedUser, selectedTheme, closeProfileDrawer]);
 
   const chatRef = useMemo(() => ref(appdatabase, activeChannel.path), [activeChannel.path]);
-  const pinnedMessagesRef = useMemo(() => ref(appdatabase, 'pin_messages'), []);
+  const pinnedMessagesRef = useMemo(() => appdatabase ? ref(appdatabase, 'pin_messages') : null, [appdatabase]);
 
   const styles = useMemo(() => getStyles(theme === 'dark'), [theme]);
 
@@ -229,10 +229,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         // ✅ Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
         const messageQuery = reset
-          ? chatRef.orderByKey().limitToLast(limitSize)
-          : chatRef.orderByKey().endAt(lastLoadedKey).limitToLast(limitSize);
+          ? dbQuery(chatRef, orderByKey(), limitToLast(limitSize))
+          : dbQuery(chatRef, orderByKey(), endAt(lastLoadedKey), limitToLast(limitSize));
 
-        const snapshot = await messageQuery.once('value');
+        const snapshot = await get(messageQuery);
         const data = snapshot.val() || {};
 
 
@@ -284,7 +284,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     const fetchPinnedMessages = async () => {
       try {
-        const snapshot = await pinnedMessagesRef.once('value');
+        const snapshot = await get(pinnedMessagesRef);
         const pinnedMessagesData = snapshot.val() || {};
 
         // ✅ Safety check and transform data into an array
@@ -308,7 +308,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     fetchPinnedMessages();  // Fetch pinned messages initially
 
     // Listen to real-time updates on pinned messages
-    const listener = pinnedMessagesRef.on('child_added', (snapshot) => {
+    const unsubPinned = onChildAdded(pinnedMessagesRef, (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       const data = snapshot.val();
       if (!data || typeof data !== 'object') return;
@@ -321,11 +321,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     });
 
     return () => {
-      if (pinnedMessagesRef) {
-        pinnedMessagesRef.off('child_added', listener);
-      }
+      unsubPinned();
     };
-  }, []);
+  }, [pinnedMessagesRef]);
 
   // ✅ Channel switch handler — resets state for new channel
   const handleChannelSwitch = useCallback((channel) => {
@@ -363,7 +361,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         setLoading(true);
         setLastLoadedKey(null);
 
-        const snapshot = await currentRef.orderByKey().limitToLast(INITIAL_PAGE_SIZE).once('value');
+        const snapshot = await get(dbQuery(currentRef, orderByKey(), limitToLast(INITIAL_PAGE_SIZE)));
         if (cancelled) return;
 
         const data = snapshot.val() || {};
@@ -412,8 +410,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const initializeListener = async () => {
       try {
         // Step 1: Get only the latest message KEY (minimal download)
-        initialLoadQuery = currentRef.orderByKey().limitToLast(1);
-        const initialSnapshot = await initialLoadQuery.once('value');
+        initialLoadQuery = dbQuery(currentRef, orderByKey(), limitToLast(1));
+        const initialSnapshot = await get(initialLoadQuery);
         if (cancelled) return;
 
         if (initialSnapshot.exists()) {
@@ -427,9 +425,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         hasInitializedRef.current = true;
 
         // Step 2: Listen for NEW messages only (skips initial data)
-        listenerQueryRef = currentRef.orderByKey().limitToLast(1);
+        listenerQueryRef = dbQuery(currentRef, orderByKey(), limitToLast(1));
 
-        listener = listenerQueryRef.on('child_added', (snapshot) => {
+        listener = onChildAdded(listenerQueryRef, (snapshot) => {
           if (cancelled || !snapshot || !snapshot.key) return;
 
           // ✅ Skip messages until initial load is complete to prevent duplicates
@@ -473,8 +471,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         if (cancelled) return;
         console.error('Error initializing chat listener:', error);
         // Fallback listener
-        listenerQueryRef = currentRef.limitToLast(1);
-        listener = listenerQueryRef.on('child_added', (snapshot) => {
+        listenerQueryRef = dbQuery(currentRef, limitToLast(1));
+        listener = onChildAdded(listenerQueryRef, (snapshot) => {
           if (cancelled || !snapshot || !snapshot.key) return;
           const data = snapshot.val();
           if (!data || typeof data !== 'object') return;
@@ -506,12 +504,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     return () => {
       cancelled = true;
-      if (listener && listenerQueryRef) {
-        listenerQueryRef.off('child_added', listener);
-      }
-      currentRef.off();
-      if (initialLoadQuery) {
-        initialLoadQuery.off('value');
+      if (typeof listener === 'function') {
+        listener();
       }
       hasInitializedRef.current = false;
     };
@@ -546,7 +540,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const handlePinMessage = async (message) => {
     try {
       const pinnedMessage = { ...message, pinnedAt: Date.now() };
-      const newRef = await pinnedMessagesRef.push(pinnedMessage);
+      const newRef = push(pinnedMessagesRef);
+      await set(newRef, pinnedMessage);
 
       // Use the Firebase key for tracking the message
       setPinnedMessages((prev) => [
@@ -563,8 +558,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
   const unpinSingleMessage = async (firebaseKey) => {
     try {
-      const messageRef = pinnedMessagesRef.child(firebaseKey);
-      await messageRef.remove();  // Remove from Firebase
+      const messageRef = child(pinnedMessagesRef, firebaseKey);
+      await remove(messageRef);  // Remove from Firebase
 
       // Update local state by filtering out the removed message
       setPinnedMessages((prev) => {
@@ -583,7 +578,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
   const clearAllPinnedMessages = async () => {
     try {
-      await pinnedMessagesRef.remove();
+      await remove(pinnedMessagesRef);
       setPinnedMessages([]);
     } catch (error) {
       console.error('Error clearing pinned messages:', error);
@@ -623,13 +618,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     if (!chatRef || !messageId || !user?.id) return;
 
     try {
-      const reactionRef = chatRef.child(`${messageId}/reactions/${user.id}`);
-      const snapshot = await reactionRef.once('value');
+      const reactionRef = child(chatRef, `${messageId}/reactions/${user.id}`);
+      const snapshot = await get(reactionRef);
       const currentReaction = snapshot.val();
 
       if (currentReaction === emoji) {
         // Same emoji → remove reaction
-        await reactionRef.remove();
+        await remove(reactionRef);
         setMessages(prev => prev.map(m => {
           if (String(m.id) !== String(messageId)) return m;
           const newReactions = { ...(m.reactions || {}) };
@@ -638,7 +633,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         }));
       } else {
         // New or different emoji → set reaction
-        await reactionRef.set(emoji);
+        await set(reactionRef, emoji);
         setMessages(prev => prev.map(m => {
           if (String(m.id) !== String(messageId)) return m;
           return {
@@ -786,7 +781,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       const txtColor = myCosmetics?.chatTextColor?.color || myProfile?.chatTextColor || null;
       const bubbleBg = myCosmetics?.chatBubbleBg || myProfile?.chatBubbleBg || null;
 
-      await chatRef.push({
+      await push(chatRef, {
         text: trimmedInput || null,
         timestamp: database.ServerValue.TIMESTAMP,
         senderId: user.id,
@@ -905,7 +900,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 flatListRef={flatListRef}
                 isDarkMode={theme === 'dark'}
                 onPinMessage={handlePinMessage}
-                onDeleteMessage={(messageId) => chatRef.child(messageId.replace(`${activeChannel.path}-`, '')).remove()}
+                onDeleteMessage={(messageId) => remove(child(chatRef, messageId.replace(`${activeChannel.path}-`, '')))}
                 // isAdmin={isAdmin}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
@@ -1017,12 +1012,12 @@ const channelTabStyles = RNStyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 2,
+    paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
   },
   pillText: {
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: '500',
   },
   pillTextActive: {
@@ -1030,4 +1025,4 @@ const channelTabStyles = RNStyleSheet.create({
   },
 });
 
-export default ChatScreen;
+export default React.memo(ChatScreen);

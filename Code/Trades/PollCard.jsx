@@ -11,8 +11,6 @@ import {
     Keyboard,
     Alert,
     LayoutAnimation,
-    UIManager,
-    Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -33,10 +31,6 @@ import {
 } from '@react-native-firebase/firestore';
 
 dayjs.extend(relativeTime);
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=007AFF&color=fff&name=U';
 const COMMENTS_PAGE_SIZE = 2;

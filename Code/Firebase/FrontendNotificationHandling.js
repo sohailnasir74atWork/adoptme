@@ -1,7 +1,7 @@
 // Code/Firebase/FrontendNotificationHandling.js
 
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, InteractionManager } from 'react-native';
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { useLocalState } from '../LocalGlobelStats';
@@ -81,15 +81,18 @@ const NotificationHandler = () => {
           notificationBody = 'Stocks have been updated!';
         }
 
-        await notifee.displayNotification({
-          title: notificationTitle,
-          body: notificationBody,
-          android: {
-            channelId: 'default',
-            smallIcon: 'ic_notification',
-            color: '#36454F',
-            pressAction: { id: 'default' },
-          },
+        // ✅ Display notification after current interactions finish to avoid blocking UI
+        InteractionManager.runAfterInteractions(async () => {
+          await notifee.displayNotification({
+            title: notificationTitle,
+            body: notificationBody,
+            android: {
+              channelId: 'default',
+              smallIcon: 'ic_notification',
+              color: '#36454F',
+              pressAction: { id: 'default' },
+            },
+          });
         });
       } catch (error) {
         // console.error('[Notification] Error processing notification:', error);

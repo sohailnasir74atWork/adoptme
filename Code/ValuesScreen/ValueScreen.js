@@ -105,8 +105,8 @@ const getImageUrl = (item, baseImgUrl) => {
 // ✅ PERF FIX: Moved to module level so React.memo actually works.
 // When defined inside the component body, React creates a new component type every render,
 // which defeats React.memo entirely.
-const HIDE_BADGE_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
-const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'OTHER'];
+const HIDE_BADGE_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
+const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS', 'OTHER'];
 
 const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, fromChat, fromSetting, imgurl, t }) => {
   const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
@@ -376,7 +376,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
 
-    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
+    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts', 'stickers'];
     if (simpleValueCategories.includes(item.type?.toLowerCase())) {
       return parseFloat(Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2));
     }
@@ -724,9 +724,16 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                     key={filter}
                     onSelect={() => applyFilter(filter)}
                   >
-                    <Text style={[styles.filterOptionText, selectedFilter === filter && styles.selectedOption]}>
-                      {t(`categories.${filter.toUpperCase()}`, { defaultValue: filter.toUpperCase() })}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.filterOptionText, selectedFilter === filter && styles.selectedOption]}>
+                        {t(`categories.${filter.toUpperCase()}`, { defaultValue: filter.toUpperCase() })}
+                      </Text>
+                      {filter.toUpperCase() === 'STICKERS' && (
+                        <View style={styles.newBadge}>
+                          <Text style={styles.newBadgeText}>NEW</Text>
+                        </View>
+                      )}
+                    </View>
                   </MenuOption>
                 ))}
               </MenuOptions>
@@ -1259,6 +1266,19 @@ export const getStyles = (isDarkMode) => {
   },
   categoryButtonTextActive: {
     color: '#fff',
+  },
+  newBadge: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    marginLeft: 6,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   adContainer: {
     // backgroundColor: '#F5F5F5', // Light background color for the ad

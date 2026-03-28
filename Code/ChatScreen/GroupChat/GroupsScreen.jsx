@@ -558,7 +558,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       const groupDocRef = doc(firestoreDB, 'groups', groupId);
       const groupDocSnapshot = await getDoc(groupDocRef);
 
-      if (!groupDocSnapshot.exists) {
+      if (!groupDocSnapshot.exists()) {
         showErrorMessage('Error', 'Group not found');
         setGroupInfoModalVisible(false);
         return;
@@ -832,6 +832,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             </MenuOption>
             {isGroupAdmin && (
               <>
+                <MenuOption onSelect={() => handleUpdateGroupIcon(groupId)}>
+                  <Text style={{ fontSize: 16, padding: 10 }}>Update Group Icon</Text>
+                </MenuOption>
                 <MenuOption onSelect={() => handleEditGroup(groupId)}>
                   <Text style={{ fontSize: 16, padding: 10 }}>Edit</Text>
                 </MenuOption>
@@ -839,11 +842,6 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   <Text style={{ color: 'red', fontSize: 16, padding: 10, fontWeight: 'bold' }}>Delete Group (Admin)</Text>
                 </MenuOption>
               </>
-            )}
-            {!isGroupAdmin && isMyGroup && (
-              <MenuOption onSelect={() => handleUpdateGroupIcon(groupId)}>
-                <Text style={{ fontSize: 16, padding: 10 }}>Update Group Icon</Text>
-              </MenuOption>
             )}
             <MenuOption onSelect={() => handleLeaveGroup(groupId, groupName)}>
               <Text style={{ color: 'red', fontSize: 16, padding: 10 }}>Leave Group</Text>
@@ -886,7 +884,6 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             // ✅ OPTIMIZED: Fetch only displayName instead of full user object
             const creatorPromises = creatorIds.map(async (creatorId) => {
               try {
-                const { ref, get } = await import('@react-native-firebase/database');
                 const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
                 if (displayNameSnap?.exists()) {
                   return { [creatorId]: displayNameSnap.val() || 'Creator' };
@@ -939,7 +936,6 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         // ✅ OPTIMIZED: Fetch only displayName instead of full user object
         const creatorPromises = creatorIds.map(async (creatorId) => {
           try {
-            const { ref, get } = await import('@react-native-firebase/database');
             const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
             if (displayNameSnap?.exists()) {
               return { [creatorId]: displayNameSnap.val() || 'Creator' };

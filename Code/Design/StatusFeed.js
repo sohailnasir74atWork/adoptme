@@ -250,6 +250,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   // ── New: Stories viewer state ──
   const [storyIndex, setStoryIndex] = useState(0);
   const storyTimerRef = useRef(null);
+  const pressTimestampRef = useRef(0);
   const storyProgressAnim = useRef(new Animated.Value(0)).current;
 
   // Track which chunk of followingIds we've loaded
@@ -1196,17 +1197,26 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
             {/* Content area — tap left/right to navigate */}
             <TouchableOpacity
               activeOpacity={1}
-              onPressIn={stopStoryTimer}
-              onPressOut={() => startStoryTimer(storyIndex, totalStatuses)}
+              onPressIn={() => { stopStoryTimer(); pressTimestampRef.current = Date.now(); }}
+              onPressOut={() => {
+                // Only restart timer if it was a long press (hold-to-pause), not a quick tap
+                if (Date.now() - (pressTimestampRef.current || 0) > 300) {
+                  startStoryTimer(storyIndex, totalStatuses);
+                }
+              }}
               onPress={(e) => {
                 const x = e.nativeEvent.locationX;
                 if (x < SCREEN_WIDTH * 0.3) {
                   // Tap left — go back
                   if (storyIndex > 0) setStoryIndex(storyIndex - 1);
+                  else startStoryTimer(storyIndex, totalStatuses);
                 } else if (x > SCREEN_WIDTH * 0.7) {
                   // Tap right — go forward
                   if (storyIndex < totalStatuses - 1) setStoryIndex(storyIndex + 1);
                   else { stopStoryTimer(); setViewingStatus(null); }
+                } else {
+                  // Tap middle — resume timer
+                  startStoryTimer(storyIndex, totalStatuses);
                 }
               }}
               style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}
@@ -1361,21 +1371,30 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                 </View>
               )}
 
-              {/* Own status: views + delete */}
+              {/* Own status: views + add new + delete */}
               {isMyStatus && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ gap: 8 }}>
                   {(currentStatus.viewedBy?.length > 0 || reactionEntries.length > 0) && (
                     <Text style={{ fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)' }}>
                       👁 {t('status_feed.views_count', { count: currentStatus.viewedBy?.length || 0 })}  •  {t('status_feed.reactions_count', { count: reactionEntries.length })}
                     </Text>
                   )}
-                  <TouchableOpacity
-                    onPress={() => { stopStoryTimer(); handleDeleteStatus(currentStatus.id); }}
-                    style={styles.deleteBtn}
-                  >
-                    <FontAwesome name="trash" size={12} color="#EF4444" />
-                    <Text style={styles.deleteText}>{t('status_feed.delete')}</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => { stopStoryTimer(); setViewingStatus(null); setShowCreator(true); }}
+                      style={[styles.deleteBtn, { backgroundColor: 'rgba(59,130,246,0.2)' }]}
+                    >
+                      <FontAwesome name="plus" size={12} color="#3B82F6" solid />
+                      <Text style={[styles.deleteText, { color: '#3B82F6' }]}>{t('status_feed.new_status')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => { stopStoryTimer(); handleDeleteStatus(currentStatus.id); }}
+                      style={styles.deleteBtn}
+                    >
+                      <FontAwesome name="trash" size={12} color="#EF4444" />
+                      <Text style={styles.deleteText}>{t('status_feed.delete')}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 

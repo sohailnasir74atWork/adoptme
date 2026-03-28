@@ -8,7 +8,7 @@ import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { getDatabase, ref, update } from '@react-native-firebase/database';
+import { getDatabase, ref, update, get } from '@react-native-firebase/database';
 import { awardBadge, incrementAndCheckBadge, TRADE_BADGE_THRESHOLDS, checkNightOwlTrade } from '../ChatScreen/GroupChat/badgeUtils';
 import { useLocalState } from '../LocalGlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -36,13 +36,13 @@ const createEmptySlots = (count) => Array(count).fill(null);
 // const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
 const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
-const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER'];
+const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'STICKERS'];
 
 const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true, factor) => {
   if (!item) return 0;
 
   // Categories that only use 'value' field
-  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'strollers', 'food', 'gifts'];
+  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'strollers', 'food', 'gifts', 'stickers'];
 
 
   // Handle simple value categories
@@ -134,6 +134,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
   const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  const [viewMode, setViewMode] = useState('standard'); // 'standard' or 'detailed'
 
   // Load analytics data for demand/hot badges
   useEffect(() => {
@@ -173,7 +174,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
   const CATEGORIES = useMemo(() => {
-    return ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS'].map(cat => cat.toUpperCase());
+    return ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'STICKERS'].map(cat => cat.toUpperCase());
   }, []);
 
   const getCategoryLabel = useCallback((category) => {
@@ -646,7 +647,7 @@ const HomeScreen = ({ selectedTheme }) => {
       factor
     );
 
-    const hideBadgeForType = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+    const hideBadgeForType = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
     const showBadges = !hideBadgeForType.includes(item.type?.toUpperCase());
 
     // Handler to add item to calculator
@@ -750,6 +751,55 @@ const HomeScreen = ({ selectedTheme }) => {
     const demand = getDemandScore(item.name, analyticsMaps.demandMap);
     const hot = getHotStatus(item.name, analyticsMaps.hotMap);
 
+    if (viewMode === 'detailed') {
+      const currentValue = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor);
+      return (
+        <TouchableOpacity
+          style={styles.detailedItem}
+          onPress={() => {
+            if (isAddingToFavorites) {
+              toggleFavorite(item);
+            } else {
+              selectItem(item);
+            }
+          }}
+        >
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.detailedItemImage} />
+          ) : (
+            <View style={[styles.detailedItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
+              <Icon name="image-outline" size={24} color={isDarkMode ? '#666' : '#999'} />
+            </View>
+          )}
+          <View style={styles.detailedItemInfo}>
+            <Text numberOfLines={1} style={styles.detailedItemName}>{item.name}</Text>
+            <Text style={styles.detailedItemValue}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
+            {(demand || hot) && (
+              <View style={styles.gridAnalyticsRow}>
+                {demand && demand.score >= 7 && (
+                  <View style={styles.gridDemandBadge}>
+                    <Text style={{ fontSize: 7 }}>{'\u{1F525}'}</Text>
+                    <Text style={styles.gridDemandText}>{demand.label}</Text>
+                  </View>
+                )}
+                {hot && (
+                  <View style={styles.gridHotBadge}>
+                    <Text style={{ fontSize: 7 }}>{'\u{1F4C8}'}</Text>
+                    <Text style={styles.gridHotText}>+{hot.pct}%</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+          {isAddingToFavorites && (
+            <TouchableOpacity style={styles.favoriteButton} activeOpacity={0.8} onPress={() => toggleFavorite(item)}>
+              <Icon name={isFavorite ? "heart" : "heart-outline"} size={20} color={isFavorite ? "#e74c3c" : "#666"} />
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      );
+    }
+
     return (
       <TouchableOpacity
         style={styles.gridItem}
@@ -771,25 +821,6 @@ const HomeScreen = ({ selectedTheme }) => {
             <Icon name="image-outline" size={30} color={isDarkMode ? '#666' : '#999'} />
           </View>
         )}
-        <Text numberOfLines={1} style={styles.gridItemText}>
-          {item.name}
-        </Text>
-        {(demand || hot) && (
-          <View style={styles.gridAnalyticsRow}>
-            {demand && demand.score >= 7 && (
-              <View style={styles.gridDemandBadge}>
-                <Text style={{ fontSize: 7 }}>{'\u{1F525}'}</Text>
-                <Text style={styles.gridDemandText}>{demand.label}</Text>
-              </View>
-            )}
-            {hot && (
-              <View style={styles.gridHotBadge}>
-                <Text style={{ fontSize: 7 }}>{'\u{1F4C8}'}</Text>
-                <Text style={styles.gridHotText}>+{hot.pct}%</Text>
-              </View>
-            )}
-          </View>
-        )}
         {isAddingToFavorites && (
           <TouchableOpacity
             style={styles.favoriteButton}
@@ -807,7 +838,7 @@ const HomeScreen = ({ selectedTheme }) => {
         )}
       </TouchableOpacity>
     );
-  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps]);
+  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps, viewMode, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, t]);
 
   // Update renderFavoritesHeader function
   const renderFavoritesHeader = useCallback(() => {
@@ -868,7 +899,7 @@ const HomeScreen = ({ selectedTheme }) => {
     const fetchFactor = async () => {
       try {
         const database = getDatabase();
-        const snapshot = await ref(database, 'factor').once('value');
+        const snapshot = await get(ref(database, 'factor'));
         const factor = snapshot.val();
         // ✅ Check if component is still mounted before updating state
         if (isMounted) {
@@ -986,7 +1017,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
       if (firestoreDB && user?.id) {
         const summaryDocSnap = await getDoc(doc(firestoreDB, 'user_ratings_summary', user.id));
-        if (summaryDocSnap.exists) {
+        if (summaryDocSnap.exists()) {
           const summaryData = summaryDocSnap.data();
           userRating = summaryData.averageRating || null;
           ratingCount = summaryData.count || 0;
@@ -994,7 +1025,7 @@ const HomeScreen = ({ selectedTheme }) => {
           // ✅ ONE-TIME MIGRATION: If Firestore summary doesn't exist, check RTDB and migrate (legacy data only)
           // This is a temporary migration path for existing data. New ratings only use Firestore.
           const database = getDatabase();
-          const avgRatingSnap = await ref(database, `averageRatings/${user.id}`).once('value');
+          const avgRatingSnap = await get(ref(database, `averageRatings/${user.id}`));
           const avgRatingData = avgRatingSnap.val();
 
           if (avgRatingData) {
@@ -1089,6 +1120,11 @@ const HomeScreen = ({ selectedTheme }) => {
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
         ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
+        ...(user?.isAdmin ? { isAdmin: true } : {}),
+        ...(user?.isModerator ? { isModerator: true } : {}),
+        ...(user?.isTrusted ? { isTrusted: true } : {}),
+        ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isBabyMod ? { isBabyMod: true } : {}),
         ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),
         ...(myCosmetics?.chatTextColor?.color ? { chatTextColor: myCosmetics.chatTextColor.color } : {}),
         ...(myCosmetics?.tradeCardBg ? { tradeCardBg: myCosmetics.tradeCardBg } : {}),
@@ -1756,18 +1792,41 @@ const HomeScreen = ({ selectedTheme }) => {
                         styles.categoryButtonText,
                         selectedPetType === category && styles.categoryButtonTextActive
                       ]}>{getCategoryLabel(category)}</Text>
+                      {category === 'STICKERS' && (
+                        <View style={styles.newBadge}>
+                          <Text style={styles.newBadgeText}>NEW</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
 
                 <View style={styles.gridContainer}>
                   {renderFavoritesHeader()}
+                  {selectedPetType !== 'INVENTORY' && (
+                    <View style={styles.viewModeToggle}>
+                      <TouchableOpacity
+                        style={[styles.viewModeButton, viewMode === 'standard' && styles.viewModeButtonActive]}
+                        onPress={() => setViewMode('standard')}
+                      >
+                        <Icon name="grid-outline" size={14} color={viewMode === 'standard' ? '#fff' : c.textSecondary} />
+                        <Text style={[styles.viewModeText, viewMode === 'standard' && styles.viewModeTextActive]}>{t('home.standard', { defaultValue: 'Standard' })}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.viewModeButton, viewMode === 'detailed' && styles.viewModeButtonActive]}
+                        onPress={() => setViewMode('detailed')}
+                      >
+                        <Icon name="list-outline" size={14} color={viewMode === 'detailed' ? '#fff' : c.textSecondary} />
+                        <Text style={[styles.viewModeText, viewMode === 'detailed' && styles.viewModeTextActive]}>{t('home.detailed', { defaultValue: 'Detailed' })}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <FlatList
-                    key={`${selectedPetType}-${isAddingToFavorites ? 'add' : 'view'}-${(localState.favorites || []).length}`}
+                    key={`${selectedPetType}-${isAddingToFavorites ? 'add' : 'view'}-${viewMode}-${(localState.favorites || []).length}`}
                     data={filteredData}
                     keyExtractor={keyExtractor}
                     renderItem={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? renderFavoriteItem : renderGridItem}
-                    numColumns={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 1 : 3}
+                    numColumns={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 1 : viewMode === 'detailed' ? 2 : 3}
                     initialNumToRender={12}
                     maxToRenderPerBatch={12}
                     windowSize={5}
@@ -2194,6 +2253,19 @@ const getStyles = (isDarkMode, c) => {
     categoryButtonTextActive: {
       color: '#fff',
     },
+    newBadge: {
+      backgroundColor: '#FF3B30',
+      borderRadius: 4,
+      paddingHorizontal: 3,
+      paddingVertical: 1,
+      marginTop: 2,
+    },
+    newBadgeText: {
+      color: '#fff',
+      fontSize: 6,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
     gridContainer: {
       flex: 1,
       flexShrink: 1,
@@ -2248,6 +2320,62 @@ const getStyles = (isDarkMode, c) => {
       fontSize: 8,
       fontWeight: '700',
       color: '#10B981',
+    },
+    viewModeToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      gap: 6,
+    },
+    viewModeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      backgroundColor: c.bgAlt,
+      gap: 4,
+    },
+    viewModeButtonActive: {
+      backgroundColor: config.colors.primary,
+    },
+    viewModeText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: c.textSecondary,
+    },
+    viewModeTextActive: {
+      color: '#fff',
+    },
+    detailedItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.bgAlt,
+      borderRadius: 10,
+      padding: 8,
+      margin: 4,
+      flex: 1,
+      gap: 8,
+    },
+    detailedItemImage: {
+      width: 44,
+      height: 44,
+      borderRadius: 8,
+    },
+    detailedItemInfo: {
+      flex: 1,
+    },
+    detailedItemName: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: c.text,
+      marginBottom: 2,
+    },
+    detailedItemValue: {
+      fontSize: 10,
+      color: c.textSecondary,
+      fontWeight: '500',
     },
     calcDemandOverlay: {
       position: 'absolute',

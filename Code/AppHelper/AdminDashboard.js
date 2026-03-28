@@ -723,14 +723,14 @@ const AdminDashboard = () => {
       let rating = 0;
       let ratingCount = 0;
 
-      if (summarySnap.exists) {
+      if (summarySnap.exists()) {
         const s = summarySnap.data();
         rating = parseRatingSafe(s?.averageRating);
         ratingCount = typeof s?.count === 'number' ? s.count : Number(s?.count) || 0;
       }
 
       // ✅ fallback if summary missing OR empty
-      if (!summarySnap.exists || ratingCount === 0) {
+      if (!summarySnap.exists() || ratingCount === 0) {
         const fallback = await computeSummaryFromReviews(firestoreDB, userId);
         rating = fallback.rating;
         ratingCount = fallback.ratingCount;
@@ -897,7 +897,7 @@ const AdminDashboard = () => {
               const summaryRef = doc(firestoreDB, 'user_ratings_summary', selectedUser.id);
               const summarySnap = await getDoc(summaryRef);
 
-              if (summarySnap.exists) {
+              if (summarySnap.exists()) {
                 const s = summarySnap.data();
                 const oldAvg = s?.averageRating || 0;
                 const oldCount = s?.count || 0;

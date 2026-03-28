@@ -1,4 +1,4 @@
-import { getDatabase, ref, set, update, get, increment, remove } from '@react-native-firebase/database';
+import { getDatabase, ref, set, update, get, increment, remove, push } from '@react-native-firebase/database';
 import {
   collection,
   doc,
@@ -262,7 +262,7 @@ export const createGroup = async (firestoreDB, appdatabase, creatorData, memberI
  * @param {Object} invitedUserData - { displayName, avatar } (optional, will be fetched if not provided)
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export const sendGroupInvite = async (firestoreDB, groupId, invitedUserId, inviterData, invitedUserData = null) => {
+export const sendGroupInvite = async (firestoreDB, groupId, invitedUserId, inviterData, invitedUserData = null, appdatabase = null) => {
   if (!firestoreDB || !groupId || !invitedUserId || !inviterData?.id) {
     return { success: false, error: 'Missing required parameters' };
   }
@@ -270,7 +270,7 @@ export const sendGroupInvite = async (firestoreDB, groupId, invitedUserId, invit
   try {
     // Check if user is already in group (1 Firestore read)
     const groupDoc = await getDoc(doc(firestoreDB, 'groups', groupId));
-    if (!groupDoc.exists) {
+    if (!groupDoc.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -365,7 +365,7 @@ export const acceptGroupInvite = async (firestoreDB, appdatabase, inviteId, user
     const inviteRef = doc(firestoreDB, 'group_invitations', inviteId);
     const inviteSnap = await getDoc(inviteRef);
 
-    if (!inviteSnap.exists) {
+    if (!inviteSnap.exists()) {
       return { success: false, error: 'Invitation not found' };
     }
 
@@ -387,7 +387,7 @@ export const acceptGroupInvite = async (firestoreDB, appdatabase, inviteId, user
     const groupRef = doc(firestoreDB, 'groups', inviteData.groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -407,7 +407,7 @@ export const acceptGroupInvite = async (firestoreDB, appdatabase, inviteId, user
     // Add user to group (transaction to prevent race conditions)
     await runTransaction(firestoreDB, async (transaction) => {
       const freshGroupSnap = await transaction.get(groupRef);
-      if (!freshGroupSnap.exists) {
+      if (!freshGroupSnap.exists()) {
         throw new Error('Group not found');
       }
 
@@ -447,19 +447,28 @@ export const acceptGroupInvite = async (firestoreDB, appdatabase, inviteId, user
       transaction.update(inviteRef, { status: 'accepted' });
     });
 
-    // Create group_meta_data for new member (1 RTDB write)
-    const groupMetaRef = ref(appdatabase, `group_meta_data/${userData.id}/${inviteData.groupId}`);
-    await set(groupMetaRef, {
-      groupId: inviteData.groupId,
-      groupName: groupData.name || 'Group',
-      groupAvatar: groupData.avatar || null,
-      lastMessage: null,
-      lastMessageTimestamp: 0,
-      unreadCount: 0,
-      createdBy: groupData.createdBy || null, // Store creator ID
-      muted: false,
-      joinedAt: Date.now(),
-    });
+    // Create group_meta_data for new member + update memberCount for all members
+    const newMemberCount = (groupData.memberIds?.length || 0) + 1;
+    const metaUpdates = {};
+
+    // New member's full metadata
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/groupId`] = inviteData.groupId;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/groupName`] = groupData.name || 'Group';
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/groupAvatar`] = groupData.avatar || null;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/lastMessage`] = null;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/lastMessageTimestamp`] = 0;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/unreadCount`] = 0;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/createdBy`] = groupData.createdBy || null;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/muted`] = false;
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/joinedAt`] = Date.now();
+    metaUpdates[`group_meta_data/${userData.id}/${inviteData.groupId}/memberCount`] = newMemberCount;
+
+    // Update memberCount for all existing members
+    for (const existingMemberId of (groupData.memberIds || [])) {
+      metaUpdates[`group_meta_data/${existingMemberId}/${inviteData.groupId}/memberCount`] = newMemberCount;
+    }
+
+    await update(ref(appdatabase, '/'), metaUpdates);
 
     return { success: true, groupId: inviteData.groupId };
   } catch (error) {
@@ -484,7 +493,7 @@ export const declineGroupInvite = async (firestoreDB, inviteId, userId) => {
     const inviteRef = doc(firestoreDB, 'group_invitations', inviteId);
     const inviteSnap = await getDoc(inviteRef);
 
-    if (!inviteSnap.exists) {
+    if (!inviteSnap.exists()) {
       return { success: false, error: 'Invitation not found' };
     }
 
@@ -514,12 +523,14 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
     return { success: false, error: 'Missing required parameters' };
   }
 
+  let metadataAlreadyCleaned = false;
+
   try {
     const groupRef = doc(firestoreDB, 'groups', groupId);
 
     const result = await runTransaction(firestoreDB, async (transaction) => {
       const groupSnap = await transaction.get(groupRef);
-      if (!groupSnap.exists) {
+      if (!groupSnap.exists()) {
         // Group doesn't exist - return null to indicate group was not found
         // We'll handle cleanup outside the transaction
         return null;
@@ -574,7 +585,7 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
         });
       }
 
-      return { success: true };
+      return { success: true, remainingMemberIds: newMemberIds };
     });
 
     // If group doesn't exist, clean up and return success (user is effectively already "left")
@@ -593,7 +604,21 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
           console.warn('Fallback delete also failed:', fallbackError);
         }
       }
+      metadataAlreadyCleaned = true;
       return { success: true, message: 'Group no longer exists' };
+    }
+
+    // Update memberCount in RTDB group_meta_data for all remaining members
+    if (result?.remainingMemberIds?.length > 0) {
+      const countUpdates = {};
+      for (const memberId of result.remainingMemberIds) {
+        countUpdates[`group_meta_data/${memberId}/${groupId}/memberCount`] = result.remainingMemberIds.length;
+      }
+      try {
+        await update(ref(appdatabase, '/'), countUpdates);
+      } catch (countError) {
+        console.warn('Could not update memberCount in RTDB for remaining members:', countError);
+      }
     }
 
     // If last person left, delete all group data from RTDB
@@ -628,6 +653,7 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
             console.warn('Fallback delete also failed:', fallbackError);
           }
         }
+        metadataAlreadyCleaned = true;
 
         // Delete related invitations from Firestore
         try {
@@ -664,19 +690,19 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
     console.error('Error leaving group:', error);
     return { success: false, error: error.message || 'Failed to leave group' };
   } finally {
-    // Always cleanup RTDB metadata (even if Firestore transaction fails)
-    try {
-      const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
-      // Use remove() to explicitly delete the node
-      await remove(groupMetaRef);
-    } catch (cleanupError) {
-      console.warn('Could not delete group metadata in finally block:', cleanupError);
-      // Fallback: try setting to null if remove fails
+    // Cleanup RTDB metadata only if not already deleted above
+    if (!metadataAlreadyCleaned) {
       try {
         const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
-        await set(groupMetaRef, null);
-      } catch (fallbackError) {
-        console.warn('Fallback delete also failed in finally block:', fallbackError);
+        await remove(groupMetaRef);
+      } catch (cleanupError) {
+        console.warn('Could not delete group metadata in finally block:', cleanupError);
+        try {
+          const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
+          await set(groupMetaRef, null);
+        } catch (fallbackError) {
+          console.warn('Fallback delete also failed in finally block:', fallbackError);
+        }
       }
     }
   }
@@ -689,30 +715,36 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
  * @param {String} groupId - Group ID
  * @param {Object} messageData - Message data { text, senderId, imageUrl, fruits, etc. }
  * @param {Object} senderData - { id, displayName, avatar }
+ * @param {Object} cachedGroupData - Optional cached group data to avoid Firestore read
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messageData, senderData) => {
+export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messageData, senderData, cachedGroupData = null) => {
   if (!appdatabase || !firestoreDB || !groupId || !messageData || !senderData?.id) {
     return { success: false, error: 'Missing required parameters' };
   }
 
   try {
     const timestamp = Date.now();
-    const messageRef = ref(appdatabase, `group_messages/${groupId}/messages/${timestamp}`);
+    // Use push() for a unique key to prevent collisions when 2 users send at the same ms
+    const messagesListRef = ref(appdatabase, `group_messages/${groupId}/messages`);
+    const newMessageRef = push(messagesListRef);
 
     // 1. Save message to RTDB
-    await set(messageRef, {
+    await set(newMessageRef, {
       ...messageData,
       timestamp,
     });
 
-    // 2. Get group members from Firestore (1 read)
-    const groupDoc = await getDoc(doc(firestoreDB, 'groups', groupId));
-    if (!groupDoc.exists) {
-      return { success: false, error: 'Group not found' };
+    // 2. Use cached group data if available, otherwise fetch from Firestore (1 read)
+    let groupData = cachedGroupData;
+    if (!groupData?.memberIds) {
+      const groupDoc = await getDoc(doc(firestoreDB, 'groups', groupId));
+      if (!groupDoc.exists()) {
+        return { success: false, error: 'Group not found' };
+      }
+      groupData = groupDoc.data();
     }
 
-    const groupData = groupDoc.data();
     const memberIds = groupData.memberIds || [];
 
     // Last message preview
@@ -754,25 +786,17 @@ export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messag
       }
     }
 
-    // 5. Get current unreadCounts for inactive members (N reads, but only for inactive)
-    if (inactiveMemberIds.length > 0) {
-      const unreadCountPromises = inactiveMemberIds.map(async (memberId) => {
-        const metaRef = ref(appdatabase, `group_meta_data/${memberId}/${groupId}`);
-        const metaSnap = await get(metaRef);
-        const currentUnread = metaSnap.exists() ? metaSnap.val().unreadCount || 0 : 0;
-        return { memberId, currentUnread };
-      });
-
-      const unreadCounts = await Promise.all(unreadCountPromises);
-
-      // Add increment updates
-      unreadCounts.forEach(({ memberId, currentUnread }) => {
-        updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = currentUnread + 1;
-      });
-    }
-
-    // 6. Batch update all metadata at once (cost-optimized: 1 write operation)
+    // 5. Batch update all non-increment metadata at once (cost-optimized: 1 write operation)
     await update(ref(appdatabase, '/'), updates);
+
+    // 6. Atomically increment unread counts for inactive members (no read-then-write race)
+    if (inactiveMemberIds.length > 0) {
+      const incrementUpdates = {};
+      for (const memberId of inactiveMemberIds) {
+        incrementUpdates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = increment(1);
+      }
+      await update(ref(appdatabase, '/'), incrementUpdates);
+    }
 
     return { success: true };
   } catch (error) {
@@ -814,7 +838,7 @@ export const addMembersToGroup = async (firestoreDB, appdatabase, groupId, newMe
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -943,7 +967,7 @@ export const removeMemberFromGroup = async (firestoreDB, appdatabase, groupId, m
 
     return await runTransaction(firestoreDB, async (transaction) => {
       const groupSnap = await transaction.get(groupRef);
-      if (!groupSnap.exists) {
+      if (!groupSnap.exists()) {
         throw new Error('Group not found');
       }
 
@@ -996,16 +1020,27 @@ export const removeMemberFromGroup = async (firestoreDB, appdatabase, groupId, m
       // Remove RTDB group_meta_data for the removed member
       try {
         const metaRef = ref(appdatabase, `group_meta_data/${memberIdToRemove}/${groupId}`);
-        // Use remove() to explicitly delete the node
         await remove(metaRef);
       } catch (metaError) {
         console.warn(`Could not delete group metadata for removed member ${memberIdToRemove}:`, metaError);
-        // Fallback: try setting to null if remove fails
         try {
           const metaRef = ref(appdatabase, `group_meta_data/${memberIdToRemove}/${groupId}`);
           await set(metaRef, null);
         } catch (fallbackError) {
           console.warn(`Fallback delete also failed for removed member ${memberIdToRemove}:`, fallbackError);
+        }
+      }
+
+      // Update memberCount in RTDB group_meta_data for all remaining members
+      if (updatedMemberIds.length > 0) {
+        const countUpdates = {};
+        for (const memberId of updatedMemberIds) {
+          countUpdates[`group_meta_data/${memberId}/${groupId}/memberCount`] = updatedMemberIds.length;
+        }
+        try {
+          await update(ref(appdatabase, '/'), countUpdates);
+        } catch (countError) {
+          console.warn('Could not update memberCount in RTDB for remaining members:', countError);
         }
       }
 
@@ -1152,7 +1187,7 @@ export const makeMemberCreator = async (firestoreDB, appdatabase, groupId, membe
 
     return await runTransaction(firestoreDB, async (transaction) => {
       const groupSnap = await transaction.get(groupRef);
-      if (!groupSnap.exists) {
+      if (!groupSnap.exists()) {
         throw new Error('Group not found');
       }
 
@@ -1208,7 +1243,7 @@ export const updateGroupName = async (firestoreDB, appdatabase, groupId, userId,
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -1262,7 +1297,7 @@ export const updateGroupDescription = async (firestoreDB, appdatabase, groupId, 
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -1311,7 +1346,7 @@ export const updateGroupAvatar = async (firestoreDB, appdatabase, groupId, userI
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -1364,7 +1399,7 @@ export const sendJoinRequest = async (firestoreDB, groupId, requesterData) => {
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -1433,7 +1468,7 @@ export const approveJoinRequest = async (firestoreDB, appdatabase, requestId, cr
     const requestRef = doc(firestoreDB, 'group_join_requests', requestId);
     const requestSnap = await getDoc(requestRef);
 
-    if (!requestSnap.exists) {
+    if (!requestSnap.exists()) {
       return { success: false, error: 'Join request not found' };
     }
 
@@ -1456,7 +1491,7 @@ export const approveJoinRequest = async (firestoreDB, appdatabase, requestId, cr
     const groupRef = doc(firestoreDB, 'groups', groupId);
     const groupSnap = await getDoc(groupRef);
 
-    if (!groupSnap.exists) {
+    if (!groupSnap.exists()) {
       return { success: false, error: 'Group not found' };
     }
 
@@ -1525,7 +1560,8 @@ export const approveJoinRequest = async (firestoreDB, appdatabase, requestId, cr
       });
     });
 
-    // Update RTDB metadata for the new member
+    // Update RTDB metadata for the new member + update memberCount for all members
+    const newMemberCount = (groupData.memberIds?.length || 0) + 1;
     const updates = {};
     updates[`group_meta_data/${requesterId}/${groupId}/groupId`] = groupId;
     updates[`group_meta_data/${requesterId}/${groupId}/groupName`] = groupData.groupName || 'Group';
@@ -1535,6 +1571,12 @@ export const approveJoinRequest = async (firestoreDB, appdatabase, requestId, cr
     updates[`group_meta_data/${requesterId}/${groupId}/createdBy`] = groupData.createdBy;
     updates[`group_meta_data/${requesterId}/${groupId}/muted`] = false;
     updates[`group_meta_data/${requesterId}/${groupId}/joinedAt`] = Date.now();
+    updates[`group_meta_data/${requesterId}/${groupId}/memberCount`] = newMemberCount;
+
+    // Update memberCount for all existing members
+    for (const existingMemberId of (groupData.memberIds || [])) {
+      updates[`group_meta_data/${existingMemberId}/${groupId}/memberCount`] = newMemberCount;
+    }
 
     await update(ref(appdatabase, '/'), updates);
 
@@ -1561,7 +1603,7 @@ export const rejectJoinRequest = async (firestoreDB, requestId, creatorId) => {
     const requestRef = doc(firestoreDB, 'group_join_requests', requestId);
     const requestSnap = await getDoc(requestRef);
 
-    if (!requestSnap.exists) {
+    if (!requestSnap.exists()) {
       return { success: false, error: 'Join request not found' };
     }
 
@@ -1612,7 +1654,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
       const groupDocRef = doc(firestoreDB, 'groups', groupId);
       const groupSnap = await getDoc(groupDocRef);
       // Fix: exists is a property, not a function
-      if (groupSnap.exists) {
+      if (groupSnap.exists()) {
         groupData = groupSnap.data();
         memberIds = groupData.memberIds || [];
       }

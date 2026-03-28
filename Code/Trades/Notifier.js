@@ -1,7 +1,7 @@
 // NotifierDrawer.js
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, FlatList, Image, StyleSheet, ScrollView, Modal, ToastAndroid, Platform, Alert, TextInput } from 'react-native';
-import { ref, onValue, remove, set, update, get } from '@react-native-firebase/database';
+import { ref, onValue, remove, set, update, get, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -227,23 +227,23 @@ const NotifierDrawer = () => {
     };
 
     // Attach listeners
-    buyRef.on('child_added', handleBuyChildAdded);
-    buyRef.on('child_changed', handleBuyChildChanged);
-    buyRef.on('child_removed', handleBuyChildRemoved);
-    saleRef.on('child_added', handleSaleChildAdded);
-    saleRef.on('child_changed', handleSaleChildChanged);
-    saleRef.on('child_removed', handleSaleChildRemoved);
+    const unsubBuyAdded = onChildAdded(buyRef, handleBuyChildAdded);
+    const unsubBuyChanged = onChildChanged(buyRef, handleBuyChildChanged);
+    const unsubBuyRemoved = onChildRemoved(buyRef, handleBuyChildRemoved);
+    const unsubSaleAdded = onChildAdded(saleRef, handleSaleChildAdded);
+    const unsubSaleChanged = onChildChanged(saleRef, handleSaleChildChanged);
+    const unsubSaleRemoved = onChildRemoved(saleRef, handleSaleChildRemoved);
 
     // Load initial data
     loadInitialData();
 
     return () => {
-      buyRef.off('child_added', handleBuyChildAdded);
-      buyRef.off('child_changed', handleBuyChildChanged);
-      buyRef.off('child_removed', handleBuyChildRemoved);
-      saleRef.off('child_added', handleSaleChildAdded);
-      saleRef.off('child_changed', handleSaleChildChanged);
-      saleRef.off('child_removed', handleSaleChildRemoved);
+      unsubBuyAdded();
+      unsubBuyChanged();
+      unsubBuyRemoved();
+      unsubSaleAdded();
+      unsubSaleChanged();
+      unsubSaleRemoved();
     };
   }, [user?.id, appdatabase]);
 

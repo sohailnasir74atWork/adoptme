@@ -59,15 +59,23 @@ const GroupMessageList = ({
 
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
-  const [frameBorderColorIndex, setFrameBorderColorIndex] = useState(0);
 
   // 🌈 Rainbow cycling for multi-color profile frames
+  const [frameBorderColorIndex, setFrameBorderColorIndex] = React.useState(0);
+
   React.useEffect(() => {
-    const timer = setInterval(() => setFrameBorderColorIndex(p => p + 1), 1200);
-    return () => clearInterval(timer);
-  }, []);
-  const frameBorderColorIndexRef = React.useRef(frameBorderColorIndex);
-  frameBorderColorIndexRef.current = frameBorderColorIndex;
+    // Only cycle if there are messages with multi-color frames
+    const hasMultiColorFrames = messages?.some((m) => {
+      const profile = resolveProfile(m);
+      return profile.profileFrame?.borderColors?.length > 1;
+    });
+    if (!hasMultiColorFrames) return;
+
+    const interval = setInterval(() => {
+      setFrameBorderColorIndex((prev) => prev + 1);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [messages]);
 
   const fruitColors = useMemo(
     () => ({
@@ -174,9 +182,9 @@ const GroupMessageList = ({
           style={{
             flexDirection: 'row',
             alignSelf: isMyMessage ? 'flex-end' : 'flex-start',
-            alignItems: 'flex-end',
+            alignItems: 'flex-start',
             maxWidth: '82%',
-            marginBottom: 4,
+            marginBottom: 6,
             marginHorizontal: 8,
             ...(item.id === highlightedMessageId ? {
               borderWidth: 2,
@@ -199,7 +207,7 @@ const GroupMessageList = ({
               <View style={profile.profileFrame ? {
                 borderWidth: 1.5,
                 borderColor: (profile.profileFrame.borderColors?.length > 1)
-                  ? profile.profileFrame.borderColors[frameBorderColorIndexRef.current % profile.profileFrame.borderColors.length]
+                  ? profile.profileFrame.borderColors[frameBorderColorIndex % profile.profileFrame.borderColors.length]
                   : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
                 borderRadius: 16,
                 padding: 1,
@@ -271,83 +279,46 @@ const GroupMessageList = ({
                   activeOpacity={0.7}
                   style={{ alignSelf: 'flex-start' }}
                 >
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    flexWrap: 'nowrap',
-                  }}>
+                  <View style={styles.nameRow}>
                     <Text
-                      style={[styles.userNameText, {
-                        flexShrink: 1,
-                      }]}
+                      style={[styles.userNameText, { flexShrink: 1 }]}
                       numberOfLines={1}
                       ellipsizeMode="tail"
                     >
                       {senderName}
                     </Text>
 
-                    {/* Pro badge */}
                     {profile.isPro && (
-                      <Image
-                        source={require('../../../assets/pro.png')}
-                        style={styles.icon}
-                      />
+                      <Image source={require('../../../assets/pro.png')} style={styles.icon} />
                     )}
-
-                    {/* Verified badge */}
                     {profile.robloxUsernameVerified && (
-                      <Image
-                        source={require('../../../assets/verification.png')}
-                        style={styles.icon}
-                      />
+                      <Image source={require('../../../assets/verification.png')} style={styles.icon} />
                     )}
-
-                    {/* Trophy badge (recent win) */}
                     {hasRecentWin && (
-                      <Image
-                        source={require('../../../assets/trophy.webp')}
-                        style={styles.icon}
-                      />
+                      <Image source={require('../../../assets/trophy.webp')} style={styles.icon} />
                     )}
 
-                    {/* Creator badge */}
                     {item?.isCreator && (
-                      <View style={{
-                        backgroundColor: '#8B5CF6',
-                        paddingHorizontal: 4,
-                        paddingVertical: 1,
-                        borderRadius: 3,
-                        marginLeft: 4,
-                      }}>
-                        <Text style={{
-                          color: '#FFF',
-                          fontSize: 9,
-                          fontWeight: '600',
-                        }}>Creator</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
+                        <Text style={styles.roleBadgeText}>Creator</Text>
                       </View>
                     )}
-
-                    {/* Baby Mod badge */}
                     {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                      <View style={[styles.modContainer, { backgroundColor: '#F59E0B' }]}>
-                        <Icon name="paw" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>JMD</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#F59E0B' }]}>
+                        <Icon name="paw" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>JMD</Text>
                       </View>
                     )}
-
-                    {/* Trusted badge */}
                     {profile.isTrusted && (
-                      <View style={styles.trustedContainer}>
-                        <Icon name="checkmark-circle" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>Trusted</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#10B981' }]}>
+                        <Icon name="checkmark-circle" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>Trusted</Text>
                       </View>
                     )}
-
-                    {/* CMSR badge */}
                     {profile.isCMSR && (
-                      <View style={styles.cmsrContainer}>
-                        <Icon name="briefcase" size={10} color="#fff" />
-                        <Text style={styles.modBadgeText}>CMSR</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: '#F97316' }]}>
+                        <Icon name="briefcase" size={8} color="#fff" />
+                        <Text style={styles.roleBadgeText}>CMSR</Text>
                       </View>
                     )}
                   </View>
@@ -403,7 +374,7 @@ const GroupMessageList = ({
                     {fruits.map((fruit, index) => {
                       const { name: nameColor, value: valueColor } = fruitColors;
                       const valueType = (fruit.valueType || 'd').toLowerCase();
-                      const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+                      const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
                       const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
 
                       let valueBadgeStyle = fruitStyles.badgeDefault;
@@ -586,7 +557,7 @@ const GroupMessageList = ({
               <View style={profile.profileFrame ? {
                 borderWidth: 1.5,
                 borderColor: (profile.profileFrame.borderColors?.length > 1)
-                  ? profile.profileFrame.borderColors[frameBorderColorIndexRef.current % profile.profileFrame.borderColors.length]
+                  ? profile.profileFrame.borderColors[frameBorderColorIndex % profile.profileFrame.borderColors.length]
                   : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
                 borderRadius: 16,
                 padding: 1,
@@ -628,7 +599,7 @@ const GroupMessageList = ({
     },
     // ✅ PERF FIX: Reduced from 24 deps to 14.
     // Removed: filteredMessages (uses ref), user, handleCopy, t, isAdmin (unused directly or stable).
-    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel]
+    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel, frameBorderColorIndex]
   );
 
   const keyExtractor = useCallback((item, index) => {
@@ -663,7 +634,7 @@ const GroupMessageList = ({
         inverted={true} // ✅ Latest messages at bottom
         style={messageListStyles}
         contentContainerStyle={messageListContentStyles}
-        extraData={`${highlightedMessageId}_${frameBorderColorIndex}`} // Re-render when highlight changes
+        extraData={highlightedMessageId} // Re-render only when highlight changes
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
         }

@@ -49,7 +49,7 @@ const GameActivityBanner = () => {
 
     try {
       const snap = await getDoc(doc(firestoreDB, 'games', user.id));
-      const data = snap.exists ? snap.data() : {};
+      const data = snap.exists() ? snap.data() : {};
 
       for (const game of GAMES) {
         const lastPlay = data[game.field];

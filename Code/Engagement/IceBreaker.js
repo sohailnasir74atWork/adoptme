@@ -214,7 +214,7 @@ const IceBreaker = ({ visible, onClose }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         const today = isSameDay(data.lastIceBreakerAt);
         const plays = today ? (data.iceBreakerPlaysToday || 0) : 0;
         setPlaysToday(plays);

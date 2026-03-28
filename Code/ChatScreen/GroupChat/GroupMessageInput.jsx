@@ -443,5 +443,5 @@ const GroupMessageInput = ({
   );
 };
 
-export default GroupMessageInput;
+export default React.memo(GroupMessageInput);
 

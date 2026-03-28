@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState, useCallback, useRef } from 'react';
+import React, { memo, useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
@@ -44,6 +44,7 @@ const PrivateMessageList = ({
   onRefresh,
   isBanned,
   onReply,
+  onDeleteMessage,
   onReportSubmit,
   loading,
   canRate,
@@ -122,6 +123,10 @@ const PrivateMessageList = ({
     }
     return messages;
   }, [messages, isBanned, userId]);
+
+  // ✅ PERF: Store filteredMessages in a ref so renderMessage doesn't depend on the array
+  const filteredMessagesRef = useRef(filteredMessages);
+  filteredMessagesRef.current = filteredMessages;
 
   // ✅ Memoize handleReport
   const handleReport = useCallback((message) => {
@@ -234,8 +239,14 @@ const PrivateMessageList = ({
     return msgDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }, [t]);
 
+  // ✅ PERF: Store scrollToMessage and highlightedMessageId in refs so renderMessage stays stable
+  const scrollToMessageRef = useRef(null);
+  const highlightedMessageIdRef = useRef(null);
+
   // ✅ Memoize renderMessage
-  const renderMessage = useCallback(({ item, index, scrollToMessage, highlightedMessageId }) => {
+  const renderMessage = useCallback(({ item, index }) => {
+    const scrollToMessage = scrollToMessageRef.current;
+    const highlightedMessageId = highlightedMessageIdRef.current;
     // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
@@ -257,8 +268,8 @@ const PrivateMessageList = ({
         style={{
           alignSelf: isMyMessage ? 'flex-end' : 'flex-start',
           maxWidth: '80%',
-          marginBottom: 4,
-          marginHorizontal: 10,
+          marginBottom: 6,
+          marginHorizontal: 8,
         }}
       >
         {/* WhatsApp-style bubble — no avatar */}
@@ -270,14 +281,14 @@ const PrivateMessageList = ({
               : isMyMessage
                 ? (isDarkMode ? '#0B5E3F' : '#DCF8C6')
                 : (isDarkMode ? '#1E293B' : '#FFFFFF'),
-          borderRadius: 16,
-          borderTopLeftRadius: isMyMessage ? 16 : 4,
-          borderTopRightRadius: isMyMessage ? 4 : 16,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
+          borderRadius: 14,
+          borderTopLeftRadius: isMyMessage ? 14 : 3,
+          borderTopRightRadius: isMyMessage ? 3 : 14,
+          paddingHorizontal: 8,
+          paddingVertical: 5,
           shadowColor: '#000',
-          shadowOpacity: 0.05,
-          shadowRadius: 2,
+          shadowOpacity: 0.04,
+          shadowRadius: 1.5,
           shadowOffset: { width: 0, height: 1 },
           elevation: 1,
         }}>
@@ -289,17 +300,16 @@ const PrivateMessageList = ({
               onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
               style={{
                 backgroundColor: isDarkMode ? '#ffffff15' : '#00000008',
-                borderLeftWidth: 3,
+                borderLeftWidth: 2,
                 borderLeftColor: '#1E88E5',
-                borderRadius: 6,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                marginBottom: 4,
+                borderRadius: 4,
+                paddingHorizontal: 6,
+                paddingVertical: 3,
+                marginBottom: 3,
               }}
             >
-              <Text style={{ fontSize: 11, color: c.textSecondary }} numberOfLines={2}>
-                {t('chat.replying_to')}: {'\n'}
-                {getReplyPreview(item.replyTo)}
+              <Text style={{ fontSize: 12, color: c.textSecondary }} numberOfLines={1}>
+                {t('chat.replying_to')}: {getReplyPreview(item.replyTo)}
               </Text>
             </TouchableOpacity>
           )}
@@ -366,7 +376,7 @@ const PrivateMessageList = ({
                 {fruits.map((fruit, index) => {
                   const { name: nameColor, value: valueColor } = fruitColors;
                   const valueType = (fruit.valueType || 'd').toLowerCase(); // 'd' | 'n' | 'm'
-                  const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS'];
+                  const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
                   const isPet = !NON_PET_TYPES.includes((fruit.category || '').toUpperCase());
 
                   let valueBadgeStyle = fruitStyles.badgeDefault;
@@ -458,11 +468,11 @@ const PrivateMessageList = ({
               isMultiColorText(profile?.chatTextColor)
                 ? <RainbowText
                     colors={getMultiColorPalette(profile.chatTextColor)}
-                    style={[{ fontSize: 13, color: c.text, lineHeight: 18 }]}
+                    style={[{ fontSize: 15, color: c.text, lineHeight: 20 }]}
                   >{item.text}</RainbowText>
                 : <Text
                     style={[
-                      { fontSize: 13, color: c.text, lineHeight: 18 },
+                      { fontSize: 15, color: c.text, lineHeight: 20 },
                       profile?.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile?.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
                     ]}
                   >
@@ -493,6 +503,20 @@ const PrivateMessageList = ({
             }}>
               <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
             </MenuOption>
+            {isMyMessage && onDeleteMessage && (
+              <MenuOption onSelect={() => {
+                Alert.alert(
+                  t('chat.delete_message', { defaultValue: 'Delete Message' }),
+                  t('chat.delete_message_confirm', { defaultValue: 'Are you sure you want to delete this message?' }),
+                  [
+                    { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+                    { text: t('common.delete', { defaultValue: 'Delete' }), style: 'destructive', onPress: () => onDeleteMessage(item.id) },
+                  ]
+                );
+              }}>
+                <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete', { defaultValue: 'Delete' })}</Text>
+              </MenuOption>
+            )}
             {!isMyMessage && (
               <MenuOption onSelect={() => handleReport(item)}>
                 <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
@@ -533,15 +557,15 @@ const PrivateMessageList = ({
     );
 
     // Date separator: in inverted list, next item in array is older
-    const nextMsg = filteredMessages[index + 1];
+    const nextMsg = filteredMessagesRef.current[index + 1];
     const showDateSep = !nextMsg || getDateLabel(item.timestamp) !== getDateLabel(nextMsg.timestamp);
 
     return (
       <>
         {msgBubble}
         {showDateSep && (
-          <View style={{ alignItems: 'center', marginVertical: 10 }}>
-            <View style={{ backgroundColor: c.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 }}>
+          <View style={{ alignItems: 'center', marginVertical: 6 }}>
+            <View style={{ backgroundColor: c.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3 }}>
               <Text style={{ fontSize: 11, color: c.textSecondary, fontWeight: '600' }}>
                 {getDateLabel(item.timestamp)}
               </Text>
@@ -550,34 +574,47 @@ const PrivateMessageList = ({
         )}
       </>
     );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, filteredMessages, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, onDeleteMessage, navigation, t, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
 
   // ✅ Add FlatList reference and scrollToMessage functionality
   const flatListRef = useRef(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
+  const scrollToMessageTimerRef = useRef(null);
   const scrollToMessage = useCallback((messageId) => {
-    if (!flatListRef.current || !filteredMessages || filteredMessages.length === 0) return;
-    
+    if (!flatListRef.current || !filteredMessagesRef.current || filteredMessagesRef.current.length === 0) return;
+
     // Find the index of the message in the reversed list
-    const index = filteredMessages.findIndex(msg => String(msg?.id) === String(messageId));
-    
+    const index = filteredMessagesRef.current.findIndex(msg => String(msg?.id) === String(messageId));
+
     if (index !== -1) {
       setHighlightedMessageId(messageId);
-      
+
       flatListRef.current.scrollToIndex({
         index,
         animated: true,
         viewPosition: 0.5,
       });
-      
-      setTimeout(() => {
+
+      if (scrollToMessageTimerRef.current) clearTimeout(scrollToMessageTimerRef.current);
+      scrollToMessageTimerRef.current = setTimeout(() => {
         setHighlightedMessageId(null);
       }, 2000);
     } else {
       Alert.alert(t('chat.message_not_found', { defaultValue: 'Message not found or too old.' }));
     }
-  }, [filteredMessages, t]);
+  }, [t]);
+
+  // Keep refs in sync for renderMessage
+  scrollToMessageRef.current = scrollToMessage;
+  highlightedMessageIdRef.current = highlightedMessageId;
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollToMessageTimerRef.current) clearTimeout(scrollToMessageTimerRef.current);
+    };
+  }, []);
 
   // ✅ Memoize keyExtractor
   const keyExtractor = useCallback((item, index) => {
@@ -598,7 +635,7 @@ const PrivateMessageList = ({
               data={filteredMessages}
               removeClippedSubviews={true}
               keyExtractor={keyExtractor}
-              renderItem={({ item, index }) => renderMessage({ item, index, scrollToMessage, highlightedMessageId })}
+              renderItem={renderMessage}
               inverted
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.3}
@@ -634,56 +671,46 @@ const PrivateMessageList = ({
 export const fruitStyles = StyleSheet.create({
   fruitsWrapper: {
     marginTop: 1,
-    // gap: 1,
-    padding: 4,
-    // borderRadius: 8,
-
+    padding: 2,
   },
   fruitCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   fruitImage: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 2,
     marginRight: 2,
   },
   fruitInfo: {
-    // flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-start',
-    // backgroundColor:'red',
     alignItems: 'center',
   },
   fruitName: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-    // color: '#fff',
   },
   fruitValue: {
-    fontSize: 11,
-    // color: '#e5e5e5',
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 1,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    // marginTop: 4,
+    gap: 1,
   },
   badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    // minWidth: 16,
-    // justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
     alignItems: 'center',
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '600',
     color: '#fff',
   },
@@ -704,20 +731,19 @@ export const fruitStyles = StyleSheet.create({
   },
   totalRow: {
     flexDirection: 'row',
-    // justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
+    marginTop: 2,
+    paddingTop: 2,
+    borderTopWidth: 0.5,
     borderTopColor: '#ffffff22',
   },
   totalLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#888',
   },
   totalValue: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#FF6666',
   },

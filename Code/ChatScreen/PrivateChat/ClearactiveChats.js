@@ -1,7 +1,7 @@
 import {  useCallback } from 'react';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { BackHandler } from 'react-native';
-import database from '@react-native-firebase/database';
+import { getDatabase, ref, set, remove } from '@react-native-firebase/database';
 
 // ✅ Add validation for clearActiveChat
 const clearActiveChat = async (userId) => {
@@ -12,12 +12,12 @@ const clearActiveChat = async (userId) => {
   }
 
   try {
-    const db = database();
+    const db = getDatabase();
     if (!db) {
       console.error('❌ Database instance not available');
       return;
     }
-    await db.ref(`/activeChats/${userId}`).remove();
+    await remove(ref(db, `/activeChats/${userId}`));
   } catch (error) {
     console.error(`❌ Failed to clear active chat for user ${userId}:`, error);
   }
@@ -40,12 +40,12 @@ export const useActiveChatHandler = (userId, chatId) => {
     }
 
     try {
-      const db = database();
+      const db = getDatabase();
       if (!db) {
         console.error('❌ Database instance not available');
         return;
       }
-      await db.ref(`/activeChats/${userId}`).set(chatId);
+      await set(ref(db, `/activeChats/${userId}`), chatId);
     } catch (error) {
       console.error(`❌ Failed to set active chat for user ${userId}:`, error);
     }

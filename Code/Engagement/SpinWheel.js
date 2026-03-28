@@ -83,7 +83,7 @@ const SpinWheel = ({ visible, onClose }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
-        const data = snap.exists ? snap.data() : {};
+        const data = snap.exists() ? snap.data() : {};
         setHasSpunToday(isSameDay(data.lastSpinAt));
         setTotalSpins(data.totalSpins || 0);
         setHasWatchedAd(isSameDay(data.lastSpinAdAt)); // persist ad limit per day

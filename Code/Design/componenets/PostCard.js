@@ -170,7 +170,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         </TouchableOpacity>
 
         <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer} activeOpacity={0.8}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3 }}>
             <Text style={s.name} numberOfLines={1}>{item.displayName}</Text>
             {item.isPro && (
               <Image source={require('../../../assets/pro.png')} style={s.badge} />
@@ -187,42 +187,45 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
                 <Image source={require('../../../assets/trophy.webp')} style={s.badge} />
               ) : null;
             })()}
-            {item.topBadge && BADGE_IMAGES[item.topBadge] && (
+            {/* {item.topBadge && BADGE_IMAGES[item.topBadge] && (
               <Image source={BADGE_IMAGES[item.topBadge]} style={{ width: 14, height: 14, borderRadius: 7 }} />
-            )}
+            )} */}
             {(() => {
-              const p = getCachedProfile(item.userId);
-              if (!p) return null;
+              const p = getCachedProfile(item.userId) || {};
+              const pIsAdmin = p.isAdmin ?? item.isAdmin;
+              const pIsMod = p.isModerator ?? item.isModerator;
+              const pIsTrusted = p.isTrusted ?? item.isTrusted;
+              const pIsCMSR = p.isCMSR ?? item.isCMSR;
               return (
                 <>
-                  {p.isAdmin && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                      <Ionicons name="shield" size={10} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Admin</Text>
+                  {pIsAdmin && (
+                    <View style={s.roleBadge_admin}>
+                      <Ionicons name="shield" size={8} color="#fff" />
+                      <Text style={s.roleBadgeText}>Admin</Text>
                     </View>
                   )}
-                  {!p.isAdmin && p.isModerator && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                      <Ionicons name="shield-checkmark" size={10} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Mod</Text>
+                  {!pIsAdmin && pIsMod && (
+                    <View style={s.roleBadge_mod}>
+                      <Ionicons name="shield-checkmark" size={8} color="#fff" />
+                      <Text style={s.roleBadgeText}>Mod</Text>
                     </View>
                   )}
-                  {!p.isAdmin && !p.isModerator && item.isBabyMod && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                      <Ionicons name="paw" size={10} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>JMD</Text>
+                  {!pIsAdmin && !pIsMod && item.isBabyMod && (
+                    <View style={s.roleBadge_jmd}>
+                      <Ionicons name="paw" size={8} color="#fff" />
+                      <Text style={s.roleBadgeText}>JMD</Text>
                     </View>
                   )}
-                  {p.isTrusted && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                      <Ionicons name="checkmark-circle" size={10} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
+                  {pIsTrusted && (
+                    <View style={s.roleBadge_trusted}>
+                      <Ionicons name="checkmark-circle" size={8} color="#fff" />
+                      <Text style={s.roleBadgeText}>Trusted</Text>
                     </View>
                   )}
-                  {p.isCMSR && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                      <Ionicons name="briefcase" size={10} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
+                  {pIsCMSR && (
+                    <View style={s.roleBadge_cmsr}>
+                      <Ionicons name="briefcase" size={8} color="#fff" />
+                      <Text style={s.roleBadgeText}>CMSR</Text>
                     </View>
                   )}
                 </>
@@ -272,11 +275,11 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         </Menu>
       </View>
 
-      {/* ── Text-only: desc + tags overlaid top-right ── */}
+      {/* ── Text-only: tags row + desc ── */}
       {hasNoImages && (
         <View style={s.textOnlyWrapper}>
           {item.selectedTags?.length > 0 && (
-            <View style={s.tagOverlay}>
+            <View style={s.textOnlyTagsRow}>
               {item.selectedTags.map((tag, idx) => {
                 const cfg = getTagConfig(tag);
                 return (
@@ -289,7 +292,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
             </View>
           )}
           {!!item?.desc && (
-            <Text style={[s.desc, item.selectedTags?.length > 0 && { paddingRight: 80 }]}>
+            <Text style={s.desc}>
               {item.desc}
             </Text>
           )}
@@ -345,6 +348,13 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
           </View>
           <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />
         </View>
+      )}
+
+      {/* ── Description below images ── */}
+      {!hasNoImages && !!item?.desc && (
+        <Text style={[s.desc, { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 4 }]}>
+          {item.desc}
+        </Text>
       )}
 
       {hasNoImages && (
@@ -473,8 +483,32 @@ const getStyles = (isDark) =>
       borderColor: config.colors.primary,
     },
     badge: {
-      width: 11,
-      height: 11,
+      width: 10,
+      height: 10,
+    },
+    roleBadge_admin: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444',
+      paddingHorizontal: 4, paddingVertical: 1, borderRadius: 5, gap: 2,
+    },
+    roleBadge_mod: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6',
+      paddingHorizontal: 4, paddingVertical: 1, borderRadius: 5, gap: 2,
+    },
+    roleBadge_jmd: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B',
+      paddingHorizontal: 4, paddingVertical: 1, borderRadius: 5, gap: 2,
+    },
+    roleBadge_trusted: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981',
+      paddingHorizontal: 4, paddingVertical: 1, borderRadius: 5, gap: 2,
+    },
+    roleBadge_cmsr: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316',
+      paddingHorizontal: 4, paddingVertical: 1, borderRadius: 5, gap: 2,
+    },
+    roleBadgeText: {
+      color: '#fff', fontSize: 7, fontWeight: '700',
+      textTransform: 'uppercase', letterSpacing: 0.3,
     },
     name: {
       fontWeight: '800',
@@ -541,10 +575,16 @@ const getStyles = (isDark) =>
 
     /* Images */
     textOnlyWrapper: {
-      position: 'relative',
       minHeight: 44,
       paddingHorizontal: 14,
       paddingBottom: 10,
+    },
+    textOnlyTagsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end',
+      gap: 4,
+      marginBottom: 6,
     },
     imageWrapper: {
       marginHorizontal: 14,

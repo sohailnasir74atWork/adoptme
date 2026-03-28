@@ -303,4 +303,4 @@ const modalStyles = StyleSheet.create({
     borderRadius: 8,
   },
 });
-export default MessageInput;
+export default React.memo(MessageInput);

@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-popup-menu/src/MenuProvider.js b/node_modules/react-native-popup-menu/src/MenuProvider.js
+index f3efd35..60a244d 100644
+--- a/node_modules/react-native-popup-menu/src/MenuProvider.js
++++ b/node_modules/react-native-popup-menu/src/MenuProvider.js
+@@ -296,7 +296,7 @@ export default class MenuProvider extends Component {
+     const { renderer, rendererProps } = instance.props;
+     const windowLayout = this._ownLayout;
+     const safeAreaLayout = this._safeAreaLayout;
+-    const { optionsContainerStyle, renderOptionsContainer, customStyles } = options.props;
++    const { optionsContainerStyle, renderOptionsContainer, customStyles = {} } = options.props;
+     const optionsRenderer = renderOptionsContainer || defaultOptionsContainerRenderer;
+     const isOutside = !triggerLayout || !optionsLayout;
+     const onLayout = e => this._onOptionsLayout(e, instance.getName(), isOutside);

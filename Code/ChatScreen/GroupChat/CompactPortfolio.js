@@ -9,15 +9,9 @@ import {
     ScrollView,
     ActivityIndicator,
     LayoutAnimation,
-    Platform,
-    UIManager,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ── Value Formatter ────────────────────────────────────
 const formatValue = (value) => {
@@ -84,7 +78,7 @@ const CompactPortfolio = ({
         );
 
         return { totalValue, totalItems, avgValue, categories, wishVal };
-    }, [ownedPets, wishlistPets]);
+    }, [ownedPets, wishlistPets, lookupPetValue]);
 
     const toggleExpand = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

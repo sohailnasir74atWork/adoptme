@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  InteractionManager,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
@@ -16,7 +17,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import database, { ref, get, update } from '@react-native-firebase/database';
+import { ref, get, update, remove, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
@@ -35,6 +36,7 @@ const InboxScreen = ({ bannedUsers }) => {
   const [displayedChatsCount, setDisplayedChatsCount] = useState(INITIAL_LOAD); // ✅ Start with 15 chats
   const debounceTimerRef = useRef(null); // ✅ Debounce updateChatsList
   const [streaks, setStreaks] = useState(new Map());
+  const hasLoadedOnce = useRef(false); // ✅ Track if initial load is done
 
   // ✅ OPTIMIZED: Use get() for initial load + child listeners for updates
   // This prevents re-downloading entire chat_meta_data on every change
@@ -47,7 +49,10 @@ const InboxScreen = ({ bannedUsers }) => {
         return;
       }
 
-      setLocalLoading(true);
+      // ✅ Only show loading spinner on first load, not when returning from a chat
+      if (!hasLoadedOnce.current) {
+        setLocalLoading(true);
+      }
       const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
       const chatsMap = new Map(); // Track chats locally
       const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
@@ -57,9 +62,35 @@ const InboxScreen = ({ bannedUsers }) => {
       // Child listeners only download individual chats as they're added (~200-500 bytes each)
       // This reduces Firebase RTDB download costs significantly for users with many chats
       const loadInitialChats = async () => {
-        // Don't fetch all chats at once - let child listeners handle it
-        // This way we only download chats as they're needed, not all at once
-        setLocalLoading(false); // Child listeners will populate chatsMap incrementally
+        try {
+          const snapshot = await get(ref(appdatabase, `chat_meta_data/${user.id}`));
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            if (data && typeof data === 'object') {
+              Object.entries(data).forEach(([chatPartnerId, chatData]) => {
+                if (!chatData || typeof chatData !== 'object') return;
+                const isBlocked = banned.includes(chatPartnerId);
+                const rawUnread = chatData?.unreadCount || 0;
+                chatsMap.set(chatPartnerId, {
+                  chatId: chatData.chatId,
+                  otherUserId: chatPartnerId,
+                  lastMessage: chatData.lastMessage || 'No messages yet',
+                  lastMessageTimestamp: chatData.timestamp || 0,
+                  unreadCount: isBlocked ? 0 : rawUnread,
+                  otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                  otherUserName: chatData.receiverName || 'Anonymous',
+                });
+              });
+              const sorted = Array.from(chatsMap.values())
+                .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
+              setLocalChats(sorted);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading initial chats:', error);
+        }
+        setLocalLoading(false);
+        hasLoadedOnce.current = true;
       };
 
       // ✅ FIXED: Debounced helper to batch rapid child_changed events
@@ -67,12 +98,14 @@ const InboxScreen = ({ bannedUsers }) => {
       const updateChatsList = () => {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => {
-          const updatedChats = Array.from(chatsMap.values())
-            .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-
-          setLocalChats(updatedChats);
-          setDisplayedChatsCount(INITIAL_LOAD);
-        }, 300); // 300ms debounce — batches rapid updates
+          // ✅ Run sort + setState after animations/interactions finish
+          InteractionManager.runAfterInteractions(() => {
+            const updatedChats = Array.from(chatsMap.values())
+              .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
+            setLocalChats(updatedChats);
+            setDisplayedChatsCount(INITIAL_LOAD);
+          });
+        }, 500); // 500ms debounce — batches rapid updates to prevent freeze
       };
 
       // ✅ OPTIMIZED: Use child listeners for updates (only downloads changed chats)
@@ -115,15 +148,15 @@ const InboxScreen = ({ bannedUsers }) => {
       loadInitialChats();
 
       // Listen to individual chat changes (only downloads changed chats, not all)
-      userChatsRef.on('child_added', handleChildChange);
-      userChatsRef.on('child_changed', handleChildChange);
-      userChatsRef.on('child_removed', handleChildRemoved);
+      const unsubAdded = onChildAdded(userChatsRef, handleChildChange);
+      const unsubChanged = onChildChanged(userChatsRef, handleChildChange);
+      const unsubRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
 
       // ✅ Cleanup listeners + debounce timer when screen loses focus
       return () => {
-        userChatsRef.off('child_added', handleChildChange);
-        userChatsRef.off('child_changed', handleChildChange);
-        userChatsRef.off('child_removed', handleChildRemoved);
+        unsubAdded();
+        unsubChanged();
+        unsubRemoved();
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         setDisplayedChatsCount(INITIAL_LOAD);
       };
@@ -211,8 +244,8 @@ const InboxScreen = ({ bannedUsers }) => {
               }
 
               // Delete chat metadata for the current user only (other user keeps their chat)
-              const senderChatRef = database().ref(`chat_meta_data/${user.id}/${otherUserId}`);
-              await senderChatRef.remove();
+              const senderChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${otherUserId}`);
+              await remove(senderChatRef);
 
               // 3. Update local state - ✅ Validate setChats callback
               setLocalChats((prevChats) => {
@@ -434,7 +467,7 @@ const getStyles = (isDarkMode, c) =>
       flex: 1,
     },
     userName: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: 'bold',
       color: isDarkMode ? '#fff' : '#333',
     },

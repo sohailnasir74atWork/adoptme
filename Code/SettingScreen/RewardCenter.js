@@ -5,7 +5,7 @@ import { useGlobalState } from '../GlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { useLocalState } from '../LocalGlobelStats';
 import SubscriptionScreen from './OfferWall';
-import { get, push, ref, set } from '@react-native-firebase/database';
+import { get, push, ref, set, onValue } from '@react-native-firebase/database';
 import { GestureHandlerRootView, TextInput } from 'react-native-gesture-handler';
 import { showSuccessMessage, showErrorMessage, showWarningMessage } from '../Helper/MessageHelper';
 import RewardedAdComponent from './RewardScreens/RewardedAd';
@@ -116,7 +116,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
         fetchPrize();
 
         // Listen for real-time updates
-        const unsubscribe = prizeRef.on('value', (snapshot) => {
+        const unsubscribe = onValue(prizeRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 setPrize(data);
@@ -127,7 +127,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
         });
 
         // Cleanup function to remove the listener on unmount
-        return () => prizeRef.off('value', unsubscribe);
+        return () => unsubscribe();
 
     }, [appdatabase]);
 
@@ -279,13 +279,13 @@ const RewardCenterScreen = ({ selectedTheme }) => {
         syncUserPoints();
 
         // Listen for real-time changes
-        const unsubscribe = userRef.on('value', (snapshot) => {
+        const unsubscribe = onValue(userRef, (snapshot) => {
             if (snapshot.exists()) {
                 setUserPoints(snapshot.val());
             }
         });
 
-        return () => userRef.off('value', unsubscribe);
+        return () => unsubscribe();
     }, [user?.id]);
 
 
@@ -321,7 +321,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
 
 
             const winnerRef = ref(appdatabase, `winners/${winnerId}`);
-            await winnerRef.set({
+            await set(winnerRef, {
                 id: winnerId,
                 name: winnerName,
                 prize: winnerPrize,
@@ -355,7 +355,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
         try {
             // Update Prize Information
             const prizeRef = ref(appdatabase, 'prize');
-            await prizeRef.set({
+            await set(prizeRef, {
                 name: prizeName,
                 value: prizeValue,
                 image: prizeImage,
@@ -396,7 +396,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
 
         try {
             // Save data to Firebase under 'rewards'
-            await appdatabase.ref(`reward/${user?.id}`).set({
+            await set(ref(appdatabase, `reward/${user?.id}`), {
                 email,
                 robloxId,
                 prize: latestWinner.prize,

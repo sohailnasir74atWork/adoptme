@@ -104,11 +104,11 @@ const TradeCompletion = ({
           //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviews fallback read below.
           let snap = await getDoc(doc(firestoreDB, 'user_profiles', uid));
           // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this fallback once all users updated
-          if (!snap.exists) {
+          if (!snap.exists()) {
             snap = await getDoc(doc(firestoreDB, 'reviews', uid));
           }
           let ownedPets = [];
-          if (snap.exists) {
+          if (snap.exists()) {
             const data = snap.data();
             ownedPets = Array.isArray(data?.ownedPets) ? [...data.ownedPets] : [];
           }

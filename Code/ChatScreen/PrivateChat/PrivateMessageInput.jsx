@@ -651,4 +651,4 @@ const PrivateMessageInput = ({
   );
 };
 
-export default PrivateMessageInput;
+export default React.memo(PrivateMessageInput);

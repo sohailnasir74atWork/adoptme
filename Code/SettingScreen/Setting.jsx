@@ -1003,13 +1003,13 @@ export default function SettingsScreen({ selectedTheme }) {
         // 📅 2026-03-13: Bio migrated from reviews/{userId} → user_profiles/{userId}.
         //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fallback below.
         let loadedBio = 'Hi there, I am new here';
-        if (profileDocSnap.exists) {
+        if (profileDocSnap.exists()) {
           const profileData = profileDocSnap.data();
           if (profileData && profileData.bio && typeof profileData.bio === 'string' && profileData.bio.trim()) {
             loadedBio = profileData.bio.trim();
           }
           // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this else-if block once all users updated
-        } else if (reviewDocSnap.exists) {
+        } else if (reviewDocSnap.exists()) {
           const reviewData = reviewDocSnap.data();
           if (reviewData && reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim()) {
             loadedBio = reviewData.bio.trim();
@@ -1018,7 +1018,7 @@ export default function SettingsScreen({ selectedTheme }) {
         setBio(loadedBio);
 
         // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
-        if (summaryDocSnap.exists) {
+        if (summaryDocSnap.exists()) {
           const summaryData = summaryDocSnap.data();
           if (summaryData) {
             setRatingSummary({
@@ -2450,7 +2450,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
       // ✅ Get old rating before updating
       const existingReviewSnap = await getDoc(reviewRef);
-      const oldRating = existingReviewSnap.exists ? existingReviewSnap.data()?.rating : null;
+      const oldRating = existingReviewSnap.exists() ? existingReviewSnap.data()?.rating : null;
       const newRating = editReviewRating;
 
       // ✅ Check if rating changed - if so, update summary
@@ -2462,7 +2462,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
         await runTransaction(firestoreDB, async (transaction) => {
           const summarySnap = await transaction.get(summaryRef);
-          const summaryData = summarySnap.exists ? summarySnap.data() : null;
+          const summaryData = summarySnap.exists() ? summarySnap.data() : null;
           const oldAverage = summaryData?.averageRating || 0;
           const oldCount = summaryData?.count || 1; // safety: at least 1 if updating
 

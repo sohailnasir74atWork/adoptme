@@ -28,7 +28,6 @@ import {
     KeyboardAvoidingView,
     Platform,
     RefreshControl,
-    UIManager,
     LayoutAnimation,
     Dimensions,
 } from 'react-native';
@@ -64,10 +63,6 @@ import { useTranslation } from 'react-i18next';
 
 dayjs.extend(relativeTime);
 dayjs.extend(customParseFormat);
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ── Bunny CDN ──
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
@@ -277,7 +272,7 @@ const ScammerDatabaseScreen = () => {
         setLoadingDetail(true);
         try {
             const snap = await getDoc(doc(db, 'scammerDetails', reportId));
-            if (snap.exists) {
+            if (snap.exists()) {
                 const data = { id: snap.id, ...snap.data() };
                 detailsCache.current[reportId] = data;
                 setDetailData(data);
@@ -421,7 +416,7 @@ const ScammerDatabaseScreen = () => {
                     const rateLimitRef = doc(db, 'userRateLimits', user.id);
                     const rateLimitSnap = await tx.get(rateLimitRef);
 
-                    if (rateLimitSnap.exists) {
+                    if (rateLimitSnap.exists()) {
                         const lastAt = rateLimitSnap.data()?.lastReportAt;
                         if (lastAt) {
                             const lastMs = lastAt?.toDate ? lastAt.toDate().getTime() : lastAt;

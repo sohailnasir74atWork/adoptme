@@ -152,8 +152,8 @@ const HomeTabScreen = ({ selectedTheme }) => {
     (async () => {
       try {
         let snap = await getDoc(doc(firestoreDB, 'user_profiles', user.id));
-        if (!snap.exists) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
-        if (snap.exists) {
+        if (!snap.exists()) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
+        if (snap.exists()) {
           const data = snap.data();
           setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
         }
@@ -170,8 +170,8 @@ const HomeTabScreen = ({ selectedTheme }) => {
       (async () => {
         try {
           let snap = await getDoc(doc(firestoreDB, 'user_profiles', user.id));
-          if (!snap.exists) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
-          if (snap.exists) {
+          if (!snap.exists()) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
+          if (snap.exists()) {
             const data = snap.data();
             setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
           }
@@ -324,9 +324,11 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 <Ionicons name="notifications-outline" size={20} color="rgba(255,255,255,0.85)" />
                 {unreadNotifCount > 0 && (
                   <View style={{
-                    position: 'absolute', top: 2, right: 2,
-                    width: 8, height: 8, borderRadius: 4,
-                    backgroundColor: '#EF4444',
+                    position: 'absolute', top: 1, right: 1,
+                    width: 10, height: 10, borderRadius: 5,
+                    backgroundColor: '#FACC15',
+                    borderWidth: 1.5,
+                    borderColor: '#fff',
                   }} />
                 )}
               </TouchableOpacity>

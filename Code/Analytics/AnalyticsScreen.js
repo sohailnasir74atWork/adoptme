@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Image, RefreshControl, Dimensions, Platform,
+  TextInput, Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
@@ -324,6 +325,7 @@ const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, form
 });
 
 const CHANGES_PAGE_SIZE = 15;
+const LIST_PAGE_SIZE = 15;
 
 const AnalyticsScreen = ({ navigation }) => {
   const { theme, single_offer_wall } = useGlobalState();
@@ -342,6 +344,14 @@ const AnalyticsScreen = ({ navigation }) => {
   const [valueChangesLoading, setValueChangesLoading] = useState(false);
   const [changesFilter, setChangesFilter] = useState('all'); // 'all', 'increased', 'decreased'
   const [changesVisible, setChangesVisible] = useState(CHANGES_PAGE_SIZE); // progressive rendering
+  const [moversVisible, setMoversVisible] = useState(LIST_PAGE_SIZE);
+  const [demandVisible, setDemandVisible] = useState(LIST_PAGE_SIZE);
+  const [predictVisible, setPredictVisible] = useState(LIST_PAGE_SIZE);
+
+  // Search state
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); // submitted search
+  const searchInputRef = React.useRef(null);
 
   // ── Fetch from Bunny CDN with MMKV caching ──
   const fetchFromCDN = useCallback(async (url, cacheKey, cacheDuration) => {
@@ -594,29 +604,93 @@ const AnalyticsScreen = ({ navigation }) => {
     return { oldVal: item.oldValue || 0, newVal: item.newValue || 0, pct: Math.round(pct) };
   }, []);
 
+  // ── Search handlers ──
+  const handleSearch = useCallback(() => {
+    if (!isPro) {
+      Alert.alert(
+        t('analytics.search_pro_title') || 'Pro Feature',
+        t('analytics.search_pro_message') || 'You need to get Pro to use search!',
+        [
+          { text: t('analytics.upgrade') || 'Go Pro', onPress: () => setShowOfferwall(true) },
+          { text: t('analytics.maybe_later') || 'Maybe Later', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    const q = searchInput.trim().toLowerCase();
+    setSearchQuery(q);
+    // Reset visible counts when searching
+    setChangesVisible(CHANGES_PAGE_SIZE);
+    setMoversVisible(LIST_PAGE_SIZE);
+    setDemandVisible(LIST_PAGE_SIZE);
+    setPredictVisible(LIST_PAGE_SIZE);
+  }, [searchInput, isPro, t]);
+
+  const handleCancelSearch = useCallback(() => {
+    setSearchInput('');
+    setSearchQuery('');
+    setChangesVisible(CHANGES_PAGE_SIZE);
+    setMoversVisible(LIST_PAGE_SIZE);
+    setDemandVisible(LIST_PAGE_SIZE);
+    setPredictVisible(LIST_PAGE_SIZE);
+  }, []);
+
+  const matchesSearch = useCallback((item) => {
+    if (!searchQuery) return true;
+    const name = (item.name || '').toLowerCase();
+    const type = (item.type || '').toLowerCase();
+    return name.includes(searchQuery) || type.includes(searchQuery);
+  }, [searchQuery]);
+
+  // ── Filtered lists for movers tab ──
+  const filteredMovers = useMemo(() => {
+    if (activeTab !== 'movers') return { rising: [], falling: [] };
+    const rising = (analytics?.topMovers || []).filter(matchesSearch);
+    const falling = (analytics?.topLosers || []).filter(matchesSearch);
+    return { rising, falling };
+  }, [activeTab, analytics, matchesSearch]);
+
+  // ── Filtered lists for demand tab ──
+  const filteredDemand = useMemo(() => {
+    if (activeTab !== 'demand') return { wanted: [], offered: [], ratios: [] };
+    const wanted = (analytics?.topWanted || []).filter(matchesSearch);
+    const offered = (analytics?.topOffered || []).filter(matchesSearch);
+    const ratios = (analytics?.demandSupplyRatios || []).filter(matchesSearch);
+    return { wanted, offered, ratios };
+  }, [activeTab, analytics, matchesSearch]);
+
+  // ── Filtered list for predict tab ──
+  const filteredPredictions = useMemo(() => {
+    if (activeTab !== 'predict') return [];
+    return (analytics?.predictions || []).filter(matchesSearch);
+  }, [activeTab, analytics, matchesSearch]);
+
   // ── Deferred: only compute when changes tab is active ──
   const filteredChanges = useMemo(() => {
     if (activeTab !== 'changes') return []; // skip computation when tab is hidden
     if (!valueChanges?.changes) return [];
-    if (changesFilter === 'all') return valueChanges.changes;
-    if (changesFilter === 'increased') return valueChanges.changes.filter(c => getChangeDirection(c) === 'up');
-    if (changesFilter === 'decreased') return valueChanges.changes.filter(c => getChangeDirection(c) === 'down');
-    return valueChanges.changes;
-  }, [activeTab, valueChanges, changesFilter, getChangeDirection]);
+    let list = valueChanges.changes;
+    if (searchQuery) list = list.filter(matchesSearch);
+    if (changesFilter === 'increased') return list.filter(c => getChangeDirection(c) === 'up');
+    if (changesFilter === 'decreased') return list.filter(c => getChangeDirection(c) === 'down');
+    return list;
+  }, [activeTab, valueChanges, changesFilter, getChangeDirection, searchQuery, matchesSearch]);
 
   // Memoized filter counts — only computed when changes tab is active
   const filterCounts = useMemo(() => {
     if (activeTab !== 'changes') return { all: 0, up: 0, down: 0 };
     if (!valueChanges?.changes) return { all: 0, up: 0, down: 0 };
+    let list = valueChanges.changes;
+    if (searchQuery) list = list.filter(matchesSearch);
     let up = 0;
     let down = 0;
-    for (const c of valueChanges.changes) {
+    for (const c of list) {
       const dir = getChangeDirection(c);
       if (dir === 'up') up++;
       else if (dir === 'down') down++;
     }
-    return { all: valueChanges.changes.length, up, down };
-  }, [activeTab, valueChanges, getChangeDirection]);
+    return { all: list.length, up, down };
+  }, [activeTab, valueChanges, getChangeDirection, searchQuery, matchesSearch]);
 
   // ── Tab Bar (fun emoji tabs) ──
   const tabs = [
@@ -665,7 +739,10 @@ const AnalyticsScreen = ({ navigation }) => {
             style={[styles.tab, activeTab === tab.key && styles.tabActive]}
             onPress={() => {
               setActiveTab(tab.key);
-              setChangesVisible(CHANGES_PAGE_SIZE); // reset when switching tabs
+              setChangesVisible(CHANGES_PAGE_SIZE);
+              setMoversVisible(LIST_PAGE_SIZE);
+              setDemandVisible(LIST_PAGE_SIZE);
+              setPredictVisible(LIST_PAGE_SIZE);
             }}
           >
             <Text style={{ fontSize: 16 }}>{tab.emoji}</Text>
@@ -675,6 +752,45 @@ const AnalyticsScreen = ({ navigation }) => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Search Bar */}
+      {activeTab !== 'overview' && (
+        <View style={styles.searchBarWrap}>
+          <View style={styles.searchInputWrap}>
+            <Icon name="search-outline" size={18} color={isDarkMode ? '#666' : '#999'} style={{ marginLeft: 10 }} />
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              placeholder={t('analytics.search_placeholder') || 'Search pet name...'}
+              placeholderTextColor={isDarkMode ? '#555' : '#aaa'}
+              value={searchInput}
+              onChangeText={setSearchInput}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searchInput.length > 0 && (
+              <TouchableOpacity onPress={handleCancelSearch} style={styles.searchClearBtn}>
+                <Icon name="close-circle" size={18} color={isDarkMode ? '#666' : '#999'} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleSearch} style={styles.searchBtn}>
+              <Icon name="search" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          {searchQuery !== '' && (
+            <View style={styles.searchActiveRow}>
+              <Text style={styles.searchActiveText}>
+                {t('analytics.search_results_for', { query: searchQuery })}
+              </Text>
+              <TouchableOpacity onPress={handleCancelSearch}>
+                <Text style={styles.searchCancelText}>{t('analytics.search_clear')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -847,17 +963,11 @@ const AnalyticsScreen = ({ navigation }) => {
                 ))}
                 {changesVisible < filteredChanges.length && (
                   <TouchableOpacity
-                    style={{
-                      paddingVertical: 14,
-                      alignItems: 'center',
-                      backgroundColor: isDarkMode ? '#1a1a2e' : '#F0F0FF',
-                      borderRadius: 12,
-                      marginTop: 8,
-                    }}
+                    style={styles.loadMoreBtn}
                     onPress={() => setChangesVisible(prev => prev + CHANGES_PAGE_SIZE)}
                   >
-                    <Text style={{ color: FUN_COLORS.purple, fontWeight: '700', fontSize: 14 }}>
-                      {'\u{1F447}'} Show More ({filteredChanges.length - changesVisible} remaining)
+                    <Text style={styles.loadMoreText}>
+                      {'\u{1F447}'} {t('analytics.show_more', { count: filteredChanges.length - changesVisible })}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -880,22 +990,64 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Top Movers (Rising) */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.green }]}>
               <SectionHeader icon="arrow-trend-up" title={t('analytics.top_movers')} subtitle={t('analytics.rising_demand')} emoji={'\u{1F680}'} styles={styles} />
-              {(analytics.topMovers || []).slice(0, isPro ? undefined : 3).map((item, i) => (
-                <ItemRow key={`mover-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
-              ))}
-              {!isPro && (analytics.topMovers || []).length > 3 && (
+              {(() => {
+                const list = isPro ? filteredMovers.rising : filteredMovers.rising.slice(0, searchQuery ? undefined : 3);
+                const visibleList = searchQuery ? list : list.slice(0, moversVisible);
+                return (
+                  <>
+                    {visibleList.map((item, i) => (
+                      <ItemRow key={`mover-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
+                    ))}
+                    {!searchQuery && isPro && moversVisible < filteredMovers.rising.length && (
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => setMoversVisible(prev => prev + LIST_PAGE_SIZE)}
+                      >
+                        <Text style={styles.loadMoreText}>
+                          {'\u{1F447}'} {t('analytics.show_more', { count: filteredMovers.rising.length - moversVisible })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
+              })()}
+              {!isPro && !searchQuery && (analytics.topMovers || []).length > 3 && (
                 <LockedOverlay message={t('analytics.see_all_movers')} onPress={handleShowOfferwall} styles={styles} />
+              )}
+              {searchQuery && filteredMovers.rising.length === 0 && (
+                <Text style={styles.noSearchResults}>{t('analytics.no_rising_found')}</Text>
               )}
             </View>
 
             {/* Top Losers (Falling) */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.red }]}>
               <SectionHeader icon="arrow-trend-down" title={t('analytics.top_losers')} subtitle={t('analytics.falling_demand')} emoji={'\u{1F4C9}'} styles={styles} />
-              {(analytics.topLosers || []).slice(0, isPro ? undefined : 3).map((item, i) => (
-                <ItemRow key={`loser-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
-              ))}
-              {!isPro && (analytics.topLosers || []).length > 3 && (
+              {(() => {
+                const list = isPro ? filteredMovers.falling : filteredMovers.falling.slice(0, searchQuery ? undefined : 3);
+                const visibleList = searchQuery ? list : list.slice(0, moversVisible);
+                return (
+                  <>
+                    {visibleList.map((item, i) => (
+                      <ItemRow key={`loser-${i}`} item={item} index={i} showChange getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
+                    ))}
+                    {!searchQuery && isPro && moversVisible < filteredMovers.falling.length && (
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => setMoversVisible(prev => prev + LIST_PAGE_SIZE)}
+                      >
+                        <Text style={styles.loadMoreText}>
+                          {'\u{1F447}'} {t('analytics.show_more', { count: filteredMovers.falling.length - moversVisible })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
+              })()}
+              {!isPro && !searchQuery && (analytics.topLosers || []).length > 3 && (
                 <LockedOverlay message={t('analytics.see_all_losers')} onPress={handleShowOfferwall} styles={styles} />
+              )}
+              {searchQuery && filteredMovers.falling.length === 0 && (
+                <Text style={styles.noSearchResults}>{t('analytics.no_falling_found')}</Text>
               )}
             </View>
           </>
@@ -907,22 +1059,64 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Most Wanted */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.pink }]}>
               <SectionHeader icon="heart" title={t('analytics.most_wanted')} subtitle={t('analytics.highest_demand')} emoji={'\u{2764}\u{FE0F}'} styles={styles} />
-              {(analytics.topWanted || []).slice(0, isPro ? undefined : 5).map((item, i) => (
-                <ItemRow key={`wanted-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
-              ))}
-              {!isPro && (analytics.topWanted || []).length > 5 && (
+              {(() => {
+                const list = isPro ? filteredDemand.wanted : filteredDemand.wanted.slice(0, searchQuery ? undefined : 5);
+                const visibleList = searchQuery ? list : list.slice(0, demandVisible);
+                return (
+                  <>
+                    {visibleList.map((item, i) => (
+                      <ItemRow key={`wanted-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
+                    ))}
+                    {!searchQuery && isPro && demandVisible < filteredDemand.wanted.length && (
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => setDemandVisible(prev => prev + LIST_PAGE_SIZE)}
+                      >
+                        <Text style={styles.loadMoreText}>
+                          {'\u{1F447}'} {t('analytics.show_more', { count: filteredDemand.wanted.length - demandVisible })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
+              })()}
+              {!isPro && !searchQuery && (analytics.topWanted || []).length > 5 && (
                 <LockedOverlay message={t('analytics.see_full_demand')} onPress={handleShowOfferwall} styles={styles} />
+              )}
+              {searchQuery && filteredDemand.wanted.length === 0 && (
+                <Text style={styles.noSearchResults}>{t('analytics.no_wanted_found')}</Text>
               )}
             </View>
 
             {/* Most Offered */}
             <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.blue }]}>
               <SectionHeader icon="box-open" title={t('analytics.most_offered')} subtitle={t('analytics.highest_supply')} emoji={'\u{1F4E6}'} styles={styles} />
-              {(analytics.topOffered || []).slice(0, isPro ? undefined : 5).map((item, i) => (
-                <ItemRow key={`offered-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
-              ))}
-              {!isPro && (analytics.topOffered || []).length > 5 && (
+              {(() => {
+                const list = isPro ? filteredDemand.offered : filteredDemand.offered.slice(0, searchQuery ? undefined : 5);
+                const visibleList = searchQuery ? list : list.slice(0, demandVisible);
+                return (
+                  <>
+                    {visibleList.map((item, i) => (
+                      <ItemRow key={`offered-${i}`} item={item} index={i} getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
+                    ))}
+                    {!searchQuery && isPro && demandVisible < filteredDemand.offered.length && (
+                      <TouchableOpacity
+                        style={styles.loadMoreBtn}
+                        onPress={() => setDemandVisible(prev => prev + LIST_PAGE_SIZE)}
+                      >
+                        <Text style={styles.loadMoreText}>
+                          {'\u{1F447}'} {t('analytics.show_more', { count: filteredDemand.offered.length - demandVisible })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
+              })()}
+              {!isPro && !searchQuery && (analytics.topOffered || []).length > 5 && (
                 <LockedOverlay message={t('analytics.see_full_supply')} onPress={handleShowOfferwall} styles={styles} />
+              )}
+              {searchQuery && filteredDemand.offered.length === 0 && (
+                <Text style={styles.noSearchResults}>{t('analytics.no_offered_found')}</Text>
               )}
             </View>
 
@@ -930,9 +1124,29 @@ const AnalyticsScreen = ({ navigation }) => {
             {isPro ? (
               <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
                 <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} subtitle={t('analytics.ds_ratio_subtitle')} locked={false} emoji={'\u{2696}\u{FE0F}'} styles={styles} />
-                {(analytics.demandSupplyRatios || []).map((item, i) => (
-                  <ItemRow key={`ds-${i}`} item={item} index={i} showSignal getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
-                ))}
+                {(() => {
+                  const visibleList = searchQuery ? filteredDemand.ratios : filteredDemand.ratios.slice(0, demandVisible);
+                  return (
+                    <>
+                      {visibleList.map((item, i) => (
+                        <ItemRow key={`ds-${i}`} item={item} index={i} showSignal getImageUrl={getImageUrl} isDarkMode={isDarkMode} styles={styles} />
+                      ))}
+                      {!searchQuery && demandVisible < filteredDemand.ratios.length && (
+                        <TouchableOpacity
+                          style={styles.loadMoreBtn}
+                          onPress={() => setDemandVisible(prev => prev + LIST_PAGE_SIZE)}
+                        >
+                          <Text style={styles.loadMoreText}>
+                            {'\u{1F447}'} {t('analytics.show_more', { count: filteredDemand.ratios.length - demandVisible })}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  );
+                })()}
+                {searchQuery && filteredDemand.ratios.length === 0 && (
+                  <Text style={styles.noSearchResults}>{t('analytics.no_ratios_found')}</Text>
+                )}
               </View>
             ) : (
               <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
@@ -965,77 +1179,100 @@ const AnalyticsScreen = ({ navigation }) => {
             {isPro ? (
               <View style={styles.card}>
                 <SectionHeader icon="crystal-ball" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} emoji={'\u{1F3B1}'} styles={styles} />
-                {(analytics.predictions || []).map((item, i) => (
-                  <View key={`pred-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
-                    <View style={styles.predictionLeft}>
-                      <View style={styles.itemImageWrap}>
-                        {item.image ? (
-                          <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
-                        ) : (
-                          <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                            <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
+                {(() => {
+                  const visibleList = searchQuery ? filteredPredictions : filteredPredictions.slice(0, predictVisible);
+                  return (
+                    <>
+                      {visibleList.map((item, i) => (
+                        <View key={`pred-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
+                          <View style={styles.predictionLeft}>
+                            <View style={styles.itemImageWrap}>
+                              {item.image ? (
+                                <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+                              ) : (
+                                <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                                  <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.itemInfo}>
+                              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={styles.itemType}>
+                                Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
+                              </Text>
+                            </View>
                           </View>
-                        )}
-                      </View>
-                      <View style={styles.itemInfo}>
-                        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.itemType}>
-                          Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.predictionRight}>
-                      <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
-                        <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
-                        <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
-                          {getPredictionLabel(item.prediction)}
-                        </Text>
-                      </View>
-                      <View style={styles.confidenceBar}>
-                        <View style={[styles.confidenceFill, {
-                          width: `${item.confidence}%`,
-                          backgroundColor: getSignalColor(item.prediction),
-                        }]} />
-                      </View>
-                      <Text style={styles.confidenceText}>{t('analytics.confidence', { value: item.confidence })}</Text>
-                    </View>
-                  </View>
-                ))}
+                          <View style={styles.predictionRight}>
+                            <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
+                              <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
+                              <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
+                                {getPredictionLabel(item.prediction)}
+                              </Text>
+                            </View>
+                            <View style={styles.confidenceBar}>
+                              <View style={[styles.confidenceFill, {
+                                width: `${item.confidence}%`,
+                                backgroundColor: getSignalColor(item.prediction),
+                              }]} />
+                            </View>
+                            <Text style={styles.confidenceText}>{t('analytics.confidence', { value: item.confidence })}</Text>
+                          </View>
+                        </View>
+                      ))}
+                      {!searchQuery && predictVisible < filteredPredictions.length && (
+                        <TouchableOpacity
+                          style={styles.loadMoreBtn}
+                          onPress={() => setPredictVisible(prev => prev + LIST_PAGE_SIZE)}
+                        >
+                          <Text style={styles.loadMoreText}>
+                            {'\u{1F447}'} {t('analytics.show_more', { count: filteredPredictions.length - predictVisible })}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  );
+                })()}
+                {searchQuery && filteredPredictions.length === 0 && (
+                  <Text style={styles.noSearchResults}>{t('analytics.no_predictions_found')}</Text>
+                )}
               </View>
             ) : (
               <>
                 {/* Show 2 predictions free, lock the rest */}
                 <View style={styles.card}>
                   <SectionHeader icon="bolt" title={t('analytics.predicted_movements')} subtitle={t('analytics.forecast_subtitle')} locked emoji={'\u{1F3B1}'} styles={styles} />
-                  {(analytics.predictions || []).slice(0, 2).map((item, i) => (
-                    <View key={`pred-free-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
-                      <View style={styles.predictionLeft}>
-                        <View style={styles.itemImageWrap}>
-                          {item.image ? (
-                            <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
-                          ) : (
-                            <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                              <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
-                            </View>
-                          )}
+                  {(() => {
+                    const freeList = searchQuery ? filteredPredictions.slice(0, 2) : (analytics.predictions || []).slice(0, 2);
+                    return freeList.map((item, i) => (
+                      <View key={`pred-free-${i}`} style={[styles.predictionRow, i % 2 === 0 && styles.itemRowAlt]}>
+                        <View style={styles.predictionLeft}>
+                          <View style={styles.itemImageWrap}>
+                            {item.image ? (
+                              <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+                            ) : (
+                              <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                                <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.itemInfo}>
+                            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={styles.itemType}>
+                              Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.itemInfo}>
-                          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                          <Text style={styles.itemType}>
-                            Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
-                          </Text>
+                        <View style={styles.predictionRight}>
+                          <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
+                            <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
+                            <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
+                              {getPredictionLabel(item.prediction)}
+                            </Text>
+                          </View>
                         </View>
                       </View>
-                      <View style={styles.predictionRight}>
-                        <View style={[styles.predictionBadge, { backgroundColor: getSignalColor(item.prediction) + '25' }]}>
-                          <Text style={{ fontSize: 14 }}>{getPredictionEmoji(item.prediction)}</Text>
-                          <Text style={[styles.predictionBadgeText, { color: getSignalColor(item.prediction) }]}>
-                            {getPredictionLabel(item.prediction)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
+                    ));
+                  })()}
                   <LockedOverlay message={t('analytics.unlock_predictions')} onPress={handleShowOfferwall} styles={styles} />
                 </View>
               </>
@@ -1620,6 +1857,79 @@ const getStyles = (isDarkMode, c) => {
       fontSize: 9,
       fontWeight: '800',
       marginTop: 2,
+    },
+
+    // Search Bar
+    searchBarWrap: {
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      paddingBottom: 4,
+      backgroundColor: c.bg,
+    },
+    searchInputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.bgAlt,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      overflow: 'hidden',
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+      paddingHorizontal: 10,
+      fontSize: 14,
+      color: c.text,
+      fontWeight: '600',
+    },
+    searchClearBtn: {
+      padding: 8,
+    },
+    searchBtn: {
+      backgroundColor: config.colors.primary,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    searchActiveRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 6,
+      paddingHorizontal: 4,
+    },
+    searchActiveText: {
+      fontSize: 12,
+      color: c.textMuted,
+      fontWeight: '600',
+    },
+    searchCancelText: {
+      fontSize: 12,
+      color: FUN_COLORS.red,
+      fontWeight: '700',
+    },
+    noSearchResults: {
+      textAlign: 'center',
+      color: c.textMuted,
+      fontSize: 13,
+      paddingVertical: 16,
+      fontWeight: '600',
+    },
+
+    // Load More
+    loadMoreBtn: {
+      paddingVertical: 14,
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#1a1a2e' : '#F0F0FF',
+      borderRadius: 12,
+      marginTop: 8,
+    },
+    loadMoreText: {
+      color: FUN_COLORS.purple,
+      fontWeight: '700',
+      fontSize: 14,
     },
 
     // Updated Row

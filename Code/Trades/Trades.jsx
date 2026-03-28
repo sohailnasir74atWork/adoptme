@@ -43,8 +43,9 @@ import {
 // Initialize dayjs plugins
 dayjs.extend(relativeTime);
 
-
-
+// ✅ Only show trades from the last 7 days — keeps feed fresh, prevents stale trades
+const TRADE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const getSevenDaysAgo = () => Timestamp.fromMillis(Date.now() - TRADE_MAX_AGE_MS);
 
 const TradeList = ({ route }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -195,14 +196,21 @@ const TradeList = ({ route }) => {
     setIsProStatus(localState.isPro); // ✅ Force update state and trigger re-render
   }, [localState.isPro]);
 
-  // ✅ Client-side filtering for non-search scenarios (filters, banned users)
+  // ✅ Client-side filtering for non-search scenarios (filters, banned users, expiry)
   useEffect(() => {
     const bannedUsersList = Array.isArray(bannedUsers) ? bannedUsers : [];
+    const cutoff = Date.now() - TRADE_MAX_AGE_MS;
 
     setFilteredTrades(
       trades.filter((trade) => {
         // ✅ Filter out trades from blocked users
         if (bannedUsersList.includes(trade.userId)) {
+          return false;
+        }
+
+        // ✅ Filter out trades older than 7 days (client-side safety net)
+        const tradeTime = trade.timestamp?.toMillis ? trade.timestamp.toMillis() : (trade.timestamp?.seconds ? trade.timestamp.seconds * 1000 : 0);
+        if (tradeTime > 0 && tradeTime < cutoff && !trade.isFeatured) {
           return false;
         }
 
@@ -241,6 +249,13 @@ const TradeList = ({ route }) => {
       })
     );
   }, [trades, selectedFilters, user.id, bannedUsers, followingIds]);
+
+  // ✅ Auto-scroll to top when filters change
+  useEffect(() => {
+    if (selectedFilters.length > 0 && flatListRef.current) {
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, [selectedFilters]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -295,11 +310,13 @@ const TradeList = ({ route }) => {
 
     try {
       const chunk = followingIds.slice(0, 30); // Firestore 'in' limit
+      const sevenDaysAgo = getSevenDaysAgo();
       let q;
       if (isLoadMore && followingLastDocRef.current) {
         q = query(
           collection(firestoreDB, 'trades_new'),
           where('userId', 'in', chunk),
+          where('timestamp', '>', sevenDaysAgo),
           orderBy('timestamp', 'desc'),
           startAfter(followingLastDocRef.current),
           limit(PAGE_SIZE),
@@ -308,6 +325,7 @@ const TradeList = ({ route }) => {
         q = query(
           collection(firestoreDB, 'trades_new'),
           where('userId', 'in', chunk),
+          where('timestamp', '>', sevenDaysAgo),
           orderBy('timestamp', 'desc'),
           limit(PAGE_SIZE),
         );
@@ -538,10 +556,12 @@ const TradeList = ({ route }) => {
         ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
         : null;
 
-      // ✅ Build query for more normal trades
+      // ✅ Build query for more normal trades (only last 7 days)
+      const sevenDaysAgo = getSevenDaysAgo();
       let normalQuery = query(
         collection(firestoreDB, 'trades_new'),
         where('isFeatured', '==', false),
+        where('timestamp', '>', sevenDaysAgo),
         orderBy('timestamp', 'desc'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
@@ -553,6 +573,7 @@ const TradeList = ({ route }) => {
           collection(firestoreDB, 'trades_new'),
           where('isFeatured', '==', false),
           where('status', 'in', statusValues),
+          where('timestamp', '>', sevenDaysAgo),
           orderBy('timestamp', 'desc'),
           startAfter(lastDoc),
           limit(PAGE_SIZE)
@@ -705,15 +726,16 @@ const TradeList = ({ route }) => {
 
       const allResults = new Map();
       let lastDocSnapshot = isLoadMore ? searchLastDoc : null;
+      const sevenDaysAgo = getSevenDaysAgo();
 
-      // ✅ Search in ME side (hasItemNames) - SERVER-SIDE filtering
-      // Requires composite index: hasItemNames (array-contains) + timestamp (desc)
+      // ✅ Search in ME side (hasItemNames) - SERVER-SIDE filtering (last 7 days only)
       if (searchInHas) {
         try {
           const hasQuery = lastDocSnapshot
             ? query(
               collection(firestoreDB, 'trades_new'),
               where('hasItemNames', 'array-contains', searchTermLower),
+              where('timestamp', '>', sevenDaysAgo),
               orderBy('timestamp', 'desc'),
               startAfter(lastDocSnapshot),
               limit(SEARCH_PAGE_SIZE)
@@ -721,6 +743,7 @@ const TradeList = ({ route }) => {
             : query(
               collection(firestoreDB, 'trades_new'),
               where('hasItemNames', 'array-contains', searchTermLower),
+              where('timestamp', '>', sevenDaysAgo),
               orderBy('timestamp', 'desc'),
               limit(SEARCH_PAGE_SIZE)
             );
@@ -733,21 +756,20 @@ const TradeList = ({ route }) => {
           });
         } catch (error) {
           console.error('❌ hasItemNames search error:', error.message);
-          // If index missing, show link to create it
           if (error.message?.includes('index')) {
             console.log('📌 Create index at:', error.message.match(/https:\/\/[^\s]+/)?.[0]);
           }
         }
       }
 
-      // ✅ Search in YOU side (wantsItemNames) - SERVER-SIDE filtering
-      // Requires composite index: wantsItemNames (array-contains) + timestamp (desc)
+      // ✅ Search in YOU side (wantsItemNames) - SERVER-SIDE filtering (last 7 days only)
       if (searchInWants) {
         try {
           const wantsQuery = lastDocSnapshot
             ? query(
               collection(firestoreDB, 'trades_new'),
               where('wantsItemNames', 'array-contains', searchTermLower),
+              where('timestamp', '>', sevenDaysAgo),
               orderBy('timestamp', 'desc'),
               startAfter(lastDocSnapshot),
               limit(SEARCH_PAGE_SIZE)
@@ -755,6 +777,7 @@ const TradeList = ({ route }) => {
             : query(
               collection(firestoreDB, 'trades_new'),
               where('wantsItemNames', 'array-contains', searchTermLower),
+              where('timestamp', '>', sevenDaysAgo),
               orderBy('timestamp', 'desc'),
               limit(SEARCH_PAGE_SIZE)
             );
@@ -809,6 +832,8 @@ const TradeList = ({ route }) => {
       } else {
         setTrades(searchedTrades);
         setIsSearchMode(true);
+        // Scroll to top for new search results
+        if (flatListRef.current) flatListRef.current.scrollToOffset({ offset: 0, animated: true });
       }
 
       // ✅ Update pagination state
@@ -832,10 +857,12 @@ const TradeList = ({ route }) => {
         ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
         : null;
 
-      // ✅ Build query for normal trades
+      // ✅ Build query for normal trades (only last 7 days)
+      const sevenDaysAgo = getSevenDaysAgo();
       let normalQuery = query(
         collection(firestoreDB, 'trades_new'),
         where('isFeatured', '==', false),
+        where('timestamp', '>', sevenDaysAgo),
         orderBy('timestamp', 'desc'),
         limit(PAGE_SIZE)
       );
@@ -846,6 +873,7 @@ const TradeList = ({ route }) => {
           collection(firestoreDB, 'trades_new'),
           where('isFeatured', '==', false),
           where('status', 'in', statusValues),
+          where('timestamp', '>', sevenDaysAgo),
           orderBy('timestamp', 'desc'),
           limit(PAGE_SIZE)
         );
@@ -1267,7 +1295,7 @@ const TradeList = ({ route }) => {
           return { backgroundColor: isDarkMode ? (bg.darkColor || bg.color) : bg.color, borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' };
         }
         return null;
-      })()]}>
+      })(), item.isFeatured && styles.featuredCard]}>
         {item.isFeatured && <View style={styles.tag}><Text style={styles.tagTextFeatured}>Featured</Text></View>}
 
         {/* ✅ Header — Feed-style */}
@@ -1288,59 +1316,62 @@ const TradeList = ({ route }) => {
             <View style={{ marginLeft: 10, flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <Text style={styles.cardName} numberOfLines={1}>{item.traderName}</Text>
-                {item.isPro && <Image source={require('../../assets/pro.png')} style={{ width: 11, height: 11 }} />}
-                {item.robloxUsernameVerified && <Image source={require('../../assets/verification.png')} style={{ width: 11, height: 11 }} />}
+                {item.isPro && <Image source={require('../../assets/pro.png')} style={badgeStyles.inlineIcon} />}
+                {item.robloxUsernameVerified && <Image source={require('../../assets/verification.png')} style={badgeStyles.inlineIcon} />}
                 {(() => {
                   const hasRecentWin = !!item?.hasRecentGameWin || (typeof item?.lastGameWinAt === 'number' && Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
-                  return hasRecentWin ? <Image source={require('../../assets/trophy.webp')} style={{ width: 11, height: 11 }} /> : null;
+                  return hasRecentWin ? <Image source={require('../../assets/trophy.webp')} style={badgeStyles.inlineIcon} /> : null;
                 })()}
-                {item.topBadge && BADGE_IMAGES[item.topBadge] && (
+                {/* {item.topBadge && BADGE_IMAGES[item.topBadge] && (
                   <Image source={BADGE_IMAGES[item.topBadge]} style={{ width: 14, height: 14, borderRadius: 7 }} />
-                )}
+                )} */}
                 {item.rating ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffb700be', borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 }}>
-                    <Icon name="star" size={8} color="white" style={{ marginRight: 2 }} />
-                    <Text style={{ fontSize: 8, color: 'white', fontWeight: '600' }}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
+                  <View style={badgeStyles.ratingBadge}>
+                    <Icon name="star" size={7} color="white" />
+                    <Text style={badgeStyles.ratingText}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
                   </View>
                 ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#888', borderRadius: 5, paddingHorizontal: 3, paddingVertical: 1 }}>
-                    <Icon name="star-outline" size={8} color="white" style={{ marginRight: 2 }} />
-                    <Text style={{ fontSize: 8, color: 'white' }}>N/A</Text>
+                  <View style={[badgeStyles.ratingBadge, { backgroundColor: '#888' }]}>
+                    <Icon name="star-outline" size={7} color="white" />
+                    <Text style={badgeStyles.ratingText}>N/A</Text>
                   </View>
                 )}
                 {(() => {
-                  const p = getCachedProfile(item.userId);
-                  if (!p) return null;
+                  const p = getCachedProfile(item.userId) || {};
+                  const pIsAdmin = p.isAdmin ?? item.isAdmin;
+                  const pIsMod = p.isModerator ?? item.isModerator;
+                  const pIsTrusted = p.isTrusted ?? item.isTrusted;
+                  const pIsCMSR = p.isCMSR ?? item.isCMSR;
                   return (
                     <>
-                      {p.isAdmin && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                          <Icon name="shield" size={10} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Admin</Text>
+                      {pIsAdmin && (
+                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#EF4444' }]}>
+                          <Icon name="shield" size={8} color="#fff" />
+                          <Text style={badgeStyles.roleBadgeText}>Admin</Text>
                         </View>
                       )}
-                      {!p.isAdmin && p.isModerator && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                          <Icon name="shield-checkmark" size={10} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Mod</Text>
+                      {!pIsAdmin && pIsMod && (
+                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
+                          <Icon name="shield-checkmark" size={8} color="#fff" />
+                          <Text style={badgeStyles.roleBadgeText}>Mod</Text>
                         </View>
                       )}
-                      {!p.isAdmin && !p.isModerator && item.isBabyMod && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                          <Icon name="paw" size={10} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>JMD</Text>
+                      {!pIsAdmin && !pIsMod && item.isBabyMod && (
+                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#F59E0B' }]}>
+                          <Icon name="paw" size={8} color="#fff" />
+                          <Text style={badgeStyles.roleBadgeText}>JMD</Text>
                         </View>
                       )}
-                      {p.isTrusted && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                          <Icon name="checkmark-circle" size={10} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
+                      {pIsTrusted && (
+                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#10B981' }]}>
+                          <Icon name="checkmark-circle" size={8} color="#fff" />
+                          <Text style={badgeStyles.roleBadgeText}>Trusted</Text>
                         </View>
                       )}
-                      {p.isCMSR && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 4 }}>
-                          <Icon name="briefcase" size={10} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
+                      {pIsCMSR && (
+                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#F97316' }]}>
+                          <Icon name="briefcase" size={8} color="#fff" />
+                          <Text style={badgeStyles.roleBadgeText}>CMSR</Text>
                         </View>
                       )}
                     </>
@@ -1528,14 +1559,14 @@ const TradeList = ({ route }) => {
                   onPress={() => handleDelete(item)}
                   style={[styles.ownerBtn, { backgroundColor: '#EF4444' }]}
                 >
-                  <Icon name="trash-outline" size={12} color="white" />
+                  <Icon name="trash-outline" size={9} color="white" />
                   <Text style={styles.ownerBtnText}>Delete</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDeleteAllTrades(item.userId)}
                   style={[styles.ownerBtn, { backgroundColor: '#991B1B' }]}
                 >
-                  <Icon name="trash" size={12} color="white" />
+                  <Icon name="trash" size={9} color="white" />
                   <Text style={styles.ownerBtnText}>Delete All</Text>
                 </TouchableOpacity>
               </>
@@ -1589,23 +1620,28 @@ const TradeList = ({ route }) => {
                 <TouchableOpacity
                   onPress={async () => {
                     if (!user?.id) { setIsSigninDrawerVisible(true); return; }
-                    triggerHapticFeedback('impactMedium');
                     const tradeId = item.id;
                     if (savedTradeRefs[tradeId]?.type === 'accepted') {
+                      triggerHapticFeedback('impactLight');
                       showSuccessMessage('✅', t('trade.already_accepted', { defaultValue: 'Already accepted!' }));
                       return;
                     }
+                    // Optimistic UI — show accepted state immediately
+                    triggerHapticFeedback('impactMedium');
+                    setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'accepted' } }));
                     try {
-                      await acceptTrade(appdatabase, firestoreDB, user.id, user.displayName || 'Someone', item);
-                      setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'accepted' } }));
+                      await acceptTrade(appdatabase, firestoreDB, user.id, user.displayName || 'Someone', item, { avatar: user.avatar || '', robloxUsername: user.robloxUsername || '' });
+                      triggerHapticFeedback('notificationSuccess');
                       showSuccessMessage('🤝 ' + t('trade.accepted', { defaultValue: 'Accepted!' }), t('trade.accepted_msg', { defaultValue: 'Trader notified! View in My Stuff → Active Trades' }));
                     } catch (e) {
+                      // Revert optimistic update on failure
+                      setSavedTradeRefs(prev => { const next = { ...prev }; delete next[tradeId]; return next; });
                       showErrorMessage(t('home.alert.error'), e?.message || 'Error');
                     }
                   }}
                   style={[styles.acceptBtn, savedTradeRefs[item.id]?.type === 'accepted' && { backgroundColor: '#10B981' }]}
                 >
-                  <Icon name="checkmark" size={13} color={savedTradeRefs[item.id]?.type === 'accepted' ? '#fff' : '#10B981'} />
+                  <Icon name={savedTradeRefs[item.id]?.type === 'accepted' ? 'checkmark-circle' : 'checkmark'} size={13} color={savedTradeRefs[item.id]?.type === 'accepted' ? '#fff' : '#10B981'} />
                   <Text style={[styles.acceptBtnText, savedTradeRefs[item.id]?.type === 'accepted' && { color: '#fff' }]}>
                     {savedTradeRefs[item.id]?.type === 'accepted' ? t('trade.accepted_short', { defaultValue: 'Accepted' }) : t('trade.accept', { defaultValue: 'Accept' })}
                   </Text>
@@ -1779,23 +1815,37 @@ const TradeList = ({ route }) => {
         renderItem={renderTrade}
         keyExtractor={(item) => item.isFeatured ? `featured-${item.id}` : item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={filteredTrades.length === 0 ? { flexGrow: 1, paddingBottom: 20 } : { paddingBottom: 20 }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.2}
-        removeClippedSubviews={true} // 🚀 Reduce memory usage
-        initialNumToRender={10} // 🔹 Render fewer items at start
-        maxToRenderPerBatch={10} // 🔹 Load smaller batches
-        updateCellsBatchingPeriod={50} // 🔹 Reduce updates per frame
-        windowSize={5} // 🔹 Keep only 5 screens worth in memory
-        refreshing={refreshing} // Add Pull-to-Refresh
-        onRefresh={handleRefresh} // Attach Refresh Handler
+        removeClippedSubviews={true}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
         onScroll={({ nativeEvent }) => {
           const { contentOffset } = nativeEvent;
-          // ✅ Check if user is at top (within 60px from top)
           const atTop = contentOffset.y <= 60;
           setIsAtTop(atTop);
         }}
         scrollEventThrottle={16}
+        ListEmptyComponent={!loading && !isSearching ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30, paddingTop: 60 }}>
+            <Text style={{ fontSize: 36, marginBottom: 10 }}>{isSearchMode ? '🔍' : '📭'}</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: isDarkMode ? '#fff' : '#1e293b', textAlign: 'center' }}>
+              {isSearchMode
+                ? t('trade.no_search_results', { defaultValue: 'No trades found' })
+                : t('trade.no_trades', { defaultValue: 'No trades yet' })}
+            </Text>
+            <Text style={{ fontSize: 13, color: isDarkMode ? '#94a3b8' : '#64748b', textAlign: 'center', marginTop: 6, lineHeight: 18 }}>
+              {isSearchMode
+                ? t('trade.no_search_results_sub', { defaultValue: 'Try a different item name or adjust your filters.' })
+                : t('trade.no_trades_sub', { defaultValue: 'Pull down to refresh or check back later.' })}
+            </Text>
+          </View>
+        ) : null}
       />
 
 
@@ -1895,6 +1945,10 @@ const getStyles = (isDarkMode, c) => {
       shadowOpacity: c.shadowOpacity,
       shadowRadius: 8,
       elevation: isDarkMode ? 4 : 3,
+    },
+    featuredCard: {
+      borderWidth: 2,
+      borderColor: '#F59E0B',
     },
 
     searchContainer: {
@@ -2293,10 +2347,10 @@ const getStyles = (isDarkMode, c) => {
     ownerBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
-      paddingVertical: 4,
-      paddingHorizontal: 6,
-      borderRadius: 6,
+      gap: 2,
+      paddingVertical: 2,
+      paddingHorizontal: 3,
+      borderRadius: 3,
     },
     ownerBtnText: {
       color: 'white',
@@ -2366,9 +2420,9 @@ const getStyles = (isDarkMode, c) => {
       position: 'absolute',
       top: 0,
       left: 0,
-      paddingHorizontal: 8,
+      paddingHorizontal: 12,
       paddingVertical: 1,
-      borderTopLeftRadius: 8,
+      borderTopLeftRadius: 12,
       borderBottomRightRadius: 10,
       zIndex: 10,
     },
@@ -2405,5 +2459,41 @@ const getStyles = (isDarkMode, c) => {
 
   });
 };
+
+const badgeStyles = StyleSheet.create({
+  inlineIcon: {
+    width: 10,
+    height: 10,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 5,
+    gap: 2,
+  },
+  roleBadgeText: {
+    color: '#fff',
+    fontSize: 7,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffb700be',
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    gap: 2,
+  },
+  ratingText: {
+    fontSize: 7,
+    color: 'white',
+    fontWeight: '600',
+  },
+});
 
 export default TradeList;

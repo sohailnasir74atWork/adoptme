@@ -11,7 +11,6 @@ import {
   acceptGameInvite,
   declineGameInvite,
 } from '../utils/gameInviteSystem';
-import { doc, getDoc } from '@react-native-firebase/firestore';
 import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
 import { navigate } from '../../../Helper/navigationService';
 
@@ -91,12 +90,7 @@ const GlobalInviteToast = () => {
         avatar: user.avatar || null,
       });
       if (result.success) {
-        // Determine game type from room doc
-        let gameType = 'petGuessing';
-        try {
-          const snap = await getDoc(doc(firestoreDB, 'petGuessingGame_rooms', invite.roomId));
-          if (snap.exists) gameType = snap.data()?.gameType || 'petGuessing';
-        } catch {}
+        const gameType = result.gameType || 'petGuessing';
         setAcceptedInviteRoom({ roomId: invite.roomId, gameType });
 
         // Navigate to the correct game screen
@@ -108,10 +102,7 @@ const GlobalInviteToast = () => {
         const targetScreen = screenMap[gameType] || 'GameHub';
 
         hide();
-        // Small delay so the toast hides first
-        setTimeout(() => {
-          navigate(targetScreen);
-        }, 300);
+        navigate(targetScreen);
       } else {
         showErrorMessage('Cannot Join', result.error || 'Failed to join');
       }
