@@ -18,7 +18,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
-import { get, ref, update, set, remove, child, query as dbQuery, orderByKey, limitToLast, endAt, onValue, onChildAdded } from '@react-native-firebase/database';
+import { get, ref, update, set, remove, child, query as dbQuery, orderByKey, limitToLast, endAt, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -70,7 +70,6 @@ const GroupChatScreen = () => {
   const lastLoadedKeyRef = useRef(null); // Oldest message ID (for pagination)
   const newestMessageIdRef = useRef(null); // Newest message ID (for real-time listener)
   const previousGroupIdRef = useRef(null);
-  const initialLoadDoneRef = useRef(false); // ✅ Track if initial load is complete (prevents duplicate messages)
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
   const highlightTimerRef = useRef(null); // Track highlight timeout for cleanup
@@ -357,7 +356,6 @@ const GroupChatScreen = () => {
       if (reset) {
         setLoading(true);
         setMessages([]);
-        initialLoadDoneRef.current = false; // ✅ Reset initial load flag
         lastLoadedKeyRef.current = null;
         newestMessageIdRef.current = null; // Reset newest message ID
       } else {
@@ -440,7 +438,6 @@ const GroupChatScreen = () => {
       } finally {
         if (reset) {
           setLoading(false);
-          initialLoadDoneRef.current = true; // ✅ Mark initial load as done
         }
         setIsPaginating(false);
       }
@@ -464,48 +461,50 @@ const GroupChatScreen = () => {
     }
   }, [groupId, messagesRef, loadMessages, isMember]);
 
-  // ✅ OPTIMIZED: Listen to new messages in real-time (only newest message)
-  // Uses useFocusEffect to detach listener when navigating away (prevents freeze)
-  useFocusEffect(
-    useCallback(() => {
-      if (!messagesRef || !isMember) return;
+  // ✅ Listen for new messages in real-time using onValue (more reliable than onChildAdded with limitToLast)
+  // onChildAdded + limitToLast(1) has known bugs in Firebase SDKs where remote writes don't fire
+  useEffect(() => {
+    if (!messagesRef || !isMember) {
+      return;
+    }
 
-      let isMounted = true;
+    let isMounted = true;
 
-      const limitedRef = dbQuery(messagesRef, limitToLast(1));
+    const latestQuery = dbQuery(messagesRef, orderByKey(), limitToLast(1));
 
-      const handleChildAdded = (snapshot) => {
-        if (!isMounted || !snapshot || !snapshot.key) return;
-        if (!initialLoadDoneRef.current) return;
-        const data = snapshot.val();
-        if (!data || typeof data !== 'object') return;
+    const unsubscribe = onValue(latestQuery, (snapshot) => {
+      if (!isMounted || !snapshot.exists()) return;
 
-        const newMessage = { id: snapshot.key, ...data };
+      snapshot.forEach((childSnap) => {
+        const key = childSnap.key;
+        const data = childSnap.val();
+        if (!key || !data || typeof data !== 'object') return;
+
+        const newMessage = { id: key, ...data };
         if (!newMessage.timestamp) {
           newMessage.timestamp = Date.now();
         }
 
         setMessages((prev) => {
-          if (!Array.isArray(prev)) return [newMessage];
-          const exists = prev.some((m) => String(m?.id) === String(newMessage.id));
+          if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
+          const exists = prev.some((m) => String(m?.id) === String(key));
           if (exists) return prev;
 
+          // ✅ Keep DESCENDING order
           const updated = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
           if (updated.length > 0) {
             newestMessageIdRef.current = updated[0]?.id;
           }
           return updated;
         });
-      };
+      });
+    });
 
-      const unsubscribe = onChildAdded(limitedRef, handleChildAdded);
-
-      return () => {
-        isMounted = false;
-        unsubscribe();
-      };
-    }, [messagesRef, isMember])
-  );
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [messagesRef, isMember]);
 
   // Set active chat and reset unread count
   useFocusEffect(
@@ -783,10 +782,27 @@ const GroupChatScreen = () => {
         if (!result.success) {
           showErrorMessage('Error', result.error || 'Failed to send message');
         } else {
+          // ✅ Optimistically add own message to local state (don't wait for listener)
+          if (result.messageKey) {
+            const optimisticMessage = {
+              id: result.messageKey,
+              ...messageData,
+              timestamp: result.timestamp || Date.now(),
+            };
+            setMessages((prev) => {
+              if (!Array.isArray(prev)) return [optimisticMessage];
+              const exists = prev.some((m) => String(m?.id) === String(result.messageKey));
+              if (exists) return prev;
+              const updated = [optimisticMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+              if (updated.length > 0) {
+                newestMessageIdRef.current = updated[0]?.id;
+              }
+              return updated;
+            });
+          }
           // Clear reply after successful send
           setReplyTo(null);
           hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
-
         }
       } catch (error) {
         console.error('Error sending message:', error);

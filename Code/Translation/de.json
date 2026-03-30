@@ -559,14 +559,29 @@
         "accepted": "Angenommen!",
         "accepted_short": "Angenommen",
         "accepted_msg": "Trader benachrichtigt! Siehe unter Meine Sachen → Aktive Tausche",
+        "accepted_guide": "Der Trader wurde benachrichtigt!\n\nGehe zu Meine Sachen → Aktive Tausche → Angenommen-Tab:\n• Roblox-Benutzernamen des Traders kopieren\n• Chatten um den Tausch zu koordinieren\n• Ping senden wenn du bereit bist",
+        "accept_trade": "Diesen Tausch annehmen?",
+        "accept_confirm_guide": "Bist du sicher, dass du annehmen möchtest?\n\nDer Trader wird benachrichtigt. Du findest diesen Tausch unter Meine Sachen → Aktive Tausche → Angenommen.\n\nVon dort kannst du:\n• Den Roblox-Namen des Traders sehen\n• Chatten um zu koordinieren\n• Ping senden wenn du bereit bist",
+        "yes_accept": "Ja, Annehmen",
+        "got_it": "Verstanden!",
         "already_accepted": "Bereits angenommen!",
         "saved": "Gespeichert!",
         "saved_msg": "Siehe unter Meine Sachen → Aktive Tausche",
+        "saved_guide": "Tausch gespeichert unter Meine Sachen → Aktive Tausche → Gespeichert.\n\nVon dort kannst du:\n• Roblox-Namen des Traders sehen und kopieren\n• Mit dem Trader chatten\n• Ping senden wenn du bereit bist\n• Den Tausch abschließen",
         "removed": "Entfernt",
         "trade_unsaved": "Tausch aus Gespeicherten entfernt",
         "roblox_required": "Bitte gib deinen Roblox-Benutzernamen ein, um einen Tausch zu veröffentlichen.",
         "roblox_username_placeholder": "Roblox-Benutzername (erforderlich)",
         "roblox_copied": "Roblox-Benutzername kopiert!",
+        "filter_all": "Alle",
+        "filter_i_accepted": "Von mir akzeptiert",
+        "filter_others_accepted": "Meine akzeptiert",
+        "others_accepted": "Jemand hat akzeptiert",
+        "i_accepted": "Du hast akzeptiert",
+        "person_accepted": "Person hat akzeptiert",
+        "people_accepted": "Personen haben akzeptiert",
+        "accepted_time": "Akzeptiert",
+        "view_acceptors": "Akzeptierer anzeigen",
         "ping_trader": "Trader anpingen",
         "ping_sent": "Ping gesendet! Der Trader wird benachrichtigt."
     },
@@ -1295,7 +1310,15 @@
             "accepted_saved": "🤝 Angenommene & Gespeicherte Tausche",
             "deleted_by_trader": "Tausch vom Trader gelöscht",
             "remove": "Entfernen",
-            "from": "von"
+            "from": "von",
+            "your_trade": "Dein Tausch",
+            "my_trades": "Meine Tausche",
+            "accepted_tab": "Akzeptiert",
+            "saved_tab": "Gespeichert",
+            "no_accepted": "Keine akzeptierten Tausche",
+            "no_accepted_sub": "Akzeptiere Tausche aus dem Feed, um In-Game-Tausche zu koordinieren.",
+            "no_saved": "Keine gespeicherten Tausche",
+            "no_saved_sub": "Speichere Tausche aus dem Feed für später."
         },
         "timeline": {
             "today": "Heute",
@@ -1319,7 +1342,8 @@
             "generous_trader": "🎁 Großzügiger Trader",
             "clear_history": "Verlauf Löschen",
             "empty_title": "Keine Trades!",
-            "empty_sub": "Geh traden! 🐾"
+            "empty_sub": "Geh traden! 🐾",
+            "load_more": "Mehr Laden ⬇️"
         }
     },
     "mystery_egg": {

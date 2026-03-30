@@ -474,7 +474,7 @@ const GroupMessageList = ({
 
                 {/* Timestamp inside bubble — WhatsApp style */}
                 <Text style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   color: isMyMessage
                     ? (isDarkMode ? '#ffffffaa' : '#00000066')
                     : (isDarkMode ? '#ffffff77' : '#00000055'),

@@ -632,14 +632,29 @@
         "accepted": "¡Aceptado!",
         "accepted_short": "Aceptado",
         "accepted_msg": "¡Trader notificado! Ver en Mis Cosas → Intercambios Activos",
+        "accepted_guide": "¡El trader ha sido notificado!\n\nVe a Mis Cosas → Intercambios Activos → pestaña Aceptados para:\n• Copiar el nombre de Roblox del trader\n• Chatear para coordinar el intercambio\n• Hacer ping cuando estés listo",
+        "accept_trade": "¿Aceptar este intercambio?",
+        "accept_confirm_guide": "¿Estás seguro de que quieres aceptar?\n\nEl trader será notificado. Encontrarás este intercambio en Mis Cosas → Intercambios Activos → Aceptados.\n\nDesde ahí puedes:\n• Ver el nombre de Roblox del trader\n• Chatear para coordinar\n• Hacer ping cuando estés listo",
+        "yes_accept": "Sí, Aceptar",
+        "got_it": "¡Entendido!",
         "already_accepted": "¡Ya aceptado!",
         "saved": "¡Guardado!",
         "saved_msg": "Ver en Mis Cosas → Intercambios Activos",
+        "saved_guide": "Intercambio guardado en Mis Cosas → Intercambios Activos → Guardados.\n\nDesde ahí puedes:\n• Ver y copiar el nombre de Roblox del trader\n• Chatear con el trader\n• Hacer ping cuando estés listo\n• Completar el intercambio",
         "removed": "Eliminado",
         "trade_unsaved": "Intercambio eliminado de guardados",
         "roblox_required": "Por favor ingresa tu nombre de usuario de Roblox para publicar un intercambio.",
         "roblox_username_placeholder": "Nombre de usuario de Roblox (obligatorio)",
         "roblox_copied": "¡Nombre de usuario de Roblox copiado!",
+        "filter_all": "Todos",
+        "filter_i_accepted": "Acepté yo",
+        "filter_others_accepted": "Aceptaron la mía",
+        "others_accepted": "Alguien aceptó",
+        "i_accepted": "Tú aceptaste",
+        "person_accepted": "persona aceptó",
+        "people_accepted": "personas aceptaron",
+        "accepted_time": "Aceptado",
+        "view_acceptors": "Ver aceptantes",
         "ping_trader": "Avisar al Trader",
         "ping_sent": "¡Aviso enviado! El trader será notificado."
     },
@@ -1368,7 +1383,15 @@
             "accepted_saved": "🤝 Intercambios Aceptados y Guardados",
             "deleted_by_trader": "Intercambio eliminado por el trader",
             "remove": "Eliminar",
-            "from": "de"
+            "from": "de",
+            "your_trade": "Tu intercambio",
+            "my_trades": "Mis intercambios",
+            "accepted_tab": "Aceptados",
+            "saved_tab": "Guardados",
+            "no_accepted": "No hay intercambios aceptados",
+            "no_accepted_sub": "Acepta intercambios del feed para coordinar intercambios en el juego.",
+            "no_saved": "No hay intercambios guardados",
+            "no_saved_sub": "Guarda intercambios del feed para revisarlos después."
         },
         "timeline": {
             "today": "Hoy",
@@ -1392,7 +1415,8 @@
             "generous_trader": "🎁 Trader Generoso",
             "clear_history": "Borrar Historial",
             "empty_title": "¡Sin trades!",
-            "empty_sub": "¡Ve a tradear! 🐾"
+            "empty_sub": "¡Ve a tradear! 🐾",
+            "load_more": "Cargar Más ⬇️"
         }
     },
     "mystery_egg": {

@@ -133,7 +133,10 @@ const NotificationFeed = () => {
 
   const handleNotifPress = useCallback((item) => {
     if (item.type === 'trade_accepted' || item.type === 'trade_ping') {
-      navigation.navigate('MyStuffScreen', { initialTab: 'active' });
+      navigation.navigate('MyStuffScreen', {
+        initialTab: 'active',
+        ...(item.type === 'trade_accepted' && item.tradeId ? { highlightTradeId: item.tradeId } : {}),
+      });
     }
   }, [navigation]);
 

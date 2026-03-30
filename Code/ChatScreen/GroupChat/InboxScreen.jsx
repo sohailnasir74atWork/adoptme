@@ -354,7 +354,7 @@ const InboxScreen = ({ bannedUsers }) => {
               )}
             </Text>
             {streaks.get(otherUserId) >= 2 && (
-              <Text style={{ fontSize: 12, marginTop: 2 }}>🔥 {streaks.get(otherUserId)}</Text>
+              <Text style={{ fontSize: 12, marginTop: 2, color: isDarkMode ? '#fff' : '#000' }}>🔥 {streaks.get(otherUserId)}</Text>
             )}
             <Text style={styles.lastMessage} numberOfLines={1}>
               {lastMessage}

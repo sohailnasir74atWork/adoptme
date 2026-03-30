@@ -1072,16 +1072,23 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
     );
   }, [user?.id, isDarkMode, handleViewStatus, subtextColor]);
 
-  // Build data: placeholder for user if no status
+  // Build data: always ensure current user is first
   const feedData = useMemo(() => {
-    const hasMyStatus = statuses.some(s => s.userId === user?.id);
-    if (!hasMyStatus && user?.id) {
+    if (!user?.id) return statuses;
+    const myIndex = statuses.findIndex(s => s.userId === user.id);
+    if (myIndex === -1) {
+      // No status yet — add placeholder at front
       return [
         { userId: user.id, userName: t('status_feed.you'), userAvatar: user.avatar, statuses: [], hasUnviewed: false },
         ...statuses,
       ];
     }
-    return statuses;
+    if (myIndex === 0) return statuses;
+    // Move my status to front
+    const reordered = [...statuses];
+    const [myGroup] = reordered.splice(myIndex, 1);
+    reordered.unshift(myGroup);
+    return reordered;
   }, [statuses, user]);
 
   // Reserve space even when empty to prevent layout shift

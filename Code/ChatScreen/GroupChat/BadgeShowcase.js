@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { getThemeColors } from '../../Helper/themeColors';
-import { View, Text } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER } from './badgeUtils';
+import { BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES } from './badgeUtils';
 
 /**
  * Badge Showcase — shows earned badge pills on profile
@@ -65,7 +65,11 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {} }) => {
                 backgroundColor: isDarkMode ? badge.bgDark : badge.bgLight,
               }}
             >
-              <Text style={{ fontSize: 10 }}>{badge.emoji}</Text>
+              {BADGE_IMAGES[id] ? (
+                <Image source={BADGE_IMAGES[id]} resizeMode="contain" style={[{ width: 12, height: 12 }, isDarkMode && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
+              ) : (
+                <Text style={{ fontSize: 10 }}>{badge.emoji}</Text>
+              )}
               <Text style={{ fontSize: 9, fontWeight: '700', color: badge.color }}>
                 {badge.name}
               </Text>

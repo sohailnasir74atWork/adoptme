@@ -335,8 +335,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   inlineIcon: {
-    width: 13,
-    height: 13,
+    width: 11,
+    height: 11,
   },
   copyBtn: {
     padding: 2,

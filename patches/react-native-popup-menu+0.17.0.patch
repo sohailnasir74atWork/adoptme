@@ -1,8 +1,17 @@
 diff --git a/node_modules/react-native-popup-menu/src/MenuProvider.js b/node_modules/react-native-popup-menu/src/MenuProvider.js
-index f3efd35..60a244d 100644
+index f3efd35..9b42c00 100644
 --- a/node_modules/react-native-popup-menu/src/MenuProvider.js
 +++ b/node_modules/react-native-popup-menu/src/MenuProvider.js
-@@ -296,7 +296,7 @@ export default class MenuProvider extends Component {
+@@ -1,6 +1,7 @@
+ import React, { Component, createContext } from 'react';
+ import PropTypes from 'prop-types';
+-import { View, BackHandler, SafeAreaView, StyleSheet } from 'react-native';
++import { View, BackHandler, StyleSheet } from 'react-native';
++import { SafeAreaView } from 'react-native-safe-area-context';
+ 
+ import { withContext } from './with-context';
+ import makeMenuRegistry from './menuRegistry';
+@@ -296,7 +297,7 @@ export default class MenuProvider extends Component {
      const { renderer, rendererProps } = instance.props;
      const windowLayout = this._ownLayout;
      const safeAreaLayout = this._safeAreaLayout;

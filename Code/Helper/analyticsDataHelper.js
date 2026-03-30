@@ -117,7 +117,7 @@ const normalizeDiffItem = (item) => {
     return { oldVal: primaryOld, newVal: primaryNew, pct };
 };
 
-export const normalizeName = (name) => (name || '').toLowerCase().trim();
+export const normalizeName = (name) => (typeof name === 'string' ? name : String(name || '')).toLowerCase().trim();
 
 const isCacheFresh = (tsKey) => {
     const ts = analyticsCache.getNumber(tsKey);

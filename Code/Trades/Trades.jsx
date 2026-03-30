@@ -22,7 +22,7 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { getCachedProfile, warmProfileCache } from '../Helper/profileCache';
-import { BADGE_IMAGES } from '../ChatScreen/GroupChat/badgeUtils';
+import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { acceptTrade, saveTrade, unsaveTrade, fetchSavedTradeRefs } from './tradeHelpers';
 import {
@@ -1322,9 +1322,6 @@ const TradeList = ({ route }) => {
                   const hasRecentWin = !!item?.hasRecentGameWin || (typeof item?.lastGameWinAt === 'number' && Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
                   return hasRecentWin ? <Image source={require('../../assets/trophy.webp')} style={badgeStyles.inlineIcon} /> : null;
                 })()}
-                {/* {item.topBadge && BADGE_IMAGES[item.topBadge] && (
-                  <Image source={BADGE_IMAGES[item.topBadge]} style={{ width: 14, height: 14, borderRadius: 7 }} />
-                )} */}
                 {item.rating ? (
                   <View style={badgeStyles.ratingBadge}>
                     <Icon name="star" size={7} color="white" />
@@ -1606,7 +1603,11 @@ const TradeList = ({ route }) => {
                       try {
                         await saveTrade(appdatabase, user.id, item);
                         setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'saved' } }));
-                        showSuccessMessage('🔖 ' + t('trade.saved', { defaultValue: 'Saved!' }), t('trade.saved_msg', { defaultValue: 'View in My Stuff → Active Trades' }));
+                        Alert.alert(
+                          '🔖 ' + t('trade.saved', { defaultValue: 'Trade Saved!' }),
+                          t('trade.saved_guide', { defaultValue: 'This trade has been saved to My Stuff → Active Trades → Saved tab.\n\nFrom there you can:\n• View the trader\'s Roblox username & copy it\n• Chat with the trader\n• Ping the trader when you\'re ready\n• Complete the trade when done' }),
+                          [{ text: t('trade.got_it', { defaultValue: 'Got it!' }) }]
+                        );
                       } catch (e) {
                         showErrorMessage(t('home.alert.error'), e?.message || 'Error');
                       }
@@ -1626,18 +1627,35 @@ const TradeList = ({ route }) => {
                       showSuccessMessage('✅', t('trade.already_accepted', { defaultValue: 'Already accepted!' }));
                       return;
                     }
+                    // Confirmation alert before accepting
+                    Alert.alert(
+                      '🤝 ' + t('trade.accept_trade', { defaultValue: 'Accept This Trade?' }),
+                      t('trade.accept_confirm_guide', { defaultValue: 'Are you sure you want to accept this trade?\n\nOnce accepted, the trader will be notified. You can find this trade in My Stuff → Active Trades → Accepted tab.\n\nFrom there you can:\n• See the trader\'s Roblox username to join their game\n• Chat with the trader to coordinate\n• Ping the trader when you\'re ready to trade' }),
+                      [
+                        { text: t('chat.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+                        {
+                          text: t('trade.yes_accept', { defaultValue: 'Yes, Accept' }),
+                          onPress: async () => {
                     // Optimistic UI — show accepted state immediately
                     triggerHapticFeedback('impactMedium');
                     setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'accepted' } }));
                     try {
                       await acceptTrade(appdatabase, firestoreDB, user.id, user.displayName || 'Someone', item, { avatar: user.avatar || '', robloxUsername: user.robloxUsername || '' });
                       triggerHapticFeedback('notificationSuccess');
-                      showSuccessMessage('🤝 ' + t('trade.accepted', { defaultValue: 'Accepted!' }), t('trade.accepted_msg', { defaultValue: 'Trader notified! View in My Stuff → Active Trades' }));
+                      Alert.alert(
+                        '✅ ' + t('trade.accepted', { defaultValue: 'Trade Accepted!' }),
+                        t('trade.accepted_guide', { defaultValue: 'The trader has been notified!\n\nHead to My Stuff → Active Trades → Accepted tab to:\n• Copy the trader\'s Roblox username\n• Chat with them to set up the trade\n• Ping them when you\'re online and ready' }),
+                        [{ text: t('trade.got_it', { defaultValue: 'Got it!' }) }]
+                      );
                     } catch (e) {
                       // Revert optimistic update on failure
                       setSavedTradeRefs(prev => { const next = { ...prev }; delete next[tradeId]; return next; });
                       showErrorMessage(t('home.alert.error'), e?.message || 'Error');
                     }
+                          }
+                        }
+                      ]
+                    );
                   }}
                   style={[styles.acceptBtn, savedTradeRefs[item.id]?.type === 'accepted' && { backgroundColor: '#10B981' }]}
                 >
@@ -2462,8 +2480,8 @@ const getStyles = (isDarkMode, c) => {
 
 const badgeStyles = StyleSheet.create({
   inlineIcon: {
-    width: 10,
-    height: 10,
+    width: 11,
+    height: 11,
   },
   roleBadge: {
     flexDirection: 'row',

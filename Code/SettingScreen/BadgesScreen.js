@@ -18,7 +18,7 @@ import Share from 'react-native-share';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../GlobelStats';
 import {
-  BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, computeBadges,
+  BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES, computeBadges,
 } from '../ChatScreen/GroupChat/badgeUtils';
 import {
   LEVELS, XP_ACTIONS, getLevelFromXP, getNextLevel, getXPProgress, getUserXP,
@@ -118,10 +118,15 @@ const BadgeCard = ({ badgeId, earned, isDark }) => {
         opacity: earned ? 1 : 0.5,
       },
     ]}>
-      <View style={{ marginBottom: 4 }}>
-        <Text style={{ fontSize: 28, opacity: earned ? 1 : 0.3 }}>
-          {earned ? badge.emoji : '🔒'}
-        </Text>
+      <View style={[{
+        marginBottom: 4, width: 48, height: 48, borderRadius: 24,
+        alignItems: 'center', justifyContent: 'center',
+      }, earned && { backgroundColor: badge.color + '20' }]}>
+        {earned && BADGE_IMAGES[badgeId] ? (
+          <Image source={BADGE_IMAGES[badgeId]} style={[{ width: 36, height: 36 }, isDark && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
+        ) : (
+          <Text style={{ fontSize: 28, opacity: 0.3 }}>🔒</Text>
+        )}
       </View>
       <Text style={[s.badgeName, { color: earned ? badge.color : (isDark ? '#475569' : '#94a3b8') }]} numberOfLines={1}>
         {badge.name}
@@ -450,7 +455,11 @@ const BadgesScreen = ({ navigation }) => {
                         const badge = BADGE_DEFINITIONS[id];
                         return (
                           <View key={id} style={[s.shareCardBadge, { backgroundColor: badge.bgLight, borderColor: badge.color + '40' }]}>
-                            <Text style={{ fontSize: 22 }}>{badge.emoji}</Text>
+                            {BADGE_IMAGES[id] ? (
+                              <Image source={BADGE_IMAGES[id]} style={{ width: 28, height: 28 }} />
+                            ) : (
+                              <Text style={{ fontSize: 22 }}>{badge.emoji}</Text>
+                            )}
                             <Text style={[s.shareCardBadgeName, { color: badge.color }]}>{badge.name}</Text>
                           </View>
                         );

@@ -33,6 +33,7 @@ import MessageActionDrawer from './MessageActionDrawer';
 import { resolveProfile, seedFromMessage } from '../../Helper/profileCache';
 
 import FramedAvatar from './FramedAvatar';
+import { BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
 
 
 const MessagesList = ({
@@ -513,7 +514,7 @@ const MessagesList = ({
 
                   {/* Timestamp inside bubble — WhatsApp style */}
                   <Text style={{
-                    fontSize: 10,
+                    fontSize: 9,
                     color: item.senderId === user?.id
                       ? (isDarkMode ? '#ffffffaa' : '#00000066')
                       : (isDarkMode ? '#ffffff77' : '#00000055'),

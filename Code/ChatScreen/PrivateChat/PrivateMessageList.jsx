@@ -468,11 +468,11 @@ const PrivateMessageList = ({
               isMultiColorText(profile?.chatTextColor)
                 ? <RainbowText
                     colors={getMultiColorPalette(profile.chatTextColor)}
-                    style={[{ fontSize: 15, color: c.text, lineHeight: 20 }]}
+                    style={[{ fontSize: 12, color: c.text, lineHeight: 20 }]}
                   >{item.text}</RainbowText>
                 : <Text
                     style={[
-                      { fontSize: 15, color: c.text, lineHeight: 20 },
+                      { fontSize: 12, color: c.text, lineHeight: 20 },
                       profile?.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile?.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
                     ]}
                   >
@@ -528,7 +528,7 @@ const PrivateMessageList = ({
           {/* Timestamp + Read receipts inside bubble — WhatsApp style */}
           <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 2, gap: 3 }}>
             <Text style={{
-              fontSize: 10,
+              fontSize: 9,
               color: isMyMessage
                 ? (isDarkMode ? '#ffffffaa' : '#00000066')
                 : (isDarkMode ? '#ffffff77' : '#00000055'),

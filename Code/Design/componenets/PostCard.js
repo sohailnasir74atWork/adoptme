@@ -18,7 +18,7 @@ import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
 import { banUserwithEmail as banUtils } from '../../ChatScreen/utils';
 import { useTranslation } from 'react-i18next';
-import { BADGE_IMAGES } from '../../ChatScreen/GroupChat/badgeUtils';
+import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
 
@@ -187,9 +187,6 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
                 <Image source={require('../../../assets/trophy.webp')} style={s.badge} />
               ) : null;
             })()}
-            {/* {item.topBadge && BADGE_IMAGES[item.topBadge] && (
-              <Image source={BADGE_IMAGES[item.topBadge]} style={{ width: 14, height: 14, borderRadius: 7 }} />
-            )} */}
             {(() => {
               const p = getCachedProfile(item.userId) || {};
               const pIsAdmin = p.isAdmin ?? item.isAdmin;
@@ -483,8 +480,8 @@ const getStyles = (isDark) =>
       borderColor: config.colors.primary,
     },
     badge: {
-      width: 10,
-      height: 10,
+      width: 11,
+      height: 11,
     },
     roleBadge_admin: {
       flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444',

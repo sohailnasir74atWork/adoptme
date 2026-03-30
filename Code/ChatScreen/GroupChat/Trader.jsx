@@ -25,7 +25,7 @@ import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { onValue, ref, remove, get, set, push, child, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
+import database, { onValue, ref, remove, get, set, push, child, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt, serverTimestamp } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
@@ -783,7 +783,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
       await push(chatRef, {
         text: trimmedInput || null,
-        timestamp: database.ServerValue.TIMESTAMP,
+        timestamp: serverTimestamp(),
         senderId: user.id,
         sender: user.displayName || t('chat.anonymous'),
         // Only include truthy profile fields (saves ~50-200 bytes per message)
@@ -863,7 +863,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                   onPress={() => handleChannelSwitch(channel)}
                   activeOpacity={0.8}
                 >
-                  <Text style={{ fontSize: 14, marginRight: 5 }}>{channel.flag}</Text>
+                  <Text style={{ fontSize: 13, marginRight: 5 }}>{channel.flag}</Text>
                   <Text
                     style={[
                       channelTabStyles.pillText,
@@ -1012,12 +1012,12 @@ const channelTabStyles = RNStyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 2,
+    borderRadius: 6,
     borderWidth: 1,
   },
   pillText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: '500',
   },
   pillTextActive: {

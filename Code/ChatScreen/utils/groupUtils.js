@@ -798,7 +798,7 @@ export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messag
       await update(ref(appdatabase, '/'), incrementUpdates);
     }
 
-    return { success: true };
+    return { success: true, messageKey: newMessageRef.key, timestamp };
   } catch (error) {
     console.error('Error sending group message:', error);
     return { success: false, error: error.message || 'Failed to send message' };

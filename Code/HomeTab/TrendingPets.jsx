@@ -83,6 +83,7 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
   const { t } = useTranslation();
   const [gainers, setGainers] = useState([]);
   const [losers, setLosers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [fetchGen, setFetchGen] = useState(0); // bumped after CDN fetch seeds cache
 
   // Fetch from CDN if cache is empty or stale (4 hours) — works for all users including logged-out
@@ -91,10 +92,12 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
     const cached = analyticsCache?.getString(CHANGES_CACHE_KEY);
     const cachedTs = analyticsCache?.getNumber('value_changes_ts');
     const isFresh = cached && cachedTs && (Date.now() - cachedTs < FOUR_HOURS_MS);
-    if (!isFresh) {
+    if (isFresh) {
+      setFetchGen(g => g + 1);
+    } else {
       fetchAnalyticsData()
         .then(() => setFetchGen(g => g + 1))
-        .catch(() => {});
+        .catch(() => setLoading(false));
     }
   }, []);
 
@@ -121,11 +124,12 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
   };
 
   useEffect(() => {
-    if (Object.keys(petMap).length === 0) return;
+    // Don't process until CDN fetch completes or cache is confirmed fresh
+    if (fetchGen === 0) return;
 
     try {
       const cachedChanges = analyticsCache?.getString(CHANGES_CACHE_KEY);
-      if (!cachedChanges) return;
+      if (!cachedChanges) { setLoading(false); return; }
 
       const changesData = JSON.parse(cachedChanges);
       const rawList = Array.isArray(changesData?.changed) ? changesData.changed
@@ -136,7 +140,7 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
       const losersList = [];
 
       rawList.forEach((item) => {
-        const name = (item.name || '').toLowerCase().trim();
+        const name = String(item.name || '').toLowerCase().trim();
         if (!name) return;
 
         const change = getPrimaryChange(item);
@@ -165,10 +169,12 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
       setLosers(losersList.slice(0, 3));
     } catch (err) {
       console.warn('[TrendingPets] Error:', err.message);
+    } finally {
+      setLoading(false);
     }
   }, [petMap, fetchGen]);
 
-  if (gainers.length === 0 && losers.length === 0) return null;
+  if (!loading && gainers.length === 0 && losers.length === 0) return null;
 
   return (
     <View style={styles.section}>
@@ -189,6 +195,25 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {loading ? (
+        <View style={styles.listsRow}>
+          {[0, 1].map((col) => (
+            <View key={col} style={[styles.listCard, { backgroundColor: isDarkMode ? '#1a2332' : col === 0 ? '#F0FDF4' : '#FEF2F2' }]}>
+              <View style={styles.listHeader}>
+                <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#ddd' }} />
+                <View style={{ width: 40, height: 12, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#ddd' }} />
+              </View>
+              {[0, 1, 2].map((row) => (
+                <View key={row} style={[styles.miniRow, { backgroundColor: isDarkMode ? '#1C1C1E' : '#fff' }]}>
+                  <View style={[styles.miniImage, { backgroundColor: isDarkMode ? '#333' : '#f0f0f0' }]} />
+                  <View style={{ flex: 1, height: 10, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
+                  <View style={{ width: 30, height: 10, borderRadius: 3, marginLeft: 4, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      ) : (
       <View style={styles.listsRow}>
         {/* 🔥 Hot / Gainers */}
         {gainers.length > 0 && (
@@ -216,6 +241,7 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
           </View>
         )}
       </View>
+      )}
     </View>
   );
 };

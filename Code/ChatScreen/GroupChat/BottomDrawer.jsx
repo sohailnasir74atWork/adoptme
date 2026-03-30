@@ -53,7 +53,7 @@ import ProfileReviewsSection from './ProfileReviewsSection';
 import ProfileTradesSection from './ProfileTradesSection';
 import ProfilePostsSection from './ProfilePostsSection';
 import BadgeShowcase from './BadgeShowcase';
-import { computeBadges, checkInfluencerBadge } from './badgeUtils';
+import { computeBadges, checkInfluencerBadge, BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
 import XPBar from '../../Engagement/XPBar';
 import { getUserXP } from '../../Engagement/xpUtils';
 import FramedAvatar from './FramedAvatar';
@@ -754,7 +754,7 @@ const ProfileBottomDrawer = ({
       Alert.alert("Error", "User email not found.");
       return;
     }
-    setReasonActionType({ type: 'strike', value: strikeCount });
+    setReasonActionType({ type: 'strike', value: strikeCount, email: mergedUser.email });
     setAdminReason('');
     toggleModal();
     setShowReasonModal(true);
@@ -779,7 +779,7 @@ const ProfileBottomDrawer = ({
       Alert.alert("Error", "User email not found.");
       return;
     }
-    setReasonActionType({ type: 'mute', value: minutes });
+    setReasonActionType({ type: 'mute', value: minutes, email: mergedUser.email });
     setAdminReason('');
     toggleModal();
     setShowReasonModal(true);
@@ -804,7 +804,7 @@ const ProfileBottomDrawer = ({
       Alert.alert("Error", "User email not found.");
       return;
     }
-    setReasonActionType({ type: 'ban' });
+    setReasonActionType({ type: 'ban', email: mergedUser.email });
     setAdminReason('');
     toggleModal();
     setShowReasonModal(true);
@@ -1057,7 +1057,7 @@ const ProfileBottomDrawer = ({
 
   // Reset when drawer closes
   useEffect(() => {
-    if (!isVisible) {
+    if (!isVisible && !showReasonModal) {
       setLoadDetails(false);
       setRatingSummary(null);
       setUserBio(null);
@@ -1079,7 +1079,7 @@ const ProfileBottomDrawer = ({
       setLastTradeDoc(null);
       setHasMoreTrades(false);
     }
-  }, [isVisible]);
+  }, [isVisible, showReasonModal]);
 
   // ─────────────────────────────────────────────
   // Load rating summary + joined

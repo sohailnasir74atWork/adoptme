@@ -2752,7 +2752,7 @@ export default function SettingsScreen({ selectedTheme }) {
                       borderRadius: 4
                     }}>
                       <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>
-                        {user?.robloxUsernameVerified ? t('settings.verified') : t('settings.unverified')}
+                        {user?.robloxUsernameVerified ? t('profile.verified') : t('profile.unverified')}
                       </Text>
                     </View>
                   )}

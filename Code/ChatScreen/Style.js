@@ -49,7 +49,7 @@ export const getStyles = (isDarkMode) => {
       marginHorizontal: 5,
     },
     senderNameText: {
-      fontSize: 12,
+      fontSize: 10,
       fontWeight: 'bold',
       color: 'grey',
     },
@@ -65,7 +65,7 @@ export const getStyles = (isDarkMode) => {
 
     },
     myMessageText: {
-      fontSize: 15,
+      fontSize: 12,
       color: c.text,
       backgroundColor: isDarkMode ? '#0B5E3F' : '#DCF8C6',
       paddingVertical: 6,
@@ -75,7 +75,7 @@ export const getStyles = (isDarkMode) => {
       lineHeight: 20,
     },
     otherMessageText: {
-      fontSize: 15,
+      fontSize: 12,
       color: c.text,
       backgroundColor: c.bgAlt,
       paddingHorizontal: 10,
@@ -85,21 +85,21 @@ export const getStyles = (isDarkMode) => {
       lineHeight: 20,
     },
     myMessageTextOnly: {
-      fontSize: 15,
+      fontSize: 12,
       color: c.text,
 
       lineHeight: 20,
       textAlign: 'left',
     },
     otherMessageTextOnly: {
-      fontSize: 15,
+      fontSize: 12,
       color: c.text,
 
       lineHeight: 20,
       textAlign: 'left',
     },
     timestamp: {
-      fontSize: 10,
+      fontSize: 9,
       color: c.textMuted,
       textAlign: 'right',
       paddingHorizontal: 5
@@ -483,19 +483,19 @@ export const getStyles = (isDarkMode) => {
 
     userNameText: {
       color: c.textMuted,
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '600',
       lineHeight: 16,
     },
     userNameAdmin: {
       color: c.textMuted,
-      fontSize: 11,
+      fontSize: 10,
       lineHeight: 14,
     },
 
     icon: {
-      width: 10,
-      height: 10,
+      width: 11,
+      height: 11,
     },
 
     roleBadge: {

@@ -34,6 +34,9 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+dayjs.extend(relativeTime);
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PET_CARD_SIZE = (SCREEN_WIDTH - 64) / 3;
@@ -103,6 +106,45 @@ const TradeJournal = ({
   const [savedDrawerTrade, setSavedDrawerTrade] = useState(null);
   const [savedDrawerVisible, setSavedDrawerVisible] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState('mine'); // 'mine' | 'saved'
+  const highlightTradeId = route.params?.highlightTradeId || null;
+  const highlightHandledRef = useRef(false);
+
+  // When arriving from a notification with highlightTradeId, fetch ONLY that trade
+  useEffect(() => {
+    if (!highlightTradeId || !firestoreDB) return;
+    highlightHandledRef.current = false;
+    setTab('active');
+    setActiveSubTab('mine');
+    setHasMoreActive(false);
+    setLoading(true);
+    (async () => {
+      try {
+        const snap = await getDoc(doc(firestoreDB, 'trades_new', highlightTradeId));
+        if (snap.exists()) {
+          const trade = { id: snap.id, ...snap.data() };
+          setActiveTrades([trade]);
+          // Fetch acceptor count + open acceptor list for this trade
+          fetchAcceptorCounts([trade]);
+          openAcceptorList(highlightTradeId);
+        }
+      } catch (e) {
+        console.warn('[TradeJournal] fetch highlighted trade error:', e?.message);
+      } finally {
+        setLoading(false);
+        highlightHandledRef.current = true;
+        navigation.setParams({ highlightTradeId: undefined, initialTab: undefined });
+      }
+    })();
+  }, [highlightTradeId, firestoreDB]);
+
+  // Sync tab when navigating from notification without highlightTradeId
+  useEffect(() => {
+    const paramTab = route.params?.initialTab;
+    if (paramTab && !highlightTradeId && TABS.some(t => t.key === paramTab)) {
+      setTab(paramTab);
+      navigation.setParams({ initialTab: undefined });
+    }
+  }, [route.params?.initialTab]);
   const [acceptorCounts, setAcceptorCounts] = useState({}); // { tradeId: count }
   const [acceptorListTradeId, setAcceptorListTradeId] = useState(null); // trade ID for acceptors modal
   const [acceptorList, setAcceptorList] = useState([]); // array of acceptor objects for modal
@@ -394,6 +436,8 @@ const TradeJournal = ({
 
   useEffect(() => {
     if (visible) {
+      // Skip full fetch if we're handling a highlighted trade from notification
+      if (highlightTradeId) return;
       // Reset cursors for server-side pagination
       activeLastDocRef.current = null;
       setHasMoreActive(true);
@@ -415,6 +459,7 @@ const TradeJournal = ({
   useEffect(() => {
     if (activeTrades.length > 0) fetchAcceptorCounts(activeTrades);
   }, [activeTrades, fetchAcceptorCounts]);
+
 
   // ── Save pets to Firestore ──
   // 📅 2026-03-13: Dual-write to user_profiles (new primary) + reviews (backward compat).
@@ -1006,14 +1051,18 @@ const TradeJournal = ({
     );
   };
 
-  const acceptedTrades = useMemo(() => savedTrades.filter(t => t._savedRef?.type === 'accepted'), [savedTrades]);
+  // Trades I accepted from others (no need for "others accepted mine" — those already show in My Trades with acceptor badge)
+  const iAcceptedTrades = useMemo(() =>
+    savedTrades.filter(t => t._savedRef?.type === 'accepted').map(t => ({ ...t, _acceptType: 'i_accepted' })),
+    [savedTrades]
+  );
   const bookmarkedTrades = useMemo(() => savedTrades.filter(t => t._savedRef?.type === 'saved'), [savedTrades]);
 
   const renderActiveSubTabPills = () => (
     <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, paddingHorizontal: 12, paddingTop: 4 }}>
       {[
         { key: 'mine', label: t('trade_journal.active.my_trades', { defaultValue: 'My Trades' }), icon: '📌', color: '#3B82F6', count: activeTrades.length },
-        { key: 'accepted', label: t('trade_journal.active.accepted_tab', { defaultValue: 'Accepted' }), icon: '🤝', color: '#10B981', count: acceptedTrades.length },
+        { key: 'accepted', label: t('trade_journal.active.accepted_tab', { defaultValue: 'Accepted' }), icon: '🤝', color: '#10B981', count: iAcceptedTrades.length },
         { key: 'saved', label: t('trade_journal.active.saved_tab', { defaultValue: 'Saved' }), icon: '🔖', color: '#F59E0B', count: bookmarkedTrades.length },
       ].map(pill => (
         <TouchableOpacity
@@ -1054,8 +1103,27 @@ const TradeJournal = ({
             const isEditing = completing === item.id + '_edit';
             const isCompleting = completing === item.id || isEditing;
 
+            const tradeDate = item.timestamp?.toDate
+              ? dayjs(item.timestamp.toDate()).fromNow()
+              : item.timestamp?.seconds
+                ? dayjs(item.timestamp.seconds * 1000).fromNow()
+                : null;
+
             return (
-              <View style={[styles.activeCard, { backgroundColor: cardBg }]}>
+              <View style={[styles.activeCard, {
+                backgroundColor: isDarkMode ? '#131a2e' : '#eff6ff',
+                marginBottom: 10,
+                borderWidth: 1, borderColor: isDarkMode ? '#3B82F630' : '#3B82F625', borderRadius: 14,
+                shadowColor: '#3B82F6',
+                shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDarkMode ? 0.3 : 0.08, shadowRadius: 6,
+                elevation: 3,
+              }]}>
+                {/* Trade age */}
+                {tradeDate && (
+                  <Text style={{ fontSize: 11, color: subtextColor, marginBottom: 6 }}>
+                    {tradeDate}
+                  </Text>
+                )}
                 {/* Trade visual */}
                 <View style={styles.tlTradeVisual}>
                   <View style={styles.tlSide}>
@@ -1273,7 +1341,7 @@ const TradeJournal = ({
           }
         />
       ) : activeSubTab === 'accepted' ? (
-        renderSavedTradesSection(acceptedTrades, 'accepted')
+        renderSavedTradesSection(iAcceptedTrades, 'accepted')
       ) : (
         renderSavedTradesSection(bookmarkedTrades, 'saved')
       )}
@@ -1301,14 +1369,43 @@ const TradeJournal = ({
       );
     }
     return (
-      <View style={{ paddingHorizontal: 12, paddingTop: 4 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={{ paddingHorizontal: 12 }}>
         {tradeList.map(item => {
           const savedRef = item._savedRef || {};
           const isAccepted = savedRef.type === 'accepted';
           const isDeleted = item._deleted;
+          const isIAccepted = item._acceptType === 'i_accepted';
+
+          // Card styling
+          const cardBackground = isIAccepted
+            ? (isDarkMode ? '#131a2e' : '#eff6ff') // subtle blue tint
+            : cardBg;
+
+          const cardBorder = isIAccepted
+            ? (isDarkMode ? '#3B82F630' : '#3B82F625')
+            : (isDarkMode ? '#334155' : '#e2e8f0');
+
+          // Trade creation date
+          const tradeDate = item.timestamp?.toDate
+            ? dayjs(item.timestamp.toDate()).fromNow()
+            : item.timestamp?.seconds
+              ? dayjs(item.timestamp.seconds * 1000).fromNow()
+              : null;
+
+          // Acceptance date
+          const acceptDate = savedRef.savedAt
+            ? dayjs(savedRef.savedAt).fromNow()
+            : null;
 
           return (
-            <View key={item.id} style={[styles.activeCard, { backgroundColor: cardBg, marginBottom: 8, opacity: isDeleted ? 0.5 : 1 }]}>
+            <View key={`${item._acceptType || 'saved'}_${item.id}`} style={[styles.activeCard, {
+              backgroundColor: cardBackground, marginBottom: 10, opacity: isDeleted ? 0.5 : 1,
+              borderWidth: 1, borderColor: cardBorder, borderRadius: 14,
+              shadowColor: isIAccepted ? '#3B82F6' : '#000',
+              shadowOffset: { width: 0, height: 2 }, shadowOpacity: isDarkMode ? 0.3 : 0.08, shadowRadius: 6,
+              elevation: 3,
+            }]}>
               {isDeleted ? (
                 <View style={{ alignItems: 'center', paddingVertical: 16 }}>
                   <Text style={{ fontSize: 24 }}>🚫</Text>
@@ -1329,18 +1426,38 @@ const TradeJournal = ({
                 </View>
               ) : (
                 <>
-                  {/* Badge */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <View style={{ backgroundColor: isAccepted ? '#10B98118' : '#3B82F618', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={{ fontSize: 10 }}>{isAccepted ? '🤝' : '🔖'}</Text>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: isAccepted ? '#10B981' : '#3B82F6' }}>
-                        {isAccepted ? t('trade.accepted_short', { defaultValue: 'Accepted' }) : t('trade.saved', { defaultValue: 'Saved' })}
+                  {/* Badge + Date row */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <View style={{
+                        backgroundColor: isIAccepted ? '#3B82F618' : '#3B82F618',
+                        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                      }}>
+                        <Text style={{ fontSize: 10 }}>{isAccepted ? '🤝' : '🔖'}</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#3B82F6' }}>
+                          {isAccepted
+                            ? t('trade.i_accepted', { defaultValue: 'You accepted' })
+                            : t('trade.saved', { defaultValue: 'Saved' })}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: subtextColor, flexShrink: 1 }} numberOfLines={1}>
+                        {`${t('trade_journal.active.from', { defaultValue: 'from' })} ${savedRef.traderName || item.traderName || 'Unknown'}`}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: subtextColor }}>
-                      {t('trade_journal.active.from', { defaultValue: 'from' })} {savedRef.traderName || item.traderName || 'Unknown'}
-                    </Text>
+                    {tradeDate && (
+                      <Text style={{ fontSize: 10, color: subtextColor, marginLeft: 6 }}>
+                        {tradeDate}
+                      </Text>
+                    )}
                   </View>
+
+                  {/* Accepted date */}
+                  {acceptDate && isIAccepted && (
+                    <Text style={{ fontSize: 10, color: subtextColor, marginBottom: 4 }}>
+                      {t('trade.accepted_time', { defaultValue: 'Accepted' })} {acceptDate}
+                    </Text>
+                  )}
 
                   {/* Trade visual */}
                   <View style={styles.tlTradeVisual}>
@@ -1392,176 +1509,178 @@ const TradeJournal = ({
                     </TouchableOpacity>
                   )}
 
-                  {/* Trade visual — show editable version when editing */}
+                  {/* Action buttons */}
                   {(() => {
-                    const isEditing = completing === item.id + '_edit';
-                    const isCompleting = completing === item.id || isEditing;
+                      const isEditing = completing === item.id + '_edit';
+                      const isCompleting = completing === item.id || isEditing;
 
-                    if (isCompleting) {
-                      return (
-                        <View style={{ marginTop: 8 }}>
-                          {/* Editable pet rows when in edit mode */}
-                          {isEditing && (
-                            <View style={styles.tlTradeVisual}>
-                              <View style={styles.tlSide}>
-                                <Text style={[styles.tlSideLabel, { color: '#EF4444' }]}>{t('trade_journal.active.i_give')}</Text>
-                                <View style={[styles.tlPetBubbles, { flexWrap: 'wrap', gap: 4 }]}>
-                                  {editGave.map((pet, idx) => (
-                                    <TouchableOpacity key={`eg-${idx}`} onPress={() => removeEditItem('gave', idx)}>
-                                      <Image source={{ uri: getImgUrl(pet.image || pet.Image) }} style={[styles.tlPetImg, { opacity: 0.8 }]} resizeMode="contain" />
+                      if (isCompleting) {
+                        return (
+                          <View style={{ marginTop: 8 }}>
+                            {/* Editable pet rows when in edit mode */}
+                            {isEditing && (
+                              <View style={styles.tlTradeVisual}>
+                                <View style={styles.tlSide}>
+                                  <Text style={[styles.tlSideLabel, { color: '#EF4444' }]}>{t('trade_journal.active.i_give')}</Text>
+                                  <View style={[styles.tlPetBubbles, { flexWrap: 'wrap', gap: 4 }]}>
+                                    {editGave.map((pet, idx) => (
+                                      <TouchableOpacity key={`eg-${idx}`} onPress={() => removeEditItem('gave', idx)}>
+                                        <Image source={{ uri: getImgUrl(pet.image || pet.Image) }} style={[styles.tlPetImg, { opacity: 0.8 }]} resizeMode="contain" />
+                                      </TouchableOpacity>
+                                    ))}
+                                    <TouchableOpacity
+                                      style={styles.addPetBtn}
+                                      onPress={() => {
+                                        preEditSnapshotRef.current = [...ownedPets];
+                                        setEditPickerSide('gave');
+                                        setPetPickerMode('owned');
+                                        setShowPetPicker(true);
+                                      }}
+                                    >
+                                      <FontAwesome name="plus" size={10} color="#EF4444" />
                                     </TouchableOpacity>
-                                  ))}
-                                  <TouchableOpacity
-                                    style={styles.addPetBtn}
-                                    onPress={() => {
-                                      preEditSnapshotRef.current = [...ownedPets];
-                                      setEditPickerSide('gave');
-                                      setPetPickerMode('owned');
-                                      setShowPetPicker(true);
-                                    }}
-                                  >
-                                    <FontAwesome name="plus" size={10} color="#EF4444" />
-                                  </TouchableOpacity>
+                                  </View>
+                                </View>
+                                <View style={styles.tlArrowWrap}>
+                                  <FontAwesome name="arrow-right-arrow-left" size={12} color={subtextColor} />
+                                </View>
+                                <View style={[styles.tlSide, { alignItems: 'flex-end' }]}>
+                                  <Text style={[styles.tlSideLabel, { color: '#10B981' }]}>{t('trade_journal.active.i_get')}</Text>
+                                  <View style={[styles.tlPetBubbles, { justifyContent: 'flex-end', flexWrap: 'wrap', gap: 4 }]}>
+                                    {editGot.map((pet, idx) => (
+                                      <TouchableOpacity key={`egt-${idx}`} onPress={() => removeEditItem('got', idx)}>
+                                        <Image source={{ uri: getImgUrl(pet.image || pet.Image) }} style={[styles.tlPetImg, { opacity: 0.8 }]} resizeMode="contain" />
+                                      </TouchableOpacity>
+                                    ))}
+                                    <TouchableOpacity
+                                      style={styles.addPetBtn}
+                                      onPress={() => {
+                                        preEditSnapshotRef.current = [...ownedPets];
+                                        setEditPickerSide('got');
+                                        setPetPickerMode('owned');
+                                        setShowPetPicker(true);
+                                      }}
+                                    >
+                                      <FontAwesome name="plus" size={10} color="#10B981" />
+                                    </TouchableOpacity>
+                                  </View>
                                 </View>
                               </View>
-                              <View style={styles.tlArrowWrap}>
-                                <FontAwesome name="arrow-right-arrow-left" size={12} color={subtextColor} />
-                              </View>
-                              <View style={[styles.tlSide, { alignItems: 'flex-end' }]}>
-                                <Text style={[styles.tlSideLabel, { color: '#10B981' }]}>{t('trade_journal.active.i_get')}</Text>
-                                <View style={[styles.tlPetBubbles, { justifyContent: 'flex-end', flexWrap: 'wrap', gap: 4 }]}>
-                                  {editGot.map((pet, idx) => (
-                                    <TouchableOpacity key={`egt-${idx}`} onPress={() => removeEditItem('got', idx)}>
-                                      <Image source={{ uri: getImgUrl(pet.image || pet.Image) }} style={[styles.tlPetImg, { opacity: 0.8 }]} resizeMode="contain" />
-                                    </TouchableOpacity>
-                                  ))}
-                                  <TouchableOpacity
-                                    style={styles.addPetBtn}
-                                    onPress={() => {
-                                      preEditSnapshotRef.current = [...ownedPets];
-                                      setEditPickerSide('got');
-                                      setPetPickerMode('owned');
-                                      setShowPetPicker(true);
-                                    }}
-                                  >
-                                    <FontAwesome name="plus" size={10} color="#10B981" />
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
+                            )}
+
+                            {/* Rating selector */}
+                            <View style={styles.ratingRow}>
+                              {Object.entries(RESULT_META).map(([key, meta]) => (
+                                <TouchableOpacity
+                                  key={key}
+                                  style={[styles.ratingPill, selectedRating === key && { backgroundColor: meta.color + '22', borderColor: meta.color }]}
+                                  onPress={() => setSelectedRating(key)}
+                                >
+                                  <Text style={{ fontSize: 16 }}>{meta.emoji}</Text>
+                                  <Text style={[styles.ratingLabel, { color: textColor }]}>{t(meta.label)}</Text>
+                                </TouchableOpacity>
+                              ))}
                             </View>
-                          )}
 
-                          {/* Rating selector */}
-                          <View style={styles.ratingRow}>
-                            {Object.entries(RESULT_META).map(([key, meta]) => (
-                              <TouchableOpacity
-                                key={key}
-                                style={[styles.ratingPill, selectedRating === key && { backgroundColor: meta.color + '22', borderColor: meta.color }]}
-                                onPress={() => setSelectedRating(key)}
+                            {/* Save / Cancel */}
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                              <TouchableOpacity style={styles.cancelBtn}
+                                onPress={() => { setCompleting(null); setEditingTrade(null); }}
                               >
-                                <Text style={{ fontSize: 16 }}>{meta.emoji}</Text>
-                                <Text style={[styles.ratingLabel, { color: textColor }]}>{t(meta.label)}</Text>
+                                <Text style={{ color: subtextColor, fontWeight: '600', fontSize: 13 }}>{t('trade_journal.active.cancel')}</Text>
                               </TouchableOpacity>
-                            ))}
+                              <TouchableOpacity
+                                style={[styles.confirmBtn, { backgroundColor: RESULT_META[selectedRating].color }]}
+                                onPress={() => handleComplete(item, selectedRating)}
+                              >
+                                <Text style={styles.confirmBtnText}>{t('trade_journal.active.save_trade')}</Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
+                        );
+                      }
 
-                          {/* Save / Cancel */}
-                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                            <TouchableOpacity style={styles.cancelBtn}
-                              onPress={() => { setCompleting(null); setEditingTrade(null); }}
-                            >
-                              <Text style={{ color: subtextColor, fontWeight: '600', fontSize: 13 }}>{t('trade_journal.active.cancel')}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.confirmBtn, { backgroundColor: RESULT_META[selectedRating].color }]}
-                              onPress={() => handleComplete(item, selectedRating)}
-                            >
-                              <Text style={styles.confirmBtnText}>{t('trade_journal.active.save_trade')}</Text>
-                            </TouchableOpacity>
-                          </View>
+                      // Normal action buttons
+                      return (
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                          {/* Chat with trader — opens profile drawer */}
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#6366F118', borderRadius: 8 }}
+                            onPress={() => {
+                              setSavedDrawerTrade(item);
+                              setSavedDrawerVisible(true);
+                            }}
+                          >
+                            <FontAwesome name="comment-dots" size={11} color="#6366F1" solid />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#6366F1' }}>
+                              {t('chat.start_chat', { defaultValue: 'Chat' })}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Ping trader */}
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#3B82F618', borderRadius: 8 }}
+                            onPress={async () => {
+                              try {
+                                await pingTrader(db, firestoreDB, uid, user?.displayName || 'Someone', { ...item, traderId: savedRef.traderId || item.userId });
+                                showSuccessMessage('📢', t('trade.ping_sent', { defaultValue: 'Ping sent! Trader will be notified.' }));
+                              } catch (e) {
+                                showErrorMessage(t('home.alert.error'), e?.message || 'Error');
+                              }
+                            }}
+                          >
+                            <FontAwesome name="bell" size={11} color="#3B82F6" solid />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#3B82F6' }}>
+                              {t('trade.ping_trader', { defaultValue: 'Ping Trader' })}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Complete as-is */}
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#10B98118', borderRadius: 8 }}
+                            onPress={() => startCompleteAsIs(item)}
+                          >
+                            <FontAwesome name="circle-check" size={11} color="#10B981" solid />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#10B981' }}>
+                              {t('trade_journal.active.done')}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Edit before completing */}
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F59E0B18', borderRadius: 8 }}
+                            onPress={() => startEditItems(item)}
+                          >
+                            <FontAwesome name="pen-to-square" size={11} color="#F59E0B" />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#F59E0B' }}>
+                              {t('trade_journal.active.edit')}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Remove */}
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#EF444418', borderRadius: 8 }}
+                            onPress={async () => {
+                              await unsaveTrade(db, uid, item.id);
+                              setSavedTrades(prev => prev.filter(x => x.id !== item.id));
+                              showSuccessMessage(t('trade.removed', { defaultValue: 'Removed' }), '');
+                            }}
+                          >
+                            <FontAwesome name="trash-can" size={11} color="#EF4444" />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: '#EF4444' }}>
+                              {t('trade_journal.active.remove', { defaultValue: 'Remove' })}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       );
-                    }
-
-                    // Normal action buttons
-                    return (
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                        {/* Chat with trader — opens profile drawer */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#6366F118', borderRadius: 8 }}
-                          onPress={() => {
-                            setSavedDrawerTrade(item);
-                            setSavedDrawerVisible(true);
-                          }}
-                        >
-                          <FontAwesome name="comment-dots" size={11} color="#6366F1" solid />
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#6366F1' }}>
-                            {t('chat.start_chat', { defaultValue: 'Chat' })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Ping trader */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#3B82F618', borderRadius: 8 }}
-                          onPress={async () => {
-                            try {
-                              await pingTrader(db, firestoreDB, uid, user?.displayName || 'Someone', { ...item, traderId: savedRef.traderId || item.userId });
-                              showSuccessMessage('📢', t('trade.ping_sent', { defaultValue: 'Ping sent! Trader will be notified.' }));
-                            } catch (e) {
-                              showErrorMessage(t('home.alert.error'), e?.message || 'Error');
-                            }
-                          }}
-                        >
-                          <FontAwesome name="bell" size={11} color="#3B82F6" solid />
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#3B82F6' }}>
-                            {t('trade.ping_trader', { defaultValue: 'Ping Trader' })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Complete as-is */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#10B98118', borderRadius: 8 }}
-                          onPress={() => startCompleteAsIs(item)}
-                        >
-                          <FontAwesome name="circle-check" size={11} color="#10B981" solid />
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#10B981' }}>
-                            {t('trade_journal.active.done')}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Edit before completing */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F59E0B18', borderRadius: 8 }}
-                          onPress={() => startEditItems(item)}
-                        >
-                          <FontAwesome name="pen-to-square" size={11} color="#F59E0B" />
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#F59E0B' }}>
-                            {t('trade_journal.active.edit')}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Remove */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#EF444418', borderRadius: 8 }}
-                          onPress={async () => {
-                            await unsaveTrade(db, uid, item.id);
-                            setSavedTrades(prev => prev.filter(x => x.id !== item.id));
-                            showSuccessMessage(t('trade.removed', { defaultValue: 'Removed' }), '');
-                          }}
-                        >
-                          <FontAwesome name="trash-can" size={11} color="#EF4444" />
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#EF4444' }}>
-                            {t('trade_journal.active.remove', { defaultValue: 'Remove' })}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })()}
+                    })()}
                 </>
               )}
             </View>
           );
         })}
+
+        </View>
 
         {/* Profile drawer for Chat */}
         {savedDrawerTrade && (
@@ -1593,7 +1712,7 @@ const TradeJournal = ({
             bannedUsers={[]}
           />
         )}
-      </View>
+      </ScrollView>
     );
   };
   // TAB 4: TIMELINE (Completed trades only)
@@ -2011,6 +2130,11 @@ const TradeJournal = ({
                           <Text style={{ fontSize: 11, color: '#3B82F6' }}>🎮 {acceptor.robloxUsername}</Text>
                           <FontAwesome name="copy" size={9} color="#3B82F680" />
                         </TouchableOpacity>
+                      ) : null}
+                      {acceptor.acceptedAt ? (
+                        <Text style={{ fontSize: 10, color: subtextColor, marginTop: 2 }}>
+                          {dayjs(acceptor.acceptedAt).fromNow()}
+                        </Text>
                       ) : null}
                     </View>
                     {/* Chat button */}

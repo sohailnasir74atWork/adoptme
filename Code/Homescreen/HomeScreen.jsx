@@ -83,7 +83,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
-  const { theme, user, firestoreDB, single_offer_wall, reload, appdatabase } = useGlobalState();
+  const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
   const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -1168,7 +1168,17 @@ const HomeScreen = ({ selectedTheme }) => {
       if (!isMountedRef.current) return;
 
       // 🏅 Track trade count & award badges (firstTrade→starTrader→diamondTrader)
-      incrementAndCheckBadge(appdatabase, user.id, 'tradeCount', TRADE_BADGE_THRESHOLDS);
+      incrementAndCheckBadge(appdatabase, user.id, 'tradeCount', TRADE_BADGE_THRESHOLDS)
+        .then(() => {
+          // Refresh topBadge in local state after badge award
+          const { ref, get } = require('@react-native-firebase/database');
+          get(ref(appdatabase, `users/${user.id}/topBadge`)).then(snap => {
+            const newTop = snap.exists() ? snap.val() : null;
+            if (newTop && newTop !== user.topBadge) {
+              setUser(prev => ({ ...prev, topBadge: newTop }));
+            }
+          }).catch(() => {});
+        });
 
       // 🦉 Check if trade was made after midnight (nightOwl badge)
       checkNightOwlTrade(appdatabase, user.id);
