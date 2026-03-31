@@ -16,6 +16,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
+import FramedAvatar from '../GroupChat/FramedAvatar';
 
 
 const BlockedUsersScreen = () => {
@@ -58,9 +59,10 @@ const BlockedUsersScreen = () => {
 
           try {
             // ✅ Fetch only the fields we need (parallel requests to specific child paths)
-            const [displayNameSnap, avatarSnap] = await Promise.all([
+            const [displayNameSnap, avatarSnap, profileFrameSnap] = await Promise.all([
               get(ref(appdatabase, `users/${id}/displayName`)).catch(() => null),
               get(ref(appdatabase, `users/${id}/avatar`)).catch(() => null),
+              get(ref(appdatabase, `users/${id}/profileFrame`)).catch(() => null),
             ]);
 
             // ✅ Check if user exists (if no displayName and no avatar, user likely doesn't exist)
@@ -73,6 +75,7 @@ const BlockedUsersScreen = () => {
               displayName: displayNameSnap?.exists() ? (displayNameSnap.val()?.trim() || t('chat.anonymous')) : t('chat.anonymous'),
               avatar: avatarSnap?.exists() ? (avatarSnap.val()?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
                 : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+              profileFrame: profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
             };
           } catch (error) {
             console.error(`❌ Error fetching user ${id}:`, error);
@@ -149,7 +152,14 @@ const BlockedUsersScreen = () => {
 
     return (
       <View style={styles.userContainer}>
-        <Image source={{ uri: avatar }} style={styles.avatar} />
+        <View style={{ marginRight: 10 }}>
+          <FramedAvatar
+            avatarUri={avatar}
+            frame={item.profileFrame || null}
+            isDarkMode={isDarkMode}
+            avatarSize={50}
+          />
+        </View>
         <View style={styles.textContainer}>
           <Text style={styles.userName}>{displayName}</Text>
           <TouchableOpacity

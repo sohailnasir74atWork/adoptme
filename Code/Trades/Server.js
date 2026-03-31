@@ -20,6 +20,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import InterstitialAdManager from '../Ads/IntAd';
 import { mixpanel } from '../AppHelper/MixPenel';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
+import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 
 
 const ServerScreen = () => {
@@ -212,7 +213,14 @@ const ServerScreen = () => {
 
                 <View style={styles.topRow}>
                     <View style={styles.userInfo}>
-                        <Image source={{ uri: item.userPhoto }} style={styles.avatar} />
+                        <View style={{ marginRight: 8 }}>
+                            <FramedAvatar
+                                avatarUri={item.userPhoto}
+                                frame={item.profileFrame || null}
+                                isDarkMode={isDarkMode}
+                                avatarSize={28}
+                            />
+                        </View>
                         <Text style={styles.username}>{item.username}</Text>
                     </View>
 

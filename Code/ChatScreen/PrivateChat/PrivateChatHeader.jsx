@@ -12,6 +12,8 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
 import { getThemeColors } from '../../Helper/themeColors';
+import FramedAvatar from '../GroupChat/FramedAvatar';
+import { getActiveCosmetics } from '../../Engagement/shopUtils';
 
 const Badge = ({ icon, label, color }) => (
   <View style={[styles.badge, { backgroundColor: color }]}>
@@ -32,6 +34,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
   // ✅ State for fetched user data (roblox username, etc.)
   const [userData, setUserData] = useState(null);
+  const [activeCosmetics, setActiveCosmetics] = useState(null);
 
   // ✅ Memoize copyToClipboard
   const copyToClipboard = useCallback((code) => {
@@ -59,7 +62,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       try {
         // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
         const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap,
-          isProSnap, lastGameWinAtSnap, isAdminSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
+          isProSnap, lastGameWinAtSnap, isAdminSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap, profileFrameSnap] = await Promise.all([
             get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
@@ -69,6 +72,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/profileFrame`)).catch(() => null),
           ]);
 
         if (!isMounted) return;
@@ -84,6 +88,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
           isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
           isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
+          profileFrame: profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
         });
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
@@ -92,6 +97,15 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     };
 
     fetchUserData();
+
+    // ✅ Fetch active cosmetics (full frame object with borderColors etc.)
+    const fetchCosmetics = async () => {
+      try {
+        const cosmetics = await getActiveCosmetics(appdatabase, selectedUserId);
+        if (isMounted) setActiveCosmetics(cosmetics);
+      } catch { /* graceful fallback */ }
+    };
+    fetchCosmetics();
 
     return () => {
       isMounted = false;
@@ -116,6 +130,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      profileFrame: selectedUser?.profileFrame || userData.profileFrame || null,
     };
   }, [selectedUser, userData]);
 
@@ -207,14 +222,13 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     <View style={styles.container}>
       {/* Avatar with online indicator */}
       <TouchableOpacity onPress={handleOpenDrawer} activeOpacity={0.7}>
-        <View style={styles.avatarWrapper}>
-          <Image source={{ uri: avatarUri }} style={[styles.avatar, { borderColor: c.border }]} />
-          <View style={[
-            styles.onlineDot,
-            { backgroundColor: isOnline ? '#22c55e' : '#94a3b8' },
-            isOnline && styles.onlineDotGlow,
-          ]} />
-        </View>
+        <FramedAvatar
+          avatarUri={avatarUri}
+          frame={activeCosmetics?.profileFrame || null}
+          isDarkMode={isDarkMode}
+          avatarSize={32}
+          isOnline={isOnline}
+        />
       </TouchableOpacity>
 
       {/* Name + badges + status */}

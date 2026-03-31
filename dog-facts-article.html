@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5 Mind-Blowing Dog Facts for Kids! 🐶</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* HERO SECTION */
+        .hero {
+            text-align: center;
+            padding: 60px 30px;
+            background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 50%, #ff99ac 100%);
+            border-radius: 30px;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .hero::before {
+            content: '🐾';
+            position: absolute;
+            font-size: 150px;
+            opacity: 0.1;
+            top: -20px;
+            right: -20px;
+        }
+
+        .hero::after {
+            content: '🐾';
+            position: absolute;
+            font-size: 100px;
+            opacity: 0.1;
+            bottom: -10px;
+            left: 20px;
+            transform: rotate(-30deg);
+        }
+
+        .hero h1 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 3em;
+            color: white;
+            text-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+            margin-bottom: 15px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 1.3em;
+            color: rgba(255,255,255,0.9);
+            font-weight: 600;
+        }
+
+        .hero .paw-divider {
+            font-size: 2em;
+            margin: 15px 0;
+        }
+
+        /* FACT CARD */
+        .fact-card {
+            background: white;
+            border-radius: 25px;
+            overflow: hidden;
+            margin-bottom: 35px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+            transition: transform 0.3s ease;
+        }
+
+        .fact-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .fact-card img {
+            width: 100%;
+            height: 350px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .fact-content {
+            padding: 35px;
+        }
+
+        .fact-number {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.1em;
+            padding: 8px 20px;
+            border-radius: 50px;
+            margin-bottom: 15px;
+        }
+
+        .fact-hook {
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.8em;
+            color: #ff6a88;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .fact-text {
+            font-size: 1.15em;
+            line-height: 1.8;
+            color: #444;
+            font-weight: 600;
+        }
+
+        .fact-text strong {
+            color: #333;
+        }
+
+        .fact-text .highlight {
+            background: linear-gradient(120deg, #fff3a1 0%, #ffe066 100%);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 800;
+        }
+
+        /* RATING BAR */
+        .rating-section {
+            margin-top: 25px;
+            padding: 20px 25px;
+            background: linear-gradient(135deg, #f8f9ff, #eef0ff);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .rating-label {
+            font-family: 'Fredoka One', cursive;
+            font-size: 1em;
+            color: #764ba2;
+            white-space: nowrap;
+        }
+
+        .rating-bar {
+            flex: 1;
+            min-width: 150px;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .rating-fill {
+            height: 100%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #ff6a88, #ff9a56);
+            transition: width 1s ease;
+        }
+
+        .rating-score {
+            font-family: 'Fredoka One', cursive;
+            font-size: 1.5em;
+            color: #ff6a88;
+            white-space: nowrap;
+        }
+
+        /* COLOR VARIANTS */
+        .fact-card:nth-child(1) .fact-number { background: linear-gradient(135deg, #ff6a88, #ff9a56); }
+        .fact-card:nth-child(2) .fact-number { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+        .fact-card:nth-child(2) .fact-hook { color: #43e97b; }
+        .fact-card:nth-child(2) .rating-label { color: #43e97b; }
+        .fact-card:nth-child(2) .rating-fill { background: linear-gradient(90deg, #43e97b, #38f9d7); }
+        .fact-card:nth-child(2) .rating-score { color: #43e97b; }
+
+        .fact-card:nth-child(3) .fact-number { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .fact-card:nth-child(3) .fact-hook { color: #667eea; }
+        .fact-card:nth-child(3) .rating-label { color: #667eea; }
+        .fact-card:nth-child(3) .rating-fill { background: linear-gradient(90deg, #667eea, #764ba2); }
+        .fact-card:nth-child(3) .rating-score { color: #667eea; }
+
+        .fact-card:nth-child(4) .fact-number { background: linear-gradient(135deg, #f5576c, #ff6f91); }
+        .fact-card:nth-child(4) .fact-hook { color: #f5576c; }
+        .fact-card:nth-child(4) .rating-label { color: #f5576c; }
+        .fact-card:nth-child(4) .rating-fill { background: linear-gradient(90deg, #f5576c, #ff6f91); }
+        .fact-card:nth-child(4) .rating-score { color: #f5576c; }
+
+        .fact-card:nth-child(5) .fact-number { background: linear-gradient(135deg, #0acffe, #495aff); }
+        .fact-card:nth-child(5) .fact-hook { color: #0acffe; }
+        .fact-card:nth-child(5) .rating-label { color: #495aff; }
+        .fact-card:nth-child(5) .rating-fill { background: linear-gradient(90deg, #0acffe, #495aff); }
+        .fact-card:nth-child(5) .rating-score { color: #0acffe; }
+
+        /* FUN FOOTER */
+        .footer {
+            text-align: center;
+            padding: 50px 30px;
+            background: white;
+            border-radius: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+        }
+
+        .footer h2 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 2em;
+            color: #764ba2;
+            margin-bottom: 10px;
+        }
+
+        .footer p {
+            font-size: 1.2em;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .footer .big-emoji {
+            font-size: 4em;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .share-text {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #999;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 2em; }
+            .fact-card img { height: 220px; }
+            .fact-hook { font-size: 1.4em; }
+            .fact-content { padding: 25px; }
+            .rating-section { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- HERO -->
+    <div class="hero">
+        <h1>5 Mind-Blowing Dog Facts That'll Make You Say WHAAAAT?!</h1>
+        <div class="paw-divider">🐾 🐾 🐾</div>
+        <p>Get ready to have your mind TOTALLY blown! 🤯</p>
+    </div>
+
+    <!-- FACT 1 -->
+    <div class="fact-card">
+        <img src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=900&h=400&fit=crop" alt="Close up of a cute dog nose">
+        <div class="fact-content">
+            <span class="fact-number">FACT #1</span>
+            <h2 class="fact-hook">🐕‍🦺 DID YOU KNOW?! Every Dog Has a Secret ID!</h2>
+            <p class="fact-text">
+                A dog's nose print is <span class="highlight">totally unique</span> — just like YOUR fingerprint! 👆
+                <br><br>
+                No two dogs in the <strong>ENTIRE WORLD</strong> have the same nose pattern. That's right — out of the roughly 500 million dogs on planet Earth, not a single one has a matching nose!
+                <br><br>
+                It gets even crazier... 🤯 Police and animal shelters have actually used <strong>nose prints</strong> to identify lost dogs. Forget microchips — just boop the snoot!
+            </p>
+            <div class="rating-section">
+                <span class="rating-label">🤯 MIND-BLOWN RATING</span>
+                <div class="rating-bar"><div class="rating-fill" style="width: 90%;"></div></div>
+                <span class="rating-score">9/10</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACT 2 -->
+    <div class="fact-card">
+        <img src="https://images.unsplash.com/photo-1534361960057-19889db9621e?w=900&h=400&fit=crop" alt="Dog sniffing in a field">
+        <div class="fact-content">
+            <span class="fact-number">FACT #2</span>
+            <h2 class="fact-hook">👃 NO WAY! Dogs Have a Superpower Nose!</h2>
+            <p class="fact-text">
+                Dogs can smell up to <span class="highlight">100,000 times better</span> than humans! 💨
+                <br><br>
+                Think about it like this — if <strong>you</strong> can smell one cookie baking in the oven, a dog could smell <strong>100,000 cookies</strong> from MILES away. That's basically a superpower!
+                <br><br>
+                But here's the REALLY wild part... 🏥 Dogs can actually <strong>sniff out diseases</strong> like cancer, diabetes, and even COVID! Some dogs are trained to detect seizures BEFORE they happen. They're basically furry doctors! 🩺
+            </p>
+            <div class="rating-section">
+                <span class="rating-label">🤯 MIND-BLOWN RATING</span>
+                <div class="rating-bar"><div class="rating-fill" style="width: 100%;"></div></div>
+                <span class="rating-score">10/10</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACT 3 -->
+    <div class="fact-card">
+        <img src="https://images.unsplash.com/photo-1530041539828-114de669390e?w=900&h=400&fit=crop" alt="Sleeping dog dreaming">
+        <div class="fact-content">
+            <span class="fact-number">FACT #3</span>
+            <h2 class="fact-hook">💤 WAIT... SERIOUSLY?! Dogs Actually Dream!</h2>
+            <p class="fact-text">
+                You know when your dog twitches, whimpers, or moves their paws while sleeping? They're not just fidgeting — they're <span class="highlight">actually DREAMING!</span> 🌙
+                <br><br>
+                Scientists at <strong>MIT</strong> studied dog brains and discovered that dogs go through the same sleep stages as humans — including the <strong>REM stage</strong> where dreams happen!
+                <br><br>
+                And get this... 🐿️ Researchers believe dogs dream about <strong>everyday activities</strong> — like chasing squirrels, playing fetch, and hanging out with YOU! Puppies and senior dogs dream even MORE than adult dogs. Sweet dreams, pupper! ✨
+            </p>
+            <div class="rating-section">
+                <span class="rating-label">🤯 MIND-BLOWN RATING</span>
+                <div class="rating-bar"><div class="rating-fill" style="width: 80%;"></div></div>
+                <span class="rating-score">8/10</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACT 4 -->
+    <div class="fact-card">
+        <img src="https://images.unsplash.com/photo-1558788353-f76d92427f16?w=900&h=400&fit=crop" alt="Greyhound running fast">
+        <div class="fact-content">
+            <span class="fact-number">FACT #4</span>
+            <h2 class="fact-hook">🏃‍♂️ DID YOU KNOW?! A Dog Can BEAT a Cheetah!</h2>
+            <p class="fact-text">
+                Okay, okay — hear us out! 🐆 A Cheetah is the fastest land animal, running at <strong>70 mph</strong>. But a <span class="highlight">Greyhound could BEAT a Cheetah</span> in a long-distance race!
+                <br><br>
+                Here's why: Cheetahs are sprinters. They get exhausted after only <strong>30 seconds</strong> of running! 😩
+                <br><br>
+                Meanwhile, a Greyhound can run at <strong>35 mph for SEVEN MILES straight</strong> without breaking a sweat! 💨 That's like running from one end of your town to the other at highway speed. Slow and steady (well... FAST and steady) wins the race! 🏆
+            </p>
+            <div class="rating-section">
+                <span class="rating-label">🤯 MIND-BLOWN RATING</span>
+                <div class="rating-bar"><div class="rating-fill" style="width: 90%;"></div></div>
+                <span class="rating-score">9/10</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACT 5 -->
+    <div class="fact-card">
+        <img src="https://images.unsplash.com/photo-1587560699334-bea93391dcef?w=900&h=400&fit=crop" alt="Dog with ears perked up listening">
+        <div class="fact-content">
+            <span class="fact-number">FACT #5</span>
+            <h2 class="fact-hook">🎶 NO WAY! Dogs Have SUPER Hearing!</h2>
+            <p class="fact-text">
+                Dogs can hear sounds <span class="highlight">4 TIMES farther away</span> than humans! 👂 That means if you can hear something from 1 block away, your dog heard it from <strong>4 BLOCKS</strong> away. Wild!
+                <br><br>
+                But it gets even crazier... 🔊 Dogs can hear <strong>higher-pitched sounds</strong> that are completely INVISIBLE to human ears. We hear up to 20,000 Hz — dogs can hear up to <strong>65,000 Hz!</strong>
+                <br><br>
+                So the next time your dog barks at "nothing"? 🤫 They're hearing stuff you literally <strong>CAN'T</strong>. They have 18 muscles in each ear just for moving them around like little satellite dishes! 📡
+            </p>
+            <div class="rating-section">
+                <span class="rating-label">🤯 MIND-BLOWN RATING</span>
+                <div class="rating-bar"><div class="rating-fill" style="width: 85%;"></div></div>
+                <span class="rating-score">8.5/10</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <span class="big-emoji">🐶❤️</span>
+        <h2>Dogs Are AMAZING!</h2>
+        <p>Now go tell your friends these facts and blow THEIR minds too! 🤯</p>
+        <p class="share-text">🐾 Share this article with a fellow dog lover! 🐾</p>
+    </div>
+
+</div>
+
+</body>
+</html>

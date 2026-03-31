@@ -503,20 +503,6 @@ const PrivateMessageList = ({
             }}>
               <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
             </MenuOption>
-            {isMyMessage && onDeleteMessage && (
-              <MenuOption onSelect={() => {
-                Alert.alert(
-                  t('chat.delete_message', { defaultValue: 'Delete Message' }),
-                  t('chat.delete_message_confirm', { defaultValue: 'Are you sure you want to delete this message?' }),
-                  [
-                    { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-                    { text: t('common.delete', { defaultValue: 'Delete' }), style: 'destructive', onPress: () => onDeleteMessage(item.id) },
-                  ]
-                );
-              }}>
-                <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete', { defaultValue: 'Delete' })}</Text>
-              </MenuOption>
-            )}
             {!isMyMessage && (
               <MenuOption onSelect={() => handleReport(item)}>
                 <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
@@ -574,7 +560,7 @@ const PrivateMessageList = ({
         )}
       </>
     );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, onDeleteMessage, navigation, t, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
 
   // ✅ Add FlatList reference and scrollToMessage functionality
   const flatListRef = useRef(null);

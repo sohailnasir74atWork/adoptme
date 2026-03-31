@@ -79,8 +79,9 @@ const TradeJournal = ({
   const visible = useIsFocused();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState(route.params?.initialTab || 'pets');
-  const [ownedPets, setOwnedPets] = useState([]);
-  const [wishlistPets, setWishlistPets] = useState([]);
+  const { localState, updateLocalState } = useLocalState();
+  const [ownedPets, setOwnedPets] = useState(localState.ownedPets || []);
+  const [wishlistPets, setWishlistPets] = useState(localState.wishlistPets || []);
   const [activeTrades, setActiveTrades] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +101,6 @@ const TradeJournal = ({
   const [editGot, setEditGot] = useState([]);
   const [editPickerSide, setEditPickerSide] = useState(null); // 'gave' | 'got'
   const preEditSnapshotRef = useRef([]); // snapshot of ownedPets before opening picker in edit mode
-  const { localState } = useLocalState();
   const { user } = useGlobalState();
   const [savedTrades, setSavedTrades] = useState([]);
   const [savedDrawerTrade, setSavedDrawerTrade] = useState(null);
@@ -109,7 +109,7 @@ const TradeJournal = ({
   const highlightTradeId = route.params?.highlightTradeId || null;
   const highlightHandledRef = useRef(false);
 
-  // When arriving from a notification with highlightTradeId, fetch ONLY that trade
+  // When arriving from a notification with highlightTradeId, fetch that trade + all other data
   useEffect(() => {
     if (!highlightTradeId || !firestoreDB) return;
     highlightHandledRef.current = false;
@@ -119,7 +119,15 @@ const TradeJournal = ({
     setLoading(true);
     (async () => {
       try {
-        const snap = await getDoc(doc(firestoreDB, 'trades_new', highlightTradeId));
+        const [snap] = await Promise.all([
+          getDoc(doc(firestoreDB, 'trades_new', highlightTradeId)),
+          // Also load pets, stats, history so they aren't stuck at 0/empty
+          fetchPets(),
+          fetchHistory(),
+          fetchTradeStats(),
+          fetchSavedTrades(),
+          fetchAnalyticsData().then(setAnalyticsMaps).catch(() => {}),
+        ]);
         if (snap.exists()) {
           const trade = { id: snap.id, ...snap.data() };
           setActiveTrades([trade]);
@@ -181,13 +189,18 @@ const TradeJournal = ({
       }
       if (snap.exists()) {
         const data = snap.data();
-        setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
-        setWishlistPets(Array.isArray(data?.wishlistPets) ? data.wishlistPets : []);
+        const owned = Array.isArray(data?.ownedPets) ? data.ownedPets : [];
+        const wishlist = Array.isArray(data?.wishlistPets) ? data.wishlistPets : [];
+        setOwnedPets(owned);
+        setWishlistPets(wishlist);
+        // Sync to MMKV so next open is instant
+        updateLocalState('ownedPets', owned);
+        updateLocalState('wishlistPets', wishlist);
       }
     } catch (err) {
       console.warn('[MyStuff] fetch pets error:', err?.message);
     }
-  }, [firestoreDB, uid]);
+  }, [firestoreDB, uid, updateLocalState]);
 
   // ── Fetch active trades (paginated — 5 at a time) ──
   const fetchActiveTrades = useCallback(async (loadMore = false) => {
@@ -434,24 +447,32 @@ const TradeJournal = ({
     );
   }, [firestoreDB, db, activeTrades, t]);
 
+  const initialLoadDoneRef = useRef(false);
   useEffect(() => {
     if (visible) {
       // Skip full fetch if we're handling a highlighted trade from notification
       if (highlightTradeId) return;
-      // Reset cursors for server-side pagination
-      activeLastDocRef.current = null;
-      setHasMoreActive(true);
-      setHasMoreHistory(true);
-      setLoading(true);
-      Promise.all([fetchPets(), fetchActiveTrades(), fetchHistory(), fetchTradeStats(), fetchSavedTrades()])
-        .finally(() => {
-          setLoading(false);
-          setTimeout(() => { hasFetchedRef.current = true; }, 200);
-        });
-      // Load demand data (from CDN cache, no Firebase cost)
-      fetchAnalyticsData().then(setAnalyticsMaps).catch(() => {});
-    } else {
-      hasFetchedRef.current = false;
+      // Only fetch pets/goals/stats once — they only change via user actions
+      // which already update state directly. Re-fetch active trades & saved trades
+      // on every focus since other users can accept/interact with them.
+      if (!initialLoadDoneRef.current) {
+        activeLastDocRef.current = null;
+        setHasMoreActive(true);
+        setHasMoreHistory(true);
+        setLoading(true);
+        Promise.all([fetchPets(), fetchActiveTrades(), fetchHistory(), fetchTradeStats(), fetchSavedTrades()])
+          .finally(() => {
+            setLoading(false);
+            initialLoadDoneRef.current = true;
+            setTimeout(() => { hasFetchedRef.current = true; }, 200);
+          });
+        fetchAnalyticsData().then(setAnalyticsMaps).catch(() => {});
+      } else {
+        // On re-focus, only refresh active trades & saved trades (other users may have accepted)
+        activeLastDocRef.current = null;
+        setHasMoreActive(true);
+        Promise.all([fetchActiveTrades(), fetchSavedTrades()]);
+      }
     }
   }, [visible, fetchPets, fetchActiveTrades, fetchHistory, fetchTradeStats, fetchSavedTrades]);
 
@@ -486,10 +507,13 @@ const TradeJournal = ({
           if (newOwned.length >= 100) checkCollectorBadge(db, uid, newOwned.length);
         } catch (e) {}
       }
+      // Sync MMKV immediately so HomeScreen & next open reflect changes
+      updateLocalState('ownedPets', newOwned);
+      updateLocalState('wishlistPets', newWishlist);
     } catch (err) {
       console.warn('[MyStuff] save error:', err?.message);
     }
-  }, [firestoreDB, uid]);
+  }, [firestoreDB, uid, updateLocalState]);
 
   // ── Auto-save pets when they change (debounced) ──
   const hasFetchedRef = useRef(false);

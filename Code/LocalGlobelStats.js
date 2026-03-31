@@ -62,6 +62,8 @@ export const LocalStateProvider = ({ children }) => {
     user_name: storage.getString('user_name') || 'Anonymous',
     translationUsage: safeParseJSON('translationUsage', { count: 0, date: new Date().toDateString() }),
     favorites: safeParseJSON('favorites', []),
+    ownedPets: safeParseJSON('ownedPets', []),
+    wishlistPets: safeParseJSON('wishlistPets', []),
     imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
     showAd1: storage.getBoolean('showAd1') ?? true,
     postsCache: safeParseJSON('postsCache', []),

@@ -9,7 +9,6 @@ import {
     TextInput,
     TouchableOpacity,
     RefreshControl,
-    Image,
 } from 'react-native';
 import { getDatabase, ref, get, query, orderByChild, startAt, endAt, limitToFirst } from '@react-native-firebase/database';
 import { collection, getDocs, query as firestoreQuery, where } from '@react-native-firebase/firestore';
@@ -17,6 +16,7 @@ import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 
@@ -41,7 +41,7 @@ const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
         onPress={onPress}
         style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
     >
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        <FramedAvatar avatarUri={item.avatar} frame={item.profileFrame || null} isDarkMode={isDark} avatarSize={48} />
         <View style={styles.cardContent}>
             <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                 {item.displayName}
@@ -130,11 +130,12 @@ const SocialDashboard = () => {
         const results = await Promise.all(
             ids.map(async (friendId) => {
                 try {
-                    const [displayNameSnap, avatarSnap, robloxUsernameSnap, robloxVerifiedSnap] = await Promise.all([
+                    const [displayNameSnap, avatarSnap, robloxUsernameSnap, robloxVerifiedSnap, profileFrameSnap] = await Promise.all([
                         get(ref(db, `users/${friendId}/displayName`)),
                         get(ref(db, `users/${friendId}/avatar`)),
                         get(ref(db, `users/${friendId}/robloxUsername`)),
                         get(ref(db, `users/${friendId}/robloxUsernameVerified`)),
+                        get(ref(db, `users/${friendId}/profileFrame`)),
                     ]);
 
                     return {
@@ -143,6 +144,7 @@ const SocialDashboard = () => {
                         avatar: avatarSnap.val() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                         robloxUsername: robloxUsernameSnap.val() || null,
                         robloxUsernameVerified: robloxVerifiedSnap.val() || false,
+                        profileFrame: profileFrameSnap.val() || null,
                     };
                 } catch (err) {
                     console.error('Error fetching friend data:', err);
@@ -296,6 +298,7 @@ const SocialDashboard = () => {
                             avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                             robloxUsername: u.robloxUsername,
                             robloxUsernameVerified: u.robloxUsernameVerified,
+                            profileFrame: u.profileFrame || null,
                         });
                     }
                 }
@@ -409,6 +412,7 @@ const SocialDashboard = () => {
                             avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                             robloxUsername: u.robloxUsername,
                             robloxUsernameVerified: u.robloxUsernameVerified,
+                            profileFrame: u.profileFrame || null,
                         });
                     }
                 }

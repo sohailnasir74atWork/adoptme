@@ -6,16 +6,39 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  StatusBar, Platform,
+  StatusBar, Platform, Modal, Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../GlobelStats';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, setCachedEggInventory } from '../Helper/cosmeticsCache';
 import { getInventory, activateItem, deactivateItem, formatTimeRemaining } from './shopUtils';
-import { RARITY_CONFIG, ALL_ITEMS, COSMETIC_TYPE } from './shopItems';
+import { RARITY_CONFIG, ALL_ITEMS, COSMETIC_TYPE, FRAMES, TEXT_COLORS, TRADE_BG_COLORS, BANNER_GRADIENTS, CHAT_BG_COLORS } from './shopItems';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import config from '../Helper/Environment';
+
+// ── DEV: Generate full inventory with all cosmetics for testing ──
+const generateTestInventory = () => {
+  const now = Date.now();
+  const farFuture = now + 365 * 24 * 60 * 60 * 1000; // 1 year from now
+
+  const makeItems = (items, type) =>
+    Object.values(items).map((item, idx) => ({
+      ...item,
+      type,
+      _key: `test_${item.id}_${idx}`,
+      activatedAt: now,
+      expiresAt: item.duration === -1 ? -1 : farFuture,
+    }));
+
+  return {
+    profileFrame: makeItems(FRAMES, 'profileFrame'),
+    chatTextColor: makeItems(TEXT_COLORS, 'chatTextColor'),
+    tradeCardBg: makeItems(TRADE_BG_COLORS, 'tradeCardBg'),
+    profileBanner: makeItems(BANNER_GRADIENTS, 'profileBanner'),
+    chatBubbleBg: makeItems(CHAT_BG_COLORS, 'chatBubbleBg'),
+  };
+};
 
 const TYPE_LABELS = {
   profileFrame: { emoji: '🖼️', label: 'Profile Frames' },
@@ -33,6 +56,8 @@ const MyCosmeticsScreen = ({ navigation }) => {
   const [cosmetics, setCosmetics] = useState(() => getMyCosmetics());
   const [inventory, setInventory] = useState(() => getCachedEggData().inventory);
   const [loading, setLoading] = useState(true);
+  const [testMode, setTestMode] = useState(false);
+  const [previewItem, setPreviewItem] = useState(null);
 
   // Sync from DB
   useEffect(() => {
@@ -59,7 +84,9 @@ const MyCosmeticsScreen = ({ navigation }) => {
     if (ok) setCosmetics(getMyCosmetics());
   }, [appdatabase, user?.id]);
 
-  const hasAnyItems = useMemo(() => Object.keys(inventory).length > 0, [inventory]);
+  // Use test inventory when testMode is on
+  const displayInventory = useMemo(() => testMode ? generateTestInventory() : inventory, [testMode, inventory]);
+  const hasAnyItems = useMemo(() => Object.keys(displayInventory).length > 0, [displayInventory]);
   const bgColor = isDark ? '#0f172a' : '#F8FAFC';
 
   return (
@@ -84,10 +111,24 @@ const MyCosmeticsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        <View style={{ width: 36 }} />
+        {/* DEV: Test mode toggle — only in dev builds */}
+        {/* {__DEV__ && ( */}
+          <TouchableOpacity
+            onPress={() => setTestMode(prev => !prev)}
+            style={[s.backBtn, testMode && { backgroundColor: '#22c55e' }]}
+            activeOpacity={0.7}
+          >
+            <Icon name={testMode ? 'flask' : 'flask-outline'} size={18} color="#fff" />
+          </TouchableOpacity>
+        {/* )} */}
       </View>
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        {testMode && (
+          <View style={s.testBanner}>
+            <Text style={s.testBannerText}>🧪 TEST MODE — All cosmetics unlocked. Tap to equip & preview.</Text>
+          </View>
+        )}
         {!hasAnyItems ? (
           /* ── Empty State ── */
           <View style={s.emptyState}>
@@ -110,7 +151,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
         ) : (
           /* ── Cosmetics Inventory ── */
           <>
-            {Object.entries(inventory).map(([type, items]) => {
+            {Object.entries(displayInventory).map(([type, items]) => {
               const typeInfo = TYPE_LABELS[type] || { emoji: '🎁', label: type };
               const activeId = cosmetics?.[type]?.id;
 
@@ -132,7 +173,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                         <TouchableOpacity
                           key={item._key || `${item.id}-${idx}`}
                           activeOpacity={0.7}
-                          onPress={() => isActive ? handleDeactivate(type) : handleActivate(type, item)}
+                          onPress={() => isFrame ? setPreviewItem({ type, item, isActive }) : (isActive ? handleDeactivate(type) : handleActivate(type, item))}
                           style={[
                             s.itemCard,
                             {
@@ -233,6 +274,97 @@ const MyCosmeticsScreen = ({ navigation }) => {
           </>
         )}
       </ScrollView>
+
+      {/* ═══ FRAME PREVIEW MODAL ═══ */}
+      {previewItem && (() => {
+        const { type, item, isActive } = previewItem;
+        const itemDef = ALL_ITEMS[item.id];
+        const rc = RARITY_CONFIG[item.rarity];
+        const screenW = Dimensions.get('window').width;
+        const previewSize = Math.min(screenW * 0.45, 180);
+
+        return (
+          <Modal transparent animationType="fade" visible onRequestClose={() => setPreviewItem(null)}>
+            <TouchableOpacity
+              style={s.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setPreviewItem(null)}
+            >
+              <TouchableOpacity activeOpacity={1} style={[s.modalCard, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
+                {/* Close button */}
+                <TouchableOpacity style={s.modalClose} onPress={() => setPreviewItem(null)}>
+                  <Icon name="close" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+                </TouchableOpacity>
+
+                {/* Large frame preview */}
+                <View style={{ alignItems: 'center', marginTop: 8 }}>
+                  <FramedAvatar
+                    avatarUri={user?.avatar || null}
+                    frame={{
+                      id: item.id,
+                      borderColors: item.borderColors || itemDef?.borderColors,
+                      borderWidth: item.borderWidth || itemDef?.borderWidth,
+                      glowColor: item.glowColor || itemDef?.glowColor,
+                    }}
+                    isDarkMode={isDark}
+                    avatarSize={previewSize}
+                    isOnline={false}
+                  />
+                </View>
+
+                {/* Frame name */}
+                <Text style={{
+                  fontSize: 18, fontWeight: '800', textAlign: 'center',
+                  color: itemDef?.borderColors?.[0] || (isDark ? '#e2e8f0' : '#0f172a'),
+                  marginTop: 16,
+                }}>
+                  {item.name}
+                </Text>
+
+                {/* Rarity pill */}
+                <View style={{
+                  alignSelf: 'center', marginTop: 6,
+                  paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
+                  backgroundColor: isDark ? rc?.bgDark : rc?.bgLight,
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: rc?.color }}>
+                    {rc?.emoji} {rc?.label}
+                  </Text>
+                </View>
+
+                {/* Time remaining */}
+                <Text style={{
+                  fontSize: 11, color: isDark ? '#64748b' : '#94a3b8',
+                  textAlign: 'center', marginTop: 6,
+                }}>
+                  {formatTimeRemaining(item.expiresAt)}
+                </Text>
+
+                {/* Equip / Remove button */}
+                <TouchableOpacity
+                  style={[s.modalBtn, {
+                    backgroundColor: isActive ? '#ef4444' : '#22c55e',
+                  }]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    if (isActive) {
+                      handleDeactivate(type);
+                    } else {
+                      handleActivate(type, item);
+                    }
+                    setPreviewItem(null);
+                  }}
+                >
+                  <Icon name={isActive ? 'close-circle' : 'checkmark-circle'} size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+                    {isActive ? 'Remove' : 'Equip'}
+                  </Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+        );
+      })()}
     </View>
   );
 };
@@ -266,6 +398,12 @@ const s = StyleSheet.create({
   headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
 
   scrollContent: { padding: 16, paddingBottom: 40 },
+  testBanner: {
+    backgroundColor: '#22c55e',
+    borderRadius: 12, padding: 10, marginBottom: 12,
+    alignItems: 'center',
+  },
+  testBannerText: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
   // Empty state
   emptyState: {
@@ -319,6 +457,30 @@ const s = StyleSheet.create({
   },
   getMoreTitle: { fontSize: 14, fontWeight: '700' },
   getMoreSub: { fontSize: 11, marginTop: 1 },
+
+  // Preview modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center', alignItems: 'center',
+    padding: 32,
+  },
+  modalCard: {
+    width: '100%', maxWidth: 320,
+    borderRadius: 24, padding: 24,
+    alignItems: 'stretch',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 24, elevation: 10,
+  },
+  modalClose: {
+    position: 'absolute', top: 12, right: 12, zIndex: 10,
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginTop: 18, paddingVertical: 12, borderRadius: 14,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+  },
 });
 
 export default MyCosmeticsScreen;

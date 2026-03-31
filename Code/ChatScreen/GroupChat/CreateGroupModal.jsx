@@ -25,6 +25,7 @@ import RNFS from 'react-native-fs';
 import { useBanStatus } from '../utils';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
+import FramedAvatar from './FramedAvatar';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -540,14 +541,14 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
                   keyExtractor={(item) => item.id}
                   renderItem={({ item }) => (
                     <View style={styles.memberItem}>
-                      <Image
-                        source={{
-                          uri:
-                            item.avatar ||
-                            'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                        }}
-                        style={styles.memberAvatar}
-                      />
+                      <View style={{ marginRight: 12 }}>
+                        <FramedAvatar
+                          avatarUri={item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                          frame={item.profileFrame || null}
+                          isDarkMode={isDarkMode}
+                          avatarSize={40}
+                        />
+                      </View>
                       <Text style={styles.memberName} numberOfLines={1}>
                         {item.displayName || t('chat.anonymous')}
                       </Text>

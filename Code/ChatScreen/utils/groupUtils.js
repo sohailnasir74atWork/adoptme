@@ -528,6 +528,35 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
   try {
     const groupRef = doc(firestoreDB, 'groups', groupId);
 
+    // ── Pre-check: if last member, clean RTDB BEFORE the Firestore transaction
+    // so we still have permission to delete group data ──
+    let preCleanedRTDB = false;
+    const preCheckSnap = await getDoc(groupRef);
+    if (preCheckSnap.exists()) {
+      const preCheckData = preCheckSnap.data();
+      const isLastMember = preCheckData.memberIds?.length === 1 && preCheckData.memberIds[0] === userId;
+      if (isLastMember) {
+        try {
+          // Delete group messages
+          const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
+          await remove(messagesRef).catch(() => {});
+
+          // Delete group node from RTDB
+          const rtdbGroupRef = ref(appdatabase, `groups/${groupId}`);
+          await remove(rtdbGroupRef).catch(() => {});
+
+          // Delete group metadata for this user
+          const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
+          await remove(groupMetaRef).catch(() => {});
+
+          preCleanedRTDB = true;
+          metadataAlreadyCleaned = true;
+        } catch (preCleanError) {
+          console.warn('Pre-cleanup of RTDB data failed (will retry after transaction):', preCleanError);
+        }
+      }
+    }
+
     const result = await runTransaction(firestoreDB, async (transaction) => {
       const groupSnap = await transaction.get(groupRef);
       if (!groupSnap.exists()) {
@@ -556,7 +585,7 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
         // Delete group if last member leaves
         transaction.delete(groupRef);
         // Return special flag to trigger full cleanup
-        return { success: true, shouldDeleteGroup: true, groupId };
+        return { success: true, shouldDeleteGroup: true, groupId, preCleanedRTDB };
       } else if (isCreator || userRole === 'admin') {
         // Admin/creator is leaving - randomly select a new admin from remaining members
         const randomIndex = Math.floor(Math.random() * newMemberIds.length);
@@ -624,36 +653,31 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
     // If last person left, delete all group data from RTDB
     if (result.shouldDeleteGroup) {
       try {
-        // Delete group messages
-        const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
-        const messagesSnapshot = await get(messagesRef);
-        if (messagesSnapshot.exists()) {
-          await remove(messagesRef);
-        }
+        // RTDB cleanup already done before transaction if preCleanedRTDB
+        if (!result.preCleanedRTDB) {
+          // Delete group messages
+          const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
+          await remove(messagesRef).catch(() => {});
 
-        // Delete group node
-        const groupRef = ref(appdatabase, `groups/${groupId}`);
-        const groupSnapshot = await get(groupRef);
-        if (groupSnapshot.exists()) {
-          await remove(groupRef);
-        }
+          // Delete group node
+          const rtdbGroupRef2 = ref(appdatabase, `groups/${groupId}`);
+          await remove(rtdbGroupRef2).catch(() => {});
 
-        // Delete group metadata for the leaving user (others already cleaned up)
-        try {
-          const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
-          // Use remove() to explicitly delete the node
-          await remove(groupMetaRef);
-        } catch (metaError) {
-          console.warn('Could not delete group metadata for leaving user:', metaError);
-          // Fallback: try setting to null if remove fails
+          // Delete group metadata for the leaving user
           try {
             const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
-            await set(groupMetaRef, null);
-          } catch (fallbackError) {
-            console.warn('Fallback delete also failed:', fallbackError);
+            await remove(groupMetaRef);
+          } catch (metaError) {
+            console.warn('Could not delete group metadata for leaving user:', metaError);
+            try {
+              const groupMetaRef = ref(appdatabase, `group_meta_data/${userId}/${groupId}`);
+              await set(groupMetaRef, null);
+            } catch (fallbackError) {
+              console.warn('Fallback delete also failed:', fallbackError);
+            }
           }
+          metadataAlreadyCleaned = true;
         }
-        metadataAlreadyCleaned = true;
 
         // Delete related invitations from Firestore
         try {

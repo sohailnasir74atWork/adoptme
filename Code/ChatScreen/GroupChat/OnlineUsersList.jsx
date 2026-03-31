@@ -302,53 +302,101 @@ const OnlineUsersList = ({
     setSearching(true);
     try {
       const usersRef = ref(appdatabase, 'users');
-      const trimmed = searchText.trim();
-
-      // ✅ Build search variants (original, capitalized, lowercase)
-      // Firebase RTDB doesn't support case-insensitive queries natively
-      const searchVariants = new Set([
-        trimmed,
-        trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase(), // "John"
-        trimmed.toLowerCase(), // "john"
-        trimmed.toUpperCase(), // "JOHN"
-      ]);
-
+      const raw = searchText.trim();
       const allResults = new Map();
 
-      // ✅ Run queries for each variant in parallel
-      const queries = Array.from(searchVariants).map(async (variant) => {
-        try {
-          const searchQ = query(
-            usersRef,
-            orderByChild('displayName'),
-            startAt(variant),
-            endAt(variant + '\uf8ff'),
-            limitToFirst(20)
-          );
-          const snapshot = await get(searchQ);
-          if (snapshot.exists()) {
-            snapshot.forEach((child) => {
-              const userData = child.val();
-              if (child.key !== user?.id && !allResults.has(child.key)) {
-                allResults.set(child.key, {
-                  id: child.key,
-                  displayName: userData.displayName || t('chat.anonymous'),
-                  avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                  isPro: userData.isPro || false,
-                  robloxUsernameVerified: userData.robloxUsernameVerified || false,
-                  isAdmin: userData.isAdmin || false,
-                  isModerator: userData.isModerator || false,
-                  isOnline: allOnlineUserIds.includes(child.key),
-                });
-              }
-            });
-          }
-        } catch (err) {
-          // Silently ignore individual query failures
-        }
-      });
+      const buildUserResult = (child) => {
+        const userData = child.val();
+        if (child.key === user?.id || allResults.has(child.key)) return;
+        allResults.set(child.key, {
+          id: child.key,
+          displayName: userData.displayName || t('chat.anonymous'),
+          avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          isPro: userData.isPro || false,
+          robloxUsernameVerified: userData.robloxUsernameVerified || false,
+          isAdmin: userData.isAdmin || false,
+          isModerator: userData.isModerator || false,
+          isOnline: allOnlineUserIds.includes(child.key),
+        });
+      };
 
-      await Promise.all(queries);
+      // ── Detect search type ──
+      const isEmailSearch = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) || raw.includes('(dot)');
+      const isIdSearch = raw.length >= 15 && /^[a-zA-Z0-9]+$/.test(raw);
+
+      if (isIdSearch) {
+        // ── ID SEARCH: direct lookup by Firebase user key ──
+        try {
+          const userSnap = await get(ref(appdatabase, `users/${raw}`));
+          if (userSnap.exists()) {
+            buildUserResult({ key: raw, val: () => userSnap.val() });
+          }
+        } catch (err) { /* ignore */ }
+
+      } else if (isEmailSearch) {
+        // ── EMAIL SEARCH: lookup by encoded email key ──
+        const email = raw.toLowerCase().trim();
+        const encodedEmail = email.replace(/\./g, '(dot)');
+
+        // Direct key lookup
+        try {
+          const directSnap = await get(ref(appdatabase, `users/${encodedEmail}`));
+          if (directSnap.exists()) {
+            buildUserResult({ key: encodedEmail, val: () => directSnap.val() });
+          }
+        } catch (err) { /* ignore */ }
+
+        // Also search by email field
+        if (allResults.size === 0) {
+          try {
+            const emailQ = query(usersRef, orderByChild('email'), startAt(email), endAt(email + '\uf8ff'), limitToFirst(10));
+            const emailSnap = await get(emailQ);
+            if (emailSnap.exists()) {
+              emailSnap.forEach((child) => buildUserResult(child));
+            }
+          } catch (err) { /* ignore */ }
+        }
+
+      } else {
+        // ── NAME SEARCH: multiple case variants ──
+        const lower = raw.toLowerCase();
+        const searchVariants = [...new Set([
+          raw,
+          lower.charAt(0).toUpperCase() + lower.slice(1),
+          lower,
+          raw.toUpperCase(),
+        ])];
+
+        const nameQueries = searchVariants.map(async (variant) => {
+          try {
+            const searchQ = query(usersRef, orderByChild('displayName'), startAt(variant), endAt(variant + '\uf8ff'), limitToFirst(30));
+            const snapshot = await get(searchQ);
+            if (snapshot.exists()) {
+              snapshot.forEach((child) => buildUserResult(child));
+            }
+          } catch (err) { /* ignore */ }
+        });
+
+        await Promise.all(nameQueries);
+
+        // ── FALLBACK: client-side contains match for emoji/special char names ──
+        if (allResults.size < 10 && lower.length >= 2) {
+          try {
+            const broadQ = query(usersRef, orderByChild('displayName'), limitToFirst(500));
+            const broadSnap = await get(broadQ);
+            if (broadSnap.exists()) {
+              broadSnap.forEach((child) => {
+                if (allResults.size >= 50) return;
+                const userData = child.val();
+                const name = (userData.displayName || '').toLowerCase();
+                if (name.includes(lower)) {
+                  buildUserResult(child);
+                }
+              });
+            }
+          } catch (err) { /* ignore */ }
+        }
+      }
 
       setSearchResults(Array.from(allResults.values()));
     } catch (error) {
@@ -435,7 +483,7 @@ const OnlineUsersList = ({
         );
 
         if (result.success) {
-          showSuccessMessage(t('chat.success'), t('chat.invite_sent_message', { name: result.invitedCount || selectedIds.length }));
+          showSuccessMessage(t('chat.success'), t('chat.members_added_success', { count: result.invitedCount || selectedIds.length }));
           setSelectedUserIds(new Set());
           setIsSelectionMode(false);
         } else {

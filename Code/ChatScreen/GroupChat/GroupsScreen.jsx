@@ -1771,35 +1771,43 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         </View>
       )}
 
-      {/* FAB Button - Create Group or Add Members (Only show in Joined Groups tab) */}
-      {activeTab === 'joined' && (
-        <TouchableOpacity
-          onPress={() => setOnlineUsersListVisible(true)}
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            right: 20,
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: config.colors.primary || '#8B5CF6',
-            justifyContent: 'center',
-            alignItems: 'center',
-            elevation: 4,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: 0.25,
-            shadowRadius: 2,
-            zIndex: 1000,
-          }}
-        >
-          <Icon
-            name="add"
-            size={24}
-            color="#fff"
-          />
-        </TouchableOpacity>
-      )}
+      {/* Create Group / Add Members Button (Only show in Joined Groups tab) */}
+      {activeTab === 'joined' && (() => {
+        const myGroup = groups.find(g => g.createdBy === user?.id);
+        return (
+          <TouchableOpacity
+            onPress={() => setOnlineUsersListVisible(true)}
+            style={{
+              position: 'absolute',
+              bottom: 20,
+              right: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: config.colors.primary || '#8B5CF6',
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 24,
+              elevation: 4,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.25,
+              shadowRadius: 2,
+              zIndex: 1000,
+            }}
+          >
+            <Icon
+              name={myGroup ? "person-add" : "add"}
+              size={20}
+              color="#fff"
+            />
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 }} numberOfLines={1}>
+              {myGroup
+                ? t('chat.add_members_in', { groupName: truncateGroupName(myGroup.groupName, 15) })
+                : t('chat.create_group')}
+            </Text>
+          </TouchableOpacity>
+        );
+      })()}
 
       {/* Online Users List for Group Creation/Adding Members */}
       <OnlineUsersList

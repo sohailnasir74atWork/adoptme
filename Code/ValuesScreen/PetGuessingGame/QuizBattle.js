@@ -24,6 +24,7 @@ import {
   Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
 import { useGlobalState } from '../../GlobelStats';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
@@ -642,7 +643,7 @@ const QuizBattle = () => {
         <View style={s.playersRow}>
           {playerIds.map(pid => (
             <View key={pid} style={[s.playerChip, { backgroundColor: cardBg }]}>
-              <Image source={{ uri: roomData.players[pid]?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }} style={s.waitAvatar} />
+              <FramedAvatar avatarUri={roomData.players[pid]?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'} frame={roomData.players[pid]?.profileFrame || null} isDarkMode={isDarkMode} avatarSize={48} />
               <Text style={[s.playerName, { color: txt }]} numberOfLines={1}>{roomData.players[pid]?.displayName}</Text>
             </View>
           ))}
@@ -675,7 +676,7 @@ const QuizBattle = () => {
               const secs = Math.ceil(remaining / 1000);
               return (
                 <View key={invite.userId} style={s.pendingItem}>
-                  <Image source={{ uri: invite.avatar }} style={s.pendingAvatar} />
+                  <FramedAvatar avatarUri={invite.avatar} frame={invite.profileFrame || null} isDarkMode={isDarkMode} avatarSize={32} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.pendingName, { color: txt }]} numberOfLines={1}>{invite.displayName}</Text>
                     <View style={s.progressBarWrap}>
@@ -806,7 +807,7 @@ const QuizBattle = () => {
         {/* Opponent result after both answered */}
         {bothAnswered && opponentAnswer && (
           <View style={[s.opponentResult, { backgroundColor: cardBg }]}>
-            <Image source={{ uri: roomData.players[opponentId]?.avatar || '' }} style={s.miniAvatar} />
+            <FramedAvatar avatarUri={roomData.players[opponentId]?.avatar || ''} frame={roomData.players[opponentId]?.profileFrame || null} isDarkMode={isDarkMode} avatarSize={26} />
             <Text style={{ color: txt, fontWeight: '600', fontSize: 13 }} numberOfLines={1}>
               {roomData.players[opponentId]?.displayName?.split(' ')[0]} {opponentAnswer.isCorrect ? '✅ Correct' : '❌ Wrong'}
             </Text>
@@ -839,7 +840,7 @@ const QuizBattle = () => {
           {playerIds.sort((a, b) => (scores[b] || 0) - (scores[a] || 0)).map((pid, i) => (
             <View key={pid} style={[s.finalScoreRow, { backgroundColor: cardBg }]}>
               <Text style={{ fontSize: 22 }}>{i === 0 ? '🥇' : '🥈'}</Text>
-              <Image source={{ uri: roomData.players[pid]?.avatar || '' }} style={s.finalAvatar} />
+              <FramedAvatar avatarUri={roomData.players[pid]?.avatar || ''} frame={roomData.players[pid]?.profileFrame || null} isDarkMode={isDarkMode} avatarSize={42} />
               <Text style={[s.finalName, { color: txt }]} numberOfLines={1}>{roomData.players[pid]?.displayName}</Text>
               <Text style={s.finalScore}>{scores[pid] || 0}</Text>
             </View>

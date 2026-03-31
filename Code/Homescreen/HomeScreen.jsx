@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, TextInput, Image, Pressable, Platform, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
+import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import config from '../Helper/Environment';
@@ -83,6 +84,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 };
 
 const HomeScreen = ({ selectedTheme }) => {
+  const navigation = useNavigation();
   const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
@@ -91,7 +93,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
 
   const [fruitRecords, setFruitRecords] = useState([]);
-  const [selectedPetType, setSelectedPetType] = useState('INVENTORY');
+  const [selectedPetType, setSelectedPetType] = useState('MY_STUFF');
   // const [wantsItems, setWantsItems] = useState(INITIAL_ITEMS);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedSection, setSelectedSection] = useState(null);
@@ -174,7 +176,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
   const CATEGORIES = useMemo(() => {
-    return ['INVENTORY', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'STICKERS'].map(cat => cat.toUpperCase());
+    return ['MY_STUFF', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'STICKERS'].map(cat => cat.toUpperCase());
   }, []);
 
   const getCategoryLabel = useCallback((category) => {
@@ -548,28 +550,52 @@ const HomeScreen = ({ selectedTheme }) => {
   // Step 3: Use optimized filteredData
   const filteredData = useMemo(() => {
     let list;
-    if (selectedPetType === 'INVENTORY') {
-      // ✅ Match favorite identifiers with current fruitRecords to get latest data
-      const favoriteIdentifiers = localState.favorites || [];
-      list = favoriteIdentifiers
-        .map(favIdentifier => {
-          // Find matching item in fruitRecords by id or name+type
-          const foundItem = memoizedFruitRecords.find(
-            item => item && (
-              (favIdentifier.id && item.id === favIdentifier.id) ||
-              (favIdentifier.name && item.name &&
-                item.name.toLowerCase() === favIdentifier.name.toLowerCase() &&
-                favIdentifier.type && item.type &&
-                item.type.toLowerCase() === favIdentifier.type.toLowerCase())
-            )
-          );
-          return foundItem || null;
-        })
-        .filter(Boolean) // Remove nulls (items that no longer exist)
-        .map(item => ({
-          ...item,
-          cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor),
-        }));
+    if (selectedPetType === 'MY_STUFF') {
+      // Read-only My Stuff list from MMKV (synced from TradeJournal)
+      const myPets = localState.ownedPets || [];
+      // Build items then group duplicates (same name + valueType + fly + ride)
+      const mapped = myPets.map(pet => {
+        const petName = (pet.name || '').toLowerCase().trim();
+        const foundItem = memoizedFruitRecords.find(
+          item => item && (
+            (pet.id && item.id === pet.id) ||
+            (petName && item.name &&
+              item.name.toLowerCase().trim() === petName &&
+              pet.category && item.type &&
+              item.type.toLowerCase() === pet.category.toLowerCase())
+          )
+        );
+        if (foundItem) {
+          const vType = pet.valueType || 'd';
+          const fly = pet.isFly || false;
+          const ride = pet.isRide || false;
+          return {
+            ...foundItem,
+            _myStuffPet: pet,
+            cachedValue: getItemValue(foundItem, vType, fly, ride, isSharkMode, factor),
+          };
+        }
+        return {
+          name: pet.name || pet.Name || 'Unknown',
+          type: pet.category || 'pets',
+          id: pet.id,
+          image: pet.imageUrl || pet.image || '',
+          _myStuffPet: pet,
+          cachedValue: Number(pet.value) || 0,
+        };
+      });
+      // Group duplicates: same name + valueType + fly + ride → single entry with _count
+      const groupMap = {};
+      mapped.forEach(item => {
+        const pet = item._myStuffPet || {};
+        const key = `${(item.name || '').toLowerCase().trim()}|${pet.valueType || 'd'}|${pet.isFly ? 1 : 0}|${pet.isRide ? 1 : 0}`;
+        if (groupMap[key]) {
+          groupMap[key]._count += 1;
+        } else {
+          groupMap[key] = { ...item, _count: 1, _groupKey: key };
+        }
+      });
+      list = Object.values(groupMap);
     } else {
       list = memoizedFruitRecords;
     }
@@ -578,7 +604,7 @@ const HomeScreen = ({ selectedTheme }) => {
       .filter(item => {
         if (!item?.type) return false;
         const matchesSearch = isMatch(item.name, debouncedSearchText);
-        const matchesType = selectedPetType === 'INVENTORY' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
+        const matchesType = selectedPetType === 'MY_STUFF' || selectedPetType === 'ALL' || selectedPetType.toLowerCase() === item.type.toLowerCase();
         return matchesSearch && matchesType;
       })
       .sort((a, b) => (b.cachedValue || 0) - (a.cachedValue || 0));
@@ -590,8 +616,8 @@ const HomeScreen = ({ selectedTheme }) => {
     isFlySelected,
     isRideSelected,
     isSharkMode,
-    localState.favorites,
-    factor // ✅ Added missing dependency
+    localState.ownedPets,
+    factor
   ]);
   // ✅ Handler for badge presses in favorites (N, M, D, R, F)
   const handleFavoriteBadgePress = useCallback((itemId, badge) => {
@@ -634,21 +660,27 @@ const HomeScreen = ({ selectedTheme }) => {
     );
   }, []);
 
-  // ✅ Render favorite item in row layout (one per row) - matching ValueScreen.js
+  // Read-only My Stuff item row — tap to add to calculator
   const renderFavoriteItem = useCallback(({ item }) => {
-    const imageUrl = getImageUrl(item, localState.imgurl);
-    const itemSelection = itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
-    const currentValue = getItemValue(
-      item,
-      itemSelection.valueType,
-      itemSelection.isFly,
-      itemSelection.isRide,
-      isSharkMode,
-      factor
-    );
+    const pet = item._myStuffPet || {};
+    // Use fruitRecords image if matched, else use stored imageUrl (may be full URL)
+    let imageUrl = getImageUrl(item, localState.imgurl);
+    if (!imageUrl && (pet.imageUrl || pet.image)) {
+      const stored = pet.imageUrl || pet.image || '';
+      imageUrl = stored.startsWith('http') ? stored : '';
+    }
+    const currentValue = item.cachedValue || 0;
 
-    const hideBadgeForType = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
-    const showBadges = !hideBadgeForType.includes(item.type?.toUpperCase());
+    // Demand & hot badges
+    const demand = getDemandScore(item.name, analyticsMaps.demandMap);
+    const hot = getHotStatus(item.name, analyticsMaps.hotMap);
+
+    // Build modifier tags
+    const tags = [];
+    if (pet.valueType === 'n') tags.push({ label: 'N', color: '#2ecc71' });
+    if (pet.valueType === 'm') tags.push({ label: 'M', color: '#9b59b6' });
+    if (pet.isFly) tags.push({ label: 'F', color: '#3498db' });
+    if (pet.isRide) tags.push({ label: 'R', color: '#e67e22' });
 
     // Handler to add item to calculator
     const handleAddToCalculator = () => {
@@ -658,9 +690,9 @@ const HomeScreen = ({ selectedTheme }) => {
       const selectedItem = {
         ...item,
         selectedValue: currentValue,
-        valueType: itemSelection.valueType,
-        isFly: itemSelection.isFly,
-        isRide: itemSelection.isRide,
+        valueType: pet.valueType || 'd',
+        isFly: pet.isFly || false,
+        isRide: pet.isRide || false,
       };
 
       const nextHasItems = [...hasItems];
@@ -676,9 +708,10 @@ const HomeScreen = ({ selectedTheme }) => {
       setIsDrawerVisible(false);
     };
 
+    const count = item._count || 1;
+
     return (
       <View style={styles.favoriteRowItem}>
-        {/* Left side: Image and Info (clickable to add to calculator) */}
         <TouchableOpacity
           style={styles.favoriteClickableArea}
           onPress={handleAddToCalculator}
@@ -692,53 +725,38 @@ const HomeScreen = ({ selectedTheme }) => {
                 <Icon name="image-outline" size={18} color={isDarkMode ? '#666' : '#999'} />
               </View>
             )}
+            {count > 1 && (
+              <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#3B82F6', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>x{count}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.favoriteItemInfo}>
-            <Text style={styles.favoriteItemName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.favoriteItemName} numberOfLines={1}>
+              {item.name}{count > 1 ? ` (x${count})` : ''}
+            </Text>
             <Text style={styles.favoriteItemValue}>Value: {Number(currentValue).toLocaleString()}</Text>
-            {item.rarity && (
-              <Text style={styles.favoriteItemRarity}>{item.rarity}</Text>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+              {tags.map(tag => (
+                <View key={tag.label} style={{ backgroundColor: tag.color, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{tag.label}</Text>
+                </View>
+              ))}
+              {demand && demand.score >= 5 && (
+                <Text style={{ fontSize: 10, color: demand.score >= 8 ? '#10B981' : '#F59E0B' }}>
+                  {demand.label}
+                </Text>
+              )}
+              {hot && (
+                <Text style={{ fontSize: 10, color: '#EF4444' }}>+{hot.pct}%</Text>
+              )}
+            </View>
           </View>
-        </TouchableOpacity>
-
-        {/* Badges container (below image/info) */}
-        {showBadges && (
-          <View style={styles.favoriteBadgesContainer}>
-            {VALUE_TYPES.map((badge) => (
-              <BadgeButton
-                key={badge}
-                badge={badge}
-                isActive={itemSelection.valueType === badge.toLowerCase()}
-                onPress={() => handleFavoriteBadgePress(item.id, badge)}
-              />
-            ))}
-            {MODIFIERS.map((badge) => (
-              <BadgeButton
-                key={badge}
-                badge={badge}
-                isActive={badge === 'F' ? itemSelection.isFly : itemSelection.isRide}
-                onPress={() => handleFavoriteBadgePress(item.id, badge)}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Right side: Delete button (only removes from favorites) */}
-        <TouchableOpacity
-          style={styles.favoriteDeleteButton}
-          activeOpacity={0.8}
-          onPress={() => {
-            triggerHapticFeedback('impactLight');
-            toggleFavorite(item);
-          }}
-        >
-          <Icon name="close-circle" size={20} color="#e74c3c" />
         </TouchableOpacity>
       </View>
     );
-  }, [itemSelections, localState.imgurl, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, toggleFavorite, isDarkMode, getImageUrl, getItemValue, handleFavoriteBadgePress, BadgeButton]);
+  }, [localState.imgurl, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, isDarkMode, getImageUrl, analyticsMaps, t]);
 
   // Update renderGridItem to handle non-favorites mode
   const renderGridItem = useCallback(({ item }) => {
@@ -840,50 +858,89 @@ const HomeScreen = ({ selectedTheme }) => {
     );
   }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps, viewMode, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, t]);
 
-  // Update renderFavoritesHeader function
+  // Header for My Stuff tab showing count & total value
   const renderFavoritesHeader = useCallback(() => {
-    if (selectedPetType === 'INVENTORY') {
+    if (selectedPetType === 'MY_STUFF') {
+      const myPets = localState.ownedPets || [];
+      const totalValue = filteredData.reduce((sum, item) => sum + (item.cachedValue || 0) * (item._count || 1), 0);
       return (
         <View style={styles.favoritesHeader}>
-          <View style={styles.favoritesHeader}>
-            <Text style={styles.favoritesTitle}>{t('home.my_inventory')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
+            <Text style={styles.favoritesTitle}>{t('home.my_stuff', 'My Stuff')} ({myPets.length})</Text>
+            {totalValue > 0 && (
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#10B981' : '#059669' }}>
+                {t('trade_journal.my_pets.total_value', 'Total')}: {Number(totalValue).toLocaleString()}
+              </Text>
+            )}
           </View>
         </View>
       );
     }
     return null;
-  }, [selectedPetType]);
+  }, [selectedPetType, localState.ownedPets, filteredData, isDarkMode, t]);
 
-  // Update renderFavoritesFooter function
+  // Safe navigation — defer to next frame so iOS doesn't choke if a modal/drawer is closing
+  const navigateToMyStuff = useCallback(() => {
+    requestAnimationFrame(() => {
+      navigation.navigate('MyStuffScreen');
+    });
+  }, [navigation]);
+
+  // Footer for My Stuff tab
   const renderFavoritesFooter = useCallback(() => {
-    if (selectedPetType === 'INVENTORY') {
-      return (
-        <View style={styles.badgeContainer}>
-          <TouchableOpacity
-            style={styles.addToFavoritesButton}
-            onPress={() => {
-              setIsAddingToFavorites(true);
-              setSelectedPetType('ALL');
-            }}
-          >
-            <Icon name="add-circle" size={30} color={config.colors.hasBlockGreen} />
-            <Text style={styles.addToFavoritesText}>{t('home.add_items_inventory')}</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    return null;
-  }, [selectedPetType]);
+    if (selectedPetType !== 'MY_STUFF') return null;
+    const hasPets = (localState.ownedPets || []).length > 0;
 
-  // Memoize key extractor
+    return (
+      <View style={{ paddingHorizontal: 16, paddingTop: hasPets ? 16 : 0, paddingBottom: 24, alignItems: 'center' }}>
+        {!hasPets && (
+          <View style={{ alignItems: 'center', paddingTop: 40, paddingBottom: 20 }}>
+            <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: isDarkMode ? '#1E293B' : '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginBottom: 14 }}>
+              <Icon name="bag-handle-outline" size={34} color={isDarkMode ? '#60A5FA' : '#3B82F6'} />
+            </View>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: isDarkMode ? '#E2E8F0' : '#1E293B', marginBottom: 6 }}>
+              {t('home.no_pets_yet', 'No pets yet')}
+            </Text>
+            <Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#94A3B8', textAlign: 'center', lineHeight: 18, paddingHorizontal: 20 }}>
+              {t('home.no_pets_desc', 'Add your pets in My Stuff to track their values and use them in the calculator.')}
+            </Text>
+          </View>
+        )}
+        <TouchableOpacity
+          onPress={navigateToMyStuff}
+          activeOpacity={0.75}
+          style={{
+            width: '100%',
+            paddingVertical: 14,
+            borderRadius: 12,
+            backgroundColor: isDarkMode ? '#2563EB' : '#3B82F6',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <Icon name={hasPets ? 'pencil-outline' : 'add-circle-outline'} size={18} color="#fff" />
+          <Text style={{ fontSize: 15, fontWeight: '600', color: '#fff' }}>
+            {hasPets
+              ? t('home.manage_my_stuff', 'Manage My Stuff')
+              : t('home.add_pets_cta', 'Add Pets in My Stuff')}
+          </Text>
+          <Icon name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [selectedPetType, localState.ownedPets, isDarkMode, t, navigateToMyStuff]);
+
+  // Memoize key extractor — use _groupKey for grouped My Stuff items to avoid duplicate keys
   const keyExtractor = useCallback((item, index) =>
-    item.id?.toString() || `${item.name}-${item.type}-${index}`, []);
+    item._groupKey || item.id?.toString() || `${item.name}-${item.type}-${index}`, []);
 
 
   // Optimize FlatList performance
   const getItemLayout = useCallback((data, index) => {
     // For favorites: row layout with larger height, for grid: smaller height
-    const itemHeight = selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 100 : 100;
+    const itemHeight = 100;
     return {
       length: itemHeight,
       offset: itemHeight * index,
@@ -1788,13 +1845,11 @@ const HomeScreen = ({ selectedTheme }) => {
                       ]}
                       onPress={() => {
                         setSelectedPetType(category);
-                        if (category !== 'INVENTORY') {
+                        if (category !== 'MY_STUFF') {
                           setIsAddingToFavorites(false);
                         } else {
-                          // ✅ Force refresh when switching to INVENTORY tab
                           setIsAddingToFavorites(false);
-                          // Trigger a re-render by updating a dummy state
-                          // The filteredData will recalculate because it depends on localState.favorites
+                          // filteredData will recalculate because it depends on localState.ownedPets
                         }
                       }}
                     >
@@ -1813,7 +1868,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
                 <View style={styles.gridContainer}>
                   {renderFavoritesHeader()}
-                  {selectedPetType !== 'INVENTORY' && (
+                  {selectedPetType !== 'MY_STUFF' && (
                     <View style={styles.viewModeToggle}>
                       <TouchableOpacity
                         style={[styles.viewModeButton, viewMode === 'standard' && styles.viewModeButtonActive]}
@@ -1832,19 +1887,19 @@ const HomeScreen = ({ selectedTheme }) => {
                     </View>
                   )}
                   <FlatList
-                    key={`${selectedPetType}-${isAddingToFavorites ? 'add' : 'view'}-${viewMode}-${(localState.favorites || []).length}`}
+                    key={`${selectedPetType}-${viewMode}-${(localState.ownedPets || []).length}`}
                     data={filteredData}
                     keyExtractor={keyExtractor}
-                    renderItem={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? renderFavoriteItem : renderGridItem}
-                    numColumns={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? 1 : viewMode === 'detailed' ? 2 : 3}
+                    renderItem={selectedPetType === 'MY_STUFF' ? renderFavoriteItem : renderGridItem}
+                    numColumns={selectedPetType === 'MY_STUFF' ? 1 : viewMode === 'detailed' ? 2 : 3}
                     initialNumToRender={12}
                     maxToRenderPerBatch={12}
                     windowSize={5}
                     removeClippedSubviews={false}
                     nestedScrollEnabled={true}
-                    getItemLayout={selectedPetType === 'INVENTORY' && !isAddingToFavorites ? undefined : getItemLayout}
+                    getItemLayout={selectedPetType === 'MY_STUFF' ? undefined : getItemLayout}
                   />
-                  {selectedPetType === 'INVENTORY' ? renderFavoritesFooter() : (
+                  {selectedPetType === 'MY_STUFF' ? renderFavoritesFooter() : (
                     (selectedPetType === 'PETS' || selectedPetType === 'ALL') && (
                       <View style={styles.badgeContainer}>
                         {VALUE_TYPES.map((badge) => (

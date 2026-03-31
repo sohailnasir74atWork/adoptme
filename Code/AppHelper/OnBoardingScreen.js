@@ -82,11 +82,6 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
   const handleLoginSuccess = () => {
     setOpenSignin(false);
-    // if (Platform.OS === 'ios') {
-    //   onFinish();
-    // } else {
-    setScreenIndex(2);
-    // }
   };
 
   // const createSlideAnimation = (direction) => {

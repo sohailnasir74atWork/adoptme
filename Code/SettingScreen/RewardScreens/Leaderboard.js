@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, Image } from 'react-native';
+import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
 
-const Leaderboard = ({ leaderboardData, styles }) => {
+const Leaderboard = ({ leaderboardData, styles, isDarkMode = false }) => {
     return (
         <View style={styles.tabContent}>
             {leaderboardData.length > 0 ? (
@@ -9,7 +10,12 @@ const Leaderboard = ({ leaderboardData, styles }) => {
                     <View key={player.id} style={styles.leaderboardCard}>
                         <View style={styles.leaderboardCardsub}>
                             <Text style={styles.rankText}>#{index + 1}</Text>
-                            <Image source={{ uri: player.avatar }} style={styles.avatar} />
+                            <FramedAvatar
+                                avatarUri={player.avatar}
+                                frame={player.profileFrame || null}
+                                isDarkMode={isDarkMode}
+                                avatarSize={30}
+                            />
                             <Text style={styles.playerName}>{player.name}</Text>
                         </View>
                         <Text style={styles.playerScore}>{player.slots} Slots</Text>

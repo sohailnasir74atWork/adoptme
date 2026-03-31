@@ -13,6 +13,7 @@ import UserProfileSection from './RewardScreens/RewardProfile';
 import PointsSlotsSection from './RewardScreens/RewardPointSlot';
 import CountdownTimer from './RewardScreens/RewardTimer';
 import { getStyles } from './RewardScreens/rewardstyle'
+import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 
 
 const RewardCenterScreen = ({ selectedTheme }) => {
@@ -529,7 +530,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
                                     <View key={player.id} style={styles.leaderboardCard}>
                                         <View style={styles.leaderboardCardsub}>
                                             <Text style={styles.rankText}>#{index + 1}</Text>
-                                            <Image source={{ uri: player.avatar }} style={styles.avatar} />
+                                            <FramedAvatar avatarUri={player.avatar} frame={player.profileFrame || null} isDarkMode={isDarkMode} avatarSize={30} />
                                             <Text style={styles.playerName}>{player.displayName}</Text>
                                         </View>
                                         <Text style={styles.playerScore}>{player.rewardPoints} Points</Text>
