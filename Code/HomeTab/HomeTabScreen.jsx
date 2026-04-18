@@ -228,6 +228,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
     { key: 'stars', icon: 'star', label: t('home_tab.action_badges'), color: '#FB923C', onPress: () => requireSignIn(() => navigation.navigate('BadgesScreen'), t('home_tab.signin_claim_stars')), hasBadge: canClaimStar },
     { key: 'following', icon: 'heart', label: t('home_tab.action_friends'), color: '#EC4899', onPress: () => requireSignIn(() => navigation.navigate('SocialDashboardScreen'), t('home_tab.signin_friends')) },
     { key: 'cosmetics', icon: 'wand-magic-sparkles', label: t('home_tab.action_cosmetics'), color: '#A855F7', onPress: () => requireSignIn(() => navigation.navigate('MyCosmeticsScreen'), t('home_tab.signin_cosmetics')) },
+    { key: 'mods', icon: 'shield-halved', label: t('home_tab.action_mods', { defaultValue: 'Mods' }), color: '#0EA5E9', onPress: () => navigation.navigate('ModsScreen') },
   ], [t, i18n.language, navigation, canClaimStar, user?.id]);
 
   // ── XP computed values ──
@@ -449,14 +450,14 @@ const HomeTabScreen = ({ selectedTheme }) => {
                       banDetails.bannedUntil === 'permanent'
                         ? 'Permanent'
                         : (() => {
-                            const diff = (banDetails.bannedUntil || 0) - Date.now();
-                            if (diff <= 0) return 'Expired';
-                            const hrs = Math.floor(diff / (1000 * 60 * 60));
-                            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                            if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h remaining`;
-                            if (hrs > 0) return `${hrs}h ${mins}m remaining`;
-                            return `${mins}m remaining`;
-                          })()
+                          const diff = (banDetails.bannedUntil || 0) - Date.now();
+                          if (diff <= 0) return 'Expired';
+                          const hrs = Math.floor(diff / (1000 * 60 * 60));
+                          const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                          if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h remaining`;
+                          if (hrs > 0) return `${hrs}h ${mins}m remaining`;
+                          return `${mins}m remaining`;
+                        })()
                     }
                   </Text>
                 </View>
@@ -656,34 +657,34 @@ const HomeTabScreen = ({ selectedTheme }) => {
           {/* ═══ TradeX App Promo Card (iOS only) ═══ */}
           {Platform.OS === 'ios' && (
             <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => Linking.openURL('https://apps.apple.com/us/app/tradex-roblox-community/id6759480366')}
-            style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
-          >
-            {/* Glow accents */}
-            <View style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(139,92,246,0.15)' }} />
-            <View style={{ position: 'absolute', bottom: -15, left: -15, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(236,72,153,0.1)' }} />
+              activeOpacity={0.85}
+              onPress={() => Linking.openURL('https://apps.apple.com/us/app/tradex-roblox-community/id6759480366')}
+              style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
+            >
+              {/* Glow accents */}
+              <View style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(139,92,246,0.15)' }} />
+              <View style={{ position: 'absolute', bottom: -15, left: -15, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(236,72,153,0.1)' }} />
 
-            <View style={styles.promoContent}>
-              <Image
-                source={require('../../assets/trade-roblox.jpeg')}
-                style={styles.promoLogo}
-                resizeMode="cover"
-              />
-              <View style={styles.promoTextWrap}>
-                <View style={styles.promoNewBadge}>
-                  <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
+              <View style={styles.promoContent}>
+                <Image
+                  source={require('../../assets/trade-roblox.jpeg')}
+                  style={styles.promoLogo}
+                  resizeMode="cover"
+                />
+                <View style={styles.promoTextWrap}>
+                  <View style={styles.promoNewBadge}>
+                    <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
+                  </View>
+                  <Text style={styles.promoTitle}>{t('home_tab.tradex_title')}</Text>
+                  <Text style={styles.promoSubtitle}>{t('home_tab.tradex_desc')}</Text>
                 </View>
-                <Text style={styles.promoTitle}>{t('home_tab.tradex_title')}</Text>
-                <Text style={styles.promoSubtitle}>{t('home_tab.tradex_desc')}</Text>
               </View>
-            </View>
-            <View style={styles.promoBtn}>
-              <FontAwesome name="apple" size={14} color="#fff" />
-              <Text style={styles.promoBtnText}>{t('home_tab.download_now')}</Text>
-              <FontAwesome name="arrow-right" size={11} color="#fff" />
-            </View>
-          </TouchableOpacity>
+              <View style={styles.promoBtn}>
+                <FontAwesome name="apple" size={14} color="#fff" />
+                <Text style={styles.promoBtnText}>{t('home_tab.download_now')}</Text>
+                <FontAwesome name="arrow-right" size={11} color="#fff" />
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* ═══ SECTION 5: Footer ═══ */}

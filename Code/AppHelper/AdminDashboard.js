@@ -144,6 +144,20 @@ const parseRatingSafe = (r) => {
 
 const getAvatarSafe = (obj) => obj?.avatar || DEFAULT_AVATAR;
 
+const timeAgo = (v) => {
+  const ms = toMillisSafe(v);
+  if (!ms) return '';
+  const diff = Math.max(0, Date.now() - ms);
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  return `${d}d ago`;
+};
+
 const AdminDashboard = () => {
   const { theme, user: currentUser, isAdmin, isModerator } = useGlobalState();
   const isDark = theme === 'dark';
@@ -152,6 +166,92 @@ const AdminDashboard = () => {
 
   // Tabs
   const [activeTab, setActiveTab] = useState('banned');
+
+  // ── Status Feed (admin moderation) ──
+  const STATUS_PAGE_SIZE = 10;
+  const [statusList, setStatusList] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusLoadingMore, setStatusLoadingMore] = useState(false);
+  const [statusHasMore, setStatusHasMore] = useState(true);
+  const statusCursorRef = React.useRef(null);
+  const [statusProfileUser, setStatusProfileUser] = useState(null);
+
+  const fetchStatusFeed = useCallback(async (reset = false) => {
+    try {
+      const fdb = getFirestore();
+      if (reset) {
+        setStatusLoading(true);
+        statusCursorRef.current = null;
+        setStatusHasMore(true);
+      } else {
+        if (!statusHasMore || statusLoadingMore) return;
+        setStatusLoadingMore(true);
+      }
+
+      let q = firestoreQuery(
+        collection(fdb, 'statuses'),
+        orderBy('createdAt', 'desc'),
+        limit(STATUS_PAGE_SIZE),
+      );
+      if (!reset && statusCursorRef.current) {
+        q = firestoreQuery(
+          collection(fdb, 'statuses'),
+          orderBy('createdAt', 'desc'),
+          startAfter(statusCursorRef.current),
+          limit(STATUS_PAGE_SIZE),
+        );
+      }
+
+      const snap = await getDocs(q);
+      const docs = snap.docs;
+      const items = docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (docs.length > 0) {
+        statusCursorRef.current = docs[docs.length - 1];
+      }
+      if (docs.length < STATUS_PAGE_SIZE) setStatusHasMore(false);
+
+      setStatusList(prev => {
+        const merged = reset ? items : [...prev, ...items];
+        const seen = new Set();
+        return merged.filter(s => {
+          if (!s.id || seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        });
+      });
+    } catch (err) {
+      console.warn('[AdminDashboard] fetchStatusFeed error:', err?.message);
+    } finally {
+      setStatusLoading(false);
+      setStatusLoadingMore(false);
+    }
+  }, [statusHasMore, statusLoadingMore]);
+
+  const handleAdminDeleteStatus = useCallback((statusId) => {
+    Alert.alert('Delete Status', 'Delete this status permanently?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const fdb = getFirestore();
+            await deleteDoc(doc(fdb, 'statuses', statusId));
+            setStatusList(prev => prev.filter(s => s.id !== statusId));
+          } catch (err) {
+            Alert.alert('Error', 'Failed to delete status.');
+          }
+        },
+      },
+    ]);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'statusFeed' && statusList.length === 0) {
+      fetchStatusFeed(true);
+    }
+  }, [activeTab]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Banned Data — single fetch, client-side filtering
   const [allBannedUsers, setAllBannedUsers] = useState([]); // full list
@@ -1269,7 +1369,12 @@ const AdminDashboard = () => {
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7', paddingTop: 16 }]}>
       {/* Tabs */}
-      <View style={styles.tabContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        contentContainerStyle={styles.tabContainer}
+      >
         <TouchableOpacity
           style={[styles.tab, activeTab === 'banned' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
           onPress={() => setActiveTab('banned')}
@@ -1305,7 +1410,16 @@ const AdminDashboard = () => {
             Polls
           </Text>
         </TouchableOpacity>
-      </View>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'statusFeed' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
+          onPress={() => setActiveTab('statusFeed')}
+        >
+          <Text style={[styles.tabText, activeTab === 'statusFeed' && styles.activeTabText, { color: activeTab === 'statusFeed' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
+            Statuses
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {activeTab === 'search' && (
         <View style={styles.searchContainer}>
@@ -1803,6 +1917,135 @@ const AdminDashboard = () => {
             ))
           )}
         </ScrollView>
+      ) : activeTab === 'statusFeed' ? (
+        <View style={{ flex: 1 }}>
+          {statusLoading && statusList.length === 0 ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={statusList}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={statusLoading}
+                  onRefresh={() => fetchStatusFeed(true)}
+                  tintColor={isDark ? '#FFF' : '#000'}
+                />
+              }
+              onEndReached={() => fetchStatusFeed(false)}
+              onEndReachedThreshold={0.4}
+              ListEmptyComponent={
+                <Text style={{ color: isDark ? '#888' : '#666', textAlign: 'center', marginTop: 40 }}>
+                  No statuses found.
+                </Text>
+              }
+              ListFooterComponent={
+                statusLoadingMore ? (
+                  <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 12 }} />
+                ) : !statusHasMore && statusList.length > 0 ? (
+                  <Text style={{ color: isDark ? '#555' : '#AAA', textAlign: 'center', fontSize: 11, marginTop: 8 }}>
+                    End of feed
+                  </Text>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const created = timeAgo(item.createdAt);
+                const viewers = Array.isArray(item.viewedBy) ? item.viewedBy.length : 0;
+                return (
+                  <View style={{
+                    backgroundColor: isDark ? '#1C1C1E' : '#FFF',
+                    borderRadius: 12,
+                    padding: 12,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                  }}>
+                    {/* Header: avatar + name + date */}
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => setStatusProfileUser({
+                        senderId: item.userId,
+                        id: item.userId,
+                        sender: item.userName,
+                        avatar: item.userAvatar,
+                      })}
+                      style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
+                    >
+                      <Image
+                        source={{ uri: item.userAvatar || DEFAULT_AVATAR }}
+                        style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                          {item.userName || 'Unknown'}
+                        </Text>
+                        <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11 }}>
+                          {created} {item.type || 'text'} {viewers} views
+                        </Text>
+                      </View>
+                      <Ionicons name="person-circle-outline" size={20} color={isDark ? '#666' : '#999'} />
+                    </TouchableOpacity>
+
+                    {/* Caption */}
+                    {!!item.caption && (
+                      <Text style={{ color: isDark ? '#DDD' : '#333', fontSize: 13, marginBottom: 8 }} numberOfLines={4}>
+                        {item.caption}
+                      </Text>
+                    )}
+
+                    {/* Image */}
+                    {!!item.imageUrl && (
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8, backgroundColor: isDark ? '#000' : '#EEE' }}
+                        resizeMode="cover"
+                      />
+                    )}
+
+                    {/* Poll preview */}
+                    {Array.isArray(item.pollOptions) && item.pollOptions.length > 0 && (
+                      <View style={{ marginBottom: 8 }}>
+                        {item.pollOptions.map((opt, i) => (
+                          <Text key={i} style={{ color: isDark ? '#AAA' : '#555', fontSize: 12 }}>{opt}</Text>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Actions */}
+                    <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                      <TouchableOpacity
+                        onPress={() => handleAdminDeleteStatus(item.id)}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center',
+                          backgroundColor: '#FF3B3020',
+                          paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#FF3B30" />
+                        <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Clipboard.setString(item.userId || '');
+                          Alert.alert('Copied', 'User ID copied.');
+                        }}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center',
+                          backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                          paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 8,
+                        }}
+                      >
+                        <Ionicons name="copy-outline" size={14} color={isDark ? '#AAA' : '#666'} />
+                        <Text style={{ color: isDark ? '#AAA' : '#666', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Copy ID</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
       ) : null}
 
       {/* Modal */}

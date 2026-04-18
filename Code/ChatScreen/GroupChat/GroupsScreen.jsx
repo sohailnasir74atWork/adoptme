@@ -786,6 +786,17 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleToggleMute(groupId, groupName)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ paddingHorizontal: 6 }}
+        >
+          <Icon
+            name={mutedGroups[groupId] ? 'notifications-off' : 'notifications-outline'}
+            size={20}
+            color={mutedGroups[groupId] ? '#EF4444' : (isDarkMode ? '#94A3B8' : '#64748B')}
+          />
+        </TouchableOpacity>
         <Menu>
           <MenuTrigger>
             <Icon

@@ -17,8 +17,8 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import { ref, get, update, remove, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
-import { showSuccessMessage } from '../../Helper/MessageHelper';
+import { ref, update, remove, get, set, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
@@ -36,11 +36,12 @@ const InboxScreen = ({ bannedUsers }) => {
   const [displayedChatsCount, setDisplayedChatsCount] = useState(INITIAL_LOAD); // ✅ Start with 15 chats
   const debounceTimerRef = useRef(null); // ✅ Debounce updateChatsList
   const [streaks, setStreaks] = useState(new Map());
+  const [mutedChats, setMutedChats] = useState({}); // { otherUserId: boolean }
   const hasLoadedOnce = useRef(false); // ✅ Track if initial load is done
 
-  // ✅ OPTIMIZED: Use get() for initial load + child listeners for updates
-  // This prevents re-downloading entire chat_meta_data on every change
-  // Only downloads changed chats instead of all chats
+  // ✅ COST-OPTIMIZED: Child listeners only — no redundant initial get()
+  // onChildAdded fires for each existing child on attach, serving as initial load
+  // Only downloads changed chats on subsequent updates
   useFocusEffect(
     useCallback(() => {
       if (!user?.id || !appdatabase) {
@@ -57,55 +58,26 @@ const InboxScreen = ({ bannedUsers }) => {
       const chatsMap = new Map(); // Track chats locally
       const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
 
-      // ✅ OPTIMIZED: Use child listeners from start instead of initial get()
-      // This prevents downloading all chat metadata at once (11.35 KB per user)
-      // Child listeners only download individual chats as they're added (~200-500 bytes each)
-      // This reduces Firebase RTDB download costs significantly for users with many chats
-      const loadInitialChats = async () => {
-        try {
-          const snapshot = await get(ref(appdatabase, `chat_meta_data/${user.id}`));
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            if (data && typeof data === 'object') {
-              Object.entries(data).forEach(([chatPartnerId, chatData]) => {
-                if (!chatData || typeof chatData !== 'object') return;
-                const isBlocked = banned.includes(chatPartnerId);
-                const rawUnread = chatData?.unreadCount || 0;
-                chatsMap.set(chatPartnerId, {
-                  chatId: chatData.chatId,
-                  otherUserId: chatPartnerId,
-                  lastMessage: chatData.lastMessage || 'No messages yet',
-                  lastMessageTimestamp: chatData.timestamp || 0,
-                  unreadCount: isBlocked ? 0 : rawUnread,
-                  otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                  otherUserName: chatData.receiverName || 'Anonymous',
-                });
-              });
-              const sorted = Array.from(chatsMap.values())
-                .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-              setLocalChats(sorted);
-            }
-          }
-        } catch (error) {
-          console.error('Error loading initial chats:', error);
-        }
-        setLocalLoading(false);
-        hasLoadedOnce.current = true;
-      };
+      // ✅ COST-OPTIMIZED: No initial get() — onChildAdded fires for each existing child on attach
+      // Removes duplicate download (get + onChildAdded was 2x bandwidth)
 
-      // ✅ FIXED: Debounced helper to batch rapid child_changed events
+      // ✅ Debounced helper to batch rapid child events (including initial onChildAdded burst)
       // Without this, every single message in any chat triggers sort + 2x setState
       const updateChatsList = () => {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(() => {
-          // ✅ Run sort + setState after animations/interactions finish
           InteractionManager.runAfterInteractions(() => {
             const updatedChats = Array.from(chatsMap.values())
               .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
             setLocalChats(updatedChats);
             setDisplayedChatsCount(INITIAL_LOAD);
+            // Mark initial load done (covers both first mount and onChildAdded burst)
+            if (!hasLoadedOnce.current) {
+              hasLoadedOnce.current = true;
+              setLocalLoading(false);
+            }
           });
-        }, 500); // 500ms debounce — batches rapid updates to prevent freeze
+        }, 500);
       };
 
       // ✅ OPTIMIZED: Use child listeners for updates (only downloads changed chats)
@@ -144,19 +116,25 @@ const InboxScreen = ({ bannedUsers }) => {
         updateChatsList();
       };
 
-      // Load initial data
-      loadInitialChats();
-
-      // Listen to individual chat changes (only downloads changed chats, not all)
+      // onChildAdded fires for each existing child — handles initial load + updates
+      // No loadInitialChats() needed — saves one full download
       const unsubAdded = onChildAdded(userChatsRef, handleChildChange);
       const unsubChanged = onChildChanged(userChatsRef, handleChildChange);
       const unsubRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
 
-      // ✅ Cleanup listeners + debounce timer when screen loses focus
+      // Fallback: dismiss loading if user has no chats (no onChildAdded fires)
+      const loadingFallback = setTimeout(() => {
+        if (!hasLoadedOnce.current) {
+          hasLoadedOnce.current = true;
+          setLocalLoading(false);
+        }
+      }, 2000);
+
       return () => {
         unsubAdded();
         unsubChanged();
         unsubRemoved();
+        clearTimeout(loadingFallback);
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         setDisplayedChatsCount(INITIAL_LOAD);
       };
@@ -170,6 +148,45 @@ const InboxScreen = ({ bannedUsers }) => {
       .then(map => setStreaks(map))
       .catch(() => { });
   }, [user?.id, firestoreDB]);
+
+  // 🔔 Load mute status for private chats
+  useEffect(() => {
+    if (!user?.id || !appdatabase) return;
+    (async () => {
+      try {
+        const snap = await get(ref(appdatabase, `chat_meta_data/${user.id}`));
+        if (!snap.exists()) return;
+        const data = snap.val();
+        const muteMap = {};
+        Object.keys(data).forEach(partnerId => {
+          if (data[partnerId]?.muted) muteMap[partnerId] = true;
+        });
+        setMutedChats(muteMap);
+      } catch (e) {
+        console.warn('[Inbox] load mute status:', e?.message);
+      }
+    })();
+  }, [user?.id, appdatabase]);
+
+  // 🔔 Toggle mute for a private chat
+  const handleToggleMute = useCallback(async (otherUserId, otherUserName) => {
+    if (!appdatabase || !user?.id || !otherUserId) return;
+    const currentMuted = mutedChats[otherUserId] || false;
+    const newMuted = !currentMuted;
+    try {
+      await set(ref(appdatabase, `chat_meta_data/${user.id}/${otherUserId}/muted`), newMuted);
+      setMutedChats(prev => ({ ...prev, [otherUserId]: newMuted }));
+      showSuccessMessage(
+        'Success',
+        newMuted
+          ? `Notifications muted for "${otherUserName}"`
+          : `Notifications enabled for "${otherUserName}"`
+      );
+    } catch (error) {
+      console.warn('[Inbox] toggle mute error:', error?.message);
+      showError('Error', 'Failed to update notification settings.');
+    }
+  }, [appdatabase, user?.id, mutedChats]);
 
   const allChats = localChats;
   const displayLoading = localLoading;
@@ -368,6 +385,17 @@ const InboxScreen = ({ bannedUsers }) => {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleToggleMute(otherUserId, otherUserName)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ paddingHorizontal: 6 }}
+        >
+          <Icon
+            name={mutedChats[otherUserId] ? 'notifications-off' : 'notifications-outline'}
+            size={20}
+            color={mutedChats[otherUserId] ? '#EF4444' : (isDarkMode ? '#94A3B8' : '#64748B')}
+          />
+        </TouchableOpacity>
         <Menu>
           <MenuTrigger>
             <Icon
@@ -397,7 +425,7 @@ const InboxScreen = ({ bannedUsers }) => {
         </Menu>
       </View>
     );
-  }, [styles, user, handleOpenChat, handleDelete, t]);
+  }, [styles, user, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t]);
 
   return (
     <View style={styles.container}>

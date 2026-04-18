@@ -207,6 +207,8 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     lazy: true, // ✅ PERF: Only mount tab screen when first visited
+    animation: 'fade',
+    animationDuration: 200,
   }), [isDarkMode, selectedTheme, getTabIcon, tabBarButtonStyles]);
 
   // ✅ PERF: Memoize all tab children with useCallback to prevent remounting on tab switch

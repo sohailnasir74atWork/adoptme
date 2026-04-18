@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf ~/.gradle/caches/transforms-* ~/.gradle/caches/journal-* ~/.gradle/caches/build-cache-*)",
+      "Bash(rm -rf ~/.gradle/daemon/*/daemon-*.log)",
+      "Read(//Users/apple/.gradle/caches/**)",
+      "Bash(du -sh ~/.gradle/caches/*)"
+    ]
+  }
+}

@@ -362,7 +362,8 @@ const ProfileBottomDrawer = ({
           topBadgeSnap,
           isBabyModSnap,
           isTrustedSnap,
-          isCMSRSnap
+          isCMSRSnap,
+          dateOfBirthSnap
         ] = await Promise.all([
           get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
@@ -379,6 +380,7 @@ const ProfileBottomDrawer = ({
           get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
           get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+          get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
         ]);
 
         if (!isMounted) return;
@@ -415,6 +417,7 @@ const ProfileBottomDrawer = ({
           isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : false,
           isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
           isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
+          dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
         };
 
         setUserData(newUserData);
@@ -491,6 +494,7 @@ const ProfileBottomDrawer = ({
       isBabyMod: userData.isBabyMod ?? selectedUser?.isBabyMod ?? false,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      dateOfBirth: userData.dateOfBirth || null,
     };
   }, [selectedUser, userData]);
 
@@ -2645,6 +2649,22 @@ const ProfileBottomDrawer = ({
                     </View>
                   </View>
                 )}
+
+                {/* ═══ AGE — admin/mod only ═══ */}
+                {loadDetails && (isAdmin || !!user?.isModerator) && mergedUser?.dateOfBirth && (() => {
+                  const dob = new Date(mergedUser.dateOfBirth);
+                  const age = Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+                  return (
+                    <View style={{ alignItems: 'center', marginTop: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FF950015', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                        <Icon name="shield-checkmark-outline" size={11} color="#FF9500" />
+                        <Text style={{ fontSize: 10, color: '#FF9500', fontWeight: '600' }}>
+                          Age: {age} ({mergedUser.dateOfBirth})
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 {/* Loading indicator for details */}
                 {loadDetails && loadingRating && (

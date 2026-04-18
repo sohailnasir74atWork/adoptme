@@ -27,17 +27,33 @@ export const DAILY_REWARDS = [
 ];
 
 // ────────────────────────────────────────────────────────
-//  GET TODAY'S DATE STRING (YYYY-MM-DD)
+//  SERVER TIME — prevents device clock manipulation
 // ────────────────────────────────────────────────────────
-const getToday = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let _serverOffset = 0;
+let _offsetFetched = false;
+
+const fetchServerOffset = async (db) => {
+  if (_offsetFetched) return;
+  try {
+    const snap = await get(ref(db, '.info/serverTimeOffset'));
+    _serverOffset = snap.val() || 0;
+    _offsetFetched = true;
+  } catch {
+    _serverOffset = 0;
+  }
 };
 
+const getServerDate = () => new Date(Date.now() + _serverOffset);
+
+const formatDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const getToday = () => formatDate(getServerDate());
+
 const getYesterday = () => {
-  const d = new Date();
+  const d = getServerDate();
   d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return formatDate(d);
 };
 
 // ────────────────────────────────────────────────────────
@@ -47,6 +63,7 @@ export const getStarStatus = async (db, uid) => {
   if (!db || !uid) return { canClaim: false, currentDay: 1, cycleNumber: 1 };
 
   try {
+    await fetchServerOffset(db);
     const snap = await get(ref(db, `users/${uid}/dailyStars`));
     const data = snap.exists() ? snap.val() : null;
 
@@ -101,6 +118,7 @@ export const claimDailyStar = async (db, uid) => {
   if (!db || !uid) return null;
 
   try {
+    await fetchServerOffset(db);
     const status = await getStarStatus(db, uid);
     if (!status.canClaim) return null;
 

@@ -63,6 +63,7 @@ export const GlobalStateProvider = ({ children }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [isRTDBConnected, setIsRTDBConnected] = useState(true); // optimistic — avoids blocking sends before first Firebase handshake
   // const [robloxUsername, setRobloxUsername] = useState('');
   const robloxUsernameRef = useRef('');
 
@@ -515,6 +516,20 @@ export const GlobalStateProvider = ({ children }) => {
 
 
 
+  // ✅ Track Firebase RTDB WebSocket connection state globally.
+  // Exposed so chat screens can warn users on WiFi networks that block WebSockets
+  // before a send attempt — instead of showing a generic error after the fact.
+  // Starts as `true` (optimistic) so app launch doesn't briefly block sends while
+  // Firebase completes its first handshake.
+  useEffect(() => {
+    if (!appdatabase) return;
+    const connectedRef = ref(appdatabase, '.info/connected');
+    const unsub = onValue(connectedRef, (snap) => {
+      setIsRTDBConnected(snap.val() === true);
+    });
+    return () => unsub();
+  }, [appdatabase]);
+
   // ✅ Set up online status tracking using separate presence node (RTDB-only, optimized for scale)
   // ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
   // ✅ Uses presence/{uid} instead of users/{uid}/online for better scalability
@@ -686,8 +701,9 @@ export const GlobalStateProvider = ({ children }) => {
       setIsInActiveGame, // ✅ Set game state
       acceptedInviteRoom, // ✅ Accepted invite from toast
       setAcceptedInviteRoom, // ✅ Set accepted invite
+      isRTDBConnected, // ✅ Firebase RTDB WebSocket connection state
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected]
   );
 
   return (

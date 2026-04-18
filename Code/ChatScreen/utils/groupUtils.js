@@ -785,7 +785,6 @@ export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messag
 
     // 4. Prepare batch updates for all members
     const updates = {};
-    const inactiveMemberIds = [];
 
     for (const memberId of memberIds) {
       const isActive = activeMemberIds.includes(memberId);
@@ -799,28 +798,17 @@ export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messag
       updates[`group_meta_data/${memberId}/${groupId}/groupName`] = groupData.name || 'Group Chat';
 
       if (isSender) {
-        // Sender: always 0 unread
         updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = 0;
       } else if (isActive) {
-        // Active member: 0 unread
         updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = 0;
       } else {
-        // Inactive member: need to get current count
-        inactiveMemberIds.push(memberId);
+        // ✅ COST-OPTIMIZED: Merge increment into same batch (was 2 separate update() calls)
+        updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = increment(1);
       }
     }
 
-    // 5. Batch update all non-increment metadata at once (cost-optimized: 1 write operation)
+    // Single batched write for all metadata + unread increments (saves 1 RTDB operation per message)
     await update(ref(appdatabase, '/'), updates);
-
-    // 6. Atomically increment unread counts for inactive members (no read-then-write race)
-    if (inactiveMemberIds.length > 0) {
-      const incrementUpdates = {};
-      for (const memberId of inactiveMemberIds) {
-        incrementUpdates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = increment(1);
-      }
-      await update(ref(appdatabase, '/'), incrementUpdates);
-    }
 
     return { success: true, messageKey: newMessageRef.key, timestamp };
   } catch (error) {

@@ -1234,7 +1234,7 @@ const HomeScreen = ({ selectedTheme }) => {
             if (newTop && newTop !== user.topBadge) {
               setUser(prev => ({ ...prev, topBadge: newTop }));
             }
-          }).catch(() => {});
+          }).catch(() => { });
         });
 
       // 🦉 Check if trade was made after midnight (nightOwl badge)
@@ -1287,7 +1287,7 @@ const HomeScreen = ({ selectedTheme }) => {
                 if (!isMountedRef.current) return;
 
                 try {
-                  InterstitialAdManager.showAd(() => {});
+                  InterstitialAdManager.showAd(() => { });
                 } catch (err) {
                   console.warn('[AdManager] Failed to show ad:', err);
                 }

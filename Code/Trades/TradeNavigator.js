@@ -76,6 +76,8 @@ export const TradeStack = ({ selectedTheme }) => {
       headerStyle: { backgroundColor: selectedTheme.colors.background },
       headerTintColor: selectedTheme.colors.text,
       headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
+      animation: 'fade',
+      animationDuration: 200,
     }),
     [selectedTheme]
   );

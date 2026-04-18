@@ -43,6 +43,7 @@ const SPAM_KEYWORDS = [
   '100% free',
 
   'referral code',
+  'rose toy',
 ];
 
 // ✅ Inappropriate content patterns (beyond profanity)

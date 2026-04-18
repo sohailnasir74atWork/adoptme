@@ -45,6 +45,9 @@ import LeaderboardScreen from './Code/ChatScreen/GroupChat/LeaderboardScreen';
 import SocialDashboard from './Code/AppHelper/SocialDashboard';
 import BadgesScreen from './Code/SettingScreen/BadgesScreen';
 import TradeJournal from './Code/Engagement/TradeJournal';
+import ModsScreen from './Code/Engagement/ModsScreen';
+import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
+import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/database';
 import NotificationFeed from './Code/Engagement/NotificationFeed';
 import PrivateChatScreen from './Code/ChatScreen/PrivateChat/PrivateChat';
 import PrivateChatHeader from './Code/ChatScreen/PrivateChat/PrivateChatHeader';
@@ -77,15 +80,29 @@ const PrivateChatRootWrapper = (props) => {
 };
 
 function App() {
-  const { theme, single_offer_wall, firestoreDB, appdatabase, user } = useGlobalState();
+  const { theme, single_offer_wall, firestoreDB, appdatabase, user, setUser } = useGlobalState();
   const { t } = useTranslation();
   const { localState, updateLocalState } = useLocalState();
+
+  // ✅ DOB gate — mandatory for all logged-in users
+  const showDobModal = !!user?.id && !user?.dateOfBirth;
+  const handleDobSubmit = useCallback(async (dobString) => {
+    if (!user?.id || !appdatabase) return;
+    try {
+      await dbUpdate(dbRef(appdatabase, `users/${user.id}`), { dateOfBirth: dobString });
+      setUser((prev) => ({ ...prev, dateOfBirth: dobString }));
+    } catch (err) {
+      console.error('Error saving DOB:', err);
+    }
+  }, [user?.id, appdatabase, setUser]);
 
   // ✅ PERF: Shared header style objects — avoid recreating on every render
   const headerOptions = useMemo(() => ({
     headerStyle: { backgroundColor: theme === 'dark' ? '#0f172a' : '#fff' },
     headerTintColor: theme === 'dark' ? '#f1f5f9' : '#1a1a2e',
     headerTitleStyle: { fontWeight: 'bold' },
+    animation: 'fade',
+    animationDuration: 200,
   }), [theme]);
 
   // ✅ Fixed: Use ref to prevent infinite loop when updating warnedAboutTheme
@@ -237,7 +254,7 @@ function App() {
           backgroundColor="transparent"
         />
 
-        <Stack.Navigator>
+        <Stack.Navigator screenOptions={headerOptions}>
           <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
             {renderMainTabs}
           </Stack.Screen>
@@ -282,6 +299,7 @@ function App() {
             {(props) => <PrivateChatRootWrapper {...props} />}
           </Stack.Screen>
           <Stack.Screen name="LeaderboardScreen" options={{ title: 'Top Traders', ...headerOptions }} component={LeaderboardScreen} />
+          <Stack.Screen name="ModsScreen" options={{ headerShown: false }} component={ModsScreen} />
 
           <Stack.Screen name="GameHub" options={{ title: 'Game Hub', ...headerOptions }}>
             {renderGameHub}
@@ -302,6 +320,13 @@ function App() {
       </NavigationContainer>
 
       {showofferwall && <SubscriptionScreen visible={showofferwall} onClose={handleCloseOfferwall} track='Home' showoffer={!single_offer_wall} oneWallOnly={single_offer_wall} />}
+
+      {/* DOB gate — blocks app until user provides date of birth */}
+      <DateOfBirthModal
+        visible={showDobModal}
+        onSubmit={handleDobSubmit}
+        isDarkMode={theme === 'dark'}
+      />
     </View>
   );
 }

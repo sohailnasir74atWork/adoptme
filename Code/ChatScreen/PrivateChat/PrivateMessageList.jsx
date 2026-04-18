@@ -18,6 +18,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { getStyles } from '../Style';
 import ReportPopup from '../ReportPopUp';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
@@ -524,18 +525,16 @@ const PrivateMessageList = ({
                 minute: '2-digit',
               }) : ''}
             </Text>
-            {/* ✅ Read receipt ticks for own messages (respects settings toggle) */}
+            {/* ✅ WhatsApp-style read receipts for own messages */}
             {isMyMessage && (localState?.showReadReceipts ?? true) && (
-              <Text style={{
-                fontSize: 12,
-                fontWeight: '700',
-                color: (otherLastRead && item.timestamp && item.timestamp <= otherLastRead)
-                  ? '#53BDEB'  // Blue ticks = read
-                  : (isDarkMode ? '#ffffff77' : '#00000044'), // Grey ticks = delivered
-                marginLeft: 1,
-              }}>
-                ✓✓
-              </Text>
+              <Icon
+                name="checkmark-done"
+                size={16}
+                color={otherLastRead && item.timestamp && Number(item.timestamp) <= Number(otherLastRead)
+                  ? (isDarkMode ? '#7FDBFF' : '#1E88E5')         // blue = read (brighter in dark)
+                  : (isDarkMode ? '#ffffff77' : '#00000044')}    // grey = unread
+                style={{ marginLeft: 2 }}
+              />
             )}
           </View>
         </View>

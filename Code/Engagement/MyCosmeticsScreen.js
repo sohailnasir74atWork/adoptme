@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  StatusBar, Platform, Modal, Dimensions,
+  StatusBar, Platform, Modal, Dimensions, ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,7 +61,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
 
   // Sync from DB
   useEffect(() => {
-    if (!user?.id || !appdatabase) { setLoading(false); return; }
+    if (!user?.id || !appdatabase) return;
 
     const load = async () => {
       const synced = await syncMyCosmetics(appdatabase, user.id, true);
@@ -112,7 +112,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
         </View>
 
         {/* DEV: Test mode toggle — only in dev builds */}
-        {/* {__DEV__ && ( */}
+        {__DEV__ && ( 
           <TouchableOpacity
             onPress={() => setTestMode(prev => !prev)}
             style={[s.backBtn, testMode && { backgroundColor: '#22c55e' }]}
@@ -120,7 +120,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
           >
             <Icon name={testMode ? 'flask' : 'flask-outline'} size={18} color="#fff" />
           </TouchableOpacity>
-        {/* )} */}
+       )} 
       </View>
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
@@ -129,7 +129,15 @@ const MyCosmeticsScreen = ({ navigation }) => {
             <Text style={s.testBannerText}>🧪 TEST MODE — All cosmetics unlocked. Tap to equip & preview.</Text>
           </View>
         )}
-        {!hasAnyItems ? (
+        {loading ? (
+          /* ── Loading State ── */
+          <View style={s.emptyState}>
+            <ActivityIndicator size="large" color={isDark ? '#a78bfa' : '#7c3aed'} />
+            <Text style={[s.emptySubtitle, { color: isDark ? '#64748b' : '#94a3b8', marginTop: 16 }]}>
+              Loading your cosmetics...
+            </Text>
+          </View>
+        ) : !hasAnyItems ? (
           /* ── Empty State ── */
           <View style={s.emptyState}>
             <Text style={{ fontSize: 60, marginBottom: 16 }}>🎒</Text>

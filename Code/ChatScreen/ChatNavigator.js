@@ -12,7 +12,7 @@ import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
-import { ref, update, get, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { ref, update, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import AdminDashboard from '../AppHelper/AdminDashboard';
 import { useTranslation } from 'react-i18next';
@@ -47,12 +47,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     headerBackTitleVisible: false,
+    animation: 'fade',
+    animationDuration: 200,
   }), [selectedTheme]);
 
 
-  // ✅ OPTIMIZED: Use child listeners instead of full value listener to reduce data download
-  // Listen to individual chat unreadCount changes instead of downloading entire chat_meta_data
-  // Only tracks unread counts - full chat list is loaded in InboxScreen when focused
+  // ✅ COST-OPTIMIZED: Child listeners only — no redundant get() call
+  // onChildAdded fires once per existing child on attach, serving as initial load
+  // Removes duplicate download that get() + onChildAdded caused (was 2x bandwidth)
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setunreadcount(0);
@@ -61,12 +63,17 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
     const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
     let totalUnread = 0;
-    const unreadCounts = new Map(); // Track unread counts per chat
-    let initialLoadDone = false; // Skip onChildAdded events until initial load completes
+    const unreadCounts = new Map();
 
-    // ✅ OPTIMIZED: Use child_added and child_changed to listen to individual chats
-    // This only downloads data when a specific chat changes, not the entire metadata
-    const handleChildChange = (snapshot, isAddedEvent = false) => {
+    const recalcUnread = () => {
+      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
+      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
+      unreadDebounceRef.current = setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => setunreadcount(totalUnread));
+      }, 500);
+    };
+
+    const handleChildChange = (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       const chatData = snapshot.val();
       if (!chatData || typeof chatData !== 'object') return;
@@ -87,76 +94,20 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         unreadCounts.set(chatPartnerId, isBlocked ? 0 : rawUnread);
       }
 
-      // Skip duplicate setState from onChildAdded for existing children —
-      // loadInitialCounts already set the count synchronously
-      if (isAddedEvent && !initialLoadDone) return;
-
-      // ✅ Skip expensive setState if user is inside a child screen (chat, inbox, etc.)
-      // Counts still accumulate in the Map — they'll be applied when user returns
-      if (isInChildScreenRef.current) return;
-
-      // Recalculate total — debounced to batch rapid Firebase events
-      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
-      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
-      unreadDebounceRef.current = setTimeout(() => {
-        InteractionManager.runAfterInteractions(() => setunreadcount(totalUnread));
-      }, 500);
+      recalcUnread();
     };
 
     const handleChildRemoved = (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       unreadCounts.delete(snapshot.key);
-      if (isInChildScreenRef.current) return;
-      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
-      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
-      unreadDebounceRef.current = setTimeout(() => {
-        InteractionManager.runAfterInteractions(() => setunreadcount(totalUnread));
-      }, 500);
+      recalcUnread();
     };
 
-    // Initial load: fetch only unreadCount fields for each chat (lighter than full data)
-    const loadInitialCounts = async () => {
-      try {
-        const snapshot = await get(userChatsRef);
-        if (!snapshot.exists()) {
-          setunreadcount(0);
-          return;
-        }
-
-        const fetchedData = snapshot.val();
-        if (!fetchedData || typeof fetchedData !== 'object') {
-          setunreadcount(0);
-          return;
-        }
-
-        const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-        totalUnread = 0;
-
-        Object.entries(fetchedData).forEach(([chatPartnerId, chatData]) => {
-          if (!chatData || typeof chatData !== 'object') return;
-          const isBlocked = banned.includes(chatPartnerId);
-          const rawUnread = chatData?.unreadCount || 0;
-          const count = isBlocked ? 0 : rawUnread;
-          unreadCounts.set(chatPartnerId, count);
-          totalUnread += count;
-        });
-
-        setunreadcount(totalUnread);
-      } catch (error) {
-        console.error("❌ Error loading initial unread counts:", error);
-        setunreadcount(0);
-      }
-      initialLoadDone = true;
-    };
-
-    loadInitialCounts();
-
-    // Listen to individual chat changes
-    const unsubChatsAdded = onChildAdded(userChatsRef, (snap) => handleChildChange(snap, true));
-    const unsubChatsChanged = onChildChanged(userChatsRef, (snap) => handleChildChange(snap, false));
+    // onChildAdded fires for each existing child on attach — no separate get() needed
+    const unsubChatsAdded = onChildAdded(userChatsRef, handleChildChange);
+    const unsubChatsChanged = onChildChanged(userChatsRef, handleChildChange);
     const unsubChatsRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
 
-    // ✅ Proper cleanup
     return () => {
       unsubChatsAdded();
       unsubChatsChanged();
@@ -165,7 +116,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
-  // ✅ OPTIMIZED: Use child listeners instead of value listener to avoid re-downloading all group metadata
+  // ✅ COST-OPTIMIZED: Child listeners only — no redundant get() call
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setGroups([]);
@@ -174,8 +125,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
     setGroupsLoading(true);
     const userGroupsRef = ref(appdatabase, `group_meta_data/${user.id}`);
-    const groupsMap = new Map(); // Track groups by ID for efficient updates
-    let groupInitialLoadDone = false;
+    const groupsMap = new Map();
 
     const parseGroupData = (groupId, groupData) => {
       if (!groupData || typeof groupData !== 'object') return null;
@@ -192,8 +142,6 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     };
 
     const recalcAndSetState = () => {
-      // ✅ Skip expensive sort + setState if user is inside a child screen
-      if (isInChildScreenRef.current) return;
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
       groupDebounceRef.current = setTimeout(() => {
         InteractionManager.runAfterInteractions(() => {
@@ -203,53 +151,17 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
           setGroups(sortedGroups);
           const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
           setGroupUnreadCount(totalGroupUnread);
+          setGroupsLoading(false);
         });
       }, 300);
     };
 
-    // Initial load to populate the map
-    const loadInitialGroups = async () => {
-      try {
-        const snapshot = await get(userGroupsRef);
-        if (!snapshot.exists()) {
-          setGroups([]);
-          setGroupUnreadCount(0);
-          setGroupsLoading(false);
-          return;
-        }
-
-        const fetchedData = snapshot.val();
-        if (!fetchedData || typeof fetchedData !== 'object') {
-          setGroups([]);
-          setGroupUnreadCount(0);
-          setGroupsLoading(false);
-          return;
-        }
-
-        Object.entries(fetchedData).forEach(([groupId, groupData]) => {
-          const parsed = parseGroupData(groupId, groupData);
-          if (parsed) groupsMap.set(groupId, parsed);
-        });
-
-        recalcAndSetState();
-        setGroupsLoading(false);
-      } catch (error) {
-        console.error('Error loading initial groups:', error);
-        setGroupsLoading(false);
-      }
-      groupInitialLoadDone = true;
-    };
-
-    loadInitialGroups();
-
-    // Listen to individual group changes (only downloads the changed group, not all)
-    const handleChildAddedOrChanged = (snapshot, isAddedEvent = false) => {
+    // onChildAdded fires for each existing group on attach — serves as initial load
+    const handleChildAddedOrChanged = (snapshot) => {
       if (!snapshot || !snapshot.key) return;
       const parsed = parseGroupData(snapshot.key, snapshot.val());
       if (parsed) {
         groupsMap.set(snapshot.key, parsed);
-        // Skip duplicate setState from onChildAdded for existing children
-        if (isAddedEvent && !groupInitialLoadDone) return;
         recalcAndSetState();
       }
     };
@@ -260,8 +172,8 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       recalcAndSetState();
     };
 
-    const unsubGroupsAdded = onChildAdded(userGroupsRef, (snap) => handleChildAddedOrChanged(snap, true));
-    const unsubGroupsChanged = onChildChanged(userGroupsRef, (snap) => handleChildAddedOrChanged(snap, false));
+    const unsubGroupsAdded = onChildAdded(userGroupsRef, handleChildAddedOrChanged);
+    const unsubGroupsChanged = onChildChanged(userGroupsRef, handleChildAddedOrChanged);
     const unsubGroupsRemoved = onChildRemoved(userGroupsRef, handleChildRemoved);
 
     return () => {
@@ -272,61 +184,15 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     };
   }, [user?.id, appdatabase]);
 
-  // ✅ FIX: Track when user enters/leaves child screens to pause badge setState
-  // Listeners still accumulate data in Maps — counts flush when user returns to root
-  const pendingRefreshRef = useRef(false);
+  // ✅ COST-OPTIMIZED: No re-fetch on navigation return
+  // Listeners update state continuously via debounce — state is always current
+  // Removed 2x full get() calls that fired every time user navigated back
   const handleNavigationStateChange = useCallback((e) => {
     const state = e?.data?.state;
     if (!state) return;
     const currentRoute = state.routes?.[state.index]?.name;
-    const wasInChild = isInChildScreenRef.current;
     isInChildScreenRef.current = currentRoute !== 'GroupChat';
-
-    // ✅ When returning to root, flush any accumulated badge counts
-    // Clear pending debounce timers to prevent concurrent setState during navigation transition
-    if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
-    if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
-
-    if (wasInChild && !isInChildScreenRef.current) {
-      pendingRefreshRef.current = true;
-      // Re-fetch counts from Firebase to sync badges (lightweight get)
-      if (user?.id && appdatabase) {
-        InteractionManager.runAfterInteractions(async () => {
-          try {
-            const chatSnap = await get(ref(appdatabase, `chat_meta_data/${user.id}`));
-            if (chatSnap.exists()) {
-              const data = chatSnap.val();
-              const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-              let total = 0;
-              Object.entries(data).forEach(([id, chat]) => {
-                if (!banned.includes(id)) total += (chat?.unreadCount || 0);
-              });
-              setunreadcount(total);
-            }
-
-            const groupSnap = await get(ref(appdatabase, `group_meta_data/${user.id}`));
-            if (groupSnap.exists()) {
-              const data = groupSnap.val();
-              let totalGroupUnread = 0;
-              const sortedGroups = Object.entries(data)
-                .map(([id, g]) => {
-                  if (!g || typeof g !== 'object') return null;
-                  totalGroupUnread += (g.unreadCount || 0);
-                  return { groupId: id, groupName: g.groupName || 'Group', groupAvatar: g.groupAvatar || null, lastMessage: g.lastMessage || 'No messages yet', lastMessageTimestamp: g.lastMessageTimestamp || 0, unreadCount: g.unreadCount || 0, memberCount: g.memberCount || 0, createdBy: g.createdBy || null };
-                })
-                .filter(Boolean)
-                .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-              setGroups(sortedGroups);
-              setGroupUnreadCount(totalGroupUnread);
-            }
-          } catch (err) {
-            console.error('Error refreshing counts on return:', err);
-          }
-          pendingRefreshRef.current = false;
-        });
-      }
-    }
-  }, [user?.id, appdatabase, bannedUsers]);
+  }, []);
 
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
 

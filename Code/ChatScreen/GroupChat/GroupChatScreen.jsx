@@ -44,7 +44,7 @@ const GroupChatScreen = () => {
   const navigation = useNavigation();
   const { groupId } = route.params || {};
 
-  const { user, theme, appdatabase, firestoreDB, isAdmin } = useGlobalState();
+  const { user, theme, appdatabase, firestoreDB, isAdmin, isRTDBConnected } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -523,31 +523,18 @@ const GroupChatScreen = () => {
       // Admins/mods can view groups without joining — skip metadata writes to
       // prevent ghost entries in the "joined groups" list.
       const isRealMember = groupData?.memberIds?.includes(user.id);
+      // ✅ COST-OPTIMIZED: Single update() instead of get-then-set/update pattern
+      // Saves 1 read operation per group chat entry — update() creates or merges
       if (isRealMember) {
         const groupMetaRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}`);
-        get(groupMetaRef).then((snap) => {
-          if (!snap.exists() || !snap.val()?.groupName) {
-            // Entry doesn't exist or missing groupName — write full metadata
-            const metaUpdate = {
-              unreadCount: 0,
-              groupName: groupData?.name || route?.params?.groupName || 'Group',
-              groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
-              memberCount: groupData?.memberIds?.length || 0,
-              lastMessage: 'No messages yet',
-              lastMessageTimestamp: Date.now(),
-              createdBy: groupData?.createdBy || null,
-            };
-            set(groupMetaRef, metaUpdate).catch((error) => {
-              console.error('Error writing group meta:', error);
-            });
-          } else {
-            // Entry exists with name — just reset unread
-            update(groupMetaRef, { unreadCount: 0 }).catch((error) => {
-              console.error('Error resetting unread count:', error);
-            });
-          }
+        update(groupMetaRef, {
+          unreadCount: 0,
+          groupName: groupData?.name || route?.params?.groupName || 'Group',
+          groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
+          memberCount: groupData?.memberIds?.length || 0,
+          createdBy: groupData?.createdBy || null,
         }).catch((error) => {
-          console.error('Error checking group meta:', error);
+          console.error('Error updating group meta:', error);
         });
       }
 
@@ -699,6 +686,14 @@ const GroupChatScreen = () => {
         return;
       }
 
+      // Connection check — catches WiFi networks that block Firebase WebSocket connections.
+      // Without this, the message silently queues in the local RTDB buffer, appears sent
+      // to the sender, but never reaches Firebase servers or other users.
+      if (!isRTDBConnected) {
+        showErrorMessage('No Connection', 'Unable to reach chat server. Try switching to mobile data or a different network.');
+        return;
+      }
+
       // Check if user is member and not muted
       if (groupData) {
         const isMember = groupData.memberIds?.includes(user.id);
@@ -809,7 +804,7 @@ const GroupChatScreen = () => {
         Alert.alert('Error', 'Could not send your message. Please try again.');
       }
     },
-    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails]
+    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected]
   );
 
   // Handle delete single message (admin/mod action)

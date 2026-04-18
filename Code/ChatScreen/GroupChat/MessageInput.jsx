@@ -95,7 +95,7 @@ const MessageInput = ({
 
     // ✅ Comprehensive content moderation check
     if (trimmedInput) {
-      const validation = validateContent(trimmedInput, { skipLinkCheck: isAdmin });
+      const validation = validateContent(trimmedInput, { skipLinkCheck: true });
       if (!validation.isValid) {
         showMessage({
           message: t('chat.inappropriate_content'),

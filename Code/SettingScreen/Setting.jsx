@@ -1224,6 +1224,20 @@ export default function SettingsScreen({ selectedTheme }) {
       return;
     }
 
+    // ✅ Block restricted display names (impersonating system/default names)
+    const RESTRICTED_NAMES = [
+      'unknown', 'anonymous', 'guest', 'guest user', 'admin', 'moderator',
+      'mod', 'system', 'bot', 'undefined', 'null', 'deleted', 'banned',
+    ];
+    const nameLower = newDisplayName.trim().toLowerCase();
+    if (RESTRICTED_NAMES.includes(nameLower) || /^(guest|anon|unknown)\s*\d*$/i.test(newDisplayName.trim())) {
+      showErrorMessage(
+        t("home.alert.error"),
+        t("settings.restricted_name_error", { defaultValue: "This display name is not allowed. Please choose a different name." })
+      );
+      return;
+    }
+
     // ✅ Check if displayName or avatar changed
     const displayNameChanged = newDisplayName.trim() !== (user?.displayName || '').trim();
     const avatarChanged = (selectedImage || '').trim() !== (user?.avatar || '').trim();

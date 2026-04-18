@@ -67,7 +67,7 @@ try {
 const STATUS_CACHE_TTL = 5 * 60 * 1000;       // 5 minutes
 const FOLLOWING_CACHE_TTL = 30 * 60 * 1000;    // 30 minutes
 const FOLLOWING_CHUNK_SIZE = 30;               // Firestore 'in' limit
-const GLOBAL_STATUS_LIMIT = 10;                // Max global (non-following) statuses
+const GLOBAL_STATUS_LIMIT = 15;                // Max global (non-following) statuses
 
 // ── Cache helpers ──
 const getCachedJSON = (key) => {

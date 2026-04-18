@@ -14,7 +14,7 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus } from '../utils';
+import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus, updateLastRead, useOtherLastRead } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
 import { get, increment, ref, update, set, remove, onValue, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
@@ -43,7 +43,7 @@ const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
 
-  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB } = useGlobalState();
+  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB, isRTDBConnected } = useGlobalState();
   const [trade, setTrade] = useState(null)
   const [post, setPost] = useState(null)
   const [messages, setMessages] = useState([]);
@@ -71,6 +71,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const isOnline = useOnlineStatus(selectedUserId);
   const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
+  // ✅ Cost opt: write receiverName/receiverAvatar into chat_meta_data only once per session
+  const metaIdentityWrittenRef = useRef(new Set());
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
 
   const closeProfileDrawer = () => {
@@ -168,6 +170,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         : `${selectedUserId}_${myUserId}`,
     [myUserId, selectedUserId]
   );
+
+  // ✅ Track other user's last-read timestamp for blue tick read receipts
+  const otherLastRead = useOtherLastRead(chatKey, selectedUserId);
 
   // ✅ Memoize getUserPoints
   const getUserPoints = useCallback(async (userId) => {
@@ -626,6 +631,14 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       return;
     }
 
+    // Connection check — catches WiFi networks that block Firebase WebSocket connections.
+    // Without this, the message silently queues in the local RTDB buffer, appears sent
+    // to the sender, but never reaches Firebase servers or the other user.
+    if (!isRTDBConnected) {
+      showErrorMessage('No Connection', 'Unable to reach chat server. Try switching to mobile data or a different network.');
+      return;
+    }
+
     // ⚠️ NOTE: Block prevention check is missing here
     // Currently, blocked users can still send messages (they're just filtered on receiver's side)
     // See BLOCK_FUNCTIONALITY_ANALYSIS.md for details and recommended solution
@@ -637,9 +650,6 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     // References
     const messageRef = ref(appdatabase, `private_messages/${chatId}/messages/${timestamp}`);
-    const senderChatRef = ref(appdatabase, `chat_meta_data/${myUserId}/${selectedUserId}`);
-    const receiverChatRef = ref(appdatabase, `chat_meta_data/${selectedUserId}/${myUserId}`);
-    const receiverStatusRef = ref(appdatabase, `users/${selectedUserId}/activeChat`);
 
     // Build message payload
     const messageData = {
@@ -685,31 +695,38 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // Save the message
       await set(messageRef, messageData);
 
-      // Check if receiver is currently in the chat
-      const snapshot = await get(receiverStatusRef);
-      const isReceiverInChat = snapshot.val() === chatId;
+      // ✅ COST-OPTIMIZED: Single batched multi-path write (was 3 ops: 1 get + 2 updates)
+      // - Removed get(receiverStatusRef) — always increment(1); receiver's useFocusEffect resets to 0
+      // - Only write receiverName/receiverAvatar once per session (they rarely change)
+      const senderPath = `chat_meta_data/${myUserId}/${selectedUserId}`;
+      const receiverPath = `chat_meta_data/${selectedUserId}/${myUserId}`;
+      const senderKey = `${myUserId}_${selectedUserId}`;
+      const receiverKey = `${selectedUserId}_${myUserId}`;
+      const metaUpdates = {};
+      metaUpdates[`${senderPath}/chatId`] = chatId;
+      metaUpdates[`${senderPath}/receiverId`] = selectedUserId;
+      metaUpdates[`${senderPath}/lastMessage`] = lastMessagePreview;
+      metaUpdates[`${senderPath}/timestamp`] = timestamp;
+      metaUpdates[`${senderPath}/unreadCount`] = 0;
+      metaUpdates[`${receiverPath}/chatId`] = chatId;
+      metaUpdates[`${receiverPath}/receiverId`] = myUserId;
+      metaUpdates[`${receiverPath}/lastMessage`] = lastMessagePreview;
+      metaUpdates[`${receiverPath}/timestamp`] = timestamp;
+      metaUpdates[`${receiverPath}/unreadCount`] = increment(1);
 
-      // Update sender's chat metadata
-      await update(senderChatRef, {
-        chatId,
-        receiverId: selectedUserId,
-        receiverName: selectedUser?.sender || t('chat.anonymous'),
-        receiverAvatar: selectedUser?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png",
-        lastMessage: lastMessagePreview,
-        timestamp,
-        unreadCount: 0,
-      });
+      // Write identity fields only on first message per session — saves ~200 bytes per subsequent message
+      if (!metaIdentityWrittenRef.current.has(senderKey)) {
+        metaUpdates[`${senderPath}/receiverName`] = selectedUser?.sender || t('chat.anonymous');
+        metaUpdates[`${senderPath}/receiverAvatar`] = selectedUser?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png";
+        metaIdentityWrittenRef.current.add(senderKey);
+      }
+      if (!metaIdentityWrittenRef.current.has(receiverKey)) {
+        metaUpdates[`${receiverPath}/receiverName`] = user?.displayName || t('chat.anonymous');
+        metaUpdates[`${receiverPath}/receiverAvatar`] = user?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png";
+        metaIdentityWrittenRef.current.add(receiverKey);
+      }
 
-      // Update receiver's chat metadata
-      await update(receiverChatRef, {
-        chatId,
-        receiverId: myUserId,
-        receiverName: user?.displayName || t('chat.anonymous'),
-        receiverAvatar: user?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png",
-        lastMessage: lastMessagePreview,
-        timestamp,
-        unreadCount: isReceiverInChat ? 0 : increment(1),
-      });
+      await update(ref(appdatabase, '/'), metaUpdates);
 
       setReplyTo(null);
       hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
@@ -720,7 +737,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails]);
+  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected]);
 
 
 
@@ -734,6 +751,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       update(chatMetaRef, { unreadCount: 0 });
 
       setActiveChat(user.id, chatKey);
+
+      // ✅ Mark messages as read
+      updateLastRead(chatKey, user.id);
 
       // ✅ Reset refs when entering chat (for exit ad logic)
       hasSentMessageRef.current = 0;
@@ -773,6 +793,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         const newMessage = { id: snapshot.key, ...data };
         if (!newMessage.timestamp) {
           newMessage.timestamp = Date.now();
+        }
+
+        // ✅ Update lastRead when a message from the other user arrives while we're viewing
+        if (newMessage.senderId && newMessage.senderId !== myUserId && chatKey) {
+          updateLastRead(chatKey, myUserId);
         }
 
         setMessages(prev => {
@@ -962,6 +987,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 hasRated={hasRated}
                 setShowRatingModal={setShowRatingModal}
                 chatKey={chatKey}
+                otherLastRead={otherLastRead}
               />
             )}
 
