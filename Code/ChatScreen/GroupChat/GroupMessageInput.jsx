@@ -117,108 +117,100 @@ const GroupMessageInput = ({
       return;
     }
 
+    let response;
     try {
-      launchImageLibrary(
-        {
-          mediaType: 'photo',
-          selectionLimit: remainingSlots, // Allow selecting up to remaining slots
-          quality: 0.8,
-          maxWidth: 1920,
-          maxHeight: 1920,
-        },
-        async (response) => {
-          try {
-            if (!response || response.didCancel) return;
-
-            if (response.errorCode) {
-              console.warn('ImagePicker error:', response.errorMessage);
-              return;
-            }
-
-            const assets = response?.assets || [];
-            if (assets.length > 0) {
-              const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
-              const validUris = [];
-              const rejectedCount = [];
-
-              // Check file size loop
-              for (const asset of assets) {
-                if (!asset?.uri || typeof asset.uri !== 'string') continue;
-
-                try {
-                  let fileSize = asset.fileSize || 0;
-
-                  // Only use RNFS.stat for file:// URIs (content:// URIs crash stat)
-                  if (!fileSize && asset.uri.startsWith('file://')) {
-                    try {
-                      const filePath = asset.uri.replace('file://', '');
-                      const fileInfo = await RNFS.stat(filePath);
-                      fileSize = fileInfo.size || 0;
-                    } catch (statError) {
-                      console.warn('RNFS.stat failed, will compress as fallback:', statError?.message);
-                      fileSize = MAX_SIZE_BYTES + 1; // Force compression
-                    }
-                  } else if (!fileSize) {
-                    // content:// or unknown scheme — compress to be safe
-                    fileSize = MAX_SIZE_BYTES + 1;
-                  }
-
-                  // 🟢 Compression Logic
-                  if (fileSize > MAX_SIZE_BYTES) {
-                    try {
-                      const compressedUri = await CompressorImage.compress(asset.uri, {
-                        maxWidth: 1024,
-                        quality: 0.7,
-                        returnableOutputType: 'uri',
-                      });
-                      validUris.push(compressedUri);
-                    } catch (compError) {
-                      console.error('Compression failed:', compError);
-                      rejectedCount.push(asset.fileName || 'image');
-                    }
-                  } else {
-                    validUris.push(asset.uri);
-                  }
-                } catch (error) {
-                  console.warn('Error processing image:', error);
-                  // Best effort: try compressing original if processing fails
-                  try {
-                    const compressedUri = await CompressorImage.compress(asset.uri, {
-                      maxWidth: 1024,
-                      quality: 0.7,
-                      returnableOutputType: 'uri',
-                    });
-                    validUris.push(compressedUri);
-                  } catch (fallbackError) {
-                    console.warn('Fallback compression also failed:', fallbackError);
-                    rejectedCount.push(asset.fileName || 'image');
-                  }
-                }
-              }
-
-              // Show alert if any images were rejected
-              if (rejectedCount.length > 0) {
-                Alert.alert(
-                  'Image Processing Failed',
-                  `${rejectedCount.length} image(s) could not be processed.`
-                );
-              }
-
-              // Add valid images to existing ones, but cap at 3 total
-              if (validUris.length > 0) {
-                setImageUris(prev => {
-                  const combined = [...prev, ...validUris];
-                  return combined.slice(0, maxImages); // Ensure we never exceed 3
-                });
-              }
-            }
-          } catch (callbackError) {
-            console.warn('Image picker callback error:', callbackError);
-          }
-        }
-      );
+      response = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: remainingSlots,
+        quality: 0.8,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      });
     } catch (launchError) {
       console.warn('Image picker launch error:', launchError);
+      return;
+    }
+
+    try {
+      if (!response || response.didCancel) return;
+
+      if (response.errorCode) {
+        console.warn('ImagePicker error:', response.errorMessage);
+        return;
+      }
+
+      const assets = response?.assets || [];
+      if (assets.length > 0) {
+        const MAX_SIZE_BYTES = 1024 * 1024; // 1 MB
+        const validUris = [];
+        const rejectedCount = [];
+
+        for (const asset of assets) {
+          if (!asset?.uri || typeof asset.uri !== 'string') continue;
+
+          try {
+            let fileSize = asset.fileSize || 0;
+
+            if (!fileSize && asset.uri.startsWith('file://')) {
+              try {
+                const filePath = asset.uri.replace('file://', '');
+                const fileInfo = await RNFS.stat(filePath);
+                fileSize = fileInfo.size || 0;
+              } catch (statError) {
+                console.warn('RNFS.stat failed, will compress as fallback:', statError?.message);
+                fileSize = MAX_SIZE_BYTES + 1;
+              }
+            } else if (!fileSize) {
+              fileSize = MAX_SIZE_BYTES + 1;
+            }
+
+            if (fileSize > MAX_SIZE_BYTES) {
+              try {
+                const compressedUri = await CompressorImage.compress(asset.uri, {
+                  maxWidth: 1024,
+                  quality: 0.7,
+                  returnableOutputType: 'uri',
+                });
+                validUris.push(compressedUri);
+              } catch (compError) {
+                console.error('Compression failed:', compError);
+                rejectedCount.push(asset.fileName || 'image');
+              }
+            } else {
+              validUris.push(asset.uri);
+            }
+          } catch (error) {
+            console.warn('Error processing image:', error);
+            try {
+              const compressedUri = await CompressorImage.compress(asset.uri, {
+                maxWidth: 1024,
+                quality: 0.7,
+                returnableOutputType: 'uri',
+              });
+              validUris.push(compressedUri);
+            } catch (fallbackError) {
+              console.warn('Fallback compression also failed:', fallbackError);
+              rejectedCount.push(asset.fileName || 'image');
+            }
+          }
+        }
+
+        if (rejectedCount.length > 0) {
+          Alert.alert(
+            'Image Processing Failed',
+            `${rejectedCount.length} image(s) could not be processed.`
+          );
+        }
+
+        if (validUris.length > 0) {
+          setImageUris(prev => {
+            const combined = [...prev, ...validUris];
+            return combined.slice(0, maxImages);
+          });
+        }
+      }
+    } catch (callbackError) {
+      console.warn('Image picker callback error:', callbackError);
     }
   }, [isBanned, imageUris.length]);
 

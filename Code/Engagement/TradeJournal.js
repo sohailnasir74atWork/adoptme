@@ -56,6 +56,12 @@ const formatValue = (v) => {
   return v % 1 === 0 ? v.toString() : v.toFixed(2);
 };
 
+const formatPlain = (v) => {
+  if (!v || typeof v !== 'number') return '0';
+  if (v % 1 === 0) return v.toLocaleString('en-US');
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const TAB_COLORS = {
   pets: '#3B82F6',
   goals: '#F59E0B',
@@ -549,6 +555,21 @@ const TradeJournal = ({
     savePets(ownedPets, newWishlist);
   }, [ownedPets, wishlistPets, savePets]);
 
+  // ── Toggle pet available for trade ──
+  const toggleAvailableForTrade = useCallback((index, listType) => {
+    if (listType === 'owned') {
+      const newOwned = ownedPets.map((pet, i) =>
+        i === index ? { ...pet, availableForTrade: !pet.availableForTrade } : pet
+      );
+      setOwnedPets(newOwned);
+    } else {
+      const newWishlist = wishlistPets.map((pet, i) =>
+        i === index ? { ...pet, availableForTrade: !pet.availableForTrade } : pet
+      );
+      setWishlistPets(newWishlist);
+    }
+  }, [ownedPets, wishlistPets]);
+
   // ── Map raw trade items to clean objects ──
   const mapItems = useCallback((items) => (items || []).map(i => ({
     name: i.name || i.Name || 'Unknown',
@@ -768,7 +789,7 @@ const TradeJournal = ({
     <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
       <View style={[styles.heroCard, { backgroundColor: isDarkMode ? '#1e293b' : '#f0f9ff' }]}>
         <Text style={[styles.heroLabel, { color: subtextColor }]}>{t('trade_journal.my_pets.worth')}</Text>
-        <Text style={[styles.heroValue, { color: '#3B82F6' }]}>{formatValue(portfolioValue)}</Text>
+        <Text style={[styles.heroValue, { color: '#3B82F6' }]}>{formatPlain(portfolioValue)}</Text>
         <Text style={[styles.heroSub, { color: subtextColor }]}>{t('trade_journal.my_pets.pets_count', { count: ownedPets.length })}</Text>
         {ownedPets.length > 0 && (() => {
           // Demand breakdown of entire portfolio
@@ -819,6 +840,25 @@ const TradeJournal = ({
         })()}
       </View>
 
+      {/* Trade visibility hint */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        backgroundColor: isDarkMode ? '#1e3a5f40' : '#EFF6FF',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginVertical: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#3B82F6',
+      }}>
+        <FontAwesome name="circle-info" size={13} color="#3B82F6" style={{ marginTop: 1 }} />
+        <Text style={{ flex: 1, fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#475569', lineHeight: 15 }}>
+          {t('trade_journal.my_pets.trade_visibility_hint', { defaultValue: 'Tap the pill below each pet to toggle between ✅ For Trade and 🔒 Private. Only items marked For Trade appear on your profile for others to trade with.' })}
+        </Text>
+      </View>
+
       {/* Add pet button */}
       <TouchableOpacity
         style={[styles.addPetBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#f0fdf4' }]}
@@ -856,7 +896,7 @@ const TradeJournal = ({
               </Text>
               {(lookupPetValue(pet) > 0) && (
                 <Text style={[styles.petValue, { color: subtextColor }]}>
-                  {formatValue(lookupPetValue(pet))}
+                  {formatPlain(lookupPetValue(pet))}
                 </Text>
               )}
               {(() => {
@@ -879,6 +919,29 @@ const TradeJournal = ({
                   <Text style={styles.tradeBadgeText}>🔄</Text>
                 </View>
               )}
+              <TouchableOpacity
+                onPress={() => toggleAvailableForTrade(index, 'owned')}
+                style={{
+                  marginTop: 4,
+                  paddingVertical: 4,
+                  paddingHorizontal: 7,
+                  borderRadius: 6,
+                  backgroundColor: pet.availableForTrade
+                    ? (isDarkMode ? '#10B98120' : '#D1FAE5')
+                    : (isDarkMode ? '#F59E0B20' : '#FEF3C7'),
+                  borderWidth: 1,
+                  borderColor: pet.availableForTrade ? '#10B981' : '#F59E0B',
+                }}
+              >
+                <Text style={{
+                  fontSize: 8,
+                  fontWeight: '800',
+                  color: pet.availableForTrade ? '#10B981' : '#D97706',
+                  textAlign: 'center',
+                }}>
+                  {pet.availableForTrade ? '✅ For Trade' : '🔒 Private'}
+                </Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -907,6 +970,27 @@ const TradeJournal = ({
         >
           <Text style={[styles.addPetText, { color: '#F59E0B' }]}>{t('trade_journal.goals.add_dream')}</Text>
         </TouchableOpacity>
+
+        {/* Trade visibility hint */}
+        {wishlistPets.length > 0 && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 8,
+            backgroundColor: isDarkMode ? '#1e3a5f40' : '#EFF6FF',
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginBottom: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: '#3B82F6',
+          }}>
+            <FontAwesome name="circle-info" size={13} color="#3B82F6" style={{ marginTop: 1 }} />
+            <Text style={{ flex: 1, fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#475569', lineHeight: 15 }}>
+              {t('trade_journal.goals.trade_visibility_hint', { defaultValue: 'Tap ✅ Trading / 🔒 Private on each pet to control visibility. Only pets marked Trading show on your profile so others know you\'re looking for them.' })}
+            </Text>
+          </View>
+        )}
 
         {wishlistPets.length === 0 ? (
           <View style={styles.emptyWrap}>
@@ -1029,7 +1113,7 @@ const TradeJournal = ({
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
                       {petVal > 0 && (
                         <View style={{ backgroundColor: isDarkMode ? '#1e3a5f' : '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                          <Text style={{ fontSize: 9, fontWeight: '700', color: '#3B82F6' }}>🏷️ {formatValue(petVal)}</Text>
+                          <Text style={{ fontSize: 9, fontWeight: '700', color: '#3B82F6' }}>🏷️ {formatPlain(petVal)}</Text>
                         </View>
                       )}
                       <View style={{ backgroundColor: difficulty.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
@@ -1043,6 +1127,29 @@ const TradeJournal = ({
                     </View>
                   </View>
 
+                  {/* Toggle available for trade */}
+                  <TouchableOpacity
+                    onPress={() => toggleAvailableForTrade(index, 'wishlist')}
+                    style={{
+                      marginRight: 4,
+                      backgroundColor: pet.availableForTrade
+                        ? (isDarkMode ? '#10B98120' : '#D1FAE5')
+                        : (isDarkMode ? '#F59E0B20' : '#FEF3C7'),
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: pet.availableForTrade ? '#10B981' : '#F59E0B',
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 10,
+                      fontWeight: '800',
+                      color: pet.availableForTrade ? '#10B981' : '#D97706',
+                    }}>
+                      {pet.availableForTrade ? '✅ Trading' : '🔒 Private'}
+                    </Text>
+                  </TouchableOpacity>
                   {/* Delete */}
                   <TouchableOpacity onPress={() => removeWishlistPet(index)} style={{ padding: 4 }}>
                     <FontAwesome name="xmark" size={12} color="#cbd5e1" />

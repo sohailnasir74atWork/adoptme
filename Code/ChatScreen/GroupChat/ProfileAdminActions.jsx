@@ -11,6 +11,7 @@ const ProfileAdminActions = ({
   handleMakeBabyMod, handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
+  handleDeleteUserData, deletingUser = false,
 }) => {
   const c = getThemeColors(isDarkMode);
   const isBabyModOnly = isBabyMod && !isAdmin && !isModerator;
@@ -96,6 +97,39 @@ const ProfileAdminActions = ({
           />
         )}
       </View>
+
+      {/* Delete User Data — admin/mod only, NOT JMD */}
+      {!isBabyModOnly && handleDeleteUserData && (
+        <>
+          <View style={{ height: 1, backgroundColor: border, marginTop: 10, marginBottom: 10 }} />
+          <TouchableOpacity
+            onPress={handleDeleteUserData}
+            disabled={deletingUser}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              paddingVertical: 10,
+              borderRadius: 8,
+              backgroundColor: '#dc262618',
+              borderWidth: 1,
+              borderColor: '#dc262640',
+              opacity: deletingUser ? 0.5 : 1,
+            }}
+          >
+            {deletingUser ? (
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#dc2626' }}>Deleting...</Text>
+            ) : (
+              <>
+                <Text style={{ fontSize: 14 }}>🗑️</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#dc2626' }}>Delete This User</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
     </View>
   );
 };

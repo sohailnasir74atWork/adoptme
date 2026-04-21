@@ -96,6 +96,8 @@ const base64ToBytes = (base64) => {
 const decodeEmail = (encoded) => (encoded ? encoded.replace(/\(dot\)/g, '.') : '');
 const BAD_KEYS = new Set(['undefined', 'onloaduser', '', null, undefined]);
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+const SUPER_ADMIN_ID = 'DNvBQC5ySWP8QiJNGpIvqd9DSWB2';
+const USER_CHATS_PAGE_SIZE = 20;
 
 // ✅ Sanitize search query — strip chars invalid in Firebase RTDB queries
 const sanitizeSearchQuery = (q) => q.replace(/[.#$\[\]\/\\]/g, '');
@@ -163,6 +165,7 @@ const AdminDashboard = () => {
   const isDark = theme === 'dark';
   const db = useMemo(() => getDatabase(), []);
   const navigation = useNavigation();
+  const isSuperAdmin = isAdmin || currentUser?.id === SUPER_ADMIN_ID;
 
   // Tabs
   const [activeTab, setActiveTab] = useState('banned');
@@ -445,6 +448,15 @@ const AdminDashboard = () => {
   const [chatSearching2, setChatSearching2] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [loadingChat, setLoadingChat] = useState(false);
+
+  // User Chats (Super Admin) — view all private chats of a single user
+  const [userChatsInput, setUserChatsInput] = useState('');
+  const [userChatsTarget, setUserChatsTarget] = useState(null);
+  const [userChatsList, setUserChatsList] = useState([]);
+  const [userChatsLoading, setUserChatsLoading] = useState(false);
+  const [userChatsLoadingMore, setUserChatsLoadingMore] = useState(false);
+  const [userChatsHasMore, setUserChatsHasMore] = useState(true);
+  const userChatsCursorRef = React.useRef(null);
 
   // Polls Management
   const [polls, setPolls] = useState([]);
@@ -1145,6 +1157,130 @@ const AdminDashboard = () => {
   }, [db, chatPerson1, chatPerson2]);
 
   // ─────────────────────────────────────────────
+  // User Chats Viewer — paginated list of all chats for a single user
+  const fetchUserChats = useCallback(async (targetUser, reset = false) => {
+    if (!targetUser?.id) return;
+    try {
+      if (reset) {
+        setUserChatsLoading(true);
+        userChatsCursorRef.current = null;
+        setUserChatsHasMore(true);
+      } else {
+        if (!userChatsHasMore || userChatsLoadingMore || userChatsLoading) return;
+        setUserChatsLoadingMore(true);
+      }
+
+      const baseRef = ref(db, `chat_meta_data/${targetUser.id}`);
+      const cursor = userChatsCursorRef.current;
+      const q = cursor != null
+        ? query(baseRef, orderByChild('timestamp'), endAt(cursor - 1), limitToLast(USER_CHATS_PAGE_SIZE))
+        : query(baseRef, orderByChild('timestamp'), limitToLast(USER_CHATS_PAGE_SIZE));
+
+      const snap = await get(q);
+      if (!snap.exists()) {
+        setUserChatsHasMore(false);
+        if (reset) setUserChatsList([]);
+        return;
+      }
+
+      const items = [];
+      snap.forEach((child) => {
+        const v = child.val() || {};
+        items.push({
+          partnerId: child.key,
+          chatId: v.chatId,
+          lastMessage: v.lastMessage || '',
+          timestamp: v.timestamp || 0,
+          unreadCount: v.unreadCount || 0,
+          partnerName: v.receiverName || 'Unknown',
+          partnerAvatar: v.receiverAvatar || DEFAULT_AVATAR,
+        });
+      });
+      items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      if (items.length > 0) {
+        userChatsCursorRef.current = items[items.length - 1].timestamp || 0;
+      }
+      if (items.length < USER_CHATS_PAGE_SIZE) setUserChatsHasMore(false);
+
+      setUserChatsList((prev) => {
+        const merged = reset ? items : [...prev, ...items];
+        const seen = new Set();
+        return merged.filter((c) => {
+          if (!c.partnerId || seen.has(c.partnerId)) return false;
+          seen.add(c.partnerId);
+          return true;
+        });
+      });
+    } catch (err) {
+      console.warn('[AdminDashboard] fetchUserChats error:', err?.message);
+    } finally {
+      setUserChatsLoading(false);
+      setUserChatsLoadingMore(false);
+    }
+  }, [db, userChatsHasMore, userChatsLoadingMore, userChatsLoading]);
+
+  const loadUserChatsForInput = useCallback(async () => {
+    const id = userChatsInput.trim();
+    if (!id) { Alert.alert('Error', 'Paste a user ID first.'); return; }
+    if (!looksLikeUserId(id)) { Alert.alert('Error', 'Not a valid Firebase user ID.'); return; }
+
+    Keyboard.dismiss();
+    setUserChatsLoading(true);
+    setUserChatsList([]);
+    userChatsCursorRef.current = null;
+    setUserChatsHasMore(true);
+
+    let target = { id, displayName: id, avatar: DEFAULT_AVATAR, email: null };
+    try {
+      const uSnap = await get(ref(db, `users/${id}`));
+      if (uSnap.exists()) {
+        const u = uSnap.val() || {};
+        target = {
+          id,
+          displayName: u.displayName || u.userName || 'Unknown',
+          avatar: getAvatarSafe(u),
+          email: u.email || null,
+        };
+      }
+    } catch {}
+
+    setUserChatsTarget(target);
+    fetchUserChats(target, true);
+  }, [db, userChatsInput, fetchUserChats]);
+
+  const clearUserChatsTarget = useCallback(() => {
+    setUserChatsTarget(null);
+    setUserChatsInput('');
+    setUserChatsList([]);
+    userChatsCursorRef.current = null;
+    setUserChatsHasMore(true);
+  }, []);
+
+  const openChatFromUserChats = useCallback((entry) => {
+    if (!userChatsTarget?.id || !entry?.partnerId) return;
+    const partner = {
+      id: entry.partnerId,
+      displayName: entry.partnerName || 'Unknown',
+      avatar: entry.partnerAvatar || DEFAULT_AVATAR,
+      email: null,
+    };
+    setChatPerson1(userChatsTarget);
+    setChatPerson2(partner);
+    setChatSearch1(''); setChatSearch2('');
+    setChatResults1([]); setChatResults2([]);
+    setActiveTab('chatViewer');
+  }, [userChatsTarget]);
+
+  // Auto-load chat when arriving at chatViewer via openChatFromUserChats
+  useEffect(() => {
+    if (activeTab === 'chatViewer' && chatPerson1?.id && chatPerson2?.id && chatMessages.length === 0 && !loadingChat) {
+      loadChat();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, chatPerson1?.id, chatPerson2?.id]);
+
+  // ─────────────────────────────────────────────
   // Polls Management
   const fetchPolls = useCallback(async () => {
     setLoadingPolls(true);
@@ -1210,53 +1346,52 @@ const AdminDashboard = () => {
   // 🐰 Upload poll image to Bunny CDN
   const handlePickPollImage = useCallback(async () => {
     setUploadingPollImage(true);
+
+    let response;
     try {
-      launchImageLibrary(
-        { mediaType: 'photo', selectionLimit: 1, quality: 0.8, maxWidth: 1920, maxHeight: 1920 },
-        async (response) => {
-          try {
-            if (!response || response.didCancel) { setUploadingPollImage(false); return; }
-            if (response.errorCode) { setUploadingPollImage(false); return; }
-            const asset = response?.assets?.[0];
-            if (!asset?.uri) { setUploadingPollImage(false); return; }
-
-            let imageUri = asset.uri;
-            // Compress if > 1MB
-            const fileSize = asset.fileSize || 0;
-            if (fileSize > 1024 * 1024) {
-              try {
-                imageUri = await CompressorImage.compress(imageUri, {
-                  maxWidth: 1024, quality: 0.7, returnableOutputType: 'uri',
-                });
-              } catch (e) { console.warn('Compression failed, using original:', e); }
-            }
-
-            // Upload to Bunny
-            const localPath = imageUri.startsWith('file://') ? imageUri.replace('file://', '') : imageUri;
-            const base64 = await RNFS.readFile(localPath, 'base64');
-            const bytes = base64ToBytes(base64);
-            const fileName = `poll_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-            const remotePath = `polls/${fileName}`;
-
-            const res = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`, {
-              method: 'PUT',
-              headers: { AccessKey: BUNNY_ACCESS_KEY, 'Content-Type': 'image/jpeg' },
-              body: bytes,
-            });
-
-            if (!res.ok) throw new Error('Upload failed');
-            const cdnUrl = `${BUNNY_CDN_BASE}/${remotePath}`;
-            setPollImageUrl(cdnUrl);
-          } catch (err) {
-            console.error('Poll image upload error:', err);
-            Alert.alert('Error', 'Could not upload image.');
-          } finally {
-            setUploadingPollImage(false);
-          }
-        },
-      );
+      response = await launchImageLibrary({
+        mediaType: 'photo', selectionLimit: 1, quality: 0.8, maxWidth: 1920, maxHeight: 1920,
+      });
     } catch (err) {
       console.error('Image picker launch error:', err);
+      setUploadingPollImage(false);
+      return;
+    }
+
+    try {
+      if (!response || response.didCancel || response.errorCode) { setUploadingPollImage(false); return; }
+      const asset = response?.assets?.[0];
+      if (!asset?.uri) { setUploadingPollImage(false); return; }
+
+      let imageUri = asset.uri;
+      const fileSize = asset.fileSize || 0;
+      if (fileSize > 1024 * 1024) {
+        try {
+          imageUri = await CompressorImage.compress(imageUri, {
+            maxWidth: 1024, quality: 0.7, returnableOutputType: 'uri',
+          });
+        } catch (e) { console.warn('Compression failed, using original:', e); }
+      }
+
+      const localPath = imageUri.startsWith('file://') ? imageUri.replace('file://', '') : imageUri;
+      const base64 = await RNFS.readFile(localPath, 'base64');
+      const bytes = base64ToBytes(base64);
+      const fileName = `poll_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+      const remotePath = `polls/${fileName}`;
+
+      const res = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${remotePath}`, {
+        method: 'PUT',
+        headers: { AccessKey: BUNNY_ACCESS_KEY, 'Content-Type': 'image/jpeg' },
+        body: bytes,
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+      const cdnUrl = `${BUNNY_CDN_BASE}/${remotePath}`;
+      setPollImageUrl(cdnUrl);
+    } catch (err) {
+      console.error('Poll image upload error:', err);
+      Alert.alert('Error', 'Could not upload image.');
+    } finally {
       setUploadingPollImage(false);
     }
   }, []);
@@ -1401,6 +1536,17 @@ const AdminDashboard = () => {
             Chat Viewer
           </Text>
         </TouchableOpacity>
+
+        {isSuperAdmin && (
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'userChats' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
+            onPress={() => setActiveTab('userChats')}
+          >
+            <Text style={[styles.tabText, activeTab === 'userChats' && styles.activeTabText, { color: activeTab === 'userChats' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
+              User Chats
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.tab, activeTab === 'polls' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
@@ -1769,6 +1915,90 @@ const AdminDashboard = () => {
                   </View>
                 );
               }}
+            />
+          )}
+        </View>
+      ) : activeTab === 'userChats' && isSuperAdmin ? (
+        <View style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Target User ID</Text>
+            {userChatsTarget ? (
+              <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                <Image source={{ uri: userChatsTarget.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{userChatsTarget.displayName}</Text>
+                  <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{userChatsTarget.email || userChatsTarget.id}</Text>
+                </View>
+                <TouchableOpacity onPress={clearUserChatsTarget} style={{ padding: 4 }}>
+                  <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.searchContainer}>
+                <TextInput
+                  value={userChatsInput}
+                  onChangeText={setUserChatsInput}
+                  placeholder="Paste user ID..."
+                  placeholderTextColor={isDark ? '#666' : '#999'}
+                  style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={loadUserChatsForInput}
+                />
+                <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#34C759' }]} onPress={loadUserChatsForInput}>
+                  <Ionicons name="search" size={20} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {userChatsLoading && userChatsList.length === 0 ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={userChatsList}
+              keyExtractor={(item) => item.partnerId}
+              contentContainerStyle={styles.listContent}
+              onEndReachedThreshold={0.3}
+              onEndReached={() => {
+                if (userChatsTarget && userChatsHasMore && !userChatsLoadingMore && !userChatsLoading) {
+                  fetchUserChats(userChatsTarget, false);
+                }
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="chatbubbles-outline" size={48} color={isDark ? '#333' : '#CCC'} />
+                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
+                    {userChatsTarget ? 'No private chats for this user' : 'Paste a user ID to view all their private chats'}
+                  </Text>
+                </View>
+              }
+              ListFooterComponent={
+                userChatsLoadingMore ? (
+                  <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 12 }} />
+                ) : null
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => openChatFromUserChats(item)}
+                  style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+                >
+                  <Image source={{ uri: item.partnerAvatar }} style={styles.avatar} />
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      {item.partnerName}
+                    </Text>
+                    <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                      {item.lastMessage || '—'}
+                    </Text>
+                    <Text style={{ color: isDark ? '#555' : '#999', fontSize: 11, marginTop: 2 }}>
+                      {item.timestamp ? timeAgo(item.timestamp) : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={isDark ? '#555' : '#CCC'} />
+                </TouchableOpacity>
+              )}
             />
           )}
         </View>

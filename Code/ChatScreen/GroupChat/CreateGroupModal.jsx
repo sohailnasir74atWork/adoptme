@@ -178,31 +178,23 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
   }, []);
 
   // Handle image picker
-  const handlePickImage = useCallback(() => {
+  const handlePickImage = useCallback(async () => {
+    let response;
     try {
-      launchImageLibrary(
-        {
-          mediaType: 'photo',
-          selectionLimit: 1,
-          quality: 0.8,
-        },
-        (response) => {
-          try {
-            if (response?.didCancel || response?.errorCode) {
-              return;
-            }
-
-            const asset = response?.assets?.[0];
-            if (asset?.uri) {
-              setGroupAvatarUri(asset.uri);
-            }
-          } catch (error) {
-            console.warn('Image picker callback error:', error);
-          }
-        }
-      );
+      response = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        quality: 0.8,
+      });
     } catch (error) {
       console.warn('Image picker launch error:', error);
+      return;
+    }
+
+    if (response?.didCancel || response?.errorCode) return;
+    const asset = response?.assets?.[0];
+    if (asset?.uri) {
+      setGroupAvatarUri(asset.uri);
     }
   }, []);
 

@@ -29,6 +29,7 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
+import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -195,6 +196,20 @@ const IceBreaker = ({ visible, onClose }) => {
 
   const MAX_PLAYS = 1;
   const c = getThemeColors(isDarkMode);
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('icebreaker'));
+
+  useEffect(() => {
+    if (!visible) return;
+    initGameSounds();
+    return () => releaseGameSounds();
+  }, [visible]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled('icebreaker', next);
+    triggerHapticFeedback('selection');
+  };
 
   // Current crack stage
   const crackStage = useMemo(() => {
@@ -288,6 +303,7 @@ const IceBreaker = ({ visible, onClose }) => {
 
     // Haptic
     triggerHapticFeedback('impactLight');
+    playPop('icebreaker');
 
     // Shake animation — more dramatic as we get closer
     const intensity = 2 + (newCount / TAPS_TO_REVEAL) * 6;
@@ -325,6 +341,7 @@ const IceBreaker = ({ visible, onClose }) => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       setRevealTime(parseFloat(elapsed));
       triggerHapticFeedback('notificationSuccess');
+      playWoosh('icebreaker');
       setPhase('guessing');
 
       // Glow reveal
@@ -358,8 +375,10 @@ const IceBreaker = ({ visible, onClose }) => {
 
     if (correct) {
       triggerHapticFeedback('notificationSuccess');
+      playWoosh('icebreaker');
     } else {
       triggerHapticFeedback('notificationError');
+      playPop('icebreaker');
     }
 
     setTimeout(() => finishGame(correct), 1200);
@@ -423,14 +442,19 @@ const IceBreaker = ({ visible, onClose }) => {
                 <Text style={[s.subtitle, { color: c.textSecondary }]}>Who's That Pet?</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => {
-              setPhase('loading');
-              setTargetPet(null);
-              setChips([]);
-              onClose();
-            }} style={[s.closeBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
-              <Icon name="close" size={18} color={c.textSecondary} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity onPress={toggleSound} style={[s.closeBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
+                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={16} color={c.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {
+                setPhase('loading');
+                setTargetPet(null);
+                setChips([]);
+                onClose();
+              }} style={[s.closeBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
+                <Icon name="close" size={18} color={c.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* ═══ READY PHASE ═══ */}

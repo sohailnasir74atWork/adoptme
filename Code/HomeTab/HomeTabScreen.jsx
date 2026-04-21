@@ -60,6 +60,12 @@ const formatValue = (v) => {
   return v % 1 === 0 ? v.toString() : v.toFixed(2);
 };
 
+const formatPlain = (v) => {
+  if (!v || typeof v !== 'number') return '0';
+  if (v % 1 === 0) return v.toLocaleString('en-US');
+  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 const HomeTabScreen = ({ selectedTheme }) => {
   const { theme, user, tradingServerLink, appdatabase, firestoreDB } = useGlobalState();
   const { localState } = useLocalState();
@@ -402,7 +408,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={styles.petsWorthTotalPill}>
                   <FontAwesome name="tags" size={10} color="#FFC107" solid />
-                  <Text style={styles.petsWorthTotalText}>{formatValue(portfolioValue)}</Text>
+                  <Text style={styles.petsWorthTotalText}>{formatPlain(portfolioValue)}</Text>
                 </View>
                 <FontAwesome name="chevron-right" size={10} color="rgba(255,255,255,0.5)" />
               </View>
@@ -541,6 +547,22 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 </View>
                 <Text style={styles.gameLabel}>{t('home_tab.game_mystery_egg')}</Text>
                 <Text style={styles.gameDesc}>{t('home_tab.game_mystery_egg_desc')}</Text>
+              </TouchableOpacity>
+
+              {/* 🎯 Arrow Game */}
+              <TouchableOpacity
+                style={[styles.gameCard, { backgroundColor: '#EF4444', position: 'relative' }]}
+                onPress={() => requireSignIn(() => navigation.navigate('ArrowGameScreen'), 'Sign in to play Arrow Game')}
+                activeOpacity={0.85}
+              >
+                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontSize: 8, fontWeight: '900', color: '#EF4444' }}>HOT</Text>
+                </View>
+                <View style={styles.gameIconWrap}>
+                  <FontAwesome name="location-arrow" size={28} color="#fff" solid />
+                </View>
+                <Text style={styles.gameLabel}>Arrow Game</Text>
+                <Text style={styles.gameDesc}>40 Levels!</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

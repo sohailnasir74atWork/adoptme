@@ -368,6 +368,99 @@ const FRAME_DEFS = {
     tripleBorder: true,
     tripleBorderWidth: 0.8,
   },
+
+  // ═══════════════════════════════════════════════════════════
+  //  MODERN ELEGANT SERIES (girly-chic aesthetic, static colors)
+  // ═══════════════════════════════════════════════════════════
+
+  // ── COMMON — clean minimalist rings ──
+  pearl_shimmer: { borderWidth: 2.2, gap: 1.2, decorations: [] },
+  blush_silk:    { borderWidth: 2.2, gap: 1.2, decorations: [] },
+
+  // ── UNCOMMON — sparkles + elegant accents ──
+  champagne_ribbon: {
+    borderWidth: 2.3,
+    gap: 1.3,
+    glowOpacity: 0.22,
+    decorScale: 0.95,
+    decorations: ['sparkles', 'ribbon'],
+    scalloped: true,
+  },
+  lilac_petal: {
+    borderWidth: 2.3,
+    gap: 1.3,
+    glowOpacity: 0.22,
+    decorScale: 0.95,
+    decorations: ['sparkles', 'wings'],
+  },
+  sage_mist: {
+    borderWidth: 2.3,
+    gap: 1.3,
+    glowOpacity: 0.2,
+    decorScale: 0.9,
+    decorations: ['sparkles'],
+    scalloped: true,
+  },
+
+  // ── RARE — gems, double ring, scalloped ──
+  peach_sorbet: {
+    borderWidth: 2.6,
+    gap: 1.6,
+    glowOpacity: 0.5,
+    decorScale: 1.3,
+    decorations: ['gems', 'sparkles', 'wings'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1,
+  },
+  dusty_rose_frame: {
+    borderWidth: 2.6,
+    gap: 1.6,
+    glowOpacity: 0.5,
+    decorScale: 1.3,
+    decorations: ['gems', 'sparkles', 'crown3'],
+    doubleBorder: true,
+    doubleBorderWidth: 1,
+  },
+
+  // ── LEGENDARY — crown + wings + triple ring, strong glow ──
+  moonstone_glow: {
+    borderWidth: 3.2,
+    gap: 2,
+    glowOpacity: 0.78,
+    decorScale: 1.8,
+    decorations: ['crown3', 'gems', 'sparkles', 'wings'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1.3,
+    tripleBorder: true,
+    tripleBorderWidth: 0.75,
+  },
+  rose_gold_luxe: {
+    borderWidth: 3.2,
+    gap: 2,
+    glowOpacity: 0.78,
+    decorScale: 1.8,
+    decorations: ['crown5', 'gems', 'sparkles', 'ribbon'],
+    doubleBorder: true,
+    doubleBorderWidth: 1.3,
+    tripleBorder: true,
+    tripleBorderWidth: 0.75,
+  },
+
+  // ── EXCLUSIVE — every decoration, max glow ──
+  celestial_pearl: {
+    borderWidth: 3.7,
+    gap: 2.1,
+    glowOpacity: 0.95,
+    decorScale: 2.1,
+    decorations: ['crown5', 'gems', 'sparkles', 'wings', 'ribbon', 'flames'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1.5,
+    tripleBorder: true,
+    tripleBorderWidth: 0.85,
+  },
 };
 
 const DEFAULT_DEF = {

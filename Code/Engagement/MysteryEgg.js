@@ -17,6 +17,7 @@ import SafeLottieView from '../Helper/SafeLottieView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
+import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { useTranslation } from 'react-i18next';
 import { getUserXP } from './xpUtils';
 import { getStarBalance } from './starUtils';
@@ -433,6 +434,20 @@ const MysteryEggScreen = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const bgPulse = useRef(new Animated.Value(0)).current;
 
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('mysteryegg'));
+
+  useEffect(() => {
+    initGameSounds();
+    return () => releaseGameSounds();
+  }, []);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled('mysteryegg', next);
+    triggerHapticFeedback('selection');
+  };
+
   // Subtle bg pulse animation
   useEffect(() => {
     Animated.loop(
@@ -497,6 +512,7 @@ const MysteryEggScreen = ({ navigation }) => {
             setPhase('hatching');
             setLoading(true);
             triggerHapticFeedback('impactMedium');
+            playPop('mysteryegg');
 
             // Start wobble animation — more dramatic for kids
             Animated.loop(
@@ -527,6 +543,7 @@ const MysteryEggScreen = ({ navigation }) => {
                     setPhase('reveal');
                     setLoading(false);
                     triggerHapticFeedback('notificationSuccess');
+                    playWoosh('mysteryegg');
                   });
 
                   // Refresh data
@@ -595,8 +612,13 @@ const MysteryEggScreen = ({ navigation }) => {
           </View>
         </View>
 
-        <View style={[s.xpBadge, { backgroundColor: isDark ? '#a855f7' : '#FF6B9D' }]}>
-          <Text style={s.xpBadgeText}>⭐ {starBalance.toLocaleString()}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity onPress={toggleSound} style={[s.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)' }]} activeOpacity={0.7}>
+            <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={18} color={isDark ? '#e2e8f0' : '#4a2c2a'} />
+          </TouchableOpacity>
+          <View style={[s.xpBadge, { backgroundColor: isDark ? '#a855f7' : '#FF6B9D' }]}>
+            <Text style={s.xpBadgeText}>⭐ {starBalance.toLocaleString()}</Text>
+          </View>
         </View>
       </View>
 

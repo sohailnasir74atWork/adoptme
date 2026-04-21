@@ -3516,7 +3516,7 @@ PODS:
     - Yoga
   - react-native-in-app-review (4.3.5):
     - React-Core
-  - react-native-safe-area-context (5.5.2):
+  - react-native-safe-area-context (5.7.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -3534,8 +3534,8 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-safe-area-context/common (= 5.5.2)
-    - react-native-safe-area-context/fabric (= 5.5.2)
+    - react-native-safe-area-context/common (= 5.7.0)
+    - react-native-safe-area-context/fabric (= 5.7.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -3546,7 +3546,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-safe-area-context/common (5.5.2):
+  - react-native-safe-area-context/common (5.7.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -3574,7 +3574,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-safe-area-context/fabric (5.5.2):
+  - react-native-safe-area-context/fabric (5.7.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -5458,7 +5458,7 @@ SPEC CHECKSUMS:
   react-native-compressor: 2215e3c639a5b4259089de9cf87f7825a14b71db
   react-native-image-picker: b99d9c1f2ddbef491eb49e1103e5c2ce78b9ab37
   react-native-in-app-review: cf4a29c5a1d6bb28dd0d15f1fb1faa25e265bfb5
-  react-native-safe-area-context: 9c4af81e2f37bcb251946f3dba42c2eeedfad59a
+  react-native-safe-area-context: 7e0ba374906d8f5009aaf96cd19d4866d8de342b
   react-native-tracking-transparency: 25ff1ff866e338c137c818bdec20526bb05ffcc1
   react-native-view-shot: a52222a76e68bf04449fd18a4efeb899a4ab21d7
   React-NativeModulesApple: 8091798d02f1d69e2fdc8affddc4c8783cc8b352

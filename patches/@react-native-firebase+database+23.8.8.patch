@@ -1,0 +1,958 @@
+diff --git a/node_modules/@react-native-firebase/database/.DS_Store b/node_modules/@react-native-firebase/database/.DS_Store
+new file mode 100644
+index 0000000..566933f
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/.DS_Store differ
+diff --git a/node_modules/@react-native-firebase/database/android/.DS_Store b/node_modules/@react-native-firebase/database/android/.DS_Store
+new file mode 100644
+index 0000000..da52b43
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/.DS_Store differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/results.bin b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/results.bin
+new file mode 100644
+index 0000000..7ed749e
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/results.bin
+@@ -0,0 +1 @@
++o/bundleLibRuntimeToDirDebug
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/BuildConfig.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/BuildConfig.dex
+new file mode 100644
+index 0000000..08fc44a
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/BuildConfig.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.dex
+new file mode 100644
+index 0000000..63920d9
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.dex
+new file mode 100644
+index 0000000..47b86d0
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.dex
+new file mode 100644
+index 0000000..dbcc14f
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.dex
+new file mode 100644
+index 0000000..d4c21bd
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.dex
+new file mode 100644
+index 0000000..83ce6c8
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.dex
+new file mode 100644
+index 0000000..c40baf3
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.dex
+new file mode 100644
+index 0000000..d5edbc7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.dex
+new file mode 100644
+index 0000000..c015d9e
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.dex
+new file mode 100644
+index 0000000..07b07af
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.dex
+new file mode 100644
+index 0000000..f7cf0e9
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.dex
+new file mode 100644
+index 0000000..38ef710
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.dex
+new file mode 100644
+index 0000000..11dcc57
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.dex
+new file mode 100644
+index 0000000..2cb074d
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.dex
+new file mode 100644
+index 0000000..be981aa
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.dex
+new file mode 100644
+index 0000000..7a4e382
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.dex
+new file mode 100644
+index 0000000..b7e61d4
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseException.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseException.dex
+new file mode 100644
+index 0000000..aefb841
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseException.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseStatics.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseStatics.dex
+new file mode 100644
+index 0000000..e878fe0
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalDatabaseStatics.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.dex
+new file mode 100644
+index 0000000..b02c6e9
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.dex
+new file mode 100644
+index 0000000..26e1986
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.dex
+new file mode 100644
+index 0000000..90b33ee
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.dex
+new file mode 100644
+index 0000000..2f2cdf7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin
+new file mode 100644
+index 0000000..e59f1e7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/38891b220c223b0f7e182e4557180fd6/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/results.bin b/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/results.bin
+new file mode 100644
+index 0000000..0d259dd
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/results.bin
+@@ -0,0 +1 @@
++o/classes
+diff --git a/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/transformed/classes/classes_dex/classes.dex b/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/transformed/classes/classes_dex/classes.dex
+new file mode 100644
+index 0000000..e09c32d
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/.transforms/d0077e84429aeac102ad5c51fe43de40/transformed/classes/classes_dex/classes.dex differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/debug/io/invertase/firebase/database/BuildConfig.java b/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/debug/io/invertase/firebase/database/BuildConfig.java
+new file mode 100644
+index 0000000..4d8b0fd
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/debug/io/invertase/firebase/database/BuildConfig.java
+@@ -0,0 +1,10 @@
++/**
++ * Automatically generated file. DO NOT MODIFY
++ */
++package io.invertase.firebase.database;
++
++public final class BuildConfig {
++  public static final boolean DEBUG = Boolean.parseBoolean("true");
++  public static final String LIBRARY_PACKAGE_NAME = "io.invertase.firebase.database";
++  public static final String BUILD_TYPE = "debug";
++}
+diff --git a/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/release/io/invertase/firebase/database/BuildConfig.java b/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/release/io/invertase/firebase/database/BuildConfig.java
+new file mode 100644
+index 0000000..7a695e9
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/generated/source/buildConfig/release/io/invertase/firebase/database/BuildConfig.java
+@@ -0,0 +1,10 @@
++/**
++ * Automatically generated file. DO NOT MODIFY
++ */
++package io.invertase.firebase.database;
++
++public final class BuildConfig {
++  public static final boolean DEBUG = false;
++  public static final String LIBRARY_PACKAGE_NAME = "io.invertase.firebase.database";
++  public static final String BUILD_TYPE = "release";
++}
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml
+new file mode 100644
+index 0000000..f27a330
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="io.invertase.firebase.database" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json
+new file mode 100644
+index 0000000..bb7994d
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json
+@@ -0,0 +1,18 @@
++{
++  "version": 3,
++  "artifactType": {
++    "type": "AAPT_FRIENDLY_MERGED_MANIFESTS",
++    "kind": "Directory"
++  },
++  "applicationId": "io.invertase.firebase.database",
++  "variantName": "debug",
++  "elements": [
++    {
++      "type": "SINGLE",
++      "filters": [],
++      "attributes": [],
++      "outputFile": "AndroidManifest.xml"
++    }
++  ],
++  "elementType": "File"
++}
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml
+new file mode 100644
+index 0000000..f27a330
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="io.invertase.firebase.database" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json
+new file mode 100644
+index 0000000..4f7c525
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json
+@@ -0,0 +1,18 @@
++{
++  "version": 3,
++  "artifactType": {
++    "type": "AAPT_FRIENDLY_MERGED_MANIFESTS",
++    "kind": "Directory"
++  },
++  "applicationId": "io.invertase.firebase.database",
++  "variantName": "release",
++  "elements": [
++    {
++      "type": "SINGLE",
++      "filters": [],
++      "attributes": [],
++      "outputFile": "AndroidManifest.xml"
++    }
++  ],
++  "elementType": "File"
++}
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties b/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties
+new file mode 100644
+index 0000000..1211b1e
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties
+@@ -0,0 +1,6 @@
++aarFormatVersion=1.0
++aarMetadataVersion=1.0
++minCompileSdk=1
++minCompileSdkExtension=0
++minAndroidGradlePluginVersion=1.0.0
++coreLibraryDesugaringEnabled=false
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties b/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties
+new file mode 100644
+index 0000000..1211b1e
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties
+@@ -0,0 +1,6 @@
++aarFormatVersion=1.0
++aarMetadataVersion=1.0
++minCompileSdk=1
++minCompileSdkExtension=0
++minAndroidGradlePluginVersion=1.0.0
++coreLibraryDesugaringEnabled=false
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json b/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json
+new file mode 100644
+index 0000000..9e26dfe
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json
+@@ -0,0 +1 @@
++{}
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json b/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+new file mode 100644
+index 0000000..9e26dfe
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+@@ -0,0 +1 @@
++{}
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar
+new file mode 100644
+index 0000000..031635a
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar
+new file mode 100644
+index 0000000..01fbd9c
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar
+new file mode 100644
+index 0000000..68f1e50
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar
+new file mode 100644
+index 0000000..68f1e50
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_symbol_list/debug/generateDebugRFile/R.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_symbol_list/debug/generateDebugRFile/R.txt
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties
+new file mode 100644
+index 0000000..d4e4c0c
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties
+@@ -0,0 +1 @@
++#Sat Apr 18 14:06:31 PKT 2026
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml
+new file mode 100644
+index 0000000..9594f07
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="debug$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/debug/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="debug" generated-set="debug$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/debug/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/generated/res/resValues/debug"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/generated/res/resValues/debug"/></dataSet><mergedItems/></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugAssets/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugAssets/merger.xml
+new file mode 100644
+index 0000000..fc4eb88
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugAssets/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/assets"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/debug/assets"/></dataSet><dataSet config="generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/intermediates/shader_assets/debug/compileDebugShaders/out"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml
+new file mode 100644
+index 0000000..faaed9f
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/jniLibs"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/debug/jniLibs"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugShaders/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugShaders/merger.xml
+new file mode 100644
+index 0000000..02dedc6
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeDebugShaders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/shaders"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/debug/shaders"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml
+new file mode 100644
+index 0000000..bca820d
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/assets"/></dataSet><dataSet config="release" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/release/assets"/></dataSet><dataSet config="generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/intermediates/shader_assets/release/compileReleaseShaders/out"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml
+new file mode 100644
+index 0000000..e00f1d9
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/shaders"/></dataSet><dataSet config="release" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/release/shaders"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+new file mode 100644
+index 0000000..8132cc5
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+@@ -0,0 +1 @@
++#Sat Apr 18 18:33:54 PKT 2026
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+new file mode 100644
+index 0000000..38fbef4
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release" generated-set="release$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/generated/res/resValues/release"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/build/generated/res/resValues/release"/></dataSet><mergedItems/></merger>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class
+new file mode 100644
+index 0000000..cf889cc
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..981a370
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class
+new file mode 100644
+index 0000000..89d8fcd
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..2c31792
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..6307f20
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class
+new file mode 100644
+index 0000000..84483e7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class
+new file mode 100644
+index 0000000..9585674
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class
+new file mode 100644
+index 0000000..87c90b3
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class
+new file mode 100644
+index 0000000..3715dd0
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class
+new file mode 100644
+index 0000000..09064bf
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class
+new file mode 100644
+index 0000000..2137360
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class
+new file mode 100644
+index 0000000..d2c04b8
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..59d7737
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class
+new file mode 100644
+index 0000000..1bc9a36
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class
+new file mode 100644
+index 0000000..8c0fd0d
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class
+new file mode 100644
+index 0000000..ce6dfd2
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class
+new file mode 100644
+index 0000000..675c919
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class
+new file mode 100644
+index 0000000..d03c940
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class
+new file mode 100644
+index 0000000..e145842
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..97d5eb7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..f9d63e5
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..41e9041
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..c3230a4
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class
+new file mode 100644
+index 0000000..7980939
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/BuildConfig.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..981a370
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class
+new file mode 100644
+index 0000000..89d8fcd
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..2c31792
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..6307f20
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class
+new file mode 100644
+index 0000000..84483e7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class
+new file mode 100644
+index 0000000..9585674
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class
+new file mode 100644
+index 0000000..87c90b3
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class
+new file mode 100644
+index 0000000..3715dd0
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class
+new file mode 100644
+index 0000000..09064bf
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class
+new file mode 100644
+index 0000000..2137360
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class
+new file mode 100644
+index 0000000..d2c04b8
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..59d7737
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class
+new file mode 100644
+index 0000000..1bc9a36
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class
+new file mode 100644
+index 0000000..8c0fd0d
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class
+new file mode 100644
+index 0000000..ce6dfd2
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class
+new file mode 100644
+index 0000000..675c919
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class
+new file mode 100644
+index 0000000..d03c940
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseException.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class
+new file mode 100644
+index 0000000..e145842
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalDatabaseStatics.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..97d5eb7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..f9d63e5
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..41e9041
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..c3230a4
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt
+new file mode 100644
+index 0000000..78ac5b8
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt
+@@ -0,0 +1,2 @@
++R_DEF: Internal format may change without notice
++local
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+new file mode 100644
+index 0000000..78ac5b8
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+@@ -0,0 +1,2 @@
++R_DEF: Internal format may change without notice
++local
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt
+new file mode 100644
+index 0000000..e2004f6
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt
+@@ -0,0 +1,17 @@
++1<?xml version="1.0" encoding="utf-8"?>
++2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++3    package="io.invertase.firebase.database" >
++4
++5    <uses-sdk android:minSdkVersion="24" />
++6
++7    <uses-permission android:name="android.permission.INTERNET" />
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:3-64
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:20-62
++8    <uses-permission android:name="android.permission.WAKE_LOCK" />
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:3-65
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:20-63
++9    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:3-76
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:20-74
++10
++11</manifest>
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt
+new file mode 100644
+index 0000000..e2004f6
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt
+@@ -0,0 +1,17 @@
++1<?xml version="1.0" encoding="utf-8"?>
++2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++3    package="io.invertase.firebase.database" >
++4
++5    <uses-sdk android:minSdkVersion="24" />
++6
++7    <uses-permission android:name="android.permission.INTERNET" />
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:3-64
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:20-62
++8    <uses-permission android:name="android.permission.WAKE_LOCK" />
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:3-65
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:20-63
++9    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:3-76
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:20-74
++10
++11</manifest>
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml
+new file mode 100644
+index 0000000..f27a330
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="io.invertase.firebase.database" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml b/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml
+new file mode 100644
+index 0000000..f27a330
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="io.invertase.firebase.database" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json b/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json
+new file mode 100644
+index 0000000..0637a08
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json
+@@ -0,0 +1 @@
++[]
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json b/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json
+new file mode 100644
+index 0000000..0637a08
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json
+@@ -0,0 +1 @@
++[]
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt
+new file mode 100644
+index 0000000..08f4ebe
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt
+@@ -0,0 +1 @@
++0 Warning/Error
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+new file mode 100644
+index 0000000..08f4ebe
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+@@ -0,0 +1 @@
++0 Warning/Error
+\ No newline at end of file
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/BuildConfig.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/BuildConfig.class
+new file mode 100644
+index 0000000..cf889cc
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/BuildConfig.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..981a370
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class
+new file mode 100644
+index 0000000..89d8fcd
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..2c31792
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..6307f20
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class
+new file mode 100644
+index 0000000..84483e7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabasePackage.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class
+new file mode 100644
+index 0000000..9585674
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQuery.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class
+new file mode 100644
+index 0000000..87c90b3
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class
+new file mode 100644
+index 0000000..3715dd0
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$2.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class
+new file mode 100644
+index 0000000..09064bf
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$3.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class
+new file mode 100644
+index 0000000..2137360
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule$4.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class
+new file mode 100644
+index 0000000..d2c04b8
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..59d7737
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class
+new file mode 100644
+index 0000000..1bc9a36
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionHandler.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class
+new file mode 100644
+index 0000000..8c0fd0d
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule$1.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class
+new file mode 100644
+index 0000000..ce6dfd2
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseDatabaseTransactionModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class
+new file mode 100644
+index 0000000..675c919
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/ReactNativeFirebaseTransactionEvent.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseException.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseException.class
+new file mode 100644
+index 0000000..d03c940
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseException.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseStatics.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseStatics.class
+new file mode 100644
+index 0000000..e145842
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalDatabaseStatics.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class
+new file mode 100644
+index 0000000..97d5eb7
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseCommon.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class
+new file mode 100644
+index 0000000..f9d63e5
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class
+new file mode 100644
+index 0000000..41e9041
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseOnDisconnectModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class
+new file mode 100644
+index 0000000..c3230a4
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/io/invertase/firebase/database/UniversalFirebaseDatabaseReferenceModule.class differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar
+new file mode 100644
+index 0000000..9321173
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar
+new file mode 100644
+index 0000000..6d4a038
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt
+new file mode 100644
+index 0000000..ffefcc0
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt
+@@ -0,0 +1 @@
++io.invertase.firebase.database
+diff --git a/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt b/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+new file mode 100644
+index 0000000..ffefcc0
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+@@ -0,0 +1 @@
++io.invertase.firebase.database
+diff --git a/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-debug-report.txt b/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-debug-report.txt
+new file mode 100644
+index 0000000..1330f07
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-debug-report.txt
+@@ -0,0 +1,29 @@
++-- Merging decision tree log ---
++manifest
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:1-8:12
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:1-8:12
++	package
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:3:11-51
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	xmlns:android
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:11-69
++uses-permission#android.permission.INTERNET
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:3-64
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:20-62
++uses-permission#android.permission.WAKE_LOCK
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:3-65
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:20-63
++uses-permission#android.permission.ACCESS_NETWORK_STATE
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:3-76
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:20-74
++uses-sdk
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	android:targetSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	android:minSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
+diff --git a/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-release-report.txt b/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-release-report.txt
+new file mode 100644
+index 0000000..1330f07
+--- /dev/null
++++ b/node_modules/@react-native-firebase/database/android/build/outputs/logs/manifest-merger-release-report.txt
+@@ -0,0 +1,29 @@
++-- Merging decision tree log ---
++manifest
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:1-8:12
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:1-8:12
++	package
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:3:11-51
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	xmlns:android
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:2:11-69
++uses-permission#android.permission.INTERNET
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:3-64
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:5:20-62
++uses-permission#android.permission.WAKE_LOCK
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:3-65
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:6:20-63
++uses-permission#android.permission.ACCESS_NETWORK_STATE
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:3-76
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml:7:20-74
++uses-sdk
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	android:targetSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
++	android:minSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/@react-native-firebase/database/android/src/main/AndroidManifest.xml
+diff --git a/node_modules/@react-native-firebase/database/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin b/node_modules/@react-native-firebase/database/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin
+new file mode 100644
+index 0000000..8674175
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin differ
+diff --git a/node_modules/@react-native-firebase/database/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin b/node_modules/@react-native-firebase/database/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin
+new file mode 100644
+index 0000000..2725394
+Binary files /dev/null and b/node_modules/@react-native-firebase/database/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin differ
+diff --git a/node_modules/@react-native-firebase/database/android/src/reactnative/java/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.java b/node_modules/@react-native-firebase/database/android/src/reactnative/java/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.java
+index 6a016b1..6e2ac0c 100644
+--- a/node_modules/@react-native-firebase/database/android/src/reactnative/java/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.java
++++ b/node_modules/@react-native-firebase/database/android/src/reactnative/java/io/invertase/firebase/database/ReactNativeFirebaseDatabaseQueryModule.java
+@@ -315,34 +315,40 @@ public class ReactNativeFirebaseDatabaseQueryModule extends ReactNativeFirebaseM
+       DataSnapshot dataSnapshot,
+       @Nullable String previousChildName) {
+     final String eventRegistrationKey = registration.getString("eventRegistrationKey");
+-    Tasks.call(
+-            getTransactionalExecutor(eventRegistrationKey),
+-            () -> {
+-              if (eventType.equals("value")) {
+-                return snapshotToMap(dataSnapshot);
+-              } else {
+-                return snapshotWithPreviousChildToMap(dataSnapshot, previousChildName);
+-              }
+-            })
+-        .addOnCompleteListener(
+-            getExecutor(),
+-            task -> {
+-              if (task.isSuccessful()) {
+-                WritableMap data = task.getResult();
+-                WritableMap event = Arguments.createMap();
+-                event.putMap("data", data);
+-                event.putString("key", key);
+-                event.putString("eventType", eventType);
+-                event.putMap("registration", readableMapToWritableMap(registration));
+-
+-                ReactNativeFirebaseEventEmitter emitter =
+-                    ReactNativeFirebaseEventEmitter.getSharedInstance();
+-
+-                emitter.sendEvent(
+-                    new ReactNativeFirebaseDatabaseEvent(
+-                        ReactNativeFirebaseDatabaseEvent.EVENT_SYNC, event));
+-              }
+-            });
++    try {
++      Tasks.call(
++              getTransactionalExecutor(eventRegistrationKey),
++              () -> {
++                if (eventType.equals("value")) {
++                  return snapshotToMap(dataSnapshot);
++                } else {
++                  return snapshotWithPreviousChildToMap(dataSnapshot, previousChildName);
++                }
++              })
++          .addOnCompleteListener(
++              getExecutor(),
++              task -> {
++                if (task.isSuccessful()) {
++                  WritableMap data = task.getResult();
++                  WritableMap event = Arguments.createMap();
++                  event.putMap("data", data);
++                  event.putString("key", key);
++                  event.putString("eventType", eventType);
++                  event.putMap("registration", readableMapToWritableMap(registration));
++
++                  ReactNativeFirebaseEventEmitter emitter =
++                      ReactNativeFirebaseEventEmitter.getSharedInstance();
++
++                  emitter.sendEvent(
++                      new ReactNativeFirebaseDatabaseEvent(
++                          ReactNativeFirebaseDatabaseEvent.EVENT_SYNC, event));
++                }
++              });
++    } catch (java.util.concurrent.RejectedExecutionException e) {
++      // Swallow — executor was shut down between the Firebase SDK dispatching
++      // this event and the RN module processing it (app teardown race).
++      // Listener will be cleaned up naturally as the RN instance dies.
++    }
+   }
+ 
+   /**

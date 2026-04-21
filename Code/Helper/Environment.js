@@ -26,7 +26,7 @@ const config = {
 
   apiKey: isNoman ? rev_cat_id : rev_cat_id,
 
-  supportEmail: isNoman ? 'thesolanalabs@gmail.com' : 'mindfusionio.help@gmail.com',
+  supportEmail: isNoman ? 'support@thesolanalabs.com' : 'mindfusionio.help@gmail.com',
   andriodShareLink: isNoman ? 'https://play.google.com/store/apps/details?id=com.adoptmevaluescalc' : 'https://play.google.com/store/apps/details?id=com.bloxfruitstock',
   IOsShareLink: isNoman ? 'https://apps.apple.com/us/app/app-name/id6745400111' : '',
   IOsShareLink: isNoman ? 'https://apps.apple.com/us/app/app-name/id6745400111' : '',

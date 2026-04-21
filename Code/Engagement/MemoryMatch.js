@@ -27,6 +27,7 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
+import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -34,11 +35,11 @@ import { fetchAnalyticsData, normalizeName } from '../Helper/analyticsDataHelper
 import { incrementAndCheckBadge, MEMORY_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_GAP = 10;
-const COLS = 2;
-const NUM_PAIRS = 3;
-const CARD_W = Math.floor((SCREEN_WIDTH - 120 - CARD_GAP * (COLS - 1)) / COLS);
-const CARD_H = CARD_W * 1.15;
+const CARD_GAP = 8;
+const COLS = 4;
+const NUM_PAIRS = 4;
+const CARD_W = Math.floor((SCREEN_WIDTH - 60 - CARD_GAP * (COLS - 1)) / COLS);
+const CARD_H = CARD_W * 1.2;
 
 // Fallback pet emojis if no real data
 const FALLBACK_PETS = [
@@ -56,7 +57,7 @@ const FALLBACK_PETS = [
   { name: 'Dog', emoji: '🐶' },
 ];
 
-const CARD_COLORS = ['#8B5CF6', '#10B981', '#F59E0B'];
+const CARD_COLORS = ['#8B5CF6', '#10B981', '#F59E0B', '#EC4899'];
 
 const isSameDay = (timestamp) => {
   if (!timestamp) return false;
@@ -134,6 +135,20 @@ const MemoryMatch = ({ visible, onClose }) => {
   const MAX_PLAYS = 1;
   const [adLoading, setAdLoading] = useState(false);
   const [hasWatchedAd, setHasWatchedAd] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('memory'));
+
+  useEffect(() => {
+    if (!visible) return;
+    initGameSounds();
+    return () => releaseGameSounds();
+  }, [visible]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled('memory', next);
+    triggerHapticFeedback('selection');
+  };
 
   // Watch ad for extra games
   const handleWatchAd = async () => {
@@ -213,6 +228,7 @@ const MemoryMatch = ({ visible, onClose }) => {
     setPeekCountdown(4);
     setPhase('peeking');
     triggerHapticFeedback('impactLight');
+    playWoosh('memory');
   };
 
   // ── Peek phase: show cards for 3 seconds then flip face-down, then shuffle ──
@@ -344,6 +360,7 @@ const MemoryMatch = ({ visible, onClose }) => {
     const newFlipped = [...flipped, index];
     setFlipped(newFlipped);
     triggerHapticFeedback('impactLight');
+    playPop('memory');
 
     if (newFlipped.length === 2) {
       setMoves(prev => prev + 1);
@@ -353,6 +370,7 @@ const MemoryMatch = ({ visible, onClose }) => {
       if (cards[a].pairId === cards[b].pairId) {
         // Match!
         triggerHapticFeedback('notificationSuccess');
+        playWoosh('memory');
         const newMatched = [...matched, cards[a].pairId];
         setMatched(newMatched);
         setFlipped([]);
@@ -365,6 +383,7 @@ const MemoryMatch = ({ visible, onClose }) => {
       } else {
         // No match — flip back
         triggerHapticFeedback('notificationWarning');
+        playPop('memory');
         setTimeout(() => {
           unflipCard(a);
           unflipCard(b);
@@ -377,11 +396,12 @@ const MemoryMatch = ({ visible, onClose }) => {
 
   const finishGame = async (finalMoves) => {
     setPhase('result');
+    playWoosh('memory');
     const newPlays = playsToday + 1;
     setPlaysToday(newPlays);
 
-    const stars = finalMoves <= 4 ? 3 : finalMoves <= 6 ? 2 : 1;
-    const xpEarned = 18 + (stars * 12); // 30-54 XP
+    const stars = finalMoves <= 6 ? 3 : finalMoves <= 9 ? 2 : 1;
+    const xpEarned = 22 + (stars * 14); // 36-64 XP
 
     try {
       const newBest = bestMoves === 0 ? finalMoves : Math.min(finalMoves, bestMoves);
@@ -402,7 +422,7 @@ const MemoryMatch = ({ visible, onClose }) => {
     }
   };
 
-  const stars = moves <= 4 ? 3 : moves <= 6 ? 2 : 1;
+  const stars = moves <= 6 ? 3 : moves <= 9 ? 2 : 1;
   const canPlayMore = playsToday < MAX_PLAYS;
   const c = getThemeColors(isDarkMode);
   const bgColor = c.bg;
@@ -417,17 +437,22 @@ const MemoryMatch = ({ visible, onClose }) => {
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: textColor }]}>{t('memory_match.title')}</Text>
-            <TouchableOpacity onPress={() => {
-              // Reset state on close
-              setPhase('loading');
-              setCards([]);
-              setFlipped([]);
-              setMatched([]);
-              setMoves(0);
-              onClose();
-            }} style={styles.closeBtn}>
-              <Icon name="close" size={22} color={subtextColor} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={toggleSound} style={styles.closeBtn}>
+                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={20} color={subtextColor} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {
+                // Reset state on close
+                setPhase('loading');
+                setCards([]);
+                setFlipped([]);
+                setMatched([]);
+                setMoves(0);
+                onClose();
+              }} style={styles.closeBtn}>
+                <Icon name="close" size={22} color={subtextColor} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Ready */}
@@ -561,7 +586,7 @@ const MemoryMatch = ({ visible, onClose }) => {
                   <Text style={[styles.resultMoves, { color: '#3B82F6' }]}>{t('memory_match.total_moves', { count: moves })}</Text>
                   <Text style={{ fontSize: 20, marginTop: 4 }}>{'⭐'.repeat(stars)}</Text>
                   <Text style={[styles.readySub, { color: subtextColor }]}>
-                    {t('memory_match.xp_earned', { xp: 18 + stars * 12 })}
+                    {t('memory_match.xp_earned', { xp: 22 + stars * 14 })}
                   </Text>
                 </>
               )}

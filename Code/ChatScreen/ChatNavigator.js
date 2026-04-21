@@ -12,7 +12,7 @@ import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
-import { ref, update, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { ref, update, get, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import AdminDashboard from '../AppHelper/AdminDashboard';
 import { useTranslation } from 'react-i18next';
@@ -116,10 +116,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
-  // ✅ COST-OPTIMIZED: Child listeners only — no redundant get() call
+  // ✅ COST-OPTIMIZED: Child listeners + one-time empty-check to clear loading
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setGroups([]);
+      setGroupsLoading(false);
       return;
     }
 
@@ -155,6 +156,20 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         });
       }, 300);
     };
+
+    // ✅ One-time check: if no group data exists, clear loading immediately
+    // This fixes the infinite loading bug when user has no groups
+    // (onChildAdded never fires for empty data)
+    get(userGroupsRef).then((snapshot) => {
+      if (!snapshot.exists()) {
+        setGroups([]);
+        setGroupsLoading(false);
+      }
+      // If data exists, onChildAdded will handle it and clear loading via recalcAndSetState
+    }).catch((error) => {
+      console.error('Error checking group data:', error);
+      setGroupsLoading(false);
+    });
 
     // onChildAdded fires for each existing group on attach — serves as initial load
     const handleChildAddedOrChanged = (snapshot) => {

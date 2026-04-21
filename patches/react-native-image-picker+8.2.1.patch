@@ -1,0 +1,1355 @@
+diff --git a/node_modules/react-native-image-picker/.DS_Store b/node_modules/react-native-image-picker/.DS_Store
+new file mode 100644
+index 0000000..e939960
+Binary files /dev/null and b/node_modules/react-native-image-picker/.DS_Store differ
+diff --git a/node_modules/react-native-image-picker/android/.DS_Store b/node_modules/react-native-image-picker/android/.DS_Store
+new file mode 100644
+index 0000000..def44ca
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/.DS_Store differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/results.bin b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/results.bin
+new file mode 100644
+index 0000000..7ed749e
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/results.bin
+@@ -0,0 +1 @@
++o/bundleLibRuntimeToDirDebug
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/BuildConfig.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/BuildConfig.dex
+new file mode 100644
+index 0000000..812610e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/BuildConfig.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/CustomMediaMetadataRetriever.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/CustomMediaMetadataRetriever.dex
+new file mode 100644
+index 0000000..976b271
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/CustomMediaMetadataRetriever.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImageMetadata.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImageMetadata.dex
+new file mode 100644
+index 0000000..2dd464b
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImageMetadata.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModule.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModule.dex
+new file mode 100644
+index 0000000..e1d64e1
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModule.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModuleImpl.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModuleImpl.dex
+new file mode 100644
+index 0000000..125dfa7
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerModuleImpl.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerPackage.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerPackage.dex
+new file mode 100644
+index 0000000..7b4d540
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerPackage.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerProvider.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerProvider.dex
+new file mode 100644
+index 0000000..9ce490e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/ImagePickerProvider.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Metadata.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Metadata.dex
+new file mode 100644
+index 0000000..f7db60a
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Metadata.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/NativeImagePickerSpec.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/NativeImagePickerSpec.dex
+new file mode 100644
+index 0000000..7fb6f7b
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/NativeImagePickerSpec.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Options.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Options.dex
+new file mode 100644
+index 0000000..606cee6
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Options.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Utils.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Utils.dex
+new file mode 100644
+index 0000000..eb5756b
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/Utils.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/VideoMetadata.dex b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/VideoMetadata.dex
+new file mode 100644
+index 0000000..e24d84b
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/imagepicker/VideoMetadata.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin
+new file mode 100644
+index 0000000..601f245
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/369cd53871315e84927481490bbba06e/transformed/bundleLibRuntimeToDirDebug/desugar_graph.bin differ
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/results.bin b/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/results.bin
+new file mode 100644
+index 0000000..0d259dd
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/results.bin
+@@ -0,0 +1 @@
++o/classes
+diff --git a/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/transformed/classes/classes_dex/classes.dex b/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/transformed/classes/classes_dex/classes.dex
+new file mode 100644
+index 0000000..157f899
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/.transforms/42665b493ea70689d363d825bdaa6b8d/transformed/classes/classes_dex/classes.dex differ
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/debug/com/imagepicker/BuildConfig.java b/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/debug/com/imagepicker/BuildConfig.java
+new file mode 100644
+index 0000000..d138f26
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/debug/com/imagepicker/BuildConfig.java
+@@ -0,0 +1,12 @@
++/**
++ * Automatically generated file. DO NOT MODIFY
++ */
++package com.imagepicker;
++
++public final class BuildConfig {
++  public static final boolean DEBUG = Boolean.parseBoolean("true");
++  public static final String LIBRARY_PACKAGE_NAME = "com.imagepicker";
++  public static final String BUILD_TYPE = "debug";
++  // Field from default config.
++  public static final boolean IS_NEW_ARCHITECTURE_ENABLED = true;
++}
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/release/com/imagepicker/BuildConfig.java b/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/release/com/imagepicker/BuildConfig.java
+new file mode 100644
+index 0000000..14a573b
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/buildConfig/release/com/imagepicker/BuildConfig.java
+@@ -0,0 +1,12 @@
++/**
++ * Automatically generated file. DO NOT MODIFY
++ */
++package com.imagepicker;
++
++public final class BuildConfig {
++  public static final boolean DEBUG = false;
++  public static final String LIBRARY_PACKAGE_NAME = "com.imagepicker";
++  public static final String BUILD_TYPE = "release";
++  // Field from default config.
++  public static final boolean IS_NEW_ARCHITECTURE_ENABLED = true;
++}
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/java/com/imagepicker/NativeImagePickerSpec.java b/node_modules/react-native-image-picker/android/build/generated/source/codegen/java/com/imagepicker/NativeImagePickerSpec.java
+new file mode 100644
+index 0000000..2d534c3
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/java/com/imagepicker/NativeImagePickerSpec.java
+@@ -0,0 +1,43 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateModuleJavaSpec.js
++ *
++ * @nolint
++ */
++
++package com.imagepicker;
++
++import com.facebook.proguard.annotations.DoNotStrip;
++import com.facebook.react.bridge.Callback;
++import com.facebook.react.bridge.ReactApplicationContext;
++import com.facebook.react.bridge.ReactContextBaseJavaModule;
++import com.facebook.react.bridge.ReactMethod;
++import com.facebook.react.bridge.ReadableMap;
++import com.facebook.react.turbomodule.core.interfaces.TurboModule;
++import javax.annotation.Nonnull;
++
++public abstract class NativeImagePickerSpec extends ReactContextBaseJavaModule implements TurboModule {
++  public static final String NAME = "ImagePicker";
++
++  public NativeImagePickerSpec(ReactApplicationContext reactContext) {
++    super(reactContext);
++  }
++
++  @Override
++  public @Nonnull String getName() {
++    return NAME;
++  }
++
++  @ReactMethod
++  @DoNotStrip
++  public abstract void launchCamera(ReadableMap options, Callback callback);
++
++  @ReactMethod
++  @DoNotStrip
++  public abstract void launchImageLibrary(ReadableMap options, Callback callback);
++}
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt
+new file mode 100644
+index 0000000..418f6dd
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt
+@@ -0,0 +1,28 @@
++# Copyright (c) Meta Platforms, Inc. and affiliates.
++#
++# This source code is licensed under the MIT license found in the
++# LICENSE file in the root directory of this source tree.
++
++cmake_minimum_required(VERSION 3.13)
++set(CMAKE_VERBOSE_MAKEFILE on)
++
++file(GLOB react_codegen_SRCS CONFIGURE_DEPENDS *.cpp react/renderer/components/RNImagePickerSpec/*.cpp)
++
++add_library(
++  react_codegen_RNImagePickerSpec
++  OBJECT
++  ${react_codegen_SRCS}
++)
++
++target_include_directories(react_codegen_RNImagePickerSpec PUBLIC . react/renderer/components/RNImagePickerSpec)
++
++target_link_libraries(
++  react_codegen_RNImagePickerSpec
++  fbjni
++  jsi
++  # We need to link different libraries based on whether we are building rncore or not, that's necessary
++  # because we want to break a circular dependency between react_codegen_rncore and reactnative
++  reactnative
++)
++
++target_compile_reactnative_options(react_codegen_RNImagePickerSpec PRIVATE)
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec-generated.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec-generated.cpp
+new file mode 100644
+index 0000000..a850835
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec-generated.cpp
+@@ -0,0 +1,38 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateModuleJniCpp.js
++ */
++
++#include "RNImagePickerSpec.h"
++
++namespace facebook::react {
++
++static facebook::jsi::Value __hostFunction_NativeImagePickerSpecJSI_launchCamera(facebook::jsi::Runtime& rt, TurboModule &turboModule, const facebook::jsi::Value* args, size_t count) {
++  static jmethodID cachedMethodId = nullptr;
++  return static_cast<JavaTurboModule &>(turboModule).invokeJavaMethod(rt, VoidKind, "launchCamera", "(Lcom/facebook/react/bridge/ReadableMap;Lcom/facebook/react/bridge/Callback;)V", args, count, cachedMethodId);
++}
++
++static facebook::jsi::Value __hostFunction_NativeImagePickerSpecJSI_launchImageLibrary(facebook::jsi::Runtime& rt, TurboModule &turboModule, const facebook::jsi::Value* args, size_t count) {
++  static jmethodID cachedMethodId = nullptr;
++  return static_cast<JavaTurboModule &>(turboModule).invokeJavaMethod(rt, VoidKind, "launchImageLibrary", "(Lcom/facebook/react/bridge/ReadableMap;Lcom/facebook/react/bridge/Callback;)V", args, count, cachedMethodId);
++}
++
++NativeImagePickerSpecJSI::NativeImagePickerSpecJSI(const JavaTurboModule::InitParams &params)
++  : JavaTurboModule(params) {
++  methodMap_["launchCamera"] = MethodMetadata {2, __hostFunction_NativeImagePickerSpecJSI_launchCamera};
++  methodMap_["launchImageLibrary"] = MethodMetadata {2, __hostFunction_NativeImagePickerSpecJSI_launchImageLibrary};
++}
++
++std::shared_ptr<TurboModule> RNImagePickerSpec_ModuleProvider(const std::string &moduleName, const JavaTurboModule::InitParams &params) {
++  if (moduleName == "ImagePicker") {
++    return std::make_shared<NativeImagePickerSpecJSI>(params);
++  }
++  return nullptr;
++}
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec.h
+new file mode 100644
+index 0000000..60a766b
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/RNImagePickerSpec.h
+@@ -0,0 +1,31 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateModuleJniH.js
++ */
++
++#pragma once
++
++#include <ReactCommon/JavaTurboModule.h>
++#include <ReactCommon/TurboModule.h>
++#include <jsi/jsi.h>
++
++namespace facebook::react {
++
++/**
++ * JNI C++ class for module 'NativeImagePicker'
++ */
++class JSI_EXPORT NativeImagePickerSpecJSI : public JavaTurboModule {
++public:
++  NativeImagePickerSpecJSI(const JavaTurboModule::InitParams &params);
++};
++
++
++JSI_EXPORT
++std::shared_ptr<TurboModule> RNImagePickerSpec_ModuleProvider(const std::string &moduleName, const JavaTurboModule::InitParams &params);
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.cpp
+new file mode 100644
+index 0000000..86fccb6
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.cpp
+@@ -0,0 +1,22 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateComponentDescriptorCpp.js
++ */
++
++#include <react/renderer/components/RNImagePickerSpec/ComponentDescriptors.h>
++#include <react/renderer/core/ConcreteComponentDescriptor.h>
++#include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
++
++namespace facebook::react {
++
++void RNImagePickerSpec_registerComponentDescriptorsFromCodegen(
++  std::shared_ptr<const ComponentDescriptorProviderRegistry> registry) {
++
++}
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.h
+new file mode 100644
+index 0000000..77cac30
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ComponentDescriptors.h
+@@ -0,0 +1,24 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateComponentDescriptorH.js
++ */
++
++#pragma once
++
++#include <react/renderer/components/RNImagePickerSpec/ShadowNodes.h>
++#include <react/renderer/core/ConcreteComponentDescriptor.h>
++#include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
++
++namespace facebook::react {
++
++
++
++void RNImagePickerSpec_registerComponentDescriptorsFromCodegen(
++  std::shared_ptr<const ComponentDescriptorProviderRegistry> registry);
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.cpp
+new file mode 100644
+index 0000000..0f442ff
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.cpp
+@@ -0,0 +1,16 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateEventEmitterCpp.js
++ */
++
++#include <react/renderer/components/RNImagePickerSpec/EventEmitters.h>
++
++
++namespace facebook::react {
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.h
+new file mode 100644
+index 0000000..2845a63
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/EventEmitters.h
+@@ -0,0 +1,17 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateEventEmitterH.js
++ */
++#pragma once
++
++#include <react/renderer/components/view/ViewEventEmitter.h>
++
++
++namespace facebook::react {
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.cpp
+new file mode 100644
+index 0000000..7d49441
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.cpp
+@@ -0,0 +1,19 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GeneratePropsCpp.js
++ */
++
++#include <react/renderer/components/RNImagePickerSpec/Props.h>
++#include <react/renderer/core/PropsParserContext.h>
++#include <react/renderer/core/propsConversions.h>
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.h
+new file mode 100644
+index 0000000..870864b
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/Props.h
+@@ -0,0 +1,18 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GeneratePropsH.js
++ */
++#pragma once
++
++
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/RNImagePickerSpecJSI.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/RNImagePickerSpecJSI.h
+new file mode 100644
+index 0000000..e7bc9f8
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/RNImagePickerSpecJSI.h
+@@ -0,0 +1,49 @@
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateModuleH.js
++ */
++
++#pragma once
++
++#include <ReactCommon/TurboModule.h>
++#include <react/bridging/Bridging.h>
++
++namespace facebook::react {
++
++
++template <typename T>
++class JSI_EXPORT NativeImagePickerCxxSpec : public TurboModule {
++public:
++  static constexpr std::string_view kModuleName = "ImagePicker";
++
++protected:
++  NativeImagePickerCxxSpec(std::shared_ptr<CallInvoker> jsInvoker) : TurboModule(std::string{NativeImagePickerCxxSpec::kModuleName}, jsInvoker) {
++    methodMap_["launchCamera"] = MethodMetadata {.argCount = 2, .invoker = __launchCamera};
++    methodMap_["launchImageLibrary"] = MethodMetadata {.argCount = 2, .invoker = __launchImageLibrary};
++  }
++  
++private:
++  static jsi::Value __launchCamera(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
++    static_assert(
++      bridging::getParameterCount(&T::launchCamera) == 3,
++      "Expected launchCamera(...) to have 3 parameters");
++    bridging::callFromJs<void>(rt, &T::launchCamera,  static_cast<NativeImagePickerCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
++      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asObject(rt),
++      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asObject(rt).asFunction(rt));return jsi::Value::undefined();
++  }
++
++  static jsi::Value __launchImageLibrary(jsi::Runtime &rt, TurboModule &turboModule, const jsi::Value* args, size_t count) {
++    static_assert(
++      bridging::getParameterCount(&T::launchImageLibrary) == 3,
++      "Expected launchImageLibrary(...) to have 3 parameters");
++    bridging::callFromJs<void>(rt, &T::launchImageLibrary,  static_cast<NativeImagePickerCxxSpec*>(&turboModule)->jsInvoker_, static_cast<T*>(&turboModule),
++      count <= 0 ? throw jsi::JSError(rt, "Expected argument in position 0 to be passed") : args[0].asObject(rt),
++      count <= 1 ? throw jsi::JSError(rt, "Expected argument in position 1 to be passed") : args[1].asObject(rt).asFunction(rt));return jsi::Value::undefined();
++  }
++};
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.cpp
+new file mode 100644
+index 0000000..8554a9f
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.cpp
+@@ -0,0 +1,17 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateShadowNodeCpp.js
++ */
++
++#include <react/renderer/components/RNImagePickerSpec/ShadowNodes.h>
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.h
+new file mode 100644
+index 0000000..ce94279
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/ShadowNodes.h
+@@ -0,0 +1,23 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateShadowNodeH.js
++ */
++
++#pragma once
++
++#include <react/renderer/components/RNImagePickerSpec/EventEmitters.h>
++#include <react/renderer/components/RNImagePickerSpec/Props.h>
++#include <react/renderer/components/RNImagePickerSpec/States.h>
++#include <react/renderer/components/view/ConcreteViewShadowNode.h>
++#include <jsi/jsi.h>
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.cpp b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.cpp
+new file mode 100644
+index 0000000..85535cd
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.cpp
+@@ -0,0 +1,16 @@
++
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateStateCpp.js
++ */
++#include <react/renderer/components/RNImagePickerSpec/States.h>
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.h b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.h
+new file mode 100644
+index 0000000..2e55bce
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/react/renderer/components/RNImagePickerSpec/States.h
+@@ -0,0 +1,20 @@
++/**
++ * This code was generated by [react-native-codegen](https://www.npmjs.com/package/react-native-codegen).
++ *
++ * Do not edit this file as changes may cause incorrect behavior and will be lost
++ * once the code is regenerated.
++ *
++ * @generated by codegen project: GenerateStateH.js
++ */
++#pragma once
++
++#include <react/renderer/core/StateData.h>
++#ifdef RN_SERIALIZABLE_STATE
++#include <folly/dynamic.h>
++#endif
++
++namespace facebook::react {
++
++
++
++} // namespace facebook::react
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/generated/source/codegen/schema.json b/node_modules/react-native-image-picker/android/build/generated/source/codegen/schema.json
+new file mode 100644
+index 0000000..bbc1785
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/generated/source/codegen/schema.json
+@@ -0,0 +1 @@
++{"libraryName":"","modules":{"NativeImagePicker":{"type":"NativeModule","aliasMap":{},"enumMap":{},"spec":{"eventEmitters":[],"methods":[{"name":"launchCamera","optional":false,"typeAnnotation":{"type":"FunctionTypeAnnotation","returnTypeAnnotation":{"type":"VoidTypeAnnotation"},"params":[{"name":"options","optional":false,"typeAnnotation":{"type":"GenericObjectTypeAnnotation"}},{"name":"callback","optional":false,"typeAnnotation":{"type":"FunctionTypeAnnotation","returnTypeAnnotation":{"type":"VoidTypeAnnotation"},"params":[]}}]}},{"name":"launchImageLibrary","optional":false,"typeAnnotation":{"type":"FunctionTypeAnnotation","returnTypeAnnotation":{"type":"VoidTypeAnnotation"},"params":[{"name":"options","optional":false,"typeAnnotation":{"type":"GenericObjectTypeAnnotation"}},{"name":"callback","optional":false,"typeAnnotation":{"type":"FunctionTypeAnnotation","returnTypeAnnotation":{"type":"VoidTypeAnnotation"},"params":[]}}]}}]},"moduleName":"ImagePicker"}}}
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml
+new file mode 100644
+index 0000000..3079045
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/AndroidManifest.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.imagepicker" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <application>
++        <provider
++            android:name="com.imagepicker.ImagePickerProvider"
++            android:authorities="dollar_openBracket_applicationId_closeBracket.imagepickerprovider"
++            android:exported="false"
++            android:grantUriPermissions="true" >
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/imagepicker_provider_paths" />
++        </provider>
++    </application>
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json
+new file mode 100644
+index 0000000..c7eb6ce
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/debug/processDebugManifest/aapt/output-metadata.json
+@@ -0,0 +1,18 @@
++{
++  "version": 3,
++  "artifactType": {
++    "type": "AAPT_FRIENDLY_MERGED_MANIFESTS",
++    "kind": "Directory"
++  },
++  "applicationId": "com.imagepicker",
++  "variantName": "debug",
++  "elements": [
++    {
++      "type": "SINGLE",
++      "filters": [],
++      "attributes": [],
++      "outputFile": "AndroidManifest.xml"
++    }
++  ],
++  "elementType": "File"
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml
+new file mode 100644
+index 0000000..3079045
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/AndroidManifest.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.imagepicker" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <application>
++        <provider
++            android:name="com.imagepicker.ImagePickerProvider"
++            android:authorities="dollar_openBracket_applicationId_closeBracket.imagepickerprovider"
++            android:exported="false"
++            android:grantUriPermissions="true" >
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/imagepicker_provider_paths" />
++        </provider>
++    </application>
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json
+new file mode 100644
+index 0000000..e760229
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aapt_friendly_merged_manifests/release/processReleaseManifest/aapt/output-metadata.json
+@@ -0,0 +1,18 @@
++{
++  "version": 3,
++  "artifactType": {
++    "type": "AAPT_FRIENDLY_MERGED_MANIFESTS",
++    "kind": "Directory"
++  },
++  "applicationId": "com.imagepicker",
++  "variantName": "release",
++  "elements": [
++    {
++      "type": "SINGLE",
++      "filters": [],
++      "attributes": [],
++      "outputFile": "AndroidManifest.xml"
++    }
++  ],
++  "elementType": "File"
++}
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties b/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties
+new file mode 100644
+index 0000000..1211b1e
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/debug/writeDebugAarMetadata/aar-metadata.properties
+@@ -0,0 +1,6 @@
++aarFormatVersion=1.0
++aarMetadataVersion=1.0
++minCompileSdk=1
++minCompileSdkExtension=0
++minAndroidGradlePluginVersion=1.0.0
++coreLibraryDesugaringEnabled=false
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties b/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties
+new file mode 100644
+index 0000000..1211b1e
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/aar_metadata/release/writeReleaseAarMetadata/aar-metadata.properties
+@@ -0,0 +1,6 @@
++aarFormatVersion=1.0
++aarMetadataVersion=1.0
++minCompileSdk=1
++minCompileSdkExtension=0
++minAndroidGradlePluginVersion=1.0.0
++coreLibraryDesugaringEnabled=false
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json b/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json
+new file mode 100644
+index 0000000..9e26dfe
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json
+@@ -0,0 +1 @@
++{}
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json b/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+new file mode 100644
+index 0000000..9e26dfe
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+@@ -0,0 +1 @@
++{}
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar b/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar
+new file mode 100644
+index 0000000..36f1a32
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar b/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar
+new file mode 100644
+index 0000000..6b0e1d5
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar b/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar
+new file mode 100644
+index 0000000..6d506d4
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar b/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar
+new file mode 100644
+index 0000000..6d506d4
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/debug/generateDebugRFile/R.txt b/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/debug/generateDebugRFile/R.txt
+new file mode 100644
+index 0000000..3f4c548
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/debug/generateDebugRFile/R.txt
+@@ -0,0 +1 @@
++int xml imagepicker_provider_paths 0x0
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt b/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt
+new file mode 100644
+index 0000000..3f4c548
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt
+@@ -0,0 +1 @@
++int xml imagepicker_provider_paths 0x0
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/debug/compileDebugLibraryResources/out/xml_imagepicker_provider_paths.xml.flat b/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/debug/compileDebugLibraryResources/out/xml_imagepicker_provider_paths.xml.flat
+new file mode 100644
+index 0000000..7536ae2
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/debug/compileDebugLibraryResources/out/xml_imagepicker_provider_paths.xml.flat differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/release/compileReleaseLibraryResources/out/xml_imagepicker_provider_paths.xml.flat b/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/release/compileReleaseLibraryResources/out/xml_imagepicker_provider_paths.xml.flat
+new file mode 100644
+index 0000000..a8266e0
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/compiled_local_resources/release/compileReleaseLibraryResources/out/xml_imagepicker_provider_paths.xml.flat differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties b/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties
+new file mode 100644
+index 0000000..80af7e0
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/compile-file-map.properties
+@@ -0,0 +1,2 @@
++#Sat Apr 18 14:06:32 PKT 2026
++com.imagepicker.react-native-image-picker-main-6\:/xml/imagepicker_provider_paths.xml=/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/debug/packageDebugResources/xml/imagepicker_provider_paths.xml
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml
+new file mode 100644
+index 0000000..6b83fb4
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/debug/packageDebugResources/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res"><file name="imagepicker_provider_paths" path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res/xml/imagepicker_provider_paths.xml" qualifiers="" type="xml"/></source></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="debug$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/debug/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="debug" generated-set="debug$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/debug/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/generated/res/resValues/debug"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/generated/res/resValues/debug"/></dataSet><mergedItems/></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugAssets/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugAssets/merger.xml
+new file mode 100644
+index 0000000..7a91bdd
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugAssets/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/assets"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/debug/assets"/></dataSet><dataSet config="generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/intermediates/shader_assets/debug/compileDebugShaders/out"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml
+new file mode 100644
+index 0000000..c976afb
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugJniLibFolders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/jniLibs"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/debug/jniLibs"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugShaders/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugShaders/merger.xml
+new file mode 100644
+index 0000000..f46f376
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeDebugShaders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/shaders"/></dataSet><dataSet config="debug" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/debug/shaders"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml
+new file mode 100644
+index 0000000..cb2f30a
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseAssets/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/assets"/></dataSet><dataSet config="release" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/release/assets"/></dataSet><dataSet config="generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/intermediates/shader_assets/release/compileReleaseShaders/out"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml
+new file mode 100644
+index 0000000..00e7acf
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/mergeReleaseShaders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/shaders"/></dataSet><dataSet config="release" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/release/shaders"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties b/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+new file mode 100644
+index 0000000..0d69fb5
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+@@ -0,0 +1,2 @@
++#Sat Apr 18 18:33:54 PKT 2026
++com.imagepicker.react-native-image-picker-main-5\:/xml/imagepicker_provider_paths.xml=/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/release/packageReleaseResources/xml/imagepicker_provider_paths.xml
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml b/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+new file mode 100644
+index 0000000..8379e1a
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res"><file name="imagepicker_provider_paths" path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/res/xml/imagepicker_provider_paths.xml" qualifiers="" type="xml"/></source></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release" generated-set="release$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/release/res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/generated/res/resValues/release"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/build/generated/res/resValues/release"/></dataSet><mergedItems/></merger>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/BuildConfig.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/BuildConfig.class
+new file mode 100644
+index 0000000..14a96b7
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/BuildConfig.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class
+new file mode 100644
+index 0000000..57c7015
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImageMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImageMetadata.class
+new file mode 100644
+index 0000000..3de373e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImageMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class
+new file mode 100644
+index 0000000..d2dfeac
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class
+new file mode 100644
+index 0000000..58cefa3
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class
+new file mode 100644
+index 0000000..7086163
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class
+new file mode 100644
+index 0000000..0bbcff9
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Metadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Metadata.class
+new file mode 100644
+index 0000000..7210ada
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Metadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class
+new file mode 100644
+index 0000000..72ae849
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Options.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Options.class
+new file mode 100644
+index 0000000..cc64835
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Options.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Utils.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Utils.class
+new file mode 100644
+index 0000000..3e6b105
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/Utils.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/VideoMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/VideoMetadata.class
+new file mode 100644
+index 0000000..3db0bfc
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/imagepicker/VideoMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/BuildConfig.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/BuildConfig.class
+new file mode 100644
+index 0000000..d847bad
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/BuildConfig.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class
+new file mode 100644
+index 0000000..57c7015
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/CustomMediaMetadataRetriever.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImageMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImageMetadata.class
+new file mode 100644
+index 0000000..3de373e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImageMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class
+new file mode 100644
+index 0000000..d2dfeac
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModule.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class
+new file mode 100644
+index 0000000..58cefa3
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerModuleImpl.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class
+new file mode 100644
+index 0000000..7086163
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerPackage.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class
+new file mode 100644
+index 0000000..0bbcff9
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/ImagePickerProvider.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Metadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Metadata.class
+new file mode 100644
+index 0000000..7210ada
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Metadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class
+new file mode 100644
+index 0000000..72ae849
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/NativeImagePickerSpec.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Options.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Options.class
+new file mode 100644
+index 0000000..cc64835
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Options.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Utils.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Utils.class
+new file mode 100644
+index 0000000..3e6b105
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/Utils.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/VideoMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/VideoMetadata.class
+new file mode 100644
+index 0000000..3db0bfc
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com/imagepicker/VideoMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt b/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt
+new file mode 100644
+index 0000000..638c37f
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt
+@@ -0,0 +1,3 @@
++R_DEF: Internal format may change without notice
++local
++xml imagepicker_provider_paths
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt b/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+new file mode 100644
+index 0000000..638c37f
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+@@ -0,0 +1,3 @@
++R_DEF: Internal format may change without notice
++local
++xml imagepicker_provider_paths
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt b/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt
+new file mode 100644
+index 0000000..eb7ac7d
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/debug/processDebugManifest/manifest-merger-blame-debug-report.txt
+@@ -0,0 +1,28 @@
++1<?xml version="1.0" encoding="utf-8"?>
++2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++3    package="com.imagepicker" >
++4
++5    <uses-sdk android:minSdkVersion="24" />
++6
++7    <application>
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:6:5-16:19
++8        <provider
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:7:7-15:20
++9            android:name="com.imagepicker.ImagePickerProvider"
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:8:13-48
++10            android:authorities="${applicationId}.imagepickerprovider"
++10-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:9:13-71
++11            android:exported="false"
++11-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:10:13-37
++12            android:grantUriPermissions="true" >
++12-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:11:13-47
++13            <meta-data
++13-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:12:13-14:70
++14                android:name="android.support.FILE_PROVIDER_PATHS"
++14-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:13:17-67
++15                android:resource="@xml/imagepicker_provider_paths" />
++15-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:14:17-67
++16        </provider>
++17    </application>
++18
++19</manifest>
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt b/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt
+new file mode 100644
+index 0000000..eb7ac7d
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/manifest_merge_blame_file/release/processReleaseManifest/manifest-merger-blame-release-report.txt
+@@ -0,0 +1,28 @@
++1<?xml version="1.0" encoding="utf-8"?>
++2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++3    package="com.imagepicker" >
++4
++5    <uses-sdk android:minSdkVersion="24" />
++6
++7    <application>
++7-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:6:5-16:19
++8        <provider
++8-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:7:7-15:20
++9            android:name="com.imagepicker.ImagePickerProvider"
++9-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:8:13-48
++10            android:authorities="${applicationId}.imagepickerprovider"
++10-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:9:13-71
++11            android:exported="false"
++11-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:10:13-37
++12            android:grantUriPermissions="true" >
++12-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:11:13-47
++13            <meta-data
++13-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:12:13-14:70
++14                android:name="android.support.FILE_PROVIDER_PATHS"
++14-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:13:17-67
++15                android:resource="@xml/imagepicker_provider_paths" />
++15-->/Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:14:17-67
++16        </provider>
++17    </application>
++18
++19</manifest>
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml b/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml
+new file mode 100644
+index 0000000..b046c54
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/debug/processDebugManifest/AndroidManifest.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.imagepicker" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <application>
++        <provider
++            android:name="com.imagepicker.ImagePickerProvider"
++            android:authorities="${applicationId}.imagepickerprovider"
++            android:exported="false"
++            android:grantUriPermissions="true" >
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/imagepicker_provider_paths" />
++        </provider>
++    </application>
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml b/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml
+new file mode 100644
+index 0000000..b046c54
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml
+@@ -0,0 +1,19 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.imagepicker" >
++
++    <uses-sdk android:minSdkVersion="24" />
++
++    <application>
++        <provider
++            android:name="com.imagepicker.ImagePickerProvider"
++            android:authorities="${applicationId}.imagepickerprovider"
++            android:exported="false"
++            android:grantUriPermissions="true" >
++            <meta-data
++                android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/imagepicker_provider_paths" />
++        </provider>
++    </application>
++
++</manifest>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json b/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json
+new file mode 100644
+index 0000000..0637a08
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json
+@@ -0,0 +1 @@
++[]
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json b/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json
+new file mode 100644
+index 0000000..0637a08
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/navigation_json/release/extractDeepLinksRelease/navigation.json
+@@ -0,0 +1 @@
++[]
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt b/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt
+new file mode 100644
+index 0000000..08f4ebe
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt
+@@ -0,0 +1 @@
++0 Warning/Error
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt b/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+new file mode 100644
+index 0000000..08f4ebe
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+@@ -0,0 +1 @@
++0 Warning/Error
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/debug/packageDebugResources/xml/imagepicker_provider_paths.xml b/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/debug/packageDebugResources/xml/imagepicker_provider_paths.xml
+new file mode 100644
+index 0000000..ce57598
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/debug/packageDebugResources/xml/imagepicker_provider_paths.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths>
++  <cache-path name="cacheDir" path="." />
++</paths>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/release/packageReleaseResources/xml/imagepicker_provider_paths.xml b/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/release/packageReleaseResources/xml/imagepicker_provider_paths.xml
+new file mode 100644
+index 0000000..ce57598
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/packaged_res/release/packageReleaseResources/xml/imagepicker_provider_paths.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths>
++  <cache-path name="cacheDir" path="." />
++</paths>
+\ No newline at end of file
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/BuildConfig.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/BuildConfig.class
+new file mode 100644
+index 0000000..14a96b7
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/BuildConfig.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/CustomMediaMetadataRetriever.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/CustomMediaMetadataRetriever.class
+new file mode 100644
+index 0000000..57c7015
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/CustomMediaMetadataRetriever.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImageMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImageMetadata.class
+new file mode 100644
+index 0000000..3de373e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImageMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModule.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModule.class
+new file mode 100644
+index 0000000..d2dfeac
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModule.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModuleImpl.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModuleImpl.class
+new file mode 100644
+index 0000000..58cefa3
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerModuleImpl.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerPackage.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerPackage.class
+new file mode 100644
+index 0000000..7086163
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerPackage.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerProvider.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerProvider.class
+new file mode 100644
+index 0000000..0bbcff9
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/ImagePickerProvider.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Metadata.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Metadata.class
+new file mode 100644
+index 0000000..7210ada
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Metadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/NativeImagePickerSpec.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/NativeImagePickerSpec.class
+new file mode 100644
+index 0000000..72ae849
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/NativeImagePickerSpec.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Options.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Options.class
+new file mode 100644
+index 0000000..cc64835
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Options.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Utils.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Utils.class
+new file mode 100644
+index 0000000..3e6b105
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/Utils.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/VideoMetadata.class b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/VideoMetadata.class
+new file mode 100644
+index 0000000..3db0bfc
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/imagepicker/VideoMetadata.class differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar
+new file mode 100644
+index 0000000..0dd0ea4
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar
+new file mode 100644
+index 0000000..3504fe9
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar differ
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt b/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt
+new file mode 100644
+index 0000000..c720f16
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/debug/generateDebugRFile/package-aware-r.txt
+@@ -0,0 +1,2 @@
++com.imagepicker
++xml imagepicker_provider_paths
+diff --git a/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt b/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+new file mode 100644
+index 0000000..c720f16
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+@@ -0,0 +1,2 @@
++com.imagepicker
++xml imagepicker_provider_paths
+diff --git a/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-debug-report.txt b/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-debug-report.txt
+new file mode 100644
+index 0000000..e0879ab
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-debug-report.txt
+@@ -0,0 +1,35 @@
++-- Merging decision tree log ---
++manifest
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:2:1-17:12
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:2:1-17:12
++	package
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:4:3-28
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	xmlns:android
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:3:3-61
++application
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:6:5-16:19
++provider#com.imagepicker.ImagePickerProvider
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:7:7-15:20
++	android:grantUriPermissions
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:11:13-47
++	android:authorities
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:9:13-71
++	android:exported
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:10:13-37
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:8:13-48
++meta-data#android.support.FILE_PROVIDER_PATHS
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:12:13-14:70
++	android:resource
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:14:17-67
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:13:17-67
++uses-sdk
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	android:targetSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	android:minSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
+diff --git a/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-release-report.txt b/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-release-report.txt
+new file mode 100644
+index 0000000..e0879ab
+--- /dev/null
++++ b/node_modules/react-native-image-picker/android/build/outputs/logs/manifest-merger-release-report.txt
+@@ -0,0 +1,35 @@
++-- Merging decision tree log ---
++manifest
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:2:1-17:12
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:2:1-17:12
++	package
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:4:3-28
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	xmlns:android
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:3:3-61
++application
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:6:5-16:19
++provider#com.imagepicker.ImagePickerProvider
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:7:7-15:20
++	android:grantUriPermissions
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:11:13-47
++	android:authorities
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:9:13-71
++	android:exported
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:10:13-37
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:8:13-48
++meta-data#android.support.FILE_PROVIDER_PATHS
++ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:12:13-14:70
++	android:resource
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:14:17-67
++	android:name
++		ADDED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml:13:17-67
++uses-sdk
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	android:targetSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
++	android:minSdkVersion
++		INJECTED from /Volumes/Sohail/AI_Projects/adoptme-jan7/node_modules/react-native-image-picker/android/src/main/AndroidManifest.xml
+diff --git a/node_modules/react-native-image-picker/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin b/node_modules/react-native-image-picker/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin
+new file mode 100644
+index 0000000..d09d690
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin differ
+diff --git a/node_modules/react-native-image-picker/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin b/node_modules/react-native-image-picker/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin
+new file mode 100644
+index 0000000..bf5626e
+Binary files /dev/null and b/node_modules/react-native-image-picker/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin differ
+diff --git a/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java b/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
+index 56149f1..2227c46 100644
+--- a/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
++++ b/node_modules/react-native-image-picker/android/src/main/java/com/imagepicker/ImagePickerModuleImpl.java
+@@ -173,12 +173,15 @@ public class ImagePickerModuleImpl implements ActivityEventListener {
+         ExecutorService executor = Executors.newSingleThreadExecutor();
+ 
+         executor.submit(() -> {
++            // Null the field first so a re-entrant result can't double-invoke.
++            final Callback localCallback = callback;
++            callback = null;
++            if (localCallback == null) return;
+             try {
+-                callback.invoke(getResponseMap(fileUris, options, reactContext));
++                localCallback.invoke(getResponseMap(fileUris, options, reactContext));
+             } catch (RuntimeException exception) {
+-                callback.invoke(getErrorMap(errOthers, exception.getMessage()));
+-            } finally {
+-                callback = null;
++                // Do NOT retry invoke — RN's native bridge aborts if a Callback
++                // is invoked more than once, which was the original bug.
+             }
+         });
+     }
+@@ -195,14 +198,16 @@ public class ImagePickerModuleImpl implements ActivityEventListener {
+             if (requestCode == REQUEST_LAUNCH_IMAGE_CAPTURE) {
+                 deleteFile(fileUri);
+             }
+-            try {
+-                callback.invoke(getCancelMap());
+-                return;
+-            } catch (RuntimeException exception) {
+-                callback.invoke(getErrorMap(errOthers, exception.getMessage()));
+-            } finally {
+-                callback = null;
++            final Callback localCallback = callback;
++            callback = null;
++            if (localCallback != null) {
++                try {
++                    localCallback.invoke(getCancelMap());
++                } catch (RuntimeException exception) {
++                    // Swallow — retrying invoke would abort (bridge asserts once-only).
++                }
+             }
++            return;
+         }
+ 
+         switch (requestCode) {
+diff --git a/node_modules/react-native-image-picker/ios/.DS_Store b/node_modules/react-native-image-picker/ios/.DS_Store
+new file mode 100644
+index 0000000..322f52a
+Binary files /dev/null and b/node_modules/react-native-image-picker/ios/.DS_Store differ

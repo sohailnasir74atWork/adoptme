@@ -60,22 +60,8 @@ const GroupMessageList = ({
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
 
-  // 🌈 Rainbow cycling for multi-color profile frames
-  const [frameBorderColorIndex, setFrameBorderColorIndex] = React.useState(0);
-
-  React.useEffect(() => {
-    // Only cycle if there are messages with multi-color frames
-    const hasMultiColorFrames = messages?.some((m) => {
-      const profile = resolveProfile(m);
-      return profile.profileFrame?.borderColors?.length > 1;
-    });
-    if (!hasMultiColorFrames) return;
-
-    const interval = setInterval(() => {
-      setFrameBorderColorIndex((prev) => prev + 1);
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [messages]);
+  // Frame border color cycling removed — was causing full-list re-renders every 1.5s.
+  // Frames now render with a static primary color (borderColors[0]).
 
   const fruitColors = useMemo(
     () => ({
@@ -206,9 +192,7 @@ const GroupMessageList = ({
             >
               <View style={profile.profileFrame ? {
                 borderWidth: 1.5,
-                borderColor: (profile.profileFrame.borderColors?.length > 1)
-                  ? profile.profileFrame.borderColors[frameBorderColorIndex % profile.profileFrame.borderColors.length]
-                  : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
+                borderColor: profile.profileFrame.borderColors?.[0] || '#6366f1',
                 borderRadius: 16,
                 padding: 1,
                 shadowColor: profile.profileFrame.glowColor || 'transparent',
@@ -556,9 +540,7 @@ const GroupMessageList = ({
             >
               <View style={profile.profileFrame ? {
                 borderWidth: 1.5,
-                borderColor: (profile.profileFrame.borderColors?.length > 1)
-                  ? profile.profileFrame.borderColors[frameBorderColorIndex % profile.profileFrame.borderColors.length]
-                  : (profile.profileFrame.borderColors?.[0] || '#6366f1'),
+                borderColor: profile.profileFrame.borderColors?.[0] || '#6366f1',
                 borderRadius: 16,
                 padding: 1,
                 shadowColor: profile.profileFrame.glowColor || 'transparent',
@@ -599,7 +581,8 @@ const GroupMessageList = ({
     },
     // ✅ PERF FIX: Reduced from 24 deps to 14.
     // Removed: filteredMessages (uses ref), user, handleCopy, t, isAdmin (unused directly or stable).
-    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel, frameBorderColorIndex]
+    // frameBorderColorIndex removed — was re-rendering whole list every 1.5s; frames now static.
+    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel]
   );
 
   const keyExtractor = useCallback((item, index) => {

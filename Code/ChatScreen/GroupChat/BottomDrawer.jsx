@@ -41,8 +41,9 @@ import {
   deleteDoc,
   serverTimestamp,
   getCountFromServer, // ✅ Added for follower count
+  writeBatch,
 } from '@react-native-firebase/firestore';
-import { ref, get, set } from '@react-native-firebase/database';
+import { ref, get, set, remove } from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
 import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus } from '../utils';
@@ -788,6 +789,183 @@ const ProfileBottomDrawer = ({
     toggleModal();
     setShowReasonModal(true);
   };
+
+  // ─────────────────────────────────────────────
+  // Admin/Mod: Delete ALL user data across Firebase
+  const [deletingUser, setDeletingUser] = useState(false);
+
+  const handleDeleteUserData = useCallback(async () => {
+    if (!selectedUserId || !firestoreDB || !appdatabase) return;
+    if (!isAdmin && !user?.isModerator) return; // only admin/mod
+
+    const targetName = mergedUser?.displayName || mergedUser?.sender || userName || 'this user';
+
+    const confirmStep1 = () => new Promise((resolve, reject) => {
+      Alert.alert(
+        '⚠️ Delete User Data',
+        `This will permanently delete ALL data for "${targetName}" (${selectedUserId}).\n\nThis includes:\n• Profile & user node\n• All reviews (given & received)\n• All trades\n• All posts\n• Followers/following\n• Chat metadata\n• Group memberships\n• Streaks, notifications, cosmetics\n\nThis action CANNOT be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: reject },
+          { text: 'Continue', style: 'destructive', onPress: resolve },
+        ]
+      );
+    });
+
+    const confirmStep2 = () => new Promise((resolve, reject) => {
+      Alert.alert(
+        '🔴 Final Confirmation',
+        `Are you ABSOLUTELY sure you want to delete all data for "${targetName}"?\n\nType the action to confirm.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: reject },
+          { text: 'DELETE EVERYTHING', style: 'destructive', onPress: resolve },
+        ]
+      );
+    });
+
+    try {
+      await confirmStep1();
+      await confirmStep2();
+
+      setDeletingUser(true);
+
+      const uid = selectedUserId;
+      const errors = [];
+
+      // ── 1. RTDB: Remove user nodes ──────────────────────────
+      const rtdbPaths = [
+        `users/${uid}`,           // profile, xp, shop, cosmetics, badges, blocked_users
+        `presence/${uid}`,        // online status
+        `chat_meta_data/${uid}`,  // private chat metadata
+        `group_meta_data/${uid}`, // group chat metadata
+        `reward/${uid}`,          // reward center data
+        `activeChats/${uid}`,     // active chat session tracking
+      ];
+      for (const path of rtdbPaths) {
+        try { await remove(ref(appdatabase, path)); }
+        catch (e) { errors.push(`RTDB ${path}: ${e.message}`); }
+      }
+
+
+      // ── 2. Firestore: Delete documents where userId matches ──
+      // Helper: query + batch-delete all matching docs (handles >500 doc limit)
+      const deleteQueryDocs = async (collectionName, field, value) => {
+        try {
+          const q = query(collection(firestoreDB, collectionName), where(field, '==', value));
+          const snap = await getDocs(q);
+          if (snap.empty) return 0;
+          // writeBatch has a 500-ops limit, so chunk
+          const CHUNK = 450;
+          for (let i = 0; i < snap.docs.length; i += CHUNK) {
+            const batch = writeBatch(firestoreDB);
+            snap.docs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+          return snap.size;
+        } catch (e) {
+          errors.push(`Firestore ${collectionName}[${field}]: ${e.message}`);
+          return 0;
+        }
+      };
+
+      // Helper: delete single doc by ID (silently skips if doc doesn't exist)
+      const deleteSingleDoc = async (collectionName, docId) => {
+        try { await deleteDoc(doc(firestoreDB, collectionName, docId)); }
+        catch (e) { errors.push(`Firestore ${collectionName}/${docId}: ${e.message}`); }
+      };
+
+      // Reviews (given by this user)
+      await deleteQueryDocs('reviews', 'fromUserId', uid);
+      // Reviews (received by this user)
+      await deleteQueryDocs('reviews', 'toUserId', uid);
+      // Reviews profile doc (stores ownedPets, wishlistPets, bio)
+      await deleteSingleDoc('reviews', uid);
+
+      // Ratings summary doc
+      await deleteSingleDoc('user_ratings_summary', uid);
+
+      // User profile doc
+      await deleteSingleDoc('user_profiles', uid);
+
+      // Game stats
+      await deleteSingleDoc('game_stats', uid);
+
+      // Trades
+      await deleteQueryDocs('trades_new', 'userId', uid);
+
+      // Following (user follows others)
+      await deleteQueryDocs('following', 'followerId', uid);
+      // Following (others follow user)
+      await deleteQueryDocs('following', 'followingId', uid);
+
+      // Notifications (sent to user + about user)
+      await deleteQueryDocs('notifications', 'userId', uid);
+      await deleteQueryDocs('notifications', 'targetUserId', uid);
+
+      // Design Posts
+      await deleteQueryDocs('designPosts', 'userId', uid);
+
+      // Group invitations
+      await deleteQueryDocs('group_invitations', 'invitedUserId', uid);
+      await deleteQueryDocs('group_invitations', 'invitedBy', uid);
+
+      // Group join requests
+      await deleteQueryDocs('group_join_requests', 'userId', uid);
+
+      // User activity
+      await deleteQueryDocs('user_activity', 'userId', uid);
+
+      // Cosmetics inventory
+      await deleteSingleDoc('cosmetics_inventory', uid);
+
+      // Streaks (Firestore — fields may be user1/user2 or participantIds)
+      try {
+        const streaksRef = collection(firestoreDB, 'streaks');
+        const q1 = query(streaksRef, where('user1', '==', uid));
+        const q2 = query(streaksRef, where('user2', '==', uid));
+        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const allDocs = [...s1.docs, ...s2.docs];
+        // Dedupe (same doc may appear in both queries)
+        const seen = new Set();
+        const uniqueDocs = allDocs.filter(d => {
+          if (seen.has(d.id)) return false;
+          seen.add(d.id);
+          return true;
+        });
+        if (uniqueDocs.length > 0) {
+          const CHUNK = 450;
+          for (let i = 0; i < uniqueDocs.length; i += CHUNK) {
+            const batch = writeBatch(firestoreDB);
+            uniqueDocs.slice(i, i + CHUNK).forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+        }
+      } catch (e) { errors.push(`Firestore streaks: ${e.message}`); }
+
+      setDeletingUser(false);
+
+      if (errors.length > 0) {
+        console.warn('[DeleteUser] Partial errors:', errors);
+        Alert.alert(
+          'Deletion Complete (with warnings)',
+          `User data for "${targetName}" has been deleted.\n\n${errors.length} non-critical error(s) occurred. Check console for details.`
+        );
+      } else {
+        Alert.alert(
+          '✅ User Deleted',
+          `All data for "${targetName}" has been permanently removed.`
+        );
+      }
+
+      toggleModal();
+    } catch (e) {
+      // User cancelled or error
+      setDeletingUser(false);
+      if (e?.message) {
+        console.error('[DeleteUser] Error:', e);
+        Alert.alert('Error', `Failed to delete user data: ${e.message}`);
+      }
+    }
+  }, [selectedUserId, firestoreDB, appdatabase, isAdmin, user?.isModerator, mergedUser, userName, toggleModal]);
 
   const handleBanUser = async () => {
     if (!mergedUser?.email) {
@@ -2965,6 +3143,8 @@ const ProfileBottomDrawer = ({
                         handleRemoveTrusted={handleRemoveTrusted}
                         handleMakeCMSR={handleMakeCMSR}
                         handleRemoveCMSR={handleRemoveCMSR}
+                        handleDeleteUserData={handleDeleteUserData}
+                        deletingUser={deletingUser}
                       />
                     )}
                   </View>

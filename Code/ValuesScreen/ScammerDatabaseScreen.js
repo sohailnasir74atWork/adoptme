@@ -314,35 +314,41 @@ const ScammerDatabaseScreen = () => {
     // ════════════════════════════════════════
     //  PICK PROOF IMAGES
     // ════════════════════════════════════════
-    const handlePickProofImage = useCallback(() => {
+    const handlePickProofImage = useCallback(async () => {
         if (reportImages.length >= 3) {
             Alert.alert(t('scammer.limit_title'), t('scammer.limit_max_images'));
             return;
         }
-        launchImageLibrary(
-            { mediaType: 'photo', selectionLimit: 3 - reportImages.length, quality: 0.7, maxWidth: 1024, maxHeight: 1024 },
-            async (response) => {
-                if (!response || response.didCancel || response.errorCode) return;
-                const assets = response?.assets || [];
-                const uris = [];
-                for (const asset of assets) {
-                    if (!asset?.uri) continue;
+        let response;
+        try {
+            response = await launchImageLibrary({
+                mediaType: 'photo',
+                selectionLimit: 3 - reportImages.length,
+                quality: 0.7,
+                maxWidth: 1024,
+                maxHeight: 1024,
+            });
+        } catch { return; }
+
+        if (!response || response.didCancel || response.errorCode) return;
+        const assets = response?.assets || [];
+        const uris = [];
+        for (const asset of assets) {
+            if (!asset?.uri) continue;
+            try {
+                const fileSize = asset.fileSize || 0;
+                let uri = asset.uri;
+                if (fileSize > 1024 * 1024) {
                     try {
-                        const fileSize = asset.fileSize || 0;
-                        let uri = asset.uri;
-                        if (fileSize > 1024 * 1024) {
-                            try {
-                                uri = await CompressorImage.compress(uri, { maxWidth: 800, quality: 0.6, returnableOutputType: 'uri' });
-                            } catch { /* use original */ }
-                        }
-                        uris.push(uri);
-                    } catch { /* skip */ }
+                        uri = await CompressorImage.compress(uri, { maxWidth: 800, quality: 0.6, returnableOutputType: 'uri' });
+                    } catch { /* use original */ }
                 }
-                if (uris.length > 0) {
-                    setReportImages((prev) => [...prev, ...uris].slice(0, 3));
-                }
-            },
-        );
+                uris.push(uri);
+            } catch { /* skip */ }
+        }
+        if (uris.length > 0) {
+            setReportImages((prev) => [...prev, ...uris].slice(0, 3));
+        }
     }, [reportImages.length]);
 
     // ════════════════════════════════════════

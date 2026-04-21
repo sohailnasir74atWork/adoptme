@@ -49,16 +49,20 @@ const CompactPortfolio = ({
     const [expanded, setExpanded] = useState(false);
     const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
+    // Filter to only pets marked as available for trade (for display)
+    const tradeableOwned = useMemo(() => ownedPets.filter(p => p.availableForTrade), [ownedPets]);
+    const tradeableWishlist = useMemo(() => wishlistPets.filter(p => p.availableForTrade), [wishlistPets]);
+
     const portfolio = useMemo(() => {
-        if (!ownedPets || ownedPets.length === 0) return null;
+        if (!tradeableOwned || tradeableOwned.length === 0) return null;
 
         const getVal = (p) => lookupPetValue ? lookupPetValue(p) : (Number(p.value) || 0);
-        const totalValue = ownedPets.reduce((s, p) => s + getVal(p), 0);
-        const totalItems = ownedPets.length;
+        const totalValue = tradeableOwned.reduce((s, p) => s + getVal(p), 0);
+        const totalItems = tradeableOwned.length;
         const avgValue = totalItems > 0 ? totalValue / totalItems : 0;
 
         const catMap = {};
-        ownedPets.forEach((p) => {
+        tradeableOwned.forEach((p) => {
             const c = (p.category || 'Other').toLowerCase();
             if (!catMap[c]) catMap[c] = { value: 0, count: 0 };
             catMap[c].value += getVal(p);
@@ -73,12 +77,12 @@ const CompactPortfolio = ({
             }))
             .sort((a, b) => b.value - a.value);
 
-        const wishVal = (wishlistPets || []).reduce(
+        const wishVal = (tradeableWishlist || []).reduce(
             (s, p) => s + (lookupPetValue ? lookupPetValue(p) : (Number(p.value) || 0)), 0,
         );
 
         return { totalValue, totalItems, avgValue, categories, wishVal };
-    }, [ownedPets, wishlistPets, lookupPetValue]);
+    }, [tradeableOwned, tradeableWishlist, lookupPetValue]);
 
     const toggleExpand = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -179,9 +183,15 @@ const CompactPortfolio = ({
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={{ paddingRight: 6 }}
                         >
-                            <View style={{ flexDirection: 'row' }}>
-                                {ownedPets.map((pet, index) =>
-                                    renderPetBubble(pet, index),
+                        <View style={{ flexDirection: 'row' }}>
+                                {tradeableOwned.length === 0 ? (
+                                    <Text style={styles.petEmpty}>
+                                        {t('profile.no_trading_pets')}
+                                    </Text>
+                                ) : (
+                                    tradeableOwned.map((pet, index) =>
+                                        renderPetBubble(pet, index),
+                                    )
                                 )}
                             </View>
                         </ScrollView>
@@ -192,7 +202,7 @@ const CompactPortfolio = ({
                         <Text style={styles.petSectionLabel}>
                             {t('profile.pets.wishlist_title')}
                         </Text>
-                        {wishlistPets.length === 0 ? (
+                        {tradeableWishlist.length === 0 ? (
                             <Text style={styles.petEmpty}>
                                 {t('profile.no_wishlist_pets')}
                             </Text>
@@ -203,7 +213,7 @@ const CompactPortfolio = ({
                                 contentContainerStyle={{ paddingRight: 6 }}
                             >
                                 <View style={{ flexDirection: 'row' }}>
-                                    {wishlistPets.map((pet, index) =>
+                                    {tradeableWishlist.map((pet, index) =>
                                         renderPetBubble(pet, index),
                                     )}
                                 </View>
@@ -241,7 +251,7 @@ const CompactPortfolio = ({
                     )}
 
                     {/* ── Wishlist comparison ── */}
-                    {wishlistPets && wishlistPets.length > 0 && (
+                    {tradeableWishlist && tradeableWishlist.length > 0 && (
                         <View style={styles.wishRow}>
                             <View style={styles.wishItem}>
                                 <Icon name="heart-outline" size={12} color="#FF6B6B" />

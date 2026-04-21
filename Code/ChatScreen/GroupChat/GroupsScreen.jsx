@@ -667,56 +667,45 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       return;
     }
 
+    let response;
     try {
-      launchImageLibrary(
-        {
-          mediaType: 'photo',
-          selectionLimit: 1,
-          quality: 0.8,
-        },
-        async (response) => {
-          try {
-            if (response?.didCancel || response?.errorCode) {
-              return;
-            }
-
-            const asset = response?.assets?.[0];
-            if (asset?.uri) {
-              try {
-                // Upload image
-                const avatarUrl = await uploadToBunny(asset.uri);
-
-                // Update group avatar
-                const result = await updateGroupAvatar(firestoreDB, appdatabase, groupId, user.id, avatarUrl, isAdmin);
-
-                if (result.success) {
-                  showSuccessMessage('Success', 'Group icon updated successfully!');
-                  // Refresh groups list
-                  if (setGroups && typeof setGroups === 'function') {
-                    setGroups((prevGroups) => {
-                      if (!Array.isArray(prevGroups)) return prevGroups;
-                      return prevGroups.map((group) =>
-                        group?.groupId === groupId
-                          ? { ...group, groupAvatar: avatarUrl }
-                          : group
-                      );
-                    });
-                  }
-                } else {
-                  showErrorMessage('Error', result.error || 'Failed to update group icon');
-                }
-              } catch (error) {
-                console.error('Error updating group icon:', error);
-                showErrorMessage('Error', 'Failed to update group icon. Please try again.');
-              }
-            }
-          } catch (callbackError) {
-            console.warn('Image picker callback error:', callbackError);
-          }
-        }
-      );
+      response = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        quality: 0.8,
+      });
     } catch (launchError) {
       console.warn('Image picker launch error:', launchError);
+      return;
+    }
+
+    if (response?.didCancel || response?.errorCode) return;
+
+    const asset = response?.assets?.[0];
+    if (!asset?.uri) return;
+
+    try {
+      const avatarUrl = await uploadToBunny(asset.uri);
+      const result = await updateGroupAvatar(firestoreDB, appdatabase, groupId, user.id, avatarUrl, isAdmin);
+
+      if (result.success) {
+        showSuccessMessage('Success', 'Group icon updated successfully!');
+        if (setGroups && typeof setGroups === 'function') {
+          setGroups((prevGroups) => {
+            if (!Array.isArray(prevGroups)) return prevGroups;
+            return prevGroups.map((group) =>
+              group?.groupId === groupId
+                ? { ...group, groupAvatar: avatarUrl }
+                : group
+            );
+          });
+        }
+      } else {
+        showErrorMessage('Error', result.error || 'Failed to update group icon');
+      }
+    } catch (error) {
+      console.error('Error updating group icon:', error);
+      showErrorMessage('Error', 'Failed to update group icon. Please try again.');
     }
   }, [user?.id, firestoreDB, appdatabase, uploadToBunny, setGroups, isAdmin, groups]);
 

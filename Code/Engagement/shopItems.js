@@ -320,6 +320,117 @@ export const FRAMES = {
     borderWidth: 4,
     glowColor: '#FACC1560',
   },
+  // ── Modern elegant series (static — no cycling) ──
+  pearl_shimmer: {
+    id: 'pearl_shimmer',
+    name: '🤍 Pearl Shimmer',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.COMMON,
+    renderType: 'css',
+    duration: 1,
+    borderColors: ['#F5E6E8'],
+    borderWidth: 3,
+    glowColor: null,
+  },
+  blush_silk: {
+    id: 'blush_silk',
+    name: '🌸 Blush Silk',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.COMMON,
+    renderType: 'css',
+    duration: 1,
+    borderColors: ['#F5B7C1'],
+    borderWidth: 3,
+    glowColor: null,
+  },
+  champagne_ribbon: {
+    id: 'champagne_ribbon',
+    name: '🥂 Champagne Ribbon',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.UNCOMMON,
+    renderType: 'svg',
+    duration: 3,
+    borderColors: ['#F0D9A7', '#E8C887'],
+    borderWidth: 4,
+    glowColor: '#F0D9A730',
+  },
+  lilac_petal: {
+    id: 'lilac_petal',
+    name: '💜 Lilac Petal',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.UNCOMMON,
+    renderType: 'svg',
+    duration: 3,
+    borderColors: ['#D8B4FE', '#C4A5F0'],
+    borderWidth: 4,
+    glowColor: '#D8B4FE30',
+  },
+  sage_mist: {
+    id: 'sage_mist',
+    name: '🌿 Sage Mist',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.UNCOMMON,
+    renderType: 'svg',
+    duration: 3,
+    borderColors: ['#B6D7B9', '#9CC4A3'],
+    borderWidth: 4,
+    glowColor: '#B6D7B930',
+  },
+  peach_sorbet: {
+    id: 'peach_sorbet',
+    name: '🍑 Peach Sorbet',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.RARE,
+    renderType: 'svg',
+    duration: 7,
+    borderColors: ['#FFC5A8', '#FFAA88'],
+    borderWidth: 5,
+    glowColor: '#FFC5A860',
+  },
+  dusty_rose_frame: {
+    id: 'dusty_rose_frame',
+    name: '🌹 Dusty Rose',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.RARE,
+    renderType: 'svg',
+    duration: 7,
+    borderColors: ['#D4909B', '#C07A86'],
+    borderWidth: 5,
+    glowColor: '#D4909B60',
+  },
+  moonstone_glow: {
+    id: 'moonstone_glow',
+    name: '🌙 Moonstone Glow',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.LEGENDARY,
+    renderType: 'svg',
+    duration: 30,
+    borderColors: ['#EAE4F2', '#C8D4F5'],
+    borderWidth: 7,
+    glowColor: '#EAE4F280',
+  },
+  rose_gold_luxe: {
+    id: 'rose_gold_luxe',
+    name: '🌷 Rose Gold Luxe',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.LEGENDARY,
+    renderType: 'svg',
+    duration: 30,
+    borderColors: ['#E8B4B8', '#D69EA3'],
+    borderWidth: 7,
+    glowColor: '#E8B4B880',
+  },
+  celestial_pearl: {
+    id: 'celestial_pearl',
+    name: '✨ Celestial Pearl',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.EXCLUSIVE,
+    renderType: 'svg',
+    duration: -1,
+    borderColors: ['#FCE7F3', '#E9D5FF'],
+    borderWidth: 8,
+    glowColor: '#FCE7F399',
+  },
 };
 
 // ════════════════════════════════════════════════════════════
@@ -403,6 +514,55 @@ export const TEXT_COLORS = {
     color: 'rainbow', // special — each character gets a different color
     colors: ['#FF3B5C', '#FF9500', '#FFD60A', '#4CD964', '#4DA6FF', '#BF5AF2'],
   },
+  // ── Modern elegant text colors ──
+  rose_gold_text: {
+    id: 'rose_gold_text',
+    name: '🌷 Rose Gold',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    color: '#E8A5B8',
+  },
+  dusty_lilac: {
+    id: 'dusty_lilac',
+    name: '💜 Dusty Lilac',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    color: '#C8A5E8',
+  },
+  soft_peach: {
+    id: 'soft_peach',
+    name: '🍑 Soft Peach',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    color: '#FFB69C',
+  },
+  sage_text: {
+    id: 'sage_text',
+    name: '🌿 Sage',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.RARE,
+    duration: 7,
+    color: '#88C4A8',
+  },
+  champagne_text: {
+    id: 'champagne_text',
+    name: '🥂 Champagne',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.RARE,
+    duration: 7,
+    color: '#E8C887',
+  },
+  coral_blush: {
+    id: 'coral_blush',
+    name: '🌸 Coral Blush',
+    type: COSMETIC_TYPE.TEXT_COLOR,
+    rarity: RARITY.LEGENDARY,
+    duration: 30,
+    color: '#FF8FA3',
+  },
 };
 
 // ════════════════════════════════════════════════════════════
@@ -485,6 +645,52 @@ export const TRADE_BG_COLORS = {
     color: '#C4B5FD',      // holographic purple-blue
     darkColor: '#1E1145',  // deep indigo
   },
+  // ── Modern elegant trade backgrounds ──
+  strawberry_cream: {
+    id: 'strawberry_cream',
+    name: '🍓 Strawberry Cream',
+    type: COSMETIC_TYPE.TRADE_BG,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    color: '#FFE0E6',      // soft strawberry
+    darkColor: '#3B1220',  // deep berry
+  },
+  lemon_chiffon: {
+    id: 'lemon_chiffon',
+    name: '🍋 Lemon Chiffon',
+    type: COSMETIC_TYPE.TRADE_BG,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    color: '#FFF3C4',      // soft lemon cream
+    darkColor: '#3A2B08',  // deep honey
+  },
+  dusty_rose_bg: {
+    id: 'dusty_rose_bg',
+    name: '🌹 Dusty Rose',
+    type: COSMETIC_TYPE.TRADE_BG,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    color: '#F5C5D0',      // muted rose
+    darkColor: '#40152A',  // deep mauve
+  },
+  pistachio_silk: {
+    id: 'pistachio_silk',
+    name: '🌿 Pistachio Silk',
+    type: COSMETIC_TYPE.TRADE_BG,
+    rarity: RARITY.RARE,
+    duration: 7,
+    color: '#D5F0D0',      // soft pistachio
+    darkColor: '#0F3521',  // deep sage
+  },
+  moonstone_tide: {
+    id: 'moonstone_tide',
+    name: '🌙 Moonstone Tide',
+    type: COSMETIC_TYPE.TRADE_BG,
+    rarity: RARITY.LEGENDARY,
+    duration: 30,
+    color: '#E0DEF5',      // iridescent pearl
+    darkColor: '#1B1538',  // deep twilight
+  },
 };
 
 // ════════════════════════════════════════════════════════════
@@ -558,6 +764,39 @@ export const BANNER_GRADIENTS = {
     rarity: RARITY.EXCLUSIVE,
     duration: -1,
     gradient: ['#5E5CE6', '#BF5AF2', '#FF2D55'],
+  },
+  // ── Modern elegant banners ──
+  rose_gold_sky: {
+    id: 'rose_gold_sky',
+    name: '🌷 Rose Gold Sky',
+    type: COSMETIC_TYPE.BANNER,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    gradient: ['#F5D7DB', '#E8A5B8', '#E8C887'],
+  },
+  lavender_fields: {
+    id: 'lavender_fields',
+    name: '💜 Lavender Fields',
+    type: COSMETIC_TYPE.BANNER,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    gradient: ['#D8B4FE', '#E8A5B8', '#FCE7F3'],
+  },
+  peach_champagne: {
+    id: 'peach_champagne',
+    name: '🥂 Peach Champagne',
+    type: COSMETIC_TYPE.BANNER,
+    rarity: RARITY.RARE,
+    duration: 7,
+    gradient: ['#FFC5A8', '#F0D9A7', '#FFE8D6'],
+  },
+  moonlit_garden: {
+    id: 'moonlit_garden',
+    name: '🌙 Moonlit Garden',
+    type: COSMETIC_TYPE.BANNER,
+    rarity: RARITY.LEGENDARY,
+    duration: 30,
+    gradient: ['#EAE4F2', '#C8A5E8', '#E8A5B8'],
   },
 };
 
@@ -641,6 +880,61 @@ export const CHAT_BG_COLORS = {
     duration: -1,
     color: '#C7B2FF',      // vivid holo purple
     darkColor: '#15102E',  // deep space
+  },
+  // ── Modern elegant chat bubble backgrounds ──
+  blush_petal: {
+    id: 'blush_petal',
+    name: '🌸 Blush Petal',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    color: '#FFDCE5',      // soft blush
+    darkColor: '#3B1320',  // deep rose
+  },
+  pistachio_cream: {
+    id: 'pistachio_cream',
+    name: '🌿 Pistachio Cream',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.COMMON,
+    duration: 1,
+    color: '#D8F0D0',      // soft pistachio
+    darkColor: '#133B24',  // deep sage
+  },
+  lilac_whisper: {
+    id: 'lilac_whisper',
+    name: '💜 Lilac Whisper',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    color: '#E5D4F5',      // soft lilac
+    darkColor: '#261548',  // deep plum
+  },
+  buttercream: {
+    id: 'buttercream',
+    name: '🧈 Buttercream',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.UNCOMMON,
+    duration: 3,
+    color: '#FFF0D0',      // warm cream
+    darkColor: '#3D2A0A',  // deep caramel
+  },
+  rose_velvet: {
+    id: 'rose_velvet',
+    name: '🌹 Rose Velvet',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.RARE,
+    duration: 7,
+    color: '#FFC5D2',      // rich rose
+    darkColor: '#42152A',  // deep wine
+  },
+  moonbeam: {
+    id: 'moonbeam',
+    name: '🌙 Moonbeam',
+    type: COSMETIC_TYPE.CHAT_BG,
+    rarity: RARITY.LEGENDARY,
+    duration: 30,
+    color: '#E8DFFF',      // iridescent pearl
+    darkColor: '#1B1538',  // deep twilight
   },
 };
 

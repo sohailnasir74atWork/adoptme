@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		18119D592D5CF50800B22C3A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18119D582D5CF50800B22C3A /* AppDelegate.swift */; };
+		181AEBCC2F93889E00B7ECC7 /* woosh.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 181AEBCB2F93889D00B7ECC7 /* woosh.mp3 */; };
+		181AEBCD2F93889E00B7ECC7 /* pop.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 181AEBCA2F93889D00B7ECC7 /* pop.mp3 */; };
 		18210E3A2D5CBE7900113462 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 18210E392D5CBE7900113462 /* StoreKit.framework */; };
 		183231FB2D66329F00278B1F /* testing.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 183231FA2D66329F00278B1F /* testing.storekit */; };
 		184488282E390BE5003EB68A /* StoreKitTestCertificate.cer in Resources */ = {isa = PBXBuildFile; fileRef = 184488272E390BE5003EB68A /* StoreKitTestCertificate.cer */; };
@@ -32,6 +34,8 @@
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = bloxfruitevalues/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		18119D582D5CF50800B22C3A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		18119D5A2D5CF50A00B22C3A /* bloxfruitevalues-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "bloxfruitevalues-Bridging-Header.h"; sourceTree = "<group>"; };
+		181AEBCA2F93889D00B7ECC7 /* pop.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = pop.mp3; sourceTree = "<group>"; };
+		181AEBCB2F93889D00B7ECC7 /* woosh.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = woosh.mp3; sourceTree = "<group>"; };
 		18210E382D5CBE3C00113462 /* bloxfruitevalues.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = bloxfruitevalues.entitlements; path = bloxfruitevalues/bloxfruitevalues.entitlements; sourceTree = "<group>"; };
 		18210E392D5CBE7900113462 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		183231FA2D66329F00278B1F /* testing.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = testing.storekit; path = bloxfruitevalues/testing.storekit; sourceTree = "<group>"; };
@@ -98,6 +102,8 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				181AEBCA2F93889D00B7ECC7 /* pop.mp3 */,
+				181AEBCB2F93889D00B7ECC7 /* woosh.mp3 */,
 				186AE12D2EFC2E8E00574D82 /* audio.mp3 */,
 				184488272E390BE5003EB68A /* StoreKitTestCertificate.cer */,
 				183231FA2D66329F00278B1F /* testing.storekit */,
@@ -206,6 +212,8 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				186AE12E2EFC2E8E00574D82 /* audio.mp3 in Resources */,
+				181AEBCC2F93889E00B7ECC7 /* woosh.mp3 in Resources */,
+				181AEBCD2F93889E00B7ECC7 /* pop.mp3 in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				184488282E390BE5003EB68A /* StoreKitTestCertificate.cer in Resources */,
 				3CB3B02363450A64CDC9063D /* PrivacyInfo.xcprivacy in Resources */,
@@ -371,7 +379,7 @@
 				CODE_SIGN_ENTITLEMENTS = bloxfruitevalues/bloxfruitevalues.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 76;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = P32FX5FC6Z;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = bloxfruitevalues/Info.plist;
@@ -381,7 +389,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.1;
+				MARKETING_VERSION = 8.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -411,7 +419,7 @@
 				CODE_SIGN_ENTITLEMENTS = bloxfruitevalues/bloxfruitevalues.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 76;
+				CURRENT_PROJECT_VERSION = 78;
 				DEVELOPMENT_TEAM = P32FX5FC6Z;
 				INFOPLIST_FILE = bloxfruitevalues/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Petfolio AMV";
@@ -420,7 +428,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.1;
+				MARKETING_VERSION = 8.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

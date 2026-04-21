@@ -40,6 +40,7 @@ import QuizBattle from './Code/ValuesScreen/PetGuessingGame/QuizBattle';
 import TradeShowdown from './Code/ValuesScreen/PetGuessingGame/TradeShowdown';
 import MysteryEggScreen from './Code/Engagement/MysteryEgg';
 import MyCosmeticsScreen from './Code/Engagement/MyCosmeticsScreen';
+import ArrowGameScreen from './Code/Engagement/ArrowGameScreen';
 import ValueScreen from './Code/ValuesScreen/ValueScreen';
 import LeaderboardScreen from './Code/ChatScreen/GroupChat/LeaderboardScreen';
 import SocialDashboard from './Code/AppHelper/SocialDashboard';
@@ -278,6 +279,7 @@ function App() {
           <Stack.Screen name="TradeShowdownScreen" options={{ title: 'Trade Showdown', ...headerOptions }} component={TradeShowdown} />
           <Stack.Screen name="MysteryEggScreen" options={{ headerShown: false }} component={MysteryEggScreen} />
           <Stack.Screen name="MyCosmeticsScreen" options={{ headerShown: false }} component={MyCosmeticsScreen} />
+          <Stack.Screen name="ArrowGameScreen" options={{ headerShown: false }} component={ArrowGameScreen} />
           <Stack.Screen name="BadgesScreen" options={{ headerShown: false }} component={BadgesScreen} />
           <Stack.Screen name="NotificationFeedScreen" options={{ title: 'Notifications', ...headerOptions }} component={NotificationFeed} />
           <Stack.Screen name="SocialDashboardScreen" options={{ title: 'Friends', ...headerOptions }} component={SocialDashboard} />

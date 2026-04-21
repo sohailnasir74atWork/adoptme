@@ -751,6 +751,18 @@ const HomeScreen = ({ selectedTheme }) => {
               {hot && (
                 <Text style={{ fontSize: 10, color: '#EF4444' }}>+{hot.pct}%</Text>
               )}
+              <View style={{
+                backgroundColor: pet.availableForTrade ? '#D1FAE5' : (isDarkMode ? '#1e293b' : '#f1f5f9'),
+                borderRadius: 4,
+                paddingHorizontal: 5,
+                paddingVertical: 1,
+                borderWidth: 1,
+                borderColor: pet.availableForTrade ? '#10B981' : (isDarkMode ? '#334155' : '#e2e8f0'),
+              }}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: pet.availableForTrade ? '#10B981' : (isDarkMode ? '#64748B' : '#94a3b8') }}>
+                  {pet.availableForTrade ? '✅ For Trade' : '🔒 Private'}
+                </Text>
+              </View>
             </View>
           </View>
         </TouchableOpacity>

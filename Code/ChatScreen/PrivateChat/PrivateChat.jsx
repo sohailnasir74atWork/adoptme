@@ -16,7 +16,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus, updateLastRead, useOtherLastRead } from '../utils';
 import { useLocalState } from '../../LocalGlobelStats';
-import { get, increment, ref, update, set, remove, onValue, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
+import { get, increment, ref, update, set, remove, onValue, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { showMessage } from 'react-native-flash-message';
@@ -778,44 +778,49 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   // ✅ OPTIMIZED: Only listen to the newest message to avoid duplicate reads
   // Uses useFocusEffect to detach listener when navigating away (prevents freeze on rapid nav)
+  // ✅ Use onValue (more reliable than onChildAdded with limitToLast).
+  // onChildAdded + limitToLast(1) has known bugs in Firebase SDKs where remote writes don't fire.
   useFocusEffect(
     useCallback(() => {
       if (!messagesRef) return;
 
-      // ✅ Use limitToLast(1) to only listen to the newest message
-      const limitedRef = dbQuery(messagesRef, limitToLast(1));
+      const latestQuery = dbQuery(messagesRef, orderByKey(), limitToLast(1));
+      let isMounted = true;
 
-      const handleChildAdded = snapshot => {
-        if (!snapshot || !snapshot.key) return;
-        const data = snapshot.val();
-        if (!data || typeof data !== 'object') return;
+      const unsubscribe = onValue(latestQuery, (snapshot) => {
+        if (!isMounted || !snapshot || !snapshot.exists()) return;
 
-        const newMessage = { id: snapshot.key, ...data };
-        if (!newMessage.timestamp) {
-          newMessage.timestamp = Date.now();
-        }
+        snapshot.forEach((childSnap) => {
+          const key = childSnap?.key;
+          const data = childSnap?.val();
+          if (!key || !data || typeof data !== 'object') return;
 
-        // ✅ Update lastRead when a message from the other user arrives while we're viewing
-        if (newMessage.senderId && newMessage.senderId !== myUserId && chatKey) {
-          updateLastRead(chatKey, myUserId);
-        }
+          const newMessage = { id: key, ...data };
+          if (!newMessage.timestamp) {
+            newMessage.timestamp = Date.now();
+          }
 
-        setMessages(prev => {
-          if (!Array.isArray(prev)) return [newMessage];
-          const exists = prev.some(m => String(m?.id) === String(newMessage.id));
-          if (exists) return prev; // don't duplicate
+          // ✅ Update lastRead when a message from the other user arrives while we're viewing
+          if (newMessage.senderId && newMessage.senderId !== myUserId && chatKey) {
+            updateLastRead(chatKey, myUserId);
+          }
 
-          // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
-          return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          setMessages(prev => {
+            if (!Array.isArray(prev)) return [newMessage];
+            const exists = prev.some(m => String(m?.id) === String(newMessage.id));
+            if (exists) return prev; // don't duplicate
+
+            // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
+            return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          });
         });
-      };
-
-      const unsubscribe = onChildAdded(limitedRef, handleChildAdded);
+      });
 
       return () => {
+        isMounted = false;
         unsubscribe();
       };
-    }, [messagesRef])
+    }, [messagesRef, myUserId, chatKey])
   );
 
 
