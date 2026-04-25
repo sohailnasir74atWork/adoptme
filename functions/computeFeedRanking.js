@@ -1,11 +1,8 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
-
 if (!admin.apps.length) admin.initializeApp();
-
 const firestore = admin.firestore();
 const rtdb = admin.database();
-
 /**
  * computeFeedRanking
  *
@@ -23,7 +20,6 @@ const rtdb = admin.database();
  * Deployment:
  *   firebase deploy --only functions:computeFeedRanking
  */
-
 // ── Helper: count total reactions on a post ──
 const countReactions = (post) => {
   let count = 0;
@@ -39,13 +35,11 @@ const countReactions = (post) => {
   }
   return count;
 };
-
 // ── Helper: get hours since post creation ──
 const getHoursAge = (post, now) => {
   const createdAt = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
   return Math.max(0, (now - createdAt.getTime()) / (1000 * 60 * 60));
 };
-
 // ── Scheduled function: runs every 30 minutes ──
 exports.computeFeedRanking = functions
   .runWith({ timeoutSeconds: 120, memory: '256MB' })
@@ -54,7 +48,6 @@ exports.computeFeedRanking = functions
     try {
       const now = Date.now();
       const twoDaysAgo = new Date(now - 48 * 60 * 60 * 1000);
-
       // ── Fetch posts from last 48 hours ──
       const snapshot = await firestore
         .collection('designPosts')
@@ -62,7 +55,6 @@ exports.computeFeedRanking = functions
         .orderBy('createdAt', 'desc')
         .limit(200)
         .get();
-
       if (snapshot.empty) {
         console.log('ℹ️ No recent posts found. Writing empty rankings.');
         await rtdb.ref('feedRanking').set({
@@ -72,23 +64,18 @@ exports.computeFeedRanking = functions
         });
         return null;
       }
-
       const posts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       console.log(`📦 Fetched ${posts.length} posts from last 48h`);
-
       // ── Compute scores ──
       const scored = posts.map(post => {
         const reactions = countReactions(post);
         const comments = post.commentCount || 0;
         const hoursAge = getHoursAge(post, now);
         const engagement = reactions + (comments * 2);
-
         // Hot: engagement decays slowly (rewards sustained popularity)
         const hotScore = engagement / Math.pow(hoursAge + 2, 1.5);
-
         // Trending: steeper decay (rewards recent bursts)
         const trendingScore = engagement / Math.pow(hoursAge + 0.5, 2);
-
         return {
           postId: post.id,
           hotScore,
@@ -104,7 +91,6 @@ exports.computeFeedRanking = functions
           createdAt: post.createdAt?.toDate ? post.createdAt.toDate().toISOString() : null,
         };
       });
-
       // ── Rank: Hot (top 10) — filter out zero-engagement posts ──
       const hot = scored
         .filter(p => p.engagement > 0)
@@ -117,7 +103,6 @@ exports.computeFeedRanking = functions
           reactions,
           comments,
         }));
-
       // ── Rank: Trending (top 10) — filter out zero-engagement posts ──
       const trending = scored
         .filter(p => p.engagement > 0)
@@ -130,7 +115,6 @@ exports.computeFeedRanking = functions
           reactions,
           comments,
         }));
-
       // ── Write to RTDB ──
       await rtdb.ref('feedRanking').set({
         hot,
@@ -139,7 +123,6 @@ exports.computeFeedRanking = functions
         updatedAt: admin.database.ServerValue.TIMESTAMP,
         computedAt: new Date().toISOString(),
       });
-
       console.log(`✅ Feed ranking done: ${hot.length} hot, ${trending.length} trending from ${posts.length} posts`);
       return null;
     } catch (error) {

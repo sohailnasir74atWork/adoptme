@@ -10,14 +10,14 @@ import {
   Alert,
   InteractionManager,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import { ref, update, remove, get, set, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { ref, update, remove, set, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
 import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
@@ -39,107 +39,109 @@ const InboxScreen = ({ bannedUsers }) => {
   const [mutedChats, setMutedChats] = useState({}); // { otherUserId: boolean }
   const hasLoadedOnce = useRef(false); // ✅ Track if initial load is done
 
-  // ✅ COST-OPTIMIZED: Child listeners only — no redundant initial get()
-  // onChildAdded fires for each existing child on attach, serving as initial load
-  // Only downloads changed chats on subsequent updates
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.id || !appdatabase) {
-        setLocalChats([]);
-        setLocalLoading(false);
-        return;
-      }
+  // Listener attaches once per mount and stays alive across in-stack navigation.
+  // onChildAdded delivers each existing child on attach (acts as initial load) and
+  // onChildChanged delivers per-child deltas thereafter. mute state is derived from
+  // the same child events — no separate full read.
+  useEffect(() => {
+    if (!user?.id || !appdatabase) {
+      setLocalChats([]);
+      setLocalLoading(false);
+      return;
+    }
 
-      // ✅ Only show loading spinner on first load, not when returning from a chat
-      if (!hasLoadedOnce.current) {
-        setLocalLoading(true);
-      }
-      const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
-      const chatsMap = new Map(); // Track chats locally
-      const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+    if (!hasLoadedOnce.current) setLocalLoading(true);
 
-      // ✅ COST-OPTIMIZED: No initial get() — onChildAdded fires for each existing child on attach
-      // Removes duplicate download (get + onChildAdded was 2x bandwidth)
+    const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
+    const chatsMap = new Map();
+    const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
 
-      // ✅ Debounced helper to batch rapid child events (including initial onChildAdded burst)
-      // Without this, every single message in any chat triggers sort + 2x setState
-      const updateChatsList = () => {
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = setTimeout(() => {
-          InteractionManager.runAfterInteractions(() => {
-            const updatedChats = Array.from(chatsMap.values())
-              .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-            setLocalChats(updatedChats);
-            setDisplayedChatsCount(INITIAL_LOAD);
-            // Mark initial load done (covers both first mount and onChildAdded burst)
-            if (!hasLoadedOnce.current) {
-              hasLoadedOnce.current = true;
-              setLocalLoading(false);
-            }
-          });
-        }, 500);
-      };
-
-      // ✅ OPTIMIZED: Use child listeners for updates (only downloads changed chats)
-      const handleChildChange = (snapshot) => {
-        if (!snapshot || !snapshot.key) return;
-        const chatData = snapshot.val();
-        if (!chatData || typeof chatData !== 'object') return;
-
-        const chatPartnerId = snapshot.key;
-        const isBlocked = banned.includes(chatPartnerId);
-        const rawUnread = chatData?.unreadCount || 0;
-
-        if (isBlocked && rawUnread > 0) {
-          const blockedChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`);
-          update(blockedChatRef, { unreadCount: 0 }).catch((error) => {
-            console.error("Error resetting unread count:", error);
-          });
-        }
-
-        chatsMap.set(chatPartnerId, {
-          chatId: chatData.chatId,
-          otherUserId: chatPartnerId,
-          lastMessage: chatData.lastMessage || 'No messages yet',
-          lastMessageTimestamp: chatData.timestamp || 0,
-          unreadCount: isBlocked ? 0 : rawUnread,
-          otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-          otherUserName: chatData.receiverName || 'Anonymous',
+    const updateChatsList = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
+          const updatedChats = Array.from(chatsMap.values())
+            .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
+          setLocalChats(updatedChats);
+          setDisplayedChatsCount(INITIAL_LOAD);
+          if (!hasLoadedOnce.current) {
+            hasLoadedOnce.current = true;
+            setLocalLoading(false);
+          }
         });
+      }, 500);
+    };
 
-        updateChatsList();
-      };
+    const handleChildChange = (snapshot) => {
+      if (!snapshot || !snapshot.key) return;
+      const chatData = snapshot.val();
+      if (!chatData || typeof chatData !== 'object') return;
 
-      const handleChildRemoved = (snapshot) => {
-        if (!snapshot || !snapshot.key) return;
-        chatsMap.delete(snapshot.key);
-        updateChatsList();
-      };
+      const chatPartnerId = snapshot.key;
+      const isBlocked = banned.includes(chatPartnerId);
+      const rawUnread = chatData?.unreadCount || 0;
 
-      // onChildAdded fires for each existing child — handles initial load + updates
-      // No loadInitialChats() needed — saves one full download
-      const unsubAdded = onChildAdded(userChatsRef, handleChildChange);
-      const unsubChanged = onChildChanged(userChatsRef, handleChildChange);
-      const unsubRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
+      if (isBlocked && rawUnread > 0) {
+        const blockedChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`);
+        update(blockedChatRef, { unreadCount: 0 }).catch((error) => {
+          console.error("Error resetting unread count:", error);
+        });
+      }
 
-      // Fallback: dismiss loading if user has no chats (no onChildAdded fires)
-      const loadingFallback = setTimeout(() => {
-        if (!hasLoadedOnce.current) {
-          hasLoadedOnce.current = true;
-          setLocalLoading(false);
-        }
-      }, 2000);
+      chatsMap.set(chatPartnerId, {
+        chatId: chatData.chatId,
+        otherUserId: chatPartnerId,
+        lastMessage: chatData.lastMessage || 'No messages yet',
+        lastMessageTimestamp: chatData.timestamp || 0,
+        unreadCount: isBlocked ? 0 : rawUnread,
+        otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+        otherUserName: chatData.receiverName || 'Anonymous',
+      });
 
-      return () => {
-        unsubAdded();
-        unsubChanged();
-        unsubRemoved();
-        clearTimeout(loadingFallback);
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        setDisplayedChatsCount(INITIAL_LOAD);
-      };
-    }, [user?.id, appdatabase, bannedUsers])
-  );
+      // Derive mute state from the same child event — avoids a second full read.
+      setMutedChats(prev => {
+        const wasMuted = !!prev[chatPartnerId];
+        const isMuted = !!chatData?.muted;
+        if (wasMuted === isMuted) return prev;
+        const next = { ...prev };
+        if (isMuted) next[chatPartnerId] = true; else delete next[chatPartnerId];
+        return next;
+      });
+
+      updateChatsList();
+    };
+
+    const handleChildRemoved = (snapshot) => {
+      if (!snapshot || !snapshot.key) return;
+      chatsMap.delete(snapshot.key);
+      setMutedChats(prev => {
+        if (!prev[snapshot.key]) return prev;
+        const next = { ...prev };
+        delete next[snapshot.key];
+        return next;
+      });
+      updateChatsList();
+    };
+
+    const unsubAdded = onChildAdded(userChatsRef, handleChildChange);
+    const unsubChanged = onChildChanged(userChatsRef, handleChildChange);
+    const unsubRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
+
+    const loadingFallback = setTimeout(() => {
+      if (!hasLoadedOnce.current) {
+        hasLoadedOnce.current = true;
+        setLocalLoading(false);
+      }
+    }, 2000);
+
+    return () => {
+      unsubAdded();
+      unsubChanged();
+      unsubRemoved();
+      clearTimeout(loadingFallback);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [user?.id, appdatabase, bannedUsers]);
 
   // 🔥 Fetch streaks on mount
   useEffect(() => {
@@ -148,25 +150,6 @@ const InboxScreen = ({ bannedUsers }) => {
       .then(map => setStreaks(map))
       .catch(() => { });
   }, [user?.id, firestoreDB]);
-
-  // 🔔 Load mute status for private chats
-  useEffect(() => {
-    if (!user?.id || !appdatabase) return;
-    (async () => {
-      try {
-        const snap = await get(ref(appdatabase, `chat_meta_data/${user.id}`));
-        if (!snap.exists()) return;
-        const data = snap.val();
-        const muteMap = {};
-        Object.keys(data).forEach(partnerId => {
-          if (data[partnerId]?.muted) muteMap[partnerId] = true;
-        });
-        setMutedChats(muteMap);
-      } catch (e) {
-        console.warn('[Inbox] load mute status:', e?.message);
-      }
-    })();
-  }, [user?.id, appdatabase]);
 
   // 🔔 Toggle mute for a private chat
   const handleToggleMute = useCallback(async (otherUserId, otherUserName) => {

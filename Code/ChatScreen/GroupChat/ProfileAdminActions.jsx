@@ -98,8 +98,8 @@ const ProfileAdminActions = ({
         )}
       </View>
 
-      {/* Delete User Data — admin/mod only, NOT JMD */}
-      {!isBabyModOnly && handleDeleteUserData && (
+      {/* Delete User Data — admin only */}
+      {isAdmin && handleDeleteUserData && (
         <>
           <View style={{ height: 1, backgroundColor: border, marginTop: 10, marginBottom: 10 }} />
           <TouchableOpacity

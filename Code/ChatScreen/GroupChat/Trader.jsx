@@ -18,14 +18,34 @@ import ChatHeaderContent from './ChatHeaderContent';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
 import { getStyles } from '../Style';
-import { banUser, handleDeleteLast300Messages, unbanUser } from '../utils';
-import { useNavigation } from '@react-navigation/native';
+import { banUser, unbanUser } from '../utils';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import ProfileBottomDrawer from './BottomDrawer';
 import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { onValue, ref, remove, get, set, push, child, onChildAdded, query as dbQuery, orderByKey, limitToLast, endAt, serverTimestamp } from '@react-native-firebase/database';
+import database, { onValue, ref } from '@react-native-firebase/database';
+import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
+import {
+  loadMessages as sbLoadMessages,
+  loadMessagesSince as sbLoadMessagesSince,
+  subscribeToMessages as sbSubscribeToMessages,
+  sendMessage as sbSendMessage,
+  toggleReaction as sbToggleReaction,
+  loadReactionsFor as sbLoadReactionsFor,
+  getPinnedMessages as sbGetPinnedMessages,
+  subscribeToPinned as sbSubscribeToPinned,
+  pinMessage as sbPinMessage,
+  unpinMessage as sbUnpinMessage,
+  clearPinnedForRoom as sbClearPinnedForRoom,
+  softDeleteMessage as sbSoftDeleteMessage,
+  softDeleteMessagesBySender as sbSoftDeleteMessagesBySender,
+  roomIdFromRtdbPath,
+  resetRealtimeAndAuth as sbResetRealtimeAndAuth,
+  ensureRealtimeAuth as sbEnsureRealtimeAuth,
+} from '../../Supabase/chatBackend';
+import { uuidv4 } from '../../Supabase/uuid';
 import { useTranslation } from 'react-i18next';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
@@ -89,6 +109,22 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
   const [selectedEmoji, setSelectedEmoji] = useState(null);
+
+  // Firebase auth state — the *real* signal that the Supabase JWT is
+  // available. `useGlobalState().user` hydrates from MMKV before Firebase
+  // finishes restoring `currentUser` on cold-start, so it can't be used
+  // as the trigger for (re)subscribing the realtime channel — see the
+  // realtime effect below.
+  const [firebaseUid, setFirebaseUid] = useState(
+    () => getAuth().currentUser?.uid || null,
+  );
+  useEffect(() => {
+    const unsub = onAuthStateChanged(getAuth(), (u) => {
+      setFirebaseUid(u?.uid || null);
+    });
+    return unsub;
+  }, []);
+
   // ✅ Remember user's preferred chat language (persisted in MMKV)
   const [activeChannel, setActiveChannel] = useState(() => {
     const savedId = storage.getString('preferred_chat_lang');
@@ -114,6 +150,33 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const newestMessageIdRef = useRef(null);
   const hasInitializedRef = useRef(false);
   const initialLoadDoneRef = useRef(false); // ✅ Track if initial load is complete (prevents duplicate messages)
+
+  // Cursor of the newest server-confirmed message we've seen in this room.
+  // Used by the gap-fill fetch on reconnect. Optimistic placeholders do
+  // NOT advance this cursor — only rows that came back from the server.
+  const newestCursorRef = useRef(null); // { createdAt: ISO, id }
+
+  // In-memory retry queue for sends that failed (network hiccup). Capped
+  // so a long offline session can't grow unbounded.
+  const RETRY_QUEUE_CAP = 50;
+  const retryQueueRef = useRef([]); // [{ roomId, message }]
+  const flushingRef = useRef(false);
+
+  // Debounced gap-fill trigger: multiple reconnect signals (channel
+  // SUBSCRIBED recovery, app foreground, etc.) fold into one fetch.
+  const gapFillTimerRef = useRef(null);
+  const lastRealtimeStatusRef = useRef(null);
+
+  // CHANNEL_ERROR / TIMED_OUT recovery. Supabase Realtime does NOT
+  // auto-reheal a channel that hits CHANNEL_ERROR (e.g. InvalidJWTToken
+  // when the Firebase ID token expires across a laptop sleep, or when
+  // cold-start auth race causes the WS to handshake without a token).
+  // We force a resubscribe with exponential backoff — the new channel
+  // re-invokes client.js's accessToken callback, which getIdToken
+  // auto-refreshes if the cached token is stale.
+  const channelErrorAttemptsRef = useRef(0);
+  const channelRetryTimerRef = useRef(null);
+  const [resubKey, setResubKey] = useState(0);
 
   const flatListRef = useRef();
 
@@ -142,6 +205,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
   const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
   const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
+  const PENDING_CAP = 50;
 
   const navigation = useNavigation()
   // ✅ Memoize openProfileDrawer
@@ -182,8 +246,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     callbackfunction();
   }, [selectedUser, selectedTheme, closeProfileDrawer]);
 
-  const chatRef = useMemo(() => ref(appdatabase, activeChannel.path), [activeChannel.path]);
-  const pinnedMessagesRef = useMemo(() => appdatabase ? ref(appdatabase, 'pin_messages') : null, [appdatabase]);
+  const roomId = useMemo(() => roomIdFromRtdbPath(activeChannel.path), [activeChannel.path]);
 
   const styles = useMemo(() => getStyles(theme === 'dark'), [theme]);
 
@@ -227,12 +290,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
         // ✅ Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
-        const messageQuery = reset
-          ? dbQuery(chatRef, orderByKey(), limitToLast(limitSize))
-          : dbQuery(chatRef, orderByKey(), endAt(lastLoadedKey), limitToLast(limitSize));
-
-        const snapshot = await get(messageQuery);
-        const data = snapshot.val() || {};
+        const beforeCursor = reset ? null : lastLoadedKey;
+        const fetched = await sbLoadMessages(roomId, { limit: limitSize, before: beforeCursor });
 
 
 
@@ -240,15 +299,15 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
         // ✅ Safety check for bannedUsers array
         const bannedIds = Array.isArray(bannedUsers)
-          ? bannedUsers.map(u => (typeof u === "string" ? u : u?.id)).filter(Boolean)
+          ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
           : [];
-        const parsedMessages = Object.entries(data)
-          .map(([key, value]) => {
-            if (!key || !value || typeof value !== 'object') return null;
-            return validateMessage({ id: key, ...value });
-          })
-          .filter(Boolean)
-          .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId)).sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+        const parsedMessages = fetched
+          .map(m => validateMessage(m))
+          .filter(m => m?.senderId && !bannedIds.includes(m.senderId));
+
+        // Hydrate reactions in one batched query.
+        const reactionMap = await sbLoadReactionsFor(parsedMessages.map(m => m.id));
+        parsedMessages.forEach(m => { m.reactions = reactionMap[m.id] || {}; });
 
 
 
@@ -260,69 +319,167 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
         if (reset) {
           setMessages(parsedMessages);
+          // Anchor the gap-fill cursor at the newest server message so
+          // subsequent reconnects know where to resume from.
+          if (parsedMessages.length > 0) {
+            const newest = parsedMessages[0];
+            newestCursorRef.current = {
+              createdAt: new Date(newest.timestamp).toISOString(),
+              id: newest.id,
+            };
+          } else {
+            newestCursorRef.current = null;
+          }
         } else {
           setMessages((prev) => [...prev, ...parsedMessages]);
         }
 
         if (parsedMessages.length > 0) {
-          // Use the last key from the newly fetched messages
-          setLastLoadedKey(parsedMessages[parsedMessages.length - 1].id);
-
-          // Profile cache warming removed — messages embed full profile data
-          // seedFromMessage() in render populates cache for free
+          // Composite cursor: Postgres created_at (ms → ISO) + row id.
+          const last = parsedMessages[parsedMessages.length - 1];
+          setLastLoadedKey({ createdAt: new Date(last.timestamp).toISOString(), id: last.id });
         }
       } catch (error) {
+        console.error('[loadMessages] error:', error?.message || error);
       } finally {
         if (reset) setLoading(false);
       }
     },
-    [chatRef, lastLoadedKey, validateMessage, bannedUsers, appdatabase]
+    [roomId, lastLoadedKey, validateMessage, bannedUsers]
   );
-  useEffect(() => {
-    if (!pinnedMessagesRef) return;
+  // Fetch messages newer than our anchor cursor and merge them in.
+  // Called on realtime recovery (channel went CHANNEL_ERROR/TIMED_OUT/
+  // CLOSED and came back SUBSCRIBED) to backfill any INSERTs that fired
+  // while we were disconnected — those events are NOT replayed by
+  // Supabase Realtime, so without this the chat silently drops messages.
+  //
+  // Pages forward if the result hits the limit (someone might have sent
+  // >200 messages while we were away). Bounded by MAX_PAGES to avoid
+  // runaway loops on a mis-advancing cursor.
+  const gapFillSince = useCallback(async () => {
+    if (!roomId) return;
+    if (!initialLoadDoneRef.current) return; // initial load hasn't anchored yet
+    try {
+      const GAP_PAGE_SIZE = 200;
+      const MAX_PAGES = 5; // hard ceiling: 1000 messages max per recovery
+      let cursor = newestCursorRef.current;
+      if (!cursor) return;
 
-    const fetchPinnedMessages = async () => {
-      try {
-        const snapshot = await get(pinnedMessagesRef);
-        const pinnedMessagesData = snapshot.val() || {};
+      for (let i = 0; i < MAX_PAGES; i++) {
+        const fetched = await sbLoadMessagesSince(roomId, cursor, { limit: GAP_PAGE_SIZE });
+        if (!fetched.length) return;
 
-        // ✅ Safety check and transform data into an array
-        const pinnedMessagesArray = Object.entries(pinnedMessagesData)
-          .map(([key, value]) => {
-            if (!key || !value || typeof value !== 'object') return null;
-            return {
-              firebaseKey: key,
-              ...value,
-            };
-          })
-          .filter(Boolean)
-          .sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
+        const bannedIds = Array.isArray(bannedUsers)
+          ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
+          : [];
+        const filtered = fetched
+          .map(m => validateMessage(m))
+          .filter(m => m?.senderId && !bannedIds.includes(m.senderId));
 
-        setPinnedMessages(pinnedMessagesArray);
-      } catch (error) {
-        console.error('Error loading pinned messages:', error);
+        if (filtered.length) {
+          // Hydrate reactions for the new rows.
+          const reactionMap = await sbLoadReactionsFor(filtered.map(m => m.id));
+          filtered.forEach(m => { m.reactions = reactionMap[m.id] || {}; });
+
+          setMessages((prev) => {
+            const byId = new Set(prev.map(m => String(m.id)));
+            const byClientId = new Set(prev.map(m => m.clientMsgId).filter(Boolean));
+            const toAdd = filtered.filter(m => {
+              if (byId.has(String(m.id))) return false;
+              if (m.clientMsgId && byClientId.has(m.clientMsgId)) return false;
+              return true;
+            });
+            if (!toAdd.length) return prev;
+            // Replace any optimistic placeholders whose server row we just fetched.
+            const merged = prev.map((m) => {
+              if (!m._pending || !m.clientMsgId) return m;
+              const real = filtered.find(r => r.clientMsgId === m.clientMsgId);
+              return real ? { ...real } : m;
+            });
+            return [...toAdd, ...merged].sort(
+              (a, b) => (b?.timestamp || 0) - (a?.timestamp || 0),
+            );
+          });
+
+          // Advance cursor to the newest row we just merged.
+          const newest = filtered[0];
+          newestCursorRef.current = {
+            createdAt: new Date(newest.timestamp).toISOString(),
+            id: newest.id,
+          };
+        }
+
+        if (fetched.length < GAP_PAGE_SIZE) return; // drained
+        cursor = {
+          createdAt: new Date(fetched[0].timestamp).toISOString(),
+          id: fetched[0].id,
+        };
       }
-    };
+    } catch (error) {
+      console.error('[gapFill] failed:', error?.message || error);
+    }
+  }, [roomId, bannedUsers, validateMessage]);
 
-    fetchPinnedMessages();  // Fetch pinned messages initially
+  // Debounce the gap-fill so a burst of status transitions or network
+  // events collapses to a single fetch.
+  const scheduleGapFill = useCallback(() => {
+    if (gapFillTimerRef.current) clearTimeout(gapFillTimerRef.current);
+    gapFillTimerRef.current = setTimeout(() => {
+      gapFillTimerRef.current = null;
+      gapFillSince();
+    }, 800);
+  }, [gapFillSince]);
 
-    // Listen to real-time updates on pinned messages
-    const unsubPinned = onChildAdded(pinnedMessagesRef, (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      const data = snapshot.val();
-      if (!data || typeof data !== 'object') return;
-      const newPinnedMessage = { firebaseKey: snapshot.key, ...data };
-      setPinnedMessages((prev) => {
-        // ✅ Prevent duplicates
-        const exists = prev.some(msg => msg.firebaseKey === snapshot.key);
-        return exists ? prev : [newPinnedMessage, ...prev];
-      });
-    });
+  // Flush any sends that failed while offline. Idempotent on the server
+  // via UNIQUE(room_id, client_msg_id) — a successful-but-timed-out
+  // attempt won't produce a duplicate row on retry.
+  const flushRetryQueue = useCallback(async () => {
+    if (flushingRef.current) return;
+    if (!retryQueueRef.current.length) return;
+    flushingRef.current = true;
+    try {
+      while (retryQueueRef.current.length) {
+        const item = retryQueueRef.current[0];
+        try {
+          const saved = await sbSendMessage(item.roomId, item.message);
+          // Replace the optimistic placeholder with the real row.
+          setMessages((prev) => prev.map(m =>
+            m.clientMsgId === item.message.clientMsgId
+              ? { ...saved, reactions: m.reactions || {} }
+              : m,
+          ));
+          retryQueueRef.current.shift();
+        } catch (error) {
+          console.warn('[retryQueue] still failing:', error?.message || error);
+          // Stop draining — we'll try again on the next reconnect signal.
+          break;
+        }
+      }
+    } finally {
+      flushingRef.current = false;
+    }
+  }, []);
 
-    return () => {
-      unsubPinned();
-    };
-  }, [pinnedMessagesRef]);
+  // Hoisted so pin/unpin/clear handlers can trigger it directly instead of
+  // relying only on Realtime (which can be flaky for DELETE without
+  // REPLICA IDENTITY FULL on the table).
+  const fetchPinned = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const list = await sbGetPinnedMessages(roomId);
+      // `firebaseKey` name preserved for the existing UI (ChatHeaderContent).
+      setPinnedMessages(list.map(p => ({ firebaseKey: p.pinId, ...p })));
+    } catch (error) {
+      console.error('[pinned] load failed:', error?.message || error);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    fetchPinned();
+    const unsub = sbSubscribeToPinned(roomId, { onChange: fetchPinned });
+    return () => { unsub(); };
+  }, [roomId, fetchPinned]);
 
   // ✅ Channel switch handler — resets state for new channel
   const handleChannelSwitch = useCallback((channel) => {
@@ -339,6 +496,18 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     hasInitializedRef.current = false;
     initialLoadDoneRef.current = false;
     lastSentMessageRef.current = null;
+    newestCursorRef.current = null;
+    retryQueueRef.current = [];
+    lastRealtimeStatusRef.current = null;
+    channelErrorAttemptsRef.current = 0;
+    if (gapFillTimerRef.current) {
+      clearTimeout(gapFillTimerRef.current);
+      gapFillTimerRef.current = null;
+    }
+    if (channelRetryTimerRef.current) {
+      clearTimeout(channelRetryTimerRef.current);
+      channelRetryTimerRef.current = null;
+    }
   }, [activeChannel.id]);
 
   // ✅ Initial setup (runs once on mount)
@@ -349,103 +518,182 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     setDevice(Platform.OS);
   }, [setChatFocused]);
 
-  // ✅ Load messages when channel changes (covers initial mount + every switch)
+  // Initial + on-switch load. Uses the unified `loadMessages(true)` path
+  // instead of an inline duplicate of the same query.
   useEffect(() => {
-    if (!appdatabase || !activeChannel?.path) return;
+    if (!roomId) return;
     let cancelled = false;
-    const currentRef = ref(appdatabase, activeChannel.path);
+    (async () => {
+      await loadMessages(true);
+      if (!cancelled) initialLoadDoneRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // loadMessages is memoised on [roomId, lastLoadedKey, ...]. We intentionally
+    // only re-run on roomId change (channel switch); including loadMessages in
+    // deps would re-trigger whenever lastLoadedKey mutates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
-    const load = async () => {
-      try {
-        setLoading(true);
-        setLastLoadedKey(null);
+  // Realtime INSERT stream. Supabase Postgres Changes fires on every new row
+  // in `messages` for this room, filling the same role as the old
+  // onValue(limitToLast 1) listener — no race with initial load.
+  //
+  // Wrapped in useFocusEffect (not plain useEffect) so the WebSocket only
+  // stays open while the chat tab is focused. Tab-switching to Home /
+  // Profile / etc. now tears down the channel and saves battery + data.
+  // On re-focus, the existing onStatus → scheduleGapFill path backfills
+  // any messages that landed during the blur window.
+  useFocusEffect(
+    useCallback(() => {
+    if (!roomId) return;
 
-        const snapshot = await get(dbQuery(currentRef, orderByKey(), limitToLast(INITIAL_PAGE_SIZE)));
-        if (cancelled) return;
-
-        const data = snapshot.val() || {};
-        const bannedIds = Array.isArray(bannedUsers)
-          ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
-          : [];
-
-        const parsed = Object.entries(data)
-          .map(([key, value]) => {
-            if (!key || !value || typeof value !== 'object') return null;
-            return validateMessage({ id: key, ...value });
-          })
-          .filter(Boolean)
-          .filter(msg => msg?.senderId && !bannedIds.includes(msg.senderId))
-          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-
-        if (cancelled) return;
-
-        setMessages(parsed);
-        const newLastKey = parsed.length > 0 ? parsed[parsed.length - 1]?.id : null;
-        setLastLoadedKey(newLastKey);
-      } catch (error) {
-        if (!cancelled) console.error('[channel load] Error:', error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          initialLoadDoneRef.current = true; // ✅ Mark initial load as done
-        }
+    // Advance the gap-fill cursor whenever a realtime-delivered row lands
+    // on screen, so reconnects resume from the last thing we actually saw.
+    const advanceCursor = (msg) => {
+      const t = typeof msg?.timestamp === 'number' ? msg.timestamp : Date.now();
+      const current = newestCursorRef.current;
+      if (!current || new Date(current.createdAt).getTime() < t) {
+        newestCursorRef.current = { createdAt: new Date(t).toISOString(), id: msg.id };
       }
     };
 
-    load();
-    return () => { cancelled = true; };
-  }, [activeChannel.path, appdatabase, bannedUsers, validateMessage]);
-
-  // ✅ Real-time listener using onValue (more reliable than onChildAdded with limitToLast)
-  //    onChildAdded + limitToLast(1) has known Firebase SDK bugs where remote writes don't fire
-  //    onValue fires on EVERY change — no race condition with initial load, no dropped messages
-  useEffect(() => {
-    if (!appdatabase || !activeChannel?.path) return;
-
     let cancelled = false;
-    const currentRef = ref(appdatabase, activeChannel.path);
-    const latestQuery = dbQuery(currentRef, orderByKey(), limitToLast(1));
+    let unsubscribe = () => {};
 
-    const unsubscribe = onValue(latestQuery, (snapshot) => {
-      if (cancelled || !snapshot.exists()) return;
-
-      snapshot.forEach((childSnap) => {
-        const key = childSnap.key;
-        const data = childSnap.val();
-        if (!key || !data || typeof data !== 'object') return;
-
-        const newMessage = validateMessage({ id: key, ...data });
+    const subscribeCallbacks = {
+      onInsert: (newMessage) => {
         if (!newMessage || !newMessage.id) return;
 
         const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
         if (banned.includes(newMessage.senderId)) return;
 
+        advanceCursor(newMessage);
+
+        let shouldQueue = false;
         setMessages((prev) => {
           if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
-          const exists = prev.some((m) => String(m?.id) === String(key));
-          if (exists) return prev;
+
+          // Dedup by primary id (echo of our own insert) OR by clientMsgId
+          // (upgrading an optimistic placeholder to the real server row).
+          const existingIdx = prev.findIndex((m) => {
+            if (String(m?.id) === String(newMessage.id)) return true;
+            if (newMessage.clientMsgId && m?.clientMsgId === newMessage.clientMsgId) return true;
+            return false;
+          });
+
+          if (existingIdx !== -1) {
+            const existing = prev[existingIdx];
+            const merged = { ...newMessage, reactions: existing.reactions || {} };
+            const copy = prev.slice();
+            copy[existingIdx] = merged;
+            return copy;
+          }
 
           if (isAtBottomRef.current) {
-            newestMessageIdRef.current = key;
+            newestMessageIdRef.current = newMessage.id;
             return [newMessage, ...prev];
-          } else {
-            setPendingMessages((prevPending) => {
-              const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
-              if (pendingIds.has(newMessage.id)) return prevPending;
-              return [newMessage, ...prevPending];
-            });
-            return prev;
           }
+          shouldQueue = true;
+          return prev;
         });
-      });
+
+        if (shouldQueue) {
+          setPendingMessages((prevPending) => {
+            const pendingIds = new Set(prevPending.map((msg) => msg?.id).filter(Boolean));
+            if (pendingIds.has(newMessage.id)) return prevPending;
+            const next = [newMessage, ...prevPending];
+            // Cap so a long scrollback session can't grow pending unboundedly.
+            return next.length > PENDING_CAP ? next.slice(0, PENDING_CAP) : next;
+          });
+        }
+      },
+      onUpdate: (updated) => {
+        if (!updated?.id) return;
+        // Moderation soft-deletes set deleted=true; let them disappear.
+        if (updated.deleted) {
+          setMessages(prev => prev.filter(m => String(m.id) !== String(updated.id)));
+          return;
+        }
+        setMessages(prev => prev.map(m => (String(m.id) === String(updated.id) ? { ...m, ...updated, reactions: m.reactions } : m)));
+      },
+      onDelete: (deletedId) => {
+        if (!deletedId) return;
+        setMessages(prev => prev.filter(m => String(m.id) !== String(deletedId)));
+      },
+      onStatus: (status, err) => {
+        const prev = lastRealtimeStatusRef.current;
+        lastRealtimeStatusRef.current = status;
+
+        if (status === 'SUBSCRIBED') {
+          // Every SUBSCRIBED transition (including the first one) triggers
+          // a gap-fill. The first-subscribe case matters on cold-start: if
+          // Firebase auth was still resolving when we opened the WebSocket,
+          // the channel was authed unauth and RLS dropped any INSERTs that
+          // landed in that window — this backfills them.
+          if (prev !== 'SUBSCRIBED') {
+            scheduleGapFill();
+            flushRetryQueue();
+          }
+          // Reset retry budget so future errors get a fresh backoff.
+          channelErrorAttemptsRef.current = 0;
+          return;
+        }
+
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          const attempts = channelErrorAttemptsRef.current;
+          if (attempts >= 5) return; // give up — log already shows the cause
+          channelErrorAttemptsRef.current = attempts + 1;
+          const delay = Math.min(2000 * Math.pow(2, attempts), 30000);
+          if (channelRetryTimerRef.current) clearTimeout(channelRetryTimerRef.current);
+          channelRetryTimerRef.current = setTimeout(async () => {
+            channelRetryTimerRef.current = null;
+            // Hard-reset the socket + force-refresh Firebase token before
+            // resubscribing — otherwise the new channel inherits the
+            // wedged WS and stale JWT and fails the same way.
+            await sbResetRealtimeAndAuth();
+            setResubKey((k) => k + 1);
+          }, delay);
+        }
+      },
+    };
+
+    // Pre-flight the realtime auth so the channel JOIN goes out with a
+    // valid JWT in its payload. supabase-js's internal connect-time auth
+    // is fire-and-forget; if the WS opens before our async accessToken
+    // callback resolves, the channel joins unauth and gets rejected
+    // with InvalidJWTToken. Awaiting setAuth() here closes that race.
+    sbEnsureRealtimeAuth().finally(() => {
+      if (cancelled) return;
+      unsubscribe = sbSubscribeToMessages(roomId, subscribeCallbacks);
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
       hasInitializedRef.current = false;
+      lastRealtimeStatusRef.current = null;
+      if (channelRetryTimerRef.current) {
+        clearTimeout(channelRetryTimerRef.current);
+        channelRetryTimerRef.current = null;
+      }
     };
-  }, [activeChannel.path, appdatabase, validateMessage, bannedUsers]);
+    // firebaseUid (not user?.id) is the trigger: useGlobalState().user is
+    // hydrated from MMKV before Firebase finishes restoring currentUser
+    // on cold-start, so user?.id flips truthy *before* the Supabase JWT
+    // is available. Anonymous viewers stay subscribed (firebaseUid=null
+    // is a stable value, channel opens once with no JWT — RLS allows
+    // anon reads). Logged-in users on cold-start may briefly open a
+    // pre-auth channel, but onAuthStateChanged fires within seconds,
+    // flips firebaseUid, this effect re-runs, the pre-auth channel is
+    // torn down, and a new one opens with the token attached. The
+    // existing onStatus → scheduleGapFill path then backfills anything
+    // missed during the window.
+    }, [roomId, bannedUsers, scheduleGapFill, flushRetryQueue, firebaseUid, resubKey])
+  );
+
+  // (Reactions realtime intentionally omitted — see chatBackend.js comment.
+  // Self-reactions are optimistic; other users' reactions refresh on
+  // pagination or re-entering the room.)
 
 
 
@@ -473,51 +721,68 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
 
-  const handlePinMessage = async (message) => {
+  // Admin soft-delete (marks deleted=true, RLS permits any authenticated
+  // user; client UI gates to admins/mods). Soft-delete triggers a
+  // Realtime UPDATE event → onUpdate handler filters the row out of the
+  // local list for everyone subscribed.
+  const handleDeleteOne = useCallback(async (messageId) => {
+    if (!messageId || !user?.id) return;
     try {
-      const pinnedMessage = { ...message, pinnedAt: Date.now() };
-      const newRef = push(pinnedMessagesRef);
-      await set(newRef, pinnedMessage);
-
-      // Use the Firebase key for tracking the message
-      setPinnedMessages((prev) => [
-        ...prev,
-        { firebaseKey: newRef.key, ...pinnedMessage },
-      ]);
+      await sbSoftDeleteMessage(messageId, user.id);
+      // Also drop locally in case realtime UPDATE misses the acting admin.
+      setMessages(prev => prev.filter(m => String(m.id) !== String(messageId)));
     } catch (error) {
-      console.error('Error pinning message:', error);
+      console.error('[delete] failed:', error?.message || error);
+      Alert.alert(t('home.alert.error'), t('chat.delete_error') || 'Failed to delete message');
+    }
+  }, [user?.id, t]);
+
+  const handleDeleteAllFromSender = useCallback(async (senderId) => {
+    if (!roomId || !senderId || !user?.id) return;
+    try {
+      const { count } = await sbSoftDeleteMessagesBySender(roomId, senderId, {
+        limit: 60, deletedBy: user.id,
+      });
+      // Optimistic local cleanup — realtime UPDATEs will reconcile for everyone.
+      setMessages(prev => prev.filter(m => String(m.senderId) !== String(senderId)));
+      if (count === 0) {
+        Alert.alert('No messages', 'This user has no recent messages to remove.');
+      }
+    } catch (error) {
+      console.error('[delete-all] failed:', error?.message || error);
+      Alert.alert(t('home.alert.error'), t('chat.delete_error') || 'Failed to remove messages');
+    }
+  }, [roomId, user?.id, t]);
+
+  const handlePinMessage = async (message) => {
+    if (!roomId || !message?.id || !user?.id) return;
+    try {
+      await sbPinMessage(roomId, message.id, user.id);
+      fetchPinned();
+    } catch (error) {
+      console.error('[pin] failed:', error?.message || error);
       Alert.alert(t('home.alert.error'), t('chat.pin_error'));
     }
   };
 
-
-
-  const unpinSingleMessage = async (firebaseKey) => {
+  const unpinSingleMessage = async (pinId) => {
+    if (!pinId) return;
     try {
-      const messageRef = child(pinnedMessagesRef, firebaseKey);
-      await remove(messageRef);  // Remove from Firebase
-
-      // Update local state by filtering out the removed message
-      setPinnedMessages((prev) => {
-        const updatedMessages = prev.filter((msg) => msg.firebaseKey !== firebaseKey);
-        return updatedMessages;
-      });
+      await sbUnpinMessage(pinId);
+      fetchPinned();
     } catch (error) {
-      console.error('Error unpinning message:', error);
+      console.error('[unpin] failed:', error?.message || error);
       Alert.alert(t('home.alert.error'), t('chat.unpin_error'));
     }
   };
 
-
-
-
-
   const clearAllPinnedMessages = async () => {
+    if (!roomId) return;
     try {
-      await remove(pinnedMessagesRef);
-      setPinnedMessages([]);
+      await sbClearPinnedForRoom(roomId);
+      fetchPinned();
     } catch (error) {
-      console.error('Error clearing pinned messages:', error);
+      console.error('[clear pins] failed:', error?.message || error);
       Alert.alert(t('home.alert.error'), t('chat.clear_pins_error'));
     }
   };
@@ -546,42 +811,43 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadMessages(true);
+    // Manual realtime recovery: if the channel is wedged (e.g. cold-start
+    // CHANNEL_ERROR that retries couldn't recover from, or the user just
+    // came back from a long sleep), pull-to-refresh now also forces a
+    // socket reset + JWT refresh + resubscribe. This gives the user an
+    // explicit escape hatch instead of having to relaunch the app.
+    if (lastRealtimeStatusRef.current !== 'SUBSCRIBED') {
+      try {
+        await sbResetRealtimeAndAuth();
+        channelErrorAttemptsRef.current = 0;
+        setResubKey((k) => k + 1);
+      } catch (e) {
+        console.warn('[refresh] realtime recovery failed:', e?.message || e);
+      }
+    }
     setRefreshing(false);
   };
 
   // Handle reaction to a message
   const handleReaction = useCallback(async (messageId, emoji) => {
-    if (!chatRef || !messageId || !user?.id) return;
+    if (!messageId || !user?.id) return;
+
+    // Optimistic update — Supabase realtime will confirm/correct.
+    setMessages(prev => prev.map(m => {
+      if (String(m.id) !== String(messageId)) return m;
+      const current = m.reactions?.[user.id];
+      const newReactions = { ...(m.reactions || {}) };
+      if (current === emoji) delete newReactions[user.id];
+      else newReactions[user.id] = emoji;
+      return { ...m, reactions: newReactions };
+    }));
 
     try {
-      const reactionRef = child(chatRef, `${messageId}/reactions/${user.id}`);
-      const snapshot = await get(reactionRef);
-      const currentReaction = snapshot.val();
-
-      if (currentReaction === emoji) {
-        // Same emoji → remove reaction
-        await remove(reactionRef);
-        setMessages(prev => prev.map(m => {
-          if (String(m.id) !== String(messageId)) return m;
-          const newReactions = { ...(m.reactions || {}) };
-          delete newReactions[user.id];
-          return { ...m, reactions: newReactions };
-        }));
-      } else {
-        // New or different emoji → set reaction
-        await set(reactionRef, emoji);
-        setMessages(prev => prev.map(m => {
-          if (String(m.id) !== String(messageId)) return m;
-          return {
-            ...m,
-            reactions: { ...(m.reactions || {}), [user.id]: emoji },
-          };
-        }));
-      }
+      await sbToggleReaction(messageId, user.id, emoji);
     } catch (error) {
-      console.error('Error toggling reaction:', error);
+      console.error('Error toggling reaction:', error?.message || error);
     }
-  }, [chatRef, user?.id]);
+  }, [user?.id]);
 
   // expects to be called like:
 
@@ -697,77 +963,100 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const containsLink = trimmedInput ? LINK_REGEX.test(trimmedInput) : false;
 
 
+    if (!roomId) {
+      console.error('❌ No roomId for current channel');
+      return;
+    }
+
+    const myProfile = getCachedProfile(user.id);
+    const myCosmetics = require('../../Helper/cosmeticsCache').getMyCosmetics();
+
+    const avatar = user.avatar || myProfile?.avatar || null;
+    const isPro = !!localState?.isPro || !!myProfile?.isPro;
+    const verified = !!user.robloxUsernameVerified || !!myProfile?.robloxUsernameVerified;
+    const topBadge = myProfile?.topBadge || null;
+    const hasWin = !!(myProfile?.hasRecentGameWin || (myProfile?.lastGameWinAt && Date.now() - myProfile.lastGameWinAt <= 24 * 60 * 60 * 1000));
+    const frame = myCosmetics?.profileFrame || myProfile?.profileFrame || null;
+    const txtColor = myCosmetics?.chatTextColor?.color || myProfile?.chatTextColor || null;
+    const bubbleBg = myCosmetics?.chatBubbleBg || myProfile?.chatBubbleBg || null;
+
+    // Client-generated id for idempotent retries. Server enforces
+    // UNIQUE(room_id, client_msg_id), so resends never duplicate.
+    const clientMsgId = uuidv4();
+
+    const payload = {
+      clientMsgId,
+      text: trimmedInput || null,
+      senderId: user.id,
+      sender: user.displayName || t('chat.anonymous'),
+      avatar,
+      isPro,
+      robloxUsernameVerified: verified,
+      topBadge,
+      hasRecentGameWin: hasWin,
+      profileFrame: frame,
+      chatTextColor: txtColor,
+      chatBubbleBg: bubbleBg,
+      replyTo: replyToArg ? { id: replyToArg.id, text: replyToArg.text } : null,
+      containsLink,
+      isAdmin: !!isAdmin,
+      isModerator: !!user?.isModerator,
+      isBabyMod: !!user?.isBabyMod,
+      isTrusted: !!user?.isTrusted,
+      isCMSR: !!user?.isCMSR,
+      strikeCount: strikeInfo?.strikeCount ?? null,
+      fruits: hasFruits ? fruits : [],
+      gif: hasEmoji ? emojiUrl : null,
+      flage: user.flage || null,
+      OS: Platform.OS,
+    };
+
+    // Optimistic placeholder. Uses a tmp: prefix so the real server id
+    // (a Postgres UUID) never collides. The realtime INSERT echo and/or
+    // the REST response will upgrade this row via clientMsgId match.
+    const optimistic = {
+      id: `tmp:${clientMsgId}`,
+      clientMsgId,
+      timestamp: Date.now(),
+      reactions: {},
+      _pending: true,
+      roomId,
+      ...payload,
+    };
+
+    setMessages(prev => [optimistic, ...prev]);
+
+    // Reset input immediately so typing feels instant.
+    setInput('');
+    setReplyTo(null);
+    lastSentMessageRef.current = currentMessage;
+    setIsCooldown(true);
+    setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
+
     try {
-      // ✅ Use chatRef instead of creating new ref
-      if (!chatRef) {
-        console.error('❌ Chat ref not available');
-        return;
-      }
-
-      // ✅ Embed profile info — only send truthy values (null = not stored in RTDB = saves bytes)
-      const myProfile = getCachedProfile(user.id);
-      const myCosmetics = require('../../Helper/cosmeticsCache').getMyCosmetics();
-
-      const avatar = user.avatar || myProfile?.avatar || null;
-      const isPro = !!localState?.isPro || !!myProfile?.isPro;
-      const verified = !!user.robloxUsernameVerified || !!myProfile?.robloxUsernameVerified;
-      const topBadge = myProfile?.topBadge || null;
-      const hasWin = !!(myProfile?.hasRecentGameWin || (myProfile?.lastGameWinAt && Date.now() - myProfile.lastGameWinAt <= 24 * 60 * 60 * 1000));
-      const frame = myCosmetics?.profileFrame || myProfile?.profileFrame || null;
-      const txtColor = myCosmetics?.chatTextColor?.color || myProfile?.chatTextColor || null;
-      const bubbleBg = myCosmetics?.chatBubbleBg || myProfile?.chatBubbleBg || null;
-
-      await push(chatRef, {
-        text: trimmedInput || null,
-        timestamp: serverTimestamp(),
-        senderId: user.id,
-        sender: user.displayName || t('chat.anonymous'),
-        // Only include truthy profile fields (saves ~50-200 bytes per message)
-        ...(avatar ? { avatar } : {}),
-        ...(isPro ? { isPro: true } : {}),
-        ...(verified ? { robloxUsernameVerified: true } : {}),
-        ...(topBadge ? { topBadge } : {}),
-        ...(hasWin ? { hasRecentGameWin: true } : {}),
-        ...(frame ? { profileFrame: frame } : {}),
-        ...(txtColor ? { chatTextColor: txtColor } : {}),
-        ...(bubbleBg ? { chatBubbleBg: bubbleBg } : {}),
-        replyTo: replyToArg
-          ? { id: replyToArg.id, text: replyToArg.text }
-          : null,
-        reportCount: 0,
-        containsLink,
-        isAdmin: !!isAdmin,
-        isModerator: !!user?.isModerator,
-        ...(user?.isBabyMod ? { isBabyMod: true } : {}),
-        ...(user?.isTrusted ? { isTrusted: true } : {}),
-        ...(user?.isCMSR ? { isCMSR: true } : {}),
-        strikeCount: strikeInfo?.strikeCount ?? null,
-        fruits: hasFruits ? fruits : [],
-        gif: hasEmoji ? emojiUrl : null,
-        flage: user.flage ? user.flage : null,
-        OS: Platform.OS,
-      });
-
-      // ✅ Store last sent message to prevent duplicates (session-based, no Firebase cost)
-      lastSentMessageRef.current = currentMessage;
+      const saved = await sbSendMessage(roomId, payload);
+      // Upgrade the optimistic placeholder to the server row. The
+      // realtime INSERT handler may beat us to it; both paths use
+      // clientMsgId matching and are idempotent.
+      setMessages(prev => prev.map(m =>
+        m.clientMsgId === clientMsgId
+          ? { ...saved, reactions: m.reactions || {} }
+          : m,
+      ));
 
       // 🏅 Track message count & award chatty badge (fire-and-forget)
       incrementAndCheckBadge(appdatabase, user.id, 'messageCount', MESSAGE_BADGE_THRESHOLDS);
-
-
-      // Reset local input state
-      setInput('');
-      setReplyTo(null);
-
-      // Start cooldown
-      setIsCooldown(true);
-      setTimeout(() => setIsCooldown(false), MESSAGE_COOLDOWN);
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert(
-        t('home.alert.error'),
-        t('chat.send_error'),
-      );
+      console.warn('Send failed, queueing for retry:', error?.message || error);
+      // Mark optimistic as failed + queue for retry on reconnect.
+      setMessages(prev => prev.map(m =>
+        m.clientMsgId === clientMsgId ? { ...m, _pending: false, _failed: true } : m,
+      ));
+      if (retryQueueRef.current.length < RETRY_QUEUE_CAP) {
+        retryQueueRef.current.push({ roomId, message: payload });
+      } else {
+        Alert.alert(t('home.alert.error'), t('chat.send_error'));
+      }
     }
   };
 
@@ -836,11 +1125,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 flatListRef={flatListRef}
                 isDarkMode={theme === 'dark'}
                 onPinMessage={handlePinMessage}
-                onDeleteMessage={(messageId) => remove(child(chatRef, messageId.replace(`${activeChannel.path}-`, '')))}
+                onDeleteMessage={handleDeleteOne}
                 // isAdmin={isAdmin}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                onDeleteAllMessage={(senderId) => handleDeleteLast300Messages(senderId, false, activeChannel.path)}
+                onDeleteAllMessage={handleDeleteAllFromSender}
                 handleLoadMore={handleLoadMore}
                 onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
                 banUser={banUser}
@@ -851,11 +1140,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 // isOwner={isOwner}
                 isAtBottom={isAtBottom}
                 setIsAtBottom={setIsAtBottom}
+                pendingCount={pendingMessages.length}
                 // toggleDrawer={toggleDrawer}
                 setMessages={setMessages}
                 isAdmin={isAdmin}
                 toggleDrawer={openProfileDrawer}
                 onReaction={handleReaction}
+                supabaseRoomId={roomId}
 
               />
             )}

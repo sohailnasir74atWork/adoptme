@@ -1,12 +1,4 @@
-/**
- * Cloud Function: Send push notifications for group join requests
- * 
- * This function triggers when a new join request is created in Firestore.
- * It sends a push notification to the group creator.
- * 
- * Deployment:
- * firebase deploy --only functions:notifyGroupJoinRequest
- */
+
 
 const admin = require('firebase-admin');
 const functions = require('firebase-functions/v1');
@@ -40,7 +32,7 @@ exports.notifyGroupJoinRequest = functions.firestore
       return null;
     }
 
-    // console.log(`✅ Processing join request for creator: ${creatorId}, group: ${groupId}`);
+    console.log(`✅ Processing join request for creator: ${creatorId}, group: ${groupId}`);
 
     // Fetch FCM token and notification preferences in parallel
     const [fcmTokenSnap, prefsSnap] = await Promise.all([
@@ -77,7 +69,6 @@ exports.notifyGroupJoinRequest = functions.firestore
         requestId: requestId || '',
         groupId: groupId || '',
         requesterId: requestData.requesterId || '',
-        senderId: requestData.requesterId || '',
         groupName: groupName || '',
         timestamp: Date.now().toString(),
       },
@@ -104,10 +95,10 @@ exports.notifyGroupJoinRequest = functions.firestore
       console.log(`✅ Notification successfully sent to ${creatorId} for join request ${requestId}`);
     } catch (error) {
       console.error('❌ Failed to send notification:', error);
-
+      
       // If token is invalid, remove it
-      if (error.code === 'messaging/invalid-registration-token' ||
-        error.code === 'messaging/registration-token-not-registered') {
+      if (error.code === 'messaging/invalid-registration-token' || 
+          error.code === 'messaging/registration-token-not-registered') {
         console.log(`Removing invalid token for user ${creatorId}`);
         await admin.database().ref(`/users/${creatorId}/fcmToken`).remove();
       }

@@ -18,8 +18,8 @@ android {
         applicationId "com.adoptmevaluescalc"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 91
-        versionName "1.9.2"
+        versionCode 98
+        versionName "1.9.9"
 
         // ⭐ ADD: ship only ARM. Add "armeabi-v7a" if you still support 32-bit.
         ndk {

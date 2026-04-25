@@ -410,14 +410,18 @@ const ProfileBottomDrawer = ({
           robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
           isPro: isProSnap?.exists() ? isProSnap.val() : false,
           lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-          isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
-          isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
+          // Use `null` (not `false`) when the snap is missing so the `??`
+          // merge in mergedUser falls through to the message's role_flags
+          // snapshot. Some admins are identified by hardcoded email in
+          // GlobelStats.js and don't have `admin: true` in RTDB /users.
+          isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
+          isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : null,
           email: emailSnap?.exists() ? emailSnap.val() : null,
           decodedEmail: decodedEmailSnap?.exists() ? decodedEmailSnap.val() : null,
           topBadge: topBadgeSnap?.exists() ? topBadgeSnap.val() : null,
-          isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : false,
-          isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
-          isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
+          isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
+          isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
+          isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
           dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
         };
 
@@ -796,7 +800,7 @@ const ProfileBottomDrawer = ({
 
   const handleDeleteUserData = useCallback(async () => {
     if (!selectedUserId || !firestoreDB || !appdatabase) return;
-    if (!isAdmin && !user?.isModerator) return; // only admin/mod
+    if (!isAdmin) return; // admin only
 
     const targetName = mergedUser?.displayName || mergedUser?.sender || userName || 'this user';
 
@@ -965,7 +969,7 @@ const ProfileBottomDrawer = ({
         Alert.alert('Error', `Failed to delete user data: ${e.message}`);
       }
     }
-  }, [selectedUserId, firestoreDB, appdatabase, isAdmin, user?.isModerator, mergedUser, userName, toggleModal]);
+  }, [selectedUserId, firestoreDB, appdatabase, isAdmin, mergedUser, userName, toggleModal]);
 
   const handleBanUser = async () => {
     if (!mergedUser?.email) {

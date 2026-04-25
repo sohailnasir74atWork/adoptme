@@ -448,6 +448,7 @@ const AdminDashboard = () => {
   const [chatSearching2, setChatSearching2] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
 
   // User Chats (Super Admin) — view all private chats of a single user
   const [userChatsInput, setUserChatsInput] = useState('');
@@ -1133,7 +1134,7 @@ const AdminDashboard = () => {
       const id2 = chatPerson2.id;
       const chatKey = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
       const messagesRef = ref(db, `private_messages/${chatKey}/messages`);
-      const q = query(messagesRef, orderByChild('timestamp'), limitToLast(50));
+      const q = query(messagesRef, orderByChild('timestamp'));
       const snapshot = await get(q);
 
       if (!snapshot.exists()) {
@@ -1898,10 +1899,13 @@ const AdminDashboard = () => {
                       <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
                     ) : null}
                     {item.imageUrl ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
-                        <Ionicons name="image-outline" size={14} color="#007AFF" />
-                        <Text style={{ color: '#007AFF', fontSize: 12, marginLeft: 4 }}>Image</Text>
-                      </View>
+                      <TouchableOpacity activeOpacity={0.85} onPress={() => setPreviewImage(item.imageUrl)}>
+                        <Image
+                          source={{ uri: item.imageUrl }}
+                          style={{ width: 200, height: 200, borderRadius: 8, marginTop: 6, backgroundColor: isDark ? '#000' : '#EEE' }}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
                     ) : null}
                     {item.fruits && item.fruits.length > 0 ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
@@ -2539,6 +2543,34 @@ const AdminDashboard = () => {
             </ScrollView>
           )}
         </View>
+      </Modal>
+
+      {/* Full-screen image preview */}
+      <Modal
+        visible={!!previewImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewImage(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setPreviewImage(null)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}
+        >
+          {previewImage ? (
+            <Image
+              source={{ uri: previewImage }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="contain"
+            />
+          ) : null}
+          <TouchableOpacity
+            onPress={() => setPreviewImage(null)}
+            style={{ position: 'absolute', top: 50, right: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+          >
+            <Ionicons name="close" size={28} color="#FFF" />
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

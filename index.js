@@ -1,3 +1,9 @@
+// Polyfill global URL / URLSearchParams before anything else. Supabase
+// Realtime opens its WebSocket from a module loaded later, and on iOS the
+// missing polyfill causes the socket to silently fail to upgrade — messages
+// appear only on reload. Keep this as the first line.
+import 'react-native-url-polyfill/auto';
+
 // 🏆 Optimize performance by enabling screens before any imports
 import { enableScreens } from 'react-native-screens';
 enableScreens();

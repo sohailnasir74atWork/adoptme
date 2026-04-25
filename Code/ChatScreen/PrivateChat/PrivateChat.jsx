@@ -752,8 +752,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
       setActiveChat(user.id, chatKey);
 
-      // ✅ Mark messages as read
-      updateLastRead(chatKey, user.id);
+      // ✅ Mark messages as read — but only if the user has read receipts ON.
+      // Otherwise the other side would see a blue tick on their messages
+      // even though we're hiding it locally — that's the user-visible bug
+      // ("I turned off read receipts but they still see I read it").
+      if (localState?.showReadReceipts !== false) {
+        updateLastRead(chatKey, user.id);
+      }
 
       // ✅ Reset refs when entering chat (for exit ad logic)
       hasSentMessageRef.current = 0;
@@ -762,7 +767,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       return () => {
         clearActiveChat(user.id);
       };
-    }, [user?.id, selectedUserId, chatKey, localState?.isPro])
+    }, [user?.id, selectedUserId, chatKey, localState?.isPro, localState?.showReadReceipts])
   );
   // console.log(selectedUser.senderId)
 
@@ -800,8 +805,15 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
             newMessage.timestamp = Date.now();
           }
 
-          // ✅ Update lastRead when a message from the other user arrives while we're viewing
-          if (newMessage.senderId && newMessage.senderId !== myUserId && chatKey) {
+          // ✅ Update lastRead when a message from the other user arrives while we're viewing.
+          // Gated on the read-receipts toggle so the sender doesn't see a
+          // blue tick if the recipient has disabled read receipts.
+          if (
+            newMessage.senderId &&
+            newMessage.senderId !== myUserId &&
+            chatKey &&
+            localState?.showReadReceipts !== false
+          ) {
             updateLastRead(chatKey, myUserId);
           }
 
@@ -820,7 +832,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         isMounted = false;
         unsubscribe();
       };
-    }, [messagesRef, myUserId, chatKey])
+    }, [messagesRef, myUserId, chatKey, localState?.showReadReceipts])
   );
 
 

@@ -60,6 +60,8 @@ const MessagesList = ({
   onDeleteAllMessage,
   handlePinMessage,
   onReaction, // Callback to react to a message
+  supabaseRoomId, // set when messages live in Supabase (public chat)
+  pendingCount = 0,
 
 }) => {
   const c = getThemeColors(isDarkMode);
@@ -700,25 +702,30 @@ const MessagesList = ({
     <>
       <FlatList
         data={messages}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderMessage}
         contentContainerStyle={styles.chatList}
         inverted
         extraData={highlightedMessageId}
         ref={flatListRef}
         scrollEventThrottle={16}
-        removeClippedSubviews={true}
         onScroll={({ nativeEvent }) => {
           const { contentOffset } = nativeEvent;
-          const atBottom = contentOffset.y <= 60;
-          // console.log("✅ isAtBottom (detected):", atBottom);
+          // Threshold is generous on purpose: a small overshoot while reading
+          // the newest message shouldn't flip us into "queue pending" mode,
+          // or new messages stop appearing live and users think chat broke.
+          const atBottom = contentOffset.y <= 200;
           setIsAtBottom(atBottom);
         }}
         onEndReachedThreshold={0.1}
         onEndReached={handleLoadMore}
-        initialNumToRender={20} // Render the first 20 messages upfront
-        maxToRenderPerBatch={10} // Render 10 items per batch for smoother performance
-        windowSize={5} // Adjust the window size for rendering nearby items
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
+        windowSize={21}
+        // Detach off-screen rows from the native view tree to keep memory
+        // bounded as the user scrolls back through long histories.
+        // PrivateMessageList already enables this; group chat was missing it.
+        removeClippedSubviews={true}
 
         refreshControl={
           <RefreshControl
@@ -759,12 +766,20 @@ const MessagesList = ({
               size={48}
               color={'#3b82f6'}
             />
+            {pendingCount > 0 && (
+              <View style={pendingBadgeStyles.badge} pointerEvents="none">
+                <Text style={pendingBadgeStyles.text} numberOfLines={1}>
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </Animated.View>
       )}
       <ReportPopup
         visible={showReportPopup}
         message={selectedMessage}
+        supabaseRoomId={supabaseRoomId}
         onClose={(success) => {
           if (success) {
             handleReportSuccess(selectedMessage.id);
@@ -887,4 +902,26 @@ export const fruitStyles = StyleSheet.create({
     color: '#FF6666',
   },
 });
+const pendingBadgeStyles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  text: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+});
+
 export default React.memo(MessagesList);

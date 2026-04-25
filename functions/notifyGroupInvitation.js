@@ -1,13 +1,3 @@
-/**
- * Cloud Function: Send push notifications for group invitations
- * 
- * This function triggers when a new group invitation is created in Firestore.
- * It sends a push notification to the invited user.
- * 
- * Deployment:
- * firebase deploy --only functions:notifyGroupInvitation
- */
-
 const admin = require('firebase-admin');
 const functions = require('firebase-functions/v1');
 
@@ -83,7 +73,6 @@ exports.notifyGroupInvitation = functions.firestore
         inviteId: inviteId || '',
         groupId: groupId || '',
         invitedBy: inviteData.invitedBy || '',
-        senderId: inviteData.invitedBy || '',
         groupName: groupName || '',
         timestamp: Date.now().toString(),
       },
@@ -110,10 +99,10 @@ exports.notifyGroupInvitation = functions.firestore
       console.log(`✅ Notification successfully sent to ${invitedUserId} for group invitation ${inviteId}`);
     } catch (error) {
       console.error('❌ Failed to send notification:', error);
-
+      
       // If token is invalid, remove it
-      if (error.code === 'messaging/invalid-registration-token' ||
-        error.code === 'messaging/registration-token-not-registered') {
+      if (error.code === 'messaging/invalid-registration-token' || 
+          error.code === 'messaging/registration-token-not-registered') {
         console.log(`Removing invalid token for user ${invitedUserId}`);
         await admin.database().ref(`/users/${invitedUserId}/fcmToken`).remove();
       }

@@ -1,8 +1,8 @@
 /**
  * Cloud Function: Send push notifications when someone comments on a post
  * 
- * This function triggers when a new comment is created in Firestore.
- * It sends push notifications to:
+ * Triggers when a new comment is created in Firestore.
+ * Sends push notifications to:
  * 1. The post creator (if they didn't comment themselves)
  * 2. All previous commenters on that post (excluding the new commenter)
  * 3. All users who liked the post (excluding the new commenter)
@@ -45,21 +45,18 @@ exports.notifyPostComment = functions.firestore
       const postData = postDoc.data();
       const postCreatorId = postData.userId;
       const postDescription = postData.desc || postData.description || 'a post';
-      // Truncate description for notification
       const shortDescription = postDescription.length > 50
         ? postDescription.substring(0, 50) + '...'
         : postDescription;
 
       console.log(`✅ Post found. Creator: ${postCreatorId}, New commenter: ${newCommenterId}`);
 
-      // Early exit: if creator is the new commenter, check if anyone else has commented or liked
+      // Early exit: if creator is the new commenter, check if anyone else is involved
       if (postCreatorId === newCommenterId) {
-        // Check for likers first (cheap — already in postData)
         const hasLikers = postData.likes && typeof postData.likes === 'object'
           && Object.keys(postData.likes).some(uid => uid !== newCommenterId);
 
         if (!hasLikers) {
-          // No likers — check for other commenters
           const commentsSnapshot = await admin.firestore()
             .collection(`designPosts/${postId}/comments`)
             .limit(10)
@@ -80,7 +77,6 @@ exports.notifyPostComment = functions.firestore
       }
 
       // 2. Get previous comments to find commenters (LIMIT to reduce reads)
-      // Only get the last 100 comments to find unique commenters (cost optimization)
       const MAX_COMMENTS_TO_CHECK = 100;
       const commentsSnapshot = await admin.firestore()
         .collection(`designPosts/${postId}/comments`)
@@ -88,18 +84,15 @@ exports.notifyPostComment = functions.firestore
         .limit(MAX_COMMENTS_TO_CHECK)
         .get();
 
-      // Collect unique user IDs who have commented (excluding the new commenter)
       const commenterIds = new Set();
-
       commentsSnapshot.forEach((doc) => {
         const comment = doc.data();
-        // Only include previous commenters (not the new one)
         if (comment.userId && comment.userId !== newCommenterId && doc.id !== commentId) {
           commenterIds.add(comment.userId);
         }
       });
 
-      // 3. Collect user IDs who liked the post (from the likes map on the post document)
+      // 3. Collect user IDs who liked the post
       const likerIds = new Set();
       if (postData.likes && typeof postData.likes === 'object') {
         Object.keys(postData.likes).forEach((likerId) => {
@@ -114,18 +107,13 @@ exports.notifyPostComment = functions.firestore
       // Merge all unique user IDs: creator + commenters + likers
       const allUserIds = new Set();
 
-      // Add post creator if they're not the new commenter
       if (postCreatorId && postCreatorId !== newCommenterId) {
         allUserIds.add(postCreatorId);
       }
-
-      // Add commenters
       commenterIds.forEach((id) => allUserIds.add(id));
-
-      // Add likers
       likerIds.forEach((id) => allUserIds.add(id));
 
-      // Limit notifications to prevent excessive costs (notify max 50 users)
+      // Limit notifications to prevent excessive costs
       const MAX_USERS_TO_NOTIFY = 50;
       const userIdsArray = Array.from(allUserIds).slice(0, MAX_USERS_TO_NOTIFY);
 
@@ -134,12 +122,9 @@ exports.notifyPostComment = functions.firestore
         return null;
       }
 
-      console.log(`📋 Found ${commenterIds.size} commenters + ${likerIds.size} likers, notifying ${userIdsArray.length} users (max ${MAX_USERS_TO_NOTIFY})`);
+      console.log(`📋 Found ${commenterIds.size} commenters + ${likerIds.size} likers, notifying ${userIdsArray.length} users`);
 
-      // 3. Batch fetch FCM tokens and preferences (cost optimization)
-      const notificationPromises = [];
-
-      // Batch RTDB reads using Promise.all for better performance
+      // 4. Batch fetch FCM tokens and preferences
       const userDataPromises = userIdsArray.map(userId =>
         Promise.all([
           admin.database().ref(`/users/${userId}/fcmToken`).once('value'),
@@ -153,14 +138,13 @@ exports.notifyPostComment = functions.firestore
 
       const userDataArray = await Promise.all(userDataPromises);
 
-      // Process each user's data
+      // 5. Send notifications
+      const notificationPromises = [];
+
       for (const userData of userDataArray) {
         const { userId, fcmToken, prefs } = userData;
 
-        // Skip if this is the new commenter
-        if (userId === newCommenterId) {
-          continue;
-        }
+        if (userId === newCommenterId) continue;
 
         if (!fcmToken) {
           console.log(`⚠️ Missing FCM token for user: ${userId}`);
@@ -173,8 +157,7 @@ exports.notifyPostComment = functions.firestore
           continue;
         }
 
-        // Determine notification message based on user's relationship to the post
-        // Priority: creator > commenter > liker
+        // Determine notification message based on relationship
         const isCreator = userId === postCreatorId;
         const isCommenter = commenterIds.has(userId);
         const isLiker = likerIds.has(userId);
@@ -251,7 +234,6 @@ exports.notifyPostComment = functions.firestore
         );
       }
 
-      // Wait for all notifications to be sent
       await Promise.all(notificationPromises);
       console.log(`✅ Completed sending notifications for comment ${commentId} on post ${postId}`);
 
@@ -261,4 +243,3 @@ exports.notifyPostComment = functions.firestore
 
     return null;
   });
-

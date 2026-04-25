@@ -56,7 +56,7 @@ exports.notifyGroupMessage = functions.database
 
     // Get group name from metadata or use default
     const notificationTitle = groupName || 'Group Chat';
-    const notificationBody = lastMessageSenderName
+    const notificationBody = lastMessageSenderName 
       ? `${lastMessageSenderName}: ${lastMessage || 'New message'}`
       : (lastMessage || 'You have a new message.');
 
@@ -69,7 +69,7 @@ exports.notifyGroupMessage = functions.database
     // Check user's notification preferences
     const prefsSnap = await admin.database().ref(`/users/${userId}/notificationSettings`).once('value');
     const prefs = prefsSnap.val() || {};
-
+    
     if (prefs.groupChatNotifications === false) {
       console.log(`User ${userId} has disabled group chat notifications`);
       return null;
@@ -78,7 +78,7 @@ exports.notifyGroupMessage = functions.database
     // ✅ Check if this specific group is muted
     const mutedSnap = await admin.database().ref(`/group_meta_data/${userId}/${groupId}/muted`).once('value');
     const isMuted = mutedSnap.exists() && mutedSnap.val() === true;
-
+    
     if (isMuted) {
       console.log(`🔇 Group ${groupId} is muted for user ${userId}. FCM notification skipped (unread count still increments).`);
       return null;
@@ -121,10 +121,10 @@ exports.notifyGroupMessage = functions.database
       console.log(`✅ Notification successfully sent to ${userId} for group ${groupId}`);
     } catch (error) {
       console.error('❌ Failed to send notification:', error);
-
+      
       // If token is invalid, remove it
-      if (error.code === 'messaging/invalid-registration-token' ||
-        error.code === 'messaging/registration-token-not-registered') {
+      if (error.code === 'messaging/invalid-registration-token' || 
+          error.code === 'messaging/registration-token-not-registered') {
         console.log(`Removing invalid token for user ${userId}`);
         await admin.database().ref(`/users/${userId}/fcmToken`).remove();
       }

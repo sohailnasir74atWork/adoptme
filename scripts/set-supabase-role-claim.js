@@ -1,0 +1,108 @@
+// One-time migration: add `role: "authenticated"` as a custom claim to
+// every existing Firebase user, so their ID tokens carry the role claim
+// that Supabase Realtime requires for Third-Party Auth to work.
+//
+// Run: `node scripts/set-supabase-role-claim.js`
+// Prereqs:
+//   1. Download serviceAccount.json from Firebase Console → Project
+//      Settings → Service Accounts → Generate new private key.
+//      Save it to the project root.
+//   2. `npm install firebase-admin --no-save` (one-time, just for this
+//      script — no need to commit the dependency).
+//
+// Idempotent: safe to re-run. Existing claims are preserved.
+
+const admin = require('firebase-admin');
+const path = require('path');
+
+const SERVICE_ACCOUNT_PATH = path.join(__dirname, '..', 'serviceAccount.json');
+
+let serviceAccount;
+try {
+  serviceAccount = require(SERVICE_ACCOUNT_PATH);
+} catch (e) {
+  console.error(`\n❌ Could not load ${SERVICE_ACCOUNT_PATH}`);
+  console.error('   Download it from Firebase Console → Project Settings');
+  console.error('   → Service Accounts → Generate new private key.\n');
+  process.exit(1);
+}
+
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
+// Concurrency limit. setCustomUserClaims hits identitytoolkit.googleapis.com
+// per user; firing too many at once exhausts the local socket pool / DNS.
+// 5 in flight + small inter-batch sleep + retry-with-backoff on network
+// errors gets through a 10k-user run reliably.
+const CONCURRENCY = 5;
+const INTER_BATCH_SLEEP_MS = 100;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function withRetry(label, fn, maxAttempts = 5) {
+  let attempt = 0;
+  let lastErr;
+  while (attempt < maxAttempts) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      const isNetwork = /ENOTFOUND|EADDRNOTAVAIL|ECONNRESET|ETIMEDOUT|EAI_AGAIN|timeout of \d+ms exceeded|DEADLINE_EXCEEDED/i.test(e.message || '');
+      if (!isNetwork) throw e;
+      attempt++;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+      console.warn(`  ~ ${label}: network error, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
+async function processInBatches(items, fn) {
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const slice = items.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(fn));
+    if (i + CONCURRENCY < items.length) await sleep(INTER_BATCH_SLEEP_MS);
+  }
+}
+
+(async () => {
+  let pageToken;
+  let totalUpdated = 0;
+  let totalSkipped = 0;
+  let totalFailed = 0;
+
+  do {
+    const result = await withRetry('listUsers', () => admin.auth().listUsers(1000, pageToken));
+
+    await processInBatches(result.users, async (u) => {
+      const existing = u.customClaims || {};
+      if (existing.role === 'authenticated') {
+        totalSkipped++;
+        return;
+      }
+      try {
+        await withRetry(u.uid, () => admin.auth().setCustomUserClaims(u.uid, {
+          ...existing,
+          role: 'authenticated',
+        }));
+        totalUpdated++;
+      } catch (e) {
+        totalFailed++;
+        console.warn(`  ! ${u.uid}: ${e.message}`);
+      }
+    });
+
+    console.log(`Processed batch of ${result.users.length} (running total: ${totalUpdated} updated, ${totalSkipped} already had it, ${totalFailed} failed)`);
+    pageToken = result.pageToken;
+  } while (pageToken);
+
+  console.log(`\n✅ Done.`);
+  console.log(`   Updated: ${totalUpdated}`);
+  console.log(`   Already had the claim: ${totalSkipped}`);
+  console.log(`   Failed: ${totalFailed}`);
+  console.log(`\nUsers will pick up the claim on their next Firebase token refresh`);
+  console.log(`(within 1 hour, or immediately if the app calls getIdToken(user, true)).`);
+  process.exit(0);
+})().catch((e) => {
+  console.error('\n❌ Migration failed:', e);
+  process.exit(1);
+});

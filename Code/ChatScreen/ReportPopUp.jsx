@@ -14,14 +14,15 @@ import config from "../Helper/Environment";
 import { ref, get, update, remove } from "@react-native-firebase/database";
 import { useTranslation } from "react-i18next";
 import { banUserwithEmail } from "./utils";
+import { reportMessage as sbReportMessage } from "../Supabase/chatBackend";
 
 
-const ReportPopup = ({ visible, message, onClose, messagePath }) => {
+const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId }) => {
   const [selectedReason, setSelectedReason] = useState("Spam");
   const [customReason, setCustomReason] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { theme, appdatabase } = useGlobalState();
+  const { theme, appdatabase, user } = useGlobalState();
   const isDarkMode = theme === "dark";
   const { t } = useTranslation();
 
@@ -35,14 +36,44 @@ const ReportPopup = ({ visible, message, onClose, messagePath }) => {
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
-  const handleSubmit = () => {
-    // ✅ Safety checks
+  const handleSubmit = async () => {
     if (!message || !message.id) {
       Alert.alert("Error", "Invalid message. Unable to report.");
       return;
     }
 
+    setLoading(true);
+
+    // -----------------------------------------------------------------
+    // Supabase path — public chat (new Trader.jsx). Uses the atomic
+    // reportMessage backend that handles first-report vs second-report.
+    // -----------------------------------------------------------------
+    if (supabaseRoomId) {
+      try {
+        const { action } = await sbReportMessage(message.id, user?.id ?? null);
+        // On second report, ban the sender. Bans stay on RTDB.
+        if (action === "deleted" && message.currentUserEmail) {
+          banUserwithEmail(message.currentUserEmail).catch((e) => {
+            console.error("Error banning user:", e);
+          });
+        }
+        setLoading(false);
+        Alert.alert(t("chat.report_submitted"), t("chat.report_submitted_message"));
+        onClose(true);
+      } catch (error) {
+        console.error("Error reporting message (supabase):", error);
+        setLoading(false);
+        Alert.alert("Error", "Failed to submit the report. Please try again.");
+      }
+      return;
+    }
+
+    // -----------------------------------------------------------------
+    // RTDB path — still used by private chat and anywhere else that
+    // passes a `messagePath` (or falls back to chat_new).
+    // -----------------------------------------------------------------
     if (!appdatabase) {
+      setLoading(false);
       Alert.alert("Error", "Database not available. Please try again.");
       return;
     }
@@ -53,13 +84,11 @@ const ReportPopup = ({ visible, message, onClose, messagePath }) => {
       : messageId;
 
     if (!sanitizedId || sanitizedId.trim().length === 0) {
+      setLoading(false);
       Alert.alert("Error", "Invalid message. Unable to report.");
       return;
     }
 
-    setLoading(true);
-    // ✅ Support both group chat (chat_new) and private messages (private_messages/{chatId}/messages)
-    // If messagePath is provided, use it; otherwise default to chat_new for backward compatibility
     const messageRef = messagePath
       ? ref(appdatabase, `${messagePath}/${sanitizedId}`)
       : ref(appdatabase, `chat_new/${sanitizedId}`);
@@ -76,20 +105,16 @@ const ReportPopup = ({ visible, message, onClose, messagePath }) => {
         const reportCount = Number(data?.reportCount || 0);
 
         if (reportCount >= 1) {
-          // ✅ Second report: delete the message
-          // ✅ Await banUserwithEmail to ensure it completes
           if (message.currentUserEmail) {
             banUserwithEmail(message.currentUserEmail).catch((error) => {
               console.error("Error banning user:", error);
             });
           }
           return remove(messageRef).then(() => ({ action: "deleted" }));
-        } else {
-          // ✅ First report: set to 1 (don't increment beyond this)
-          return update(messageRef, { reportCount: 1 }).then(() => ({ action: "reported" }));
         }
+        return update(messageRef, { reportCount: 1 }).then(() => ({ action: "reported" }));
       })
-      .then((res) => {
+      .then(() => {
         setLoading(false);
         Alert.alert(t("chat.report_submitted"), t("chat.report_submitted_message"));
         onClose(true);

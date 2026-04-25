@@ -12,7 +12,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentication';
 import { useHaptic } from '../Helper/HepticFeedBack';
@@ -35,17 +35,37 @@ import {
   GoogleAuthProvider,
   AppleAuthProvider,
   signOut,
-  signInWithPhoneNumber,
 } from '@react-native-firebase/auth';
+
+// Map Firebase Auth error codes to translated, user-friendly messages.
+// Falls back to a generic message for unmapped codes — keeps users from
+// seeing raw "Firebase: Error (auth/network-request-failed)..." strings.
+const getFirebaseAuthErrorMessage = (error, t) => {
+  switch (error?.code) {
+    case 'auth/invalid-email': return t('signin.error_invalid_email_format');
+    case 'auth/user-disabled': return t('signin.error_user_disabled');
+    case 'auth/user-not-found': return t('signin.error_user_not_found');
+    case 'auth/wrong-password': return t('signin.error_wrong_password');
+    case 'auth/invalid-credential': return t('signin.error_invalid_credential');
+    case 'auth/email-already-in-use': return t('signin.error_email_in_use');
+    case 'auth/weak-password': return t('signin.error_weak_password');
+    case 'auth/too-many-requests': return t('signin.error_too_many_requests');
+    default: return t('signin.error_signin_message');
+  }
+};
+
+// Detect "user changed their mind" cancellations from Apple/Google sign-in
+// sheets so we don't show a scary error toast for what's just a dismiss.
+const isUserCancellation = (error) => {
+  if (!error) return false;
+  const code = String(error.code || '');
+  // Google: SIGN_IN_CANCELLED. Apple: '1001' (appleAuth.Error.CANCELED).
+  return code === statusCodes.SIGN_IN_CANCELLED || code === '1001';
+};
 
 const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState(null);
-  const [otpSent, setOtpSent] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);            // Google / reset
   const [isLoadingSecondary, setIsLoadingSecondary] = useState(false); // email/pass
@@ -87,58 +107,38 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     });
   }, [auth]);
 
-  // Reset phone verification state
-  const resetPhoneState = () => {
-    setPhoneNumber('');
-    setOtpCode('');
-    setConfirmationResult(null);
-    setOtpSent(false);
-  };
-
-  const handleSendOtp = async () => {
-    const cleaned = phoneNumber.trim();
-    if (!cleaned || cleaned.length < 7) {
-      Alert.alert(t('home.alert.error'), 'Please enter a valid phone number with country code (e.g. +1234567890)');
-      return;
-    }
-    setIsSendingOtp(true);
-    try {
-      const result = await signInWithPhoneNumber(auth, cleaned);
-      setConfirmationResult(result);
-      setOtpSent(true);
-      showSuccessMessage('Code Sent', `Verification code sent to ${cleaned}`);
-    } catch (error) {
-      showErrorMessage(t('home.alert.error'), error?.message || 'Failed to send SMS. Check the number and try again.');
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
   const handleForgotPassword = async () => {
-    if (!email) {
-      Alert.alert(t('home.alert.error'), t('signin.enter_valid_email'));
+    triggerHapticFeedback('impactLight');
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      showErrorMessage(t('home.alert.error'), t('signin.enter_valid_email'));
       return;
     }
 
     const isValidEmail = (em) => /\S+@\S+\.\S+/.test(em);
-    if (!isValidEmail(email)) {
-      Alert.alert(t('home.alert.error'), t('signin.error_input_message'));
+    if (!isValidEmail(trimmedEmail)) {
+      showErrorMessage(t('home.alert.error'), t('signin.error_input_message'));
       return;
     }
 
     setIsLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
-      showSuccessMessage(t('home.alert.success'), t('signin.password_reset_email_sent'));
-      setIsForgotPasswordMode(false);
+      await sendPasswordResetEmail(auth, trimmedEmail);
     } catch (error) {
-      showErrorMessage(
-        t('home.alert.error'),
-        error?.message || t('signin.error_reset_password')
-      );
+      // Intentionally swallow Firebase errors here, including
+      // auth/user-not-found. Surfacing them would let an attacker
+      // enumerate which emails have accounts. Worst case a network
+      // failure shows "email sent" but nothing arrives — the user can
+      // tap the button again and we'll retry.
+      console.warn('[forgot-password] suppressed:', error?.message);
     } finally {
       setIsLoading(false);
     }
+
+    // Always show the same generic success regardless of outcome.
+    showSuccessMessage(t('home.alert.success'), t('signin.password_reset_email_sent'));
+    setIsForgotPasswordMode(false);
   };
 
   const onAppleButtonPress = useCallback(async () => {
@@ -160,9 +160,10 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       mixpanel.track(`Login with apple from ${screen}`);
       await requestPermission();
     } catch (error) {
+      if (isUserCancellation(error)) return; // user dismissed sheet — don't toast
       showErrorMessage(
         t('home.alert.error'),
-        error?.message || t('signin.error_signin_message')
+        getFirebaseAuthErrorMessage(error, t)
       );
     }
   }, [auth, t, triggerHapticFeedback, onClose, screen]);
@@ -170,14 +171,16 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   const handleSignInOrRegister = async () => {
     triggerHapticFeedback('impactLight');
 
-    if (!email || !password) {
-      Alert.alert(t('home.alert.error'), t('signin.error_input_message'));
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password) {
+      showErrorMessage(t('home.alert.error'), t('signin.error_input_message'));
       return;
     }
 
     const isValidEmail = (em) => /\S+@\S+\.\S+/.test(em);
-    if (!isValidEmail(email)) {
-      Alert.alert(t('home.alert.error'), t('signin.error_input_message'));
+    if (!isValidEmail(trimmedEmail)) {
+      showErrorMessage(t('home.alert.error'), t('signin.error_input_message'));
       return;
     }
 
@@ -199,9 +202,9 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       'trashmailer.com', 'wegwerfmail.de', 'yopmail.pp.ua',
     ]);
     if (isRegisterMode) {
-      const emailDomain = email.toLowerCase().split('@')[1];
+      const emailDomain = trimmedEmail.toLowerCase().split('@')[1];
       if (TEMP_EMAIL_DOMAINS.has(emailDomain)) {
-        Alert.alert(
+        showErrorMessage(
           t('home.alert.error'),
           'Temporary or disposable email addresses are not allowed. Please use a real email address (Gmail, Outlook, Yahoo, etc.).'
         );
@@ -213,43 +216,31 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     try {
       if (isRegisterMode) {
-        // Step 1: Verify phone OTP first
-        if (!confirmationResult || !otpSent) {
-          Alert.alert(t('home.alert.error'), 'Please verify your phone number first.');
-          setIsLoadingSecondary(false);
-          return;
-        }
-        try {
-          await confirmationResult.confirm(otpCode.trim());
-        } catch {
-          Alert.alert(t('home.alert.error'), 'Invalid verification code. Please try again.');
-          setIsLoadingSecondary(false);
-          return;
-        }
-
         // 🔐 Register new user
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
         const user = userCredential.user;
 
         // Send verification email then sign out
         await user.sendEmailVerification();
         await signOut(auth);
 
+        // Blocking modal — user must acknowledge to know they need to
+        // check their inbox before signing in.
         Alert.alert(
           t('signin.account_created_title'),
           t('signin.account_created_message')
         );
-        resetPhoneState();
         return;
       } else {
         // 🔐 Login existing user
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
         const user = userCredential.user;
 
         if (!user.emailVerified) {
           await user.sendEmailVerification();
           await signOut(auth);
 
+          // Blocking modal — user must acknowledge they need to verify.
           Alert.alert(
             t('signin.email_not_verified_title'),
             t('signin.email_not_verified_message')
@@ -258,25 +249,16 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         }
 
         mixpanel.track(`Login with email from ${screen}`);
-        Alert.alert(t('signin.alert_welcome_back'), t('signin.success_signin'));
+        showSuccessMessage(t('signin.alert_welcome_back'), t('signin.success_signin'));
         await requestPermission();
         setTimeout(onClose, 200);
       }
     } catch (error) {
       console.error(t('signin.auth_error'), error);
-
-      let errorMessage = t('signin.error_signin_message');
-
-      if (error?.code === 'auth/invalid-email') errorMessage = t('signin.error_invalid_email_format');
-      else if (error?.code === 'auth/user-disabled') errorMessage = t('signin.error_user_disabled');
-      else if (error?.code === 'auth/user-not-found') errorMessage = t('signin.error_user_not_found');
-      else if (error?.code === 'auth/wrong-password') errorMessage = t('signin.error_wrong_password');
-      else if (error?.code === 'auth/invalid-credential') errorMessage = t('signin.error_invalid_credential');
-      else if (error?.code === 'auth/email-already-in-use') errorMessage = t('signin.error_email_in_use');
-      else if (error?.code === 'auth/weak-password') errorMessage = t('signin.error_weak_password');
-      else if (error?.code === 'auth/too-many-requests') errorMessage = t('signin.error_too_many_requests'); // Optional if you have it, else fallback
-
-      Alert.alert(t('signin.error_auth'), errorMessage);
+      showErrorMessage(
+        t('home.alert.error'),
+        getFirebaseAuthErrorMessage(error, t)
+      );
     } finally {
       setIsLoadingSecondary(false);
     }
@@ -300,9 +282,10 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       mixpanel.track(`Login with google from ${screen}`);
       await requestPermission();
     } catch (error) {
+      if (isUserCancellation(error)) return; // user dismissed sheet — don't toast
       showErrorMessage(
         t('home.alert.error'),
-        error?.message || t('signin.error_signin_message')
+        getFirebaseAuthErrorMessage(error, t)
       );
     } finally {
       setIsLoading(false);
@@ -349,62 +332,6 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                   placeholderTextColor={selectedTheme.colors.text}
                 />
               </>
-            )}
-
-            {/* ── Phone verification — register mode only ── */}
-            {isRegisterMode && !isForgotPasswordMode && (
-              <View style={{ marginTop: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        flex: 1, marginTop: 0, color: selectedTheme.colors.text,
-                        borderColor: otpSent ? '#29AB87' : 'grey'
-                      },
-                    ]}
-                    placeholder="+1234567890 (with country code)"
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    keyboardType="phone-pad"
-                    editable={!otpSent}
-                    placeholderTextColor={selectedTheme.colors.text}
-                  />
-                  <TouchableOpacity
-                    onPress={otpSent ? () => { setOtpSent(false); setConfirmationResult(null); setOtpCode(''); } : handleSendOtp}
-                    disabled={isSendingOtp}
-                    style={{
-                      backgroundColor: otpSent ? '#555' : '#29AB87',
-                      paddingHorizontal: 12, paddingVertical: 10,
-                      borderRadius: 6, alignItems: 'center',
-                    }}
-                  >
-                    {isSendingOtp
-                      ? <ActivityIndicator size="small" color="white" />
-                      : <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-                          {otpSent ? 'Resend' : 'Send Code'}
-                        </Text>
-                    }
-                  </TouchableOpacity>
-                </View>
-
-                {otpSent && (
-                  <View style={{ marginTop: 8 }}>
-                    <TextInput
-                      style={[styles.input, { marginTop: 0, color: selectedTheme.colors.text, borderColor: '#29AB87' }]}
-                      placeholder="Enter 6-digit code"
-                      value={otpCode}
-                      onChangeText={setOtpCode}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      placeholderTextColor={selectedTheme.colors.text}
-                    />
-                    <Text style={{ fontSize: 11, color: '#29AB87', marginTop: 4 }}>
-                      ✅ Code sent! Enter it above then tap Register.
-                    </Text>
-                  </View>
-                )}
-              </View>
             )}
 
             {isForgotPasswordMode && (
@@ -499,7 +426,6 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               onPress={() => {
                 if (!isForgotPasswordMode) {
                   setIsRegisterMode(!isRegisterMode);
-                  resetPhoneState();
                 }
               }}
             >

@@ -39,6 +39,12 @@ const config = {
   // Cloud Functions URL (update with your actual region)
   cloudFunctionsUrl: 'https://us-central1-adoptme-7b50c.cloudfunctions.net',
 
+  // Supabase (phase 1 scope: public/global chat only)
+  supabaseUrl: 'https://kvtbtzhtcaanhjblyick.supabase.co',
+  // Paste the FULL publishable key from Supabase → Settings → API
+  // Starts with sb_publishable_... — safe to ship in the client bundle.
+  supabasePublishableKey: 'sb_publishable_jS-BfPZ_e1WnhDaJYhU8LQ_wd3ipadn',
+
   colors: isNoman
     ? {
       primary: '#ff6666', // Muted grayish blue

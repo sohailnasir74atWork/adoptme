@@ -15,7 +15,7 @@ if (!admin.apps.length) {
  */
 exports.cleanupExpiredStatuses = functions
   .runWith({ memory: '256MB', timeoutSeconds: 60 })
-  .pubsub.schedule('every 1 hours')
+  .pubsub.schedule('every 30 minutes')
   .onRun(async (context) => {
     try {
       const now = admin.firestore.Timestamp.now();
