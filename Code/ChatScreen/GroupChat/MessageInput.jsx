@@ -70,7 +70,9 @@ const MessageInput = ({
   const { triggerHapticFeedback } = useHaptic();
   const { t } = useTranslation();
   const { localState } = useLocalState();
-  const { theme, isAdmin } = useGlobalState();
+  const { theme, isAdmin, user } = useGlobalState();
+  // Admins and full moderators (not baby mods) bypass content moderation.
+  const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
   const [showEmojiPopup, setShowEmojiPopup] = useState(false);
 
@@ -95,7 +97,7 @@ const MessageInput = ({
 
     // ✅ Comprehensive content moderation check
     if (trimmedInput) {
-      const validation = validateContent(trimmedInput, { skipLinkCheck: true });
+      const validation = validateContent(trimmedInput, { skipLinkCheck: canBypassModeration, skipAll: canBypassModeration });
       if (!validation.isValid) {
         showMessage({
           message: t('chat.inappropriate_content'),

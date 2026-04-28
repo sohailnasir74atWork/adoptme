@@ -86,7 +86,9 @@ const PrivateMessageInput = ({
   const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
 
   const { localState } = useLocalState();
-  const { theme, user } = useGlobalState();
+  const { theme, user, isAdmin } = useGlobalState();
+  // Admins and full moderators (not baby mods) bypass content moderation.
+  const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
   const { t } = useTranslation();
 
@@ -276,7 +278,7 @@ const PrivateMessageInput = ({
 
     // ✅ Comprehensive content moderation check
     if (trimmedInput) {
-      const validation = validateContent(trimmedInput);
+      const validation = validateContent(trimmedInput, { skipAll: canBypassModeration });
       if (!validation.isValid) {
         Alert.alert(t('chat.error'), t('chat.inappropriate_content'));
         return;

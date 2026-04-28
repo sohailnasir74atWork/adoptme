@@ -38,7 +38,9 @@ import {
   limitToFirst,
   limitToLast,
   onValue,
+  update,
 } from '@react-native-firebase/database';
+import { warmProfileCache, getCachedProfile, getOrFetchProfile } from '../Helper/profileCache';
 
 import {
   getFirestore,
@@ -336,18 +338,15 @@ const AdminDashboard = () => {
       // Sort by most recent first
       list.sort((a, b) => (b.bannedAt || 0) - (a.bannedAt || 0));
 
-      // Batch-resolve mod IDs → display names
+      // Batch-resolve mod IDs → display names via profileCache (cached for 30 min)
       const idToName = {};
       if (idsToResolve.size > 0) {
-        const resolvePromises = [...idsToResolve].map(async (uid) => {
-          try {
-            const userSnap = await get(ref(db, `users/${uid}/displayName`));
-            idToName[uid] = userSnap.exists() ? userSnap.val() : uid;
-          } catch {
-            idToName[uid] = uid;
-          }
+        const ids = [...idsToResolve];
+        await warmProfileCache(db, ids);
+        ids.forEach((uid) => {
+          const cached = getCachedProfile(uid);
+          idToName[uid] = cached?.displayName || uid;
         });
-        await Promise.all(resolvePromises);
 
         // Resolve IDs in the list items too
         list.forEach((item) => {
@@ -937,8 +936,8 @@ const AdminDashboard = () => {
 
           if (rawBannedBy && looksLikeUserId(rawBannedBy)) {
             try {
-              const modSnap = await get(ref(db, `users/${rawBannedBy}/displayName`));
-              appliedByName = modSnap.exists() ? modSnap.val() : rawBannedBy;
+              const cached = await getOrFetchProfile(db, rawBannedBy);
+              appliedByName = cached?.displayName || rawBannedBy;
             } catch {
               appliedByName = rawBannedBy;
             }
@@ -1152,6 +1151,55 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Chat load error:', err);
       Alert.alert('Error', 'Could not load chat. Check selections and try again.');
+    } finally {
+      setLoadingChat(false);
+    }
+  }, [db, chatPerson1, chatPerson2]);
+
+  // Delete the entire private conversation between the two selected users.
+  // Removes /private_messages/{chatKey} and both /chat_meta_data inbox entries
+  // in one atomic multi-path update. Gated to admin + SUPER_ADMIN_ID at the UI.
+  const deletePrivateChat = useCallback(async () => {
+    if (!chatPerson1?.id || !chatPerson2?.id) {
+      Alert.alert('Error', 'Please select both users first.');
+      return;
+    }
+    if (chatPerson1.id === chatPerson2.id) {
+      Alert.alert('Error', 'Please select two different users.');
+      return;
+    }
+
+    const id1 = chatPerson1.id;
+    const id2 = chatPerson2.id;
+    const chatKey = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+    const name1 = chatPerson1.displayName || id1;
+    const name2 = chatPerson2.displayName || id2;
+
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        '⚠️ Delete Conversation',
+        `This will permanently delete the entire chat between "${name1}" and "${name2}".\n\nThis includes all messages, unread counters, last-read markers, trade/post attachments, and the inbox entries on both sides.\n\nThis action CANNOT be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirm) return;
+
+    setLoadingChat(true);
+    try {
+      const updates = {};
+      updates[`private_messages/${chatKey}`] = null;
+      updates[`chat_meta_data/${id1}/${id2}`] = null;
+      updates[`chat_meta_data/${id2}/${id1}`] = null;
+      await update(ref(db), updates);
+
+      setChatMessages([]);
+      Alert.alert('Deleted', 'Conversation removed.');
+    } catch (err) {
+      console.error('Chat delete error:', err);
+      Alert.alert('Error', 'Could not delete chat. Try again.');
     } finally {
       setLoadingChat(false);
     }
@@ -1862,6 +1910,18 @@ const AdminDashboard = () => {
               >
                 <Ionicons name="chatbubbles" size={18} color="#FFF" style={{ marginRight: 8 }} />
                 <Text style={[styles.buttonText, { fontSize: 15 }]}>View Conversation</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete Conversation — admin + owner UID only */}
+            {chatPerson1 && chatPerson2 && isSuperAdmin && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#dc262618', borderWidth: 1, borderColor: '#dc262640', height: 42, borderRadius: 12, marginTop: 8, marginBottom: 0 }]}
+                onPress={deletePrivateChat}
+                disabled={loadingChat}
+              >
+                <Ionicons name="trash-outline" size={16} color="#dc2626" style={{ marginRight: 8 }} />
+                <Text style={[styles.buttonText, { fontSize: 14, color: '#dc2626', fontWeight: '700' }]}>Delete Conversation</Text>
               </TouchableOpacity>
             )}
           </View>

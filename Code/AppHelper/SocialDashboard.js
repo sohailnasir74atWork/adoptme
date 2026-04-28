@@ -11,6 +11,7 @@ import {
     RefreshControl,
 } from 'react-native';
 import { getDatabase, ref, get, query, orderByChild, startAt, endAt, limitToFirst } from '@react-native-firebase/database';
+import { warmProfileCache, getCachedProfile } from '../Helper/profileCache';
 import { collection, getDocs, query as firestoreQuery, where } from '@react-native-firebase/firestore';
 import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
@@ -127,23 +128,25 @@ const SocialDashboard = () => {
     const fetchUsersFromRTDB = useCallback(async (ids) => {
         if (!ids || ids.length === 0) return [];
 
+        // Warm profileCache once for displayName + avatar + robloxUsernameVerified.
+        // robloxUsername and users/{uid}/profileFrame are not in profileCache — kept as separate gets.
+        await warmProfileCache(db, ids);
+
         const results = await Promise.all(
             ids.map(async (friendId) => {
                 try {
-                    const [displayNameSnap, avatarSnap, robloxUsernameSnap, robloxVerifiedSnap, profileFrameSnap] = await Promise.all([
-                        get(ref(db, `users/${friendId}/displayName`)),
-                        get(ref(db, `users/${friendId}/avatar`)),
+                    const [robloxUsernameSnap, profileFrameSnap] = await Promise.all([
                         get(ref(db, `users/${friendId}/robloxUsername`)),
-                        get(ref(db, `users/${friendId}/robloxUsernameVerified`)),
                         get(ref(db, `users/${friendId}/profileFrame`)),
                     ]);
+                    const cached = getCachedProfile(friendId);
 
                     return {
                         id: friendId,
-                        displayName: displayNameSnap.val() || 'Unknown',
-                        avatar: avatarSnap.val() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                        displayName: cached?.displayName || 'Unknown',
+                        avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                         robloxUsername: robloxUsernameSnap.val() || null,
-                        robloxUsernameVerified: robloxVerifiedSnap.val() || false,
+                        robloxUsernameVerified: cached?.robloxUsernameVerified ?? false,
                         profileFrame: profileFrameSnap.val() || null,
                     };
                 } catch (err) {

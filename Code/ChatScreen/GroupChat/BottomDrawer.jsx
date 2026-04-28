@@ -44,6 +44,10 @@ import {
   writeBatch,
 } from '@react-native-firebase/firestore';
 import { ref, get, set, remove } from '@react-native-firebase/database';
+import { getOrFetchFullProfile, invalidateFullProfile } from '../../Helper/profileCache';
+
+// Kill-switch: set to false to revert to the original 16-get fetch path.
+const BOTTOM_DRAWER_CACHE_ENABLED = true;
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
 import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus } from '../utils';
@@ -344,86 +348,116 @@ const ProfileBottomDrawer = ({
 
     let isMounted = true;
 
+    // Build the userData shape from a raw /users/{uid} record (single source of truth).
+    // null/undefined are preserved for role flags so mergedUser's `??` chain falls
+    // through to the message's role_flags snapshot. (Some admins are identified by
+    // hardcoded email in GlobelStats.js and don't have `admin: true` in RTDB.)
+    const buildFromRecord = (rec) => {
+      const r = rec || {};
+      const has = (k) => Object.prototype.hasOwnProperty.call(r, k);
+      const valOrNull = (k) => has(k) ? r[k] : null;
+      return {
+        avatar: valOrNull('avatar'),
+        robloxUsername: valOrNull('robloxUsername'),
+        robloxUserId: valOrNull('robloxUserId'),
+        robloxUsernameVerified: has('robloxUsernameVerified') ? !!r.robloxUsernameVerified : false,
+        isPro: has('isPro') ? !!r.isPro : false,
+        lastGameWinAt: valOrNull('lastGameWinAt'),
+        isModerator: valOrNull('isModerator'),
+        // RTDB field is `admin`, exposed to consumers as `isAdmin` (legacy name).
+        isAdmin: valOrNull('admin'),
+        email: valOrNull('email'),
+        decodedEmail: valOrNull('decodedEmail'),
+        topBadge: valOrNull('topBadge'),
+        isBabyMod: valOrNull('isBabyMod'),
+        isTrusted: valOrNull('isTrusted'),
+        isCMSR: valOrNull('isCMSR'),
+        dateOfBirth: valOrNull('dateOfBirth'),
+      };
+    };
+
     const fetchUserData = async () => {
       try {
-        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
-        // Added checks for isModerator and isAdmin
-        const [
-          robloxUsernameSnap,
-          robloxUserIdSnap,
-          robloxUsernameVerifiedSnap,
-          isProSnap,
-          lastGameWinAtSnap,
-          isModeratorSnap,
-          isAdminSnap,
-          emailSnap,
-          decodedEmailSnap,
-          badgesSnap,
-          avatarSnap,
-          topBadgeSnap,
-          isBabyModSnap,
-          isTrustedSnap,
-          isCMSRSnap,
-          dateOfBirthSnap
-        ] = await Promise.all([
-          get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/email`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/decodedEmail`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/badges`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/avatar`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/topBadge`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
-          get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
-        ]);
+        let newUserData;
+        let badgesValue;
+        let emailToCheck;
 
-        if (!isMounted) return;
-
-        // ✅ Load saved badges
-        if (badgesSnap?.exists()) {
-          setSavedBadges(badgesSnap.val() || {});
+        if (BOTTOM_DRAWER_CACHE_ENABLED) {
+          // Single cached read of /users/{uid}; covers all 16 fields.
+          const record = await getOrFetchFullProfile(appdatabase, selectedUserId);
+          if (!isMounted) return;
+          newUserData = buildFromRecord(record);
+          badgesValue = record?.badges || null;
+          emailToCheck = record?.email || selectedUser?.email;
         } else {
-          setSavedBadges({});
+          // Original 16-get fallback (kill-switch path).
+          const [
+            robloxUsernameSnap,
+            robloxUserIdSnap,
+            robloxUsernameVerifiedSnap,
+            isProSnap,
+            lastGameWinAtSnap,
+            isModeratorSnap,
+            isAdminSnap,
+            emailSnap,
+            decodedEmailSnap,
+            badgesSnap,
+            avatarSnap,
+            topBadgeSnap,
+            isBabyModSnap,
+            isTrustedSnap,
+            isCMSRSnap,
+            dateOfBirthSnap
+          ] = await Promise.all([
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/email`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/decodedEmail`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/badges`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/avatar`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/topBadge`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
+          ]);
+          if (!isMounted) return;
+          newUserData = {
+            avatar: avatarSnap?.exists() ? avatarSnap.val() : null,
+            robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
+            robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
+            robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+            isPro: isProSnap?.exists() ? isProSnap.val() : false,
+            lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+            isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
+            isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : null,
+            email: emailSnap?.exists() ? emailSnap.val() : null,
+            decodedEmail: decodedEmailSnap?.exists() ? decodedEmailSnap.val() : null,
+            topBadge: topBadgeSnap?.exists() ? topBadgeSnap.val() : null,
+            isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
+            isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
+            isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
+            dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
+          };
+          badgesValue = badgesSnap?.exists() ? (badgesSnap.val() || null) : null;
+          emailToCheck = emailSnap?.exists() ? emailSnap.val() : selectedUser?.email;
         }
 
-        // Check ban status if email is available from snapshot OR selectedUser
-        const emailToCheck = emailSnap?.exists() ? emailSnap.val() : selectedUser?.email;
+        // Load saved badges
+        setSavedBadges(badgesValue || {});
+
+        // Check ban status (email comes from record/snap or fallback to selectedUser)
         if (emailToCheck) {
           const banStatus = await checkBanStatus(emailToCheck);
           if (isMounted) setIsBanned(banStatus.isBanned);
         } else {
           if (isMounted) setIsBanned(false);
         }
-
-        // ✅ Extract values only if they exist
-        const newUserData = {
-          avatar: avatarSnap?.exists() ? avatarSnap.val() : null,
-          robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
-          robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
-          robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
-          isPro: isProSnap?.exists() ? isProSnap.val() : false,
-          lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-          // Use `null` (not `false`) when the snap is missing so the `??`
-          // merge in mergedUser falls through to the message's role_flags
-          // snapshot. Some admins are identified by hardcoded email in
-          // GlobelStats.js and don't have `admin: true` in RTDB /users.
-          isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
-          isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : null,
-          email: emailSnap?.exists() ? emailSnap.val() : null,
-          decodedEmail: decodedEmailSnap?.exists() ? decodedEmailSnap.val() : null,
-          topBadge: topBadgeSnap?.exists() ? topBadgeSnap.val() : null,
-          isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
-          isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
-          isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
-          dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
-        };
 
         setUserData(newUserData);
       } catch (error) {
@@ -1021,38 +1055,47 @@ const ProfileBottomDrawer = ({
     if (reasonActionType.type === 'strike') {
       const strikeCount = reasonActionType.value;
       const success = await setUserStrike(
-        actionEmail, 
-        strikeCount, 
-        currentUser?.uid, 
-        true, 
-        bannerInfo, 
-        mergedUser, 
+        actionEmail,
+        strikeCount,
+        currentUser?.uid,
+        true,
+        bannerInfo,
+        mergedUser,
         finalReason
       );
-      if (success) setIsBanned(true);
-      
+      if (success) {
+        invalidateFullProfile(selectedUserId);
+        setIsBanned(true);
+      }
+
     } else if (reasonActionType.type === 'mute') {
       const minutes = reasonActionType.value;
       const success = await muteUser(
-        actionEmail, 
-        minutes, 
-        mergedUser, 
-        bannerInfo, 
-        true, 
+        actionEmail,
+        minutes,
+        mergedUser,
+        bannerInfo,
+        true,
         finalReason
       );
-      if (success) setIsBanned(true);
-      
+      if (success) {
+        invalidateFullProfile(selectedUserId);
+        setIsBanned(true);
+      }
+
     } else if (reasonActionType.type === 'ban') {
       const success = await banUserwithEmail(
-        actionEmail, 
-        isAdmin, 
-        selectedUserId, 
-        mergedUser, 
-        bannerInfo, 
+        actionEmail,
+        isAdmin,
+        selectedUserId,
+        mergedUser,
+        bannerInfo,
         finalReason
       );
-      if (success) setIsBanned(true);
+      if (success) {
+        invalidateFullProfile(selectedUserId);
+        setIsBanned(true);
+      }
     }
     
     setReasonActionType(null);
@@ -1075,7 +1118,10 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
 
     const success = await unbanUserWithEmail(mergedUser.email);
-    if (success) setIsBanned(false);
+    if (success) {
+      invalidateFullProfile(selectedUserId);
+      setIsBanned(false);
+    }
   };
 
   const handlePromoteModerator = async () => {
@@ -1094,6 +1140,7 @@ const ProfileBottomDrawer = ({
 
     const success = await makeModerator(selectedUserId);
     if (success) {
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isModerator: true }));
     }
   };
@@ -1114,6 +1161,7 @@ const ProfileBottomDrawer = ({
 
     const success = await removeModerator(selectedUserId);
     if (success) {
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isModerator: false }));
     }
   };
@@ -1130,6 +1178,7 @@ const ProfileBottomDrawer = ({
   const OWNER_ID = 'DNvBQC5ySWP8QiJNGpIvqd9DSWB2';
   const canManageBabyMod = isAdmin || user?.id === OWNER_ID;
   const canManageBadges = isAdmin || !!user?.isModerator;
+  const canDeleteUser = isAdmin || user?.id === OWNER_ID;
 
   const handleMakeBabyMod = async () => {
     if (!selectedUserId || !appdatabase) return;
@@ -1142,6 +1191,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), true);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isBabyMod: true }));
       Alert.alert('Success', `${userName} is now a Junior Mod`);
     } catch (err) {
@@ -1160,6 +1210,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), null);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isBabyMod: false }));
       Alert.alert('Success', `${userName} is no longer a Junior Mod`);
     } catch (err) {
@@ -1179,6 +1230,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), true);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isTrusted: true }));
       Alert.alert('Success', `${userName} now has the Trusted badge`);
     } catch (err) {
@@ -1197,6 +1249,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), null);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isTrusted: false }));
       Alert.alert('Success', `${userName} no longer has the Trusted badge`);
     } catch (err) {
@@ -1216,6 +1269,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), true);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isCMSR: true }));
       Alert.alert('Success', `${userName} now has the CMSR badge`);
     } catch (err) {
@@ -1234,6 +1288,7 @@ const ProfileBottomDrawer = ({
     if (!confirm) return;
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), null);
+      invalidateFullProfile(selectedUserId);
       setUserData(prev => ({ ...prev, isCMSR: false }));
       Alert.alert('Success', `${userName} no longer has the CMSR badge`);
     } catch (err) {
@@ -3149,6 +3204,7 @@ const ProfileBottomDrawer = ({
                         handleRemoveCMSR={handleRemoveCMSR}
                         handleDeleteUserData={handleDeleteUserData}
                         deletingUser={deletingUser}
+                        canDeleteUser={canDeleteUser}
                       />
                     )}
                   </View>

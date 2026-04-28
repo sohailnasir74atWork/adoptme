@@ -13,7 +13,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, Image,
-  StyleSheet, Dimensions, ActivityIndicator, Alert, ScrollView,
+  StyleSheet, Dimensions, ActivityIndicator, Alert, ScrollView, TextInput,
 } from 'react-native';
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -101,6 +101,9 @@ const TradeJournal = ({
   const [selectedRating, setSelectedRating] = useState('fair');
   const [showPetPicker, setShowPetPicker] = useState(false);
   const [petPickerMode, setPetPickerMode] = useState('owned');
+  const [petSearch, setPetSearch] = useState('');
+  const [petSort, setPetSort] = useState('recent'); // 'recent' | 'value-desc' | 'value-asc' | 'name'
+  const [showMyProfile, setShowMyProfile] = useState(false);
   // Editable trade completion
   const [editingTrade, setEditingTrade] = useState(null);
   const [editGave, setEditGave] = useState([]);
@@ -555,6 +558,64 @@ const TradeJournal = ({
     savePets(ownedPets, newWishlist);
   }, [ownedPets, wishlistPets, savePets]);
 
+  // ── Clear all owned pets ──
+  const clearOwnedPets = useCallback(() => {
+    Alert.alert(
+      t('trade_journal.alerts.clear_pets_title', { defaultValue: 'Clear inventory?' }),
+      t('trade_journal.alerts.clear_pets_msg', {
+        count: ownedPets.length,
+        defaultValue: 'This removes all {{count}} pets from your inventory. Your wishlist and trade history are not affected.',
+      }),
+      [
+        { text: t('trade_journal.alerts.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('trade_journal.alerts.clear_all', { defaultValue: 'Clear all' }),
+          style: 'destructive',
+          onPress: async () => {
+            setOwnedPets([]);
+            try {
+              await savePets([], wishlistPets);
+            } catch {
+              Alert.alert(
+                t('trade_journal.alerts.error', { defaultValue: 'Error' }),
+                t('trade_journal.alerts.could_not_clear', { defaultValue: 'Could not clear inventory.' })
+              );
+            }
+          },
+        },
+      ]
+    );
+  }, [ownedPets.length, wishlistPets, savePets, t]);
+
+  // ── Clear all wishlist pets ──
+  const clearWishlistPets = useCallback(() => {
+    Alert.alert(
+      t('trade_journal.alerts.clear_wishlist_title', { defaultValue: 'Clear wishlist?' }),
+      t('trade_journal.alerts.clear_wishlist_msg', {
+        count: wishlistPets.length,
+        defaultValue: 'This removes all {{count}} pets from your wishlist. Your inventory and trade history are not affected.',
+      }),
+      [
+        { text: t('trade_journal.alerts.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('trade_journal.alerts.clear_all', { defaultValue: 'Clear all' }),
+          style: 'destructive',
+          onPress: async () => {
+            setWishlistPets([]);
+            try {
+              await savePets(ownedPets, []);
+            } catch {
+              Alert.alert(
+                t('trade_journal.alerts.error', { defaultValue: 'Error' }),
+                t('trade_journal.alerts.could_not_clear', { defaultValue: 'Could not clear wishlist.' })
+              );
+            }
+          },
+        },
+      ]
+    );
+  }, [wishlistPets.length, ownedPets, savePets, t]);
+
   // ── Toggle pet available for trade ──
   const toggleAvailableForTrade = useCallback((index, listType) => {
     if (listType === 'owned') {
@@ -653,9 +714,25 @@ const TradeJournal = ({
       let addedNames = [];
 
       gave.forEach(g => {
-        const idx = updatedOwned.findIndex(p =>
-          (p.name || '').toLowerCase() === (g.name || '').toLowerCase()
+        const gName = (g.name || '').toLowerCase();
+        const gType = g.valueType || 'd';
+        const gFly = !!g.isFly;
+        const gRide = !!g.isRide;
+        // Match exact variant: same name + valueType + fly + ride.
+        // Falls back to name-only only when no variant exists, so a neon
+        // trade can never silently remove a mega of the same pet.
+        let idx = updatedOwned.findIndex(p =>
+          (p.name || '').toLowerCase() === gName &&
+          (p.valueType || 'd') === gType &&
+          !!p.isFly === gFly &&
+          !!p.isRide === gRide
         );
+        if (idx === -1) {
+          const sameName = updatedOwned.filter(p => (p.name || '').toLowerCase() === gName);
+          if (sameName.length === 1) {
+            idx = updatedOwned.indexOf(sameName[0]);
+          }
+        }
         if (idx !== -1) {
           updatedOwned.splice(idx, 1);
           removedNames.push(g.name);
@@ -747,6 +824,23 @@ const TradeJournal = ({
     ownedPets.reduce((s, p) => s + lookupPetValue(p), 0)
   , [ownedPets, lookupPetValue]);
 
+  // Pets list as user sees it: filtered by search, sorted by chosen mode.
+  // Each entry keeps its originalIndex so removePet still operates on the
+  // canonical ownedPets array regardless of display order.
+  const displayedPets = useMemo(() => {
+    const q = petSearch.trim().toLowerCase();
+    const indexed = ownedPets.map((pet, originalIndex) => ({ pet, originalIndex }));
+    const filtered = q
+      ? indexed.filter(({ pet }) => (pet.name || '').toLowerCase().includes(q))
+      : indexed;
+    if (petSort === 'recent') return filtered;
+    const sorted = [...filtered];
+    if (petSort === 'value-desc') sorted.sort((a, b) => lookupPetValue(b.pet) - lookupPetValue(a.pet));
+    else if (petSort === 'value-asc') sorted.sort((a, b) => lookupPetValue(a.pet) - lookupPetValue(b.pet));
+    else if (petSort === 'name') sorted.sort((a, b) => (a.pet.name || '').localeCompare(b.pet.name || ''));
+    return sorted;
+  }, [ownedPets, petSearch, petSort, lookupPetValue]);
+
   // Net value needs real-time calculation from loaded history
   const netValue = useMemo(() => {
     if (history.length === 0) return 0;
@@ -791,6 +885,24 @@ const TradeJournal = ({
         <Text style={[styles.heroLabel, { color: subtextColor }]}>{t('trade_journal.my_pets.worth')}</Text>
         <Text style={[styles.heroValue, { color: '#3B82F6' }]}>{formatPlain(portfolioValue)}</Text>
         <Text style={[styles.heroSub, { color: subtextColor }]}>{t('trade_journal.my_pets.pets_count', { count: ownedPets.length })}</Text>
+        <TouchableOpacity
+          onPress={() => setShowMyProfile(true)}
+          style={{
+            marginTop: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            backgroundColor: isDarkMode ? '#1e3a5f' : '#dbeafe',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
+          }}
+        >
+          <FontAwesome name="user" size={11} color="#3B82F6" />
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#3B82F6' }}>
+            {t('trade_journal.my_pets.view_my_profile', { defaultValue: 'View my profile' })}
+          </Text>
+        </TouchableOpacity>
         {ownedPets.length > 0 && (() => {
           // Demand breakdown of entire portfolio
           let highDemand = [], risingPets = [], lowDemand = 0, noDemand = 0;
@@ -867,6 +979,66 @@ const TradeJournal = ({
         <Text style={[styles.addPetText, { color: '#10B981' }]}>{t('trade_journal.my_pets.add_pet')}</Text>
       </TouchableOpacity>
 
+      {/* Search + sort controls */}
+      {ownedPets.length > 0 && (
+        <View style={{ marginBottom: 8 }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: cardBg,
+            borderRadius: 10,
+            paddingHorizontal: 10,
+            height: 36,
+            marginBottom: 8,
+          }}>
+            <FontAwesome name="magnifying-glass" size={12} color={subtextColor} />
+            <TextInput
+              value={petSearch}
+              onChangeText={setPetSearch}
+              placeholder={t('trade_journal.my_pets.search_placeholder', { defaultValue: 'Search pets...' })}
+              placeholderTextColor={subtextColor}
+              style={{ flex: 1, marginLeft: 8, color: textColor, fontSize: 13, padding: 0 }}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {petSearch.length > 0 && (
+              <TouchableOpacity onPress={() => setPetSearch('')} hitSlop={8}>
+                <Text style={{ color: subtextColor, fontSize: 14 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {[
+              { key: 'recent', label: t('trade_journal.my_pets.sort_recent', { defaultValue: 'Recent' }) },
+              { key: 'value-desc', label: t('trade_journal.my_pets.sort_value_desc', { defaultValue: 'Value ↓' }) },
+              { key: 'value-asc', label: t('trade_journal.my_pets.sort_value_asc', { defaultValue: 'Value ↑' }) },
+              { key: 'name', label: t('trade_journal.my_pets.sort_name', { defaultValue: 'A–Z' }) },
+            ].map(opt => {
+              const active = petSort === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  onPress={() => setPetSort(opt.key)}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 14,
+                    backgroundColor: active ? '#3B82F6' : cardBg,
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: '600',
+                    color: active ? '#fff' : subtextColor,
+                  }}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* Pets grid */}
       {ownedPets.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -876,14 +1048,24 @@ const TradeJournal = ({
             {t('trade_journal.my_pets.empty_sub')}
           </Text>
         </View>
+      ) : displayedPets.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Text style={{ fontSize: 40 }}>🔍</Text>
+          <Text style={[styles.emptyTitle, { color: textColor }]}>
+            {t('trade_journal.my_pets.no_match_title', { defaultValue: 'No pets match' })}
+          </Text>
+          <Text style={[styles.emptySub, { color: subtextColor }]}>
+            {t('trade_journal.my_pets.no_match_sub', { defaultValue: 'Try a different search.' })}
+          </Text>
+        </View>
       ) : (
         <View style={styles.petsGrid}>
-          {ownedPets.map((pet, index) => (
+          {displayedPets.map(({ pet, originalIndex }) => (
             <View
-              key={`${pet.name}-${index}`}
+              key={`${pet.name}-${originalIndex}`}
               style={[styles.petCard, { backgroundColor: cardBg }]}
             >
-              <TouchableOpacity style={styles.petRemoveBtn} onPress={() => removePet(index)}>
+              <TouchableOpacity style={styles.petRemoveBtn} onPress={() => removePet(originalIndex)}>
                 <Text style={styles.petRemoveText}>✕</Text>
               </TouchableOpacity>
               <Image
@@ -920,7 +1102,7 @@ const TradeJournal = ({
                 </View>
               )}
               <TouchableOpacity
-                onPress={() => toggleAvailableForTrade(index, 'owned')}
+                onPress={() => toggleAvailableForTrade(originalIndex, 'owned')}
                 style={{
                   marginTop: 4,
                   paddingVertical: 4,
@@ -945,6 +1127,14 @@ const TradeJournal = ({
             </View>
           ))}
         </View>
+      )}
+
+      {ownedPets.length > 0 && (
+        <TouchableOpacity style={styles.clearHistoryBtn} onPress={clearOwnedPets}>
+          <Text style={styles.clearHistoryText}>
+            {t('trade_journal.my_pets.clear_inventory', { defaultValue: '🗑 Clear inventory' })}
+          </Text>
+        </TouchableOpacity>
       )}
     </ScrollView>
   );
@@ -1177,6 +1367,14 @@ const TradeJournal = ({
               </View>
             );
           })
+        )}
+
+        {wishlistPets.length > 0 && (
+          <TouchableOpacity style={styles.clearHistoryBtn} onPress={clearWishlistPets}>
+            <Text style={styles.clearHistoryText}>
+              {t('trade_journal.goals.clear_wishlist', { defaultValue: '🗑 Clear wishlist' })}
+            </Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     );
@@ -2292,6 +2490,20 @@ const TradeJournal = ({
           </View>
         </View>
       )}
+
+      {/* Own profile viewer */}
+      <ProfileBottomDrawer
+        isVisible={showMyProfile}
+        toggleModal={() => setShowMyProfile(false)}
+        startChat={null}
+        selectedUser={{
+          senderId: user?.id,
+          sender: user?.displayName || t('trade_journal.my_pets.you', { defaultValue: 'You' }),
+          avatar: user?.avatar || null,
+        }}
+        isOnline={true}
+        bannedUsers={[]}
+      />
 
       {/* Pet Picker Modal */}
       <PetModal

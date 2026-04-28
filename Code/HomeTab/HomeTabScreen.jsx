@@ -230,7 +230,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
   // ── Quick Action Items ──
   const quickActions = useMemo(() => [
     { key: 'values', icon: 'paw', label: t('home_tab.action_pet_values'), color: '#2563EB', onPress: () => navigation.navigate('ValueScreen') },
-    { key: 'topRated', icon: 'trophy', label: t('home_tab.action_top_traders'), color: '#F59E0B', onPress: () => navigation.navigate('LeaderboardScreen') },
+    { key: 'topRated', icon: 'medal', label: t('home_tab.action_leaderboard', { defaultValue: 'Leaderboard' }), color: '#F59E0B', onPress: () => navigation.navigate('LeaderboardScreen') },
     { key: 'stars', icon: 'star', label: t('home_tab.action_badges'), color: '#FB923C', onPress: () => requireSignIn(() => navigation.navigate('BadgesScreen'), t('home_tab.signin_claim_stars')), hasBadge: canClaimStar },
     { key: 'following', icon: 'heart', label: t('home_tab.action_friends'), color: '#EC4899', onPress: () => requireSignIn(() => navigation.navigate('SocialDashboardScreen'), t('home_tab.signin_friends')) },
     { key: 'cosmetics', icon: 'wand-magic-sparkles', label: t('home_tab.action_cosmetics'), color: '#A855F7', onPress: () => requireSignIn(() => navigation.navigate('MyCosmeticsScreen'), t('home_tab.signin_cosmetics')) },

@@ -1,7 +1,7 @@
 {
   "rules": {
     "users": {
-      ".indexOn": ["isSelectedReminderEnabled", "isReminderEnabled", "fcmToken"],
+      ".indexOn": ["isSelectedReminderEnabled", "isReminderEnabled", "fcmToken", "isModerator", "isBabyMod", "isTrusted", "isCMSR"],
       "$userId": {
         ".read": true,
         ".write": true

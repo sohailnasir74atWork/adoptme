@@ -1,23 +1,18 @@
 /**
- * Cloud Functions: Mod/JMod roster sync
+ * Cloud Functions: Mod / JMod role triggers
  *
- * syncModRole_Moderator / syncModRole_BabyMod:
- *   Deep-path RTDB triggers that only fire when isModerator or isBabyMod
- *   changes — not on every user write. Handles promotions and demotions.
- *
- * refreshModProfiles:
- *   Scheduled function that updates displayName/avatar for existing mods
- *   every 6 hours. Only touches the ~10 mod entries, not all users.
- *
- * seedModRoster:
- *   One-time seed that runs on schedule but only works if mods node is
- *   empty. Uses indexed queries (not full user dump).
+ * Deep-path RTDB triggers — fire only when isModerator / isBabyMod
+ * changes, not on every user write. Mod rank wins over jmod when both
+ * flags are true.
  *
  * RTDB structure:
- *   mods/{uid}/ { displayName, avatar, role, updatedAt }
+ *   mods/{uid}/ { displayName, avatar, role: 'mod' | 'jmod', updatedAt }
+ *
+ * Refresh + seed maintenance lives in syncRosterMaintenance.js
+ * (one shared schedule for mods + trusted + cmsr).
  *
  * Deployment:
- * firebase deploy --only functions:syncModRole_Moderator,functions:syncModRole_BabyMod,functions:refreshModProfiles,functions:seedModRoster
+ * firebase deploy --only functions:syncModRole_Moderator,functions:syncModRole_BabyMod
  */
 
 const admin = require('firebase-admin');
@@ -29,6 +24,18 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
+// Read only the two fields we need — not the full user doc
+async function readNameAvatar(uid) {
+  const [nameSnap, avatarSnap] = await Promise.all([
+    db.ref(`users/${uid}/displayName`).once('value'),
+    db.ref(`users/${uid}/avatar`).once('value'),
+  ]);
+  return {
+    displayName: nameSnap.val() || 'Unknown',
+    avatar: avatarSnap.val() || '',
+  };
+}
+
 // ─── Trigger: fires ONLY when users/{uid}/isModerator changes ───
 exports.syncModRole_Moderator = functions
   .runWith({ memory: '128MB', timeoutSeconds: 10 })
@@ -39,26 +46,24 @@ exports.syncModRole_Moderator = functions
     const isMod = change.after.val() === true;
 
     if (isMod) {
-      // Promoted to mod — fetch profile and write entry
-      const userSnap = await db.ref(`users/${uid}`).once('value');
-      const data = userSnap.val() || {};
+      const profile = await readNameAvatar(uid);
       await db.ref(`mods/${uid}`).set({
-        displayName: data.displayName || 'Unknown',
-        avatar: data.avatar || '',
+        ...profile,
         role: 'mod',
         updatedAt: Date.now(),
       });
     } else {
-      // Demoted — check if they're still a jmod before removing
+      // Demoted — keep as 'jmod' if isBabyMod is still true, else remove
       const jmodSnap = await db.ref(`users/${uid}/isBabyMod`).once('value');
       if (jmodSnap.val() === true) {
-        await db.ref(`mods/${uid}/role`).set('jmod');
-        await db.ref(`mods/${uid}/updatedAt`).set(Date.now());
+        await db.ref(`mods/${uid}`).update({
+          role: 'jmod',
+          updatedAt: Date.now(),
+        });
       } else {
         await db.ref(`mods/${uid}`).remove();
       }
     }
-
     return null;
   });
 
@@ -72,130 +77,20 @@ exports.syncModRole_BabyMod = functions
     const isJmod = change.after.val() === true;
 
     if (isJmod) {
-      // Promoted to jmod — only write if not already a full mod
+      // Already a full mod? mod rank wins, leave entry alone
       const modSnap = await db.ref(`users/${uid}/isModerator`).once('value');
-      if (modSnap.val() === true) return null; // already a mod, mod rank wins
+      if (modSnap.val() === true) return null;
 
-      const userSnap = await db.ref(`users/${uid}`).once('value');
-      const data = userSnap.val() || {};
+      const profile = await readNameAvatar(uid);
       await db.ref(`mods/${uid}`).set({
-        displayName: data.displayName || 'Unknown',
-        avatar: data.avatar || '',
+        ...profile,
         role: 'jmod',
         updatedAt: Date.now(),
       });
     } else {
-      // Demoted — check if they're still a full mod before removing
       const modSnap = await db.ref(`users/${uid}/isModerator`).once('value');
       if (modSnap.val() === true) return null; // still a mod, keep entry
       await db.ref(`mods/${uid}`).remove();
     }
-
-    return null;
-  });
-
-// ─── Scheduled: refresh displayName/avatar for existing mods ───
-// Only reads the ~10 mod entries, not all 100K+ users
-exports.refreshModProfiles = functions
-  .runWith({ memory: '128MB', timeoutSeconds: 30 })
-  .pubsub
-  .schedule('every 6 hours')
-  .onRun(async () => {
-    const modsSnap = await db.ref('mods').once('value');
-    if (!modsSnap.exists()) return null;
-
-    const updates = {};
-    const uids = Object.keys(modsSnap.val());
-
-    // Fetch only the mods' profiles (parallel reads for ~10 users)
-    const userSnaps = await Promise.all(
-      uids.map(uid => db.ref(`users/${uid}`).once('value'))
-    );
-
-    userSnaps.forEach((snap, i) => {
-      const uid = uids[i];
-      const data = snap.val();
-      if (!data) {
-        // User deleted, remove from mods
-        updates[`mods/${uid}`] = null;
-        return;
-      }
-      const currentMod = modsSnap.val()[uid];
-      if (data.displayName !== currentMod.displayName || data.avatar !== currentMod.avatar) {
-        updates[`mods/${uid}/displayName`] = data.displayName || 'Unknown';
-        updates[`mods/${uid}/avatar`] = data.avatar || '';
-        updates[`mods/${uid}/updatedAt`] = Date.now();
-      }
-    });
-
-    if (Object.keys(updates).length > 0) {
-      await db.ref().update(updates);
-      console.log(`[ModSync] Refreshed profiles for ${Object.keys(updates).length / 3 | 0} mods`);
-    } else {
-      console.log('[ModSync] All mod profiles up to date');
-    }
-
-    return null;
-  });
-
-// ─── One-time seed: finds existing mods via indexed queries ───
-exports.seedModRoster = functions
-  .runWith({ memory: '256MB', timeoutSeconds: 60 })
-  .pubsub
-  .schedule('every 24 hours')
-  .onRun(async () => {
-    const modsSnap = await db.ref('mods').limitToFirst(1).once('value');
-    if (modsSnap.exists()) {
-      console.log('[ModSync] mods node already exists, skipping seed');
-      return null;
-    }
-
-    console.log('[ModSync] Seeding mods node...');
-    const updates = {};
-    let count = 0;
-
-    const modSnap = await db.ref('users')
-      .orderByChild('isModerator')
-      .equalTo(true)
-      .once('value');
-
-    if (modSnap.exists()) {
-      modSnap.forEach(child => {
-        const data = child.val();
-        updates[`mods/${child.key}`] = {
-          displayName: data.displayName || 'Unknown',
-          avatar: data.avatar || '',
-          role: 'mod',
-          updatedAt: Date.now(),
-        };
-        count++;
-      });
-    }
-
-    const jmodSnap = await db.ref('users')
-      .orderByChild('isBabyMod')
-      .equalTo(true)
-      .once('value');
-
-    if (jmodSnap.exists()) {
-      jmodSnap.forEach(child => {
-        if (!updates[`mods/${child.key}`]) {
-          const data = child.val();
-          updates[`mods/${child.key}`] = {
-            displayName: data.displayName || 'Unknown',
-            avatar: data.avatar || '',
-            role: 'jmod',
-            updatedAt: Date.now(),
-          };
-          count++;
-        }
-      });
-    }
-
-    if (count > 0) {
-      await db.ref().update(updates);
-    }
-
-    console.log(`[ModSync] Seeded ${count} mods/jmods`);
     return null;
   });

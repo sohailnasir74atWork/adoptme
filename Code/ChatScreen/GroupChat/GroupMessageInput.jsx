@@ -10,6 +10,8 @@ import { useLocalState } from '../../LocalGlobelStats';
 import { Image as CompressorImage } from 'react-native-compressor';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
+import { validateContent, containsLink, isAllowedLink } from '../../Helper/ContentModeration';
+import { showMessage } from 'react-native-flash-message';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -69,7 +71,8 @@ const GroupMessageInput = ({
   const [imageUris, setImageUris] = useState([]); // Array to hold up to 3 images
 
   const { localState } = useLocalState();
-  const { theme, user } = useGlobalState();
+  const { theme, user, isAdmin } = useGlobalState();
+  const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
   const { t } = useTranslation();
 
@@ -223,6 +226,20 @@ const GroupMessageInput = ({
 
     if (!textToSend && imagesToSend.length === 0 && fruitsToSend.length === 0) {
       return;
+    }
+
+    if (textToSend) {
+      // If message contains a link, only allow YouTube and TikTok for everyone; block everything else
+      if (containsLink(textToSend) && !isAllowedLink(textToSend) && !canBypassModeration) {
+        showMessage({ message: 'Only YouTube and TikTok links are allowed.', type: 'danger', duration: 3000 });
+        return;
+      }
+      // Run other content checks (profanity, spam, etc.) — link check handled above
+      const validation = validateContent(textToSend, { skipLinkCheck: true, skipAll: canBypassModeration });
+      if (!validation.isValid) {
+        showMessage({ message: validation.reason || 'Message not allowed.', type: 'danger', duration: 3000 });
+        return;
+      }
     }
 
     setIsSending(true);

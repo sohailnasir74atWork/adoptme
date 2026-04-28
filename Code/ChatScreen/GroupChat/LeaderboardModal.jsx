@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { ref, get } from '@react-native-firebase/database';
+import { warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 import { collection, getDocs, query, orderBy, limit, doc, getDoc } from '@react-native-firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -96,32 +97,19 @@ const LeaderboardModal = ({
         return b.averageRating - a.averageRating;
       });
 
-      // ✅ Fetch user details (displayName, avatar) for each user in parallel
-      const userDetailsPromises = ratingsArray.map(async (item) => {
-        try {
-          const [displayNameSnap, avatarSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${item.userId}/displayName`)).catch(() => null),
-            get(ref(appdatabase, `users/${item.userId}/avatar`)).catch(() => null),
-          ]);
+      // Route through profileCache: one read per uncached uid, served from MMKV thereafter.
+      const userIds = ratingsArray.map(it => it.userId);
+      await warmProfileCache(appdatabase, userIds);
 
-          return {
-            ...item,
-            displayName: displayNameSnap?.exists() ? displayNameSnap.val() : 'Anonymous',
-            avatar: avatarSnap?.exists() ? avatarSnap.val() : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            rank: ratingsArray.indexOf(item) + 1,
-          };
-        } catch (error) {
-          console.error(`Error fetching user ${item.userId}:`, error);
-          return {
-            ...item,
-            displayName: 'Anonymous',
-            avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            rank: ratingsArray.indexOf(item) + 1,
-          };
-        }
+      const leaderboardWithDetails = ratingsArray.map((item, index) => {
+        const cached = getCachedProfile(item.userId);
+        return {
+          ...item,
+          displayName: cached?.displayName || 'Anonymous',
+          avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          rank: index + 1,
+        };
       });
-
-      const leaderboardWithDetails = await Promise.all(userDetailsPromises);
 
       // ✅ Save to cache
       const cacheData = {

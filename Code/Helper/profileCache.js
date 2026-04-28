@@ -135,13 +135,15 @@ export const getOrFetchProfile = async (db, uid) => {
 export const warmProfileCache = async (db, uids) => {
   if (!db || !Array.isArray(uids) || uids.length === 0) return;
 
-  // Filter to only uncached UIDs
   const uncached = [...new Set(uids)].filter(uid => !getCachedProfile(uid));
   if (uncached.length === 0) return;
 
-  // Fetch in parallel (max 10 at a time to avoid flooding)
-  const batch = uncached.slice(0, 10);
-  await Promise.allSettled(batch.map(uid => getOrFetchProfile(db, uid)));
+  // Process all uncached uids in waves of 10 — bounded concurrency, no flooding.
+  const WAVE = 10;
+  for (let i = 0; i < uncached.length; i += WAVE) {
+    const wave = uncached.slice(i, i + WAVE);
+    await Promise.allSettled(wave.map(uid => getOrFetchProfile(db, uid)));
+  }
 };
 
 // ────────────────────────────────────────────────────────
@@ -204,6 +206,60 @@ export const resolveProfile = (msg) => {
     chatBubbleBg: msg.chatBubbleBg ?? cached?.chatBubbleBg ?? null,
     topBadge: msg.topBadge ?? cached?.topBadge ?? null,
   };
+};
+
+// ────────────────────────────────────────────────────────
+//  FULL-RECORD CACHE — caches the raw /users/{uid} record
+//  for screens (BottomDrawer, admin tools) that need many
+//  user fields beyond the chat-render subset. Kept under a
+//  separate key prefix so the chat profile cache is unaffected.
+// ────────────────────────────────────────────────────────
+const FULL_KEY = (uid) => `full_${uid}`;
+
+export const getCachedFullProfile = (uid) => {
+  if (!uid) return null;
+  try {
+    const raw = cache.getString(FULL_KEY(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.t > TTL) {
+      cache.delete(FULL_KEY(uid));
+      return null;
+    }
+    return parsed.d;
+  } catch {
+    return null;
+  }
+};
+
+export const setCachedFullProfile = (uid, record) => {
+  if (!uid) return;
+  try {
+    cache.set(FULL_KEY(uid), JSON.stringify({ d: record || null, t: Date.now() }));
+  } catch {
+    // ignore — cache is optional
+  }
+};
+
+export const invalidateFullProfile = (uid) => {
+  if (!uid) return;
+  try { cache.delete(FULL_KEY(uid)); } catch {}
+};
+
+// Read the raw /users/{uid} once, cache it, return it. Returns null on missing.
+export const getOrFetchFullProfile = async (db, uid) => {
+  if (!uid || !db) return null;
+  const cached = getCachedFullProfile(uid);
+  if (cached !== null) return cached;
+  try {
+    const snap = await get(ref(db, `users/${uid}`));
+    const record = snap.exists() ? snap.val() : null;
+    setCachedFullProfile(uid, record);
+    return record;
+  } catch (err) {
+    console.warn('[profileCache] getOrFetchFullProfile error:', err?.message);
+    return null;
+  }
 };
 
 // ────────────────────────────────────────────────────────

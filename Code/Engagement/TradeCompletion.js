@@ -116,7 +116,24 @@ const TradeCompletion = ({
           // Remove gave items from owned
           gave.forEach(g => {
             const gName = (g.name || g.Name || '').toLowerCase();
-            const idx = ownedPets.findIndex(p => (p.name || '').toLowerCase() === gName);
+            const gType = g.valueType || 'd';
+            const gFly = !!g.isFly;
+            const gRide = !!g.isRide;
+            // Match exact variant: same name + valueType + fly + ride.
+            // Falls back to name-only only when no variant exists, so a neon
+            // trade can never silently remove a mega of the same pet.
+            let idx = ownedPets.findIndex(p =>
+              (p.name || '').toLowerCase() === gName &&
+              (p.valueType || 'd') === gType &&
+              !!p.isFly === gFly &&
+              !!p.isRide === gRide
+            );
+            if (idx === -1) {
+              const sameName = ownedPets.filter(p => (p.name || '').toLowerCase() === gName);
+              if (sameName.length === 1) {
+                idx = ownedPets.indexOf(sameName[0]);
+              }
+            }
             if (idx !== -1) {
               ownedPets.splice(idx, 1);
               removedNames.push(g.name || g.Name);

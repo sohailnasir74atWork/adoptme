@@ -12,6 +12,7 @@ const ProfileAdminActions = ({
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
   handleDeleteUserData, deletingUser = false,
+  canDeleteUser = false,
 }) => {
   const c = getThemeColors(isDarkMode);
   const isBabyModOnly = isBabyMod && !isAdmin && !isModerator;
@@ -98,8 +99,8 @@ const ProfileAdminActions = ({
         )}
       </View>
 
-      {/* Delete User Data — admin only */}
-      {isAdmin && handleDeleteUserData && (
+      {/* Delete User Data — admins + owner UID */}
+      {canDeleteUser && handleDeleteUserData && (
         <>
           <View style={{ height: 1, backgroundColor: border, marginTop: 10, marginBottom: 10 }} />
           <TouchableOpacity

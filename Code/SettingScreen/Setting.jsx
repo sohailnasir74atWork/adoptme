@@ -32,6 +32,7 @@ import config from '../Helper/Environment';
 import notifee from '@notifee/react-native';
 import SubscriptionScreen from './OfferWall';
 import { ref, remove, get, update, set } from '@react-native-firebase/database';
+import { warmProfileCache, getCachedProfile } from '../Helper/profileCache';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 // useLanguage removed - using i18n from useTranslation hook
 import { useTranslation } from 'react-i18next';
@@ -1712,23 +1713,15 @@ export default function SettingsScreen({ selectedTheme }) {
         const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
         const followerIds = displayDocs.map(d => d.data().followerId).filter(Boolean);
 
-        const followersWithDetails = await Promise.all(
-          followerIds.map(async (followerId) => {
-            try {
-              const [displayNameSnap, avatarSnap] = await Promise.all([
-                get(ref(appdatabase, `users/${followerId}/displayName`)),
-                get(ref(appdatabase, `users/${followerId}/avatar`)),
-              ]);
-              return {
-                id: followerId,
-                displayName: displayNameSnap.val() || 'Unknown',
-                avatar: avatarSnap.val() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-              };
-            } catch {
-              return { id: followerId, displayName: 'Unknown', avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' };
-            }
-          })
-        );
+        await warmProfileCache(appdatabase, followerIds);
+        const followersWithDetails = followerIds.map((followerId) => {
+          const cached = getCachedProfile(followerId);
+          return {
+            id: followerId,
+            displayName: cached?.displayName || 'Unknown',
+            avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          };
+        });
 
         setModalFollowers(followersWithDetails);
         setModalLastFollowerDoc(displayDocs[displayDocs.length - 1] || null);
@@ -1776,23 +1769,15 @@ export default function SettingsScreen({ selectedTheme }) {
       const displayDocs = hasMore ? docs.slice(0, FOLLOWERS_PAGE_SIZE) : docs;
       const followerIds = displayDocs.map(d => d.data().followerId).filter(Boolean);
 
-      const newFollowers = await Promise.all(
-        followerIds.map(async (followerId) => {
-          try {
-            const [displayNameSnap, avatarSnap] = await Promise.all([
-              get(ref(appdatabase, `users/${followerId}/displayName`)),
-              get(ref(appdatabase, `users/${followerId}/avatar`)),
-            ]);
-            return {
-              id: followerId,
-              displayName: displayNameSnap.val() || 'Unknown',
-              avatar: avatarSnap.val() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            };
-          } catch {
-            return { id: followerId, displayName: 'Unknown', avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' };
-          }
-        })
-      );
+      await warmProfileCache(appdatabase, followerIds);
+      const newFollowers = followerIds.map((followerId) => {
+        const cached = getCachedProfile(followerId);
+        return {
+          id: followerId,
+          displayName: cached?.displayName || 'Unknown',
+          avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+        };
+      });
 
       setModalFollowers(prev => [...prev, ...newFollowers]);
       setModalLastFollowerDoc(displayDocs[displayDocs.length - 1] || null);

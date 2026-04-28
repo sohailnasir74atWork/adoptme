@@ -300,7 +300,7 @@ function App() {
           >
             {(props) => <PrivateChatRootWrapper {...props} />}
           </Stack.Screen>
-          <Stack.Screen name="LeaderboardScreen" options={{ title: 'Top Traders', ...headerOptions }} component={LeaderboardScreen} />
+          <Stack.Screen name="LeaderboardScreen" options={{ title: 'Leaderboard', ...headerOptions }} component={LeaderboardScreen} />
           <Stack.Screen name="ModsScreen" options={{ headerShown: false }} component={ModsScreen} />
 
           <Stack.Screen name="GameHub" options={{ title: 'Game Hub', ...headerOptions }}>

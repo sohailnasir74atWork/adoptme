@@ -115,6 +115,13 @@ const INAPPROPRIATE_PATTERNS = [
   /\bfetish(?:es)?\b/i,
 ];
 
+// ✅ Allowed link domains (YouTube + TikTok)
+const ALLOWED_LINK_PATTERNS = [
+  /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\//i,
+  /(?:https?:\/\/)?(?:www\.)?tiktok\.com\//i,
+  /(?:https?:\/\/)?vm\.tiktok\.com\//i,
+];
+
 // ✅ URL patterns (already covered, but included for completeness)
 const URL_PATTERNS = [
   /https?:\/\//i,
@@ -164,15 +171,32 @@ export const containsLink = (text) => {
 };
 
 /**
+ * Check if a link in the text is an allowed domain (YouTube or TikTok)
+ * @param {string} text - Text to check
+ * @returns {boolean} - True if the link is YouTube or TikTok
+ */
+export const isAllowedLink = (text) => {
+  if (!text || typeof text !== 'string') return false;
+  return ALLOWED_LINK_PATTERNS.some(pattern => pattern.test(text));
+};
+
+/**
  * Comprehensive content moderation check
  * Checks for: profanity, spam, inappropriate content, links
  * @param {string} text - Text to check
- * @param {{skipLinkCheck?: boolean}} [options] - Options (e.g. skip link check for admins)
+ * @param {{skipLinkCheck?: boolean, skipAll?: boolean}} [options] - Options
+ *   - skipLinkCheck: bypass only the link check
+ *   - skipAll: bypass every check (used for admins/full moderators)
  * @returns {{isValid: boolean, reason?: string}} - Validation result
  */
 export const validateContent = (text, options = {}) => {
   if (!text || typeof text !== 'string') {
     return { isValid: true }; // Empty text is valid
+  }
+
+  // Full bypass — admins / full moderators can post anything.
+  if (options.skipAll) {
+    return { isValid: true };
   }
 
   // Check profanity
