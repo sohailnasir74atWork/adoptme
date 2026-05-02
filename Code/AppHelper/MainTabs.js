@@ -27,6 +27,7 @@ import Animated, {
   withSequence,
   withTiming,
   withDelay,
+  cancelAnimation,
 } from 'react-native-reanimated';
 
 
@@ -53,6 +54,13 @@ const AnimatedTabIcon = React.memo(({ iconName, color, size, focused, isDark }) 
       scale.value = withSpring(1, { damping: 15, stiffness: 150 });
       rotate.value = withTiming(0, { duration: 150 });
     }
+
+    // ✅ Cancel running animations on unmount to prevent REANodesManager crash
+    return () => {
+      cancelAnimation(scale);
+      cancelAnimation(rotate);
+      cancelAnimation(translateY);
+    };
   }, [focused]);
 
   const animatedStyle = useAnimatedStyle(() => ({

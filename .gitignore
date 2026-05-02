@@ -56,6 +56,9 @@ yarn-error.log
 
 # Bundle artifact
 *.jsbundle
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/assets/index.android.bundle.map
+**/.DS_Store
 
 # Ruby / CocoaPods
 **/Pods/
@@ -67,6 +70,10 @@ yarn-error.log
 # Firebase service account — secret, never commit
 serviceAccount.json
 serviceAccount*.json
+
+# Local credentials & analytics scratch — never commit
+.secrets/
+analytics/
 
 # testing
 /coverage

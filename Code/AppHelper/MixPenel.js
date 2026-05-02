@@ -1,6 +1,8 @@
-import { Mixpanel } from "mixpanel-react-native";
+// Analytics removed. Wrapper kept as a no-op so the ~33 existing
+// `mixpanel.track(...)` call sites compile and run without edits.
+// Safe to delete this file and remove imports if/when those call sites
+// are cleaned up.
 
-const trackAutomaticEvents = true;
-export const mixpanel = new Mixpanel("d09abb03cee5f7c89d5f11a1f21ce499", trackAutomaticEvents);
-mixpanel.init();
-
+export const mixpanel = {
+  track: () => {},
+};

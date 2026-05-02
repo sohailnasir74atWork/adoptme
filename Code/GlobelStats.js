@@ -224,18 +224,38 @@ export const GlobalStateProvider = ({ children }) => {
       const userId = loggedInUser.uid;
       const userRef = ref(appdatabase, `users/${userId}`);
 
-
-      // 🔄 Fetch user data
-      const snapshot = await get(userRef);
+      // Project only the leaf fields that user state actually consumes.
+      // Skips shop/*, posts, blocked_users, levelRewards, dailyStars, fcmToken,
+      // notifications, etc. — these can be lazy-loaded via getOrFetchProfile or
+      // getOrFetchFullProfile. Single fat read of /users/{uid} used to scale with
+      // user data growth, slowing every cold start.
+      const PROJECTION = [
+        'email', 'decodedEmail', 'createdAt',
+        'displayName', 'avatar', 'userName',
+        'robloxUsername', 'robloxUserId', 'robloxUsernameVerified',
+        'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR',
+        'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
+        'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
+      ];
+      const fieldSnaps = await Promise.all(
+        PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`))),
+      );
+      // xp is a small object — fetch the whole sub-tree
+      const xpSnap = await get(ref(appdatabase, `users/${userId}/xp`));
+      const exists = fieldSnaps.some((s) => s.exists()) || xpSnap.exists();
       let userData;
 
       const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com' || loggedInUser.email === 'sohailnasir74@gmail.com';
       if (makeadmin) { setIsAdmin(makeadmin) }
       setCurrentuserEmail(loggedInUser.email)
 
-      if (snapshot.exists()) {
+      if (exists) {
         // ⏳ USER EXISTS → Keep existing createdAt
-        const existing = snapshot.val();
+        const existing = {};
+        PROJECTION.forEach((f, i) => {
+          if (fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
+        });
+        if (xpSnap.exists()) existing.xp = xpSnap.val();
 
         // ✅ SELF-HEALING: Update email if missing or changed
         if (loggedInUser.email && (!existing.email || existing.email !== loggedInUser.email)) {

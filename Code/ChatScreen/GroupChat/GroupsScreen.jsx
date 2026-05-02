@@ -30,6 +30,7 @@ import CreateGroupModal from './CreateGroupModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { getThemeColors } from '../../Helper/themeColors';
+import { ChatListSkeleton } from './ChatListSkeleton';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -1434,7 +1435,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
       {/* Groups List */}
       {groupsLoading || invitationsLoading ? (
-        <ActivityIndicator size="large" color="#1E88E5" style={{ flex: 1 }} />
+        <ChatListSkeleton count={6} isDarkMode={isDarkMode} />
       ) : activeTab === 'joined' ? (
         // Joined Groups Tab
         filteredGroups.length === 0 && pendingInvitations.length === 0 && pendingJoinRequests.length === 0 ? (

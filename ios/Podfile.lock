@@ -1466,12 +1466,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - Mixpanel-swift (5.1.0):
-    - Mixpanel-swift/Complete (= 5.1.0)
-  - Mixpanel-swift/Complete (5.1.0)
-  - MixpanelReactNative (3.1.2):
-    - Mixpanel-swift (= 5.1.0)
-    - React-Core
   - MMKVCore (2.4.0)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
@@ -1543,9 +1537,6 @@ PODS:
     - PromisesObjC (= 2.4.0)
   - PurchasesHybridCommon (17.52.0):
     - RevenueCat (= 5.65.0)
-  - PurchasesHybridCommonUI (17.52.0):
-    - PurchasesHybridCommon (= 17.52.0)
-    - RevenueCatUI (= 5.65.0)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3458,7 +3449,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-compressor (1.16.0):
+  - react-native-compressor (1.18.1):
     - boost
     - DoubleConversion
     - fast_float
@@ -4192,8 +4183,6 @@ PODS:
     - SocketRocket
   - RecaptchaInterop (101.0.0)
   - RevenueCat (5.65.0)
-  - RevenueCatUI (5.65.0):
-    - RevenueCat (= 5.65.0)
   - RNAppleAuthentication (2.4.1):
     - React-Core
   - RNBootSplash (6.3.10):
@@ -4558,9 +4547,6 @@ PODS:
     - RNNotifee/NotifeeCore (= 9.1.8)
   - RNNotifee/NotifeeCore (9.1.8):
     - React-Core
-  - RNPaywalls (9.14.0):
-    - PurchasesHybridCommonUI (= 17.52.0)
-    - React-Core
   - RNPurchases (9.14.0):
     - PurchasesHybridCommon (= 17.52.0)
     - React-Core
@@ -4592,7 +4578,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - RNReanimated (4.2.3):
+  - RNReanimated (4.3.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -4619,11 +4605,12 @@ PODS:
     - ReactCodegen
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
-    - RNReanimated/reanimated (= 4.2.3)
+    - RNReanimated/apple (= 4.3.0)
+    - RNReanimated/common (= 4.3.0)
     - RNWorklets
     - SocketRocket
     - Yoga
-  - RNReanimated/reanimated (4.2.3):
+  - RNReanimated/apple (4.3.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -4650,11 +4637,10 @@ PODS:
     - ReactCodegen
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
-    - RNReanimated/reanimated/apple (= 4.2.3)
     - RNWorklets
     - SocketRocket
     - Yoga
-  - RNReanimated/reanimated/apple (4.2.3):
+  - RNReanimated/common (4.3.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -4985,7 +4971,6 @@ DEPENDENCIES:
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - lottie-react-native (from `../node_modules/lottie-react-native`)
-  - MixpanelReactNative (from `../node_modules/mixpanel-react-native`)
   - NitroMmkv (from `../node_modules/react-native-mmkv`)
   - NitroModules (from `../node_modules/react-native-nitro-modules`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -5081,7 +5066,6 @@ DEPENDENCIES:
   - "RNGoogleSignin (from `../node_modules/@react-native-google-signin/google-signin`)"
   - RNLocalize (from `../node_modules/react-native-localize`)
   - "RNNotifee (from `../node_modules/@notifee/react-native`)"
-  - RNPaywalls (from `../node_modules/react-native-purchases-ui`)
   - RNPurchases (from `../node_modules/react-native-purchases`)
   - RNReactNativeHapticFeedback (from `../node_modules/react-native-haptic-feedback`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
@@ -5126,16 +5110,13 @@ SPEC REPOS:
     - GTMSessionFetcher
     - leveldb-library
     - lottie-ios
-    - Mixpanel-swift
     - MMKVCore
     - nanopb
     - PromisesObjC
     - PromisesSwift
     - PurchasesHybridCommon
-    - PurchasesHybridCommonUI
     - RecaptchaInterop
     - RevenueCat
-    - RevenueCatUI
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -5156,8 +5137,6 @@ EXTERNAL SOURCES:
     :tag: hermes-v0.14.1
   lottie-react-native:
     :path: "../node_modules/lottie-react-native"
-  MixpanelReactNative:
-    :path: "../node_modules/mixpanel-react-native"
   NitroMmkv:
     :path: "../node_modules/react-native-mmkv"
   NitroModules:
@@ -5346,8 +5325,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-localize"
   RNNotifee:
     :path: "../node_modules/@notifee/react-native"
-  RNPaywalls:
-    :path: "../node_modules/react-native-purchases-ui"
   RNPurchases:
     :path: "../node_modules/react-native-purchases"
   RNReactNativeHapticFeedback:
@@ -5408,8 +5385,6 @@ SPEC CHECKSUMS:
   leveldb-library: cc8b8f8e013647a295ad3f8cd2ddf49a6f19be19
   lottie-ios: 8f959969761e9c45d70353667d00af0e5b9cadb3
   lottie-react-native: a2e73ead497511a11d9b5dc520e79343f17529ed
-  Mixpanel-swift: 7b26468fc0e2e521104e51d65c4bbf7cab8162f8
-  MixpanelReactNative: b523d54778e31e396c55df6f732173f3819e58ee
   MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   NitroMmkv: d5d6bea7b502ac15baab67337fc308b11897e525
@@ -5417,7 +5392,6 @@ SPEC CHECKSUMS:
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
   PurchasesHybridCommon: 27cca251e01998c53a6b31bf53baf09f84926609
-  PurchasesHybridCommonUI: fb64dd31451c45a11aa9ac0cd40aac8c0a88b2d0
   RCT-Folly: 59ec0ac1f2f39672a0c6e6cecdd39383b764646f
   RCTDeprecation: 9da1d0cf93db23ca8b41e8efe9ae558fd9c0077f
   RCTRequired: 92a63c7041031a131fa5206eb082d53f95729b79
@@ -5455,7 +5429,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 2475460b57076a927c3817517d540f2fe3f95022
   React-microtasksnativemodule: 93566ea522d50f3f2a8187eb3aa0a547896a34a5
   react-native-cameraroll: aa5f6fe38b5574f1066a37ceaad5ece494a157a5
-  react-native-compressor: 2215e3c639a5b4259089de9cf87f7825a14b71db
+  react-native-compressor: b8f9426d5c3aced5e97ec0629d27b2b34bc8decf
   react-native-image-picker: b99d9c1f2ddbef491eb49e1103e5c2ce78b9ab37
   react-native-in-app-review: cf4a29c5a1d6bb28dd0d15f1fb1faa25e265bfb5
   react-native-safe-area-context: 7e0ba374906d8f5009aaf96cd19d4866d8de342b
@@ -5496,7 +5470,6 @@ SPEC CHECKSUMS:
   ReactCommon: bb6cb6b23087910d53710256929454c8c4eac756
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
   RevenueCat: 9a37739bdf42af84dd87e023db340de7e0f9d874
-  RevenueCatUI: 1a503c1713ab8f598a0eb55e9954de7e3616aa5b
   RNAppleAuthentication: b2d8b5ccba86b5b1e55a1a2e858f7ac6d8a21816
   RNBootSplash: 41b6d3a5b68dde8aacd4fb11f1e2d8bbf9e57173
   RNCClipboard: 4eea71d801c880175c12f6ab14332ca86fed935f
@@ -5513,10 +5486,9 @@ SPEC CHECKSUMS:
   RNGoogleSignin: 3593186e676d55c10d95130278d5f5b26d8fe7f5
   RNLocalize: 842268670666fae0b00edd62e7a8a0330cb86986
   RNNotifee: 4a6ee5c7deaf00e005050052d73ee6315dff7ec9
-  RNPaywalls: 990a630d86aad9ff06454364e32feccd7e1b386f
   RNPurchases: 0c66db11d9323c2d771f8cc594562c8a90f04ee7
   RNReactNativeHapticFeedback: 43c09eb41d8321be2e1375cb87ae734e58f677b0
-  RNReanimated: 8865aa14d69ed194ae41aa58c15a51c3e066f492
+  RNReanimated: b2300baf1f712ba0b7bd4b267ada27a351fea7e1
   RNScreens: 656e050942ae9445f5cc45d05d57f13ce7a4c8e4
   RNShare: e48a664063b9f160ef353f042c178a55b90b9ade
   RNSound: 9a85701a35e3132484515e73b694610997c7fdfb

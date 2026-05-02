@@ -8,10 +8,8 @@ import {
   Platform,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { navigationRef } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import SettingsScreen from './Code/SettingScreen/Setting';
 import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
 import { AdsConsent, AdsConsentStatus, MobileAds } from 'react-native-google-mobile-ads';
@@ -21,37 +19,19 @@ import {
   MyLightTheme,
   requestReview,
 } from './Code/AppHelper/AppHelperFunction';
-import OnboardingScreen from './Code/AppHelper/OnBoardingScreen';
 import { useTranslation } from 'react-i18next';
 
-import InterstitialAdManager from './Code/Ads/IntAd';
-import RewardedAdManager from './Code/Ads/RewardedAdManager';
-import AppOpenAdManager from './Code/Ads/openApp';
 import RNBootSplash from "react-native-bootsplash";
 import { requestTrackingPermission } from 'react-native-tracking-transparency';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
-import { checkForUpdate } from './Code/AppHelper/InAppUpdateChecker';
-import AdminUnbanScreen from './Code/AppHelper/AdminDashboard';
 import Icon from 'react-native-vector-icons/Ionicons';
-import SubscriptionScreen from './Code/SettingScreen/OfferWall';
-import AnalyticsScreen from './Code/Analytics/AnalyticsScreen';
-import GameHub from './Code/Engagement/GameHub';
-import QuizBattle from './Code/ValuesScreen/PetGuessingGame/QuizBattle';
-import TradeShowdown from './Code/ValuesScreen/PetGuessingGame/TradeShowdown';
-import MysteryEggScreen from './Code/Engagement/MysteryEgg';
-import MyCosmeticsScreen from './Code/Engagement/MyCosmeticsScreen';
-import ArrowGameScreen from './Code/Engagement/ArrowGameScreen';
-import ValueScreen from './Code/ValuesScreen/ValueScreen';
-import LeaderboardScreen from './Code/ChatScreen/GroupChat/LeaderboardScreen';
-import SocialDashboard from './Code/AppHelper/SocialDashboard';
-import BadgesScreen from './Code/SettingScreen/BadgesScreen';
-import TradeJournal from './Code/Engagement/TradeJournal';
-import ModsScreen from './Code/Engagement/ModsScreen';
 import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
 import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/database';
-import NotificationFeed from './Code/Engagement/NotificationFeed';
-import PrivateChatScreen from './Code/ChatScreen/PrivateChat/PrivateChat';
-import PrivateChatHeader from './Code/ChatScreen/PrivateChat/PrivateChatHeader';
+
+// Heavy screens stay out of the eager-import graph and are loaded on first
+// navigation via getComponent / inline require. ArrowGameScreen alone is
+// 2300+ lines; admin/analytics/leaderboard etc. are never visited by most
+// users. Each one used to add to JS bundle parse time on every cold start.
 
 
 
@@ -66,9 +46,11 @@ const setNavigationBarAppearance = (theme) => {
 };
 
 // Wrapper for PrivateChat used from root stack (SocialDashboard → Chat)
-// Manages its own drawer state since it's outside ChatNavigator
+// Manages its own drawer state since it's outside ChatNavigator.
+// PrivateChat is required lazily so its bundle isn't parsed until first nav.
 const PrivateChatRootWrapper = (props) => {
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const PrivateChatScreen = require('./Code/ChatScreen/PrivateChat/PrivateChat').default;
   return (
     <PrivateChatScreen
       {...props}
@@ -122,10 +104,21 @@ function App() {
   const [showofferwall, setShowofferwall] = useState(false);
 
 
+  // Deferred to idle so it doesn't compete with first paint. Ad SDK init and
+  // the in-app-update RPC together used to block the JS thread for several
+  // hundred ms during cold start.
   useEffect(() => {
-    InterstitialAdManager.init();
-    RewardedAdManager.init();
-    checkForUpdate()
+    const id = requestIdleCallback(() => {
+      try {
+        const InterstitialAdManager = require('./Code/Ads/IntAd').default;
+        const RewardedAdManager = require('./Code/Ads/RewardedAdManager').default;
+        const { checkForUpdate } = require('./Code/AppHelper/InAppUpdateChecker');
+        InterstitialAdManager.init();
+        RewardedAdManager.init();
+        checkForUpdate();
+      } catch (_) {}
+    });
+    return () => cancelIdleCallback(id);
   }, []);
 
 
@@ -216,9 +209,11 @@ function App() {
     }
   }, [localState?.reviewCount]); // ✅ Only depend on reviewCount, not updateLocalState
 
-  // Handle Consent
+  // Consent + ATT flow runs on idle. Ads can't show until this finishes
+  // anyway, and pushing it off the critical path frees first paint.
   useEffect(() => {
-    handleUserConsent();
+    const id = requestIdleCallback(() => { handleUserConsent(); });
+    return () => cancelIdleCallback(id);
   }, [handleUserConsent]);
 
   // ✅ PERF: Memoize screen render functions to prevent remounting
@@ -232,17 +227,29 @@ function App() {
     />
   ), [selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo]);
 
-  const renderGameHub = useCallback(({ navigation }) => <GameHub navigation={navigation} />, []);
-  const renderValueScreen = useCallback(() => <ValueScreen selectedTheme={selectedTheme} />, [selectedTheme]);
-  const renderSettings = useCallback(() => <SettingsScreen selectedTheme={selectedTheme} />, [selectedTheme]);
-  const renderMyStuff = useCallback(() => (
-    <TradeJournal
-      firestoreDB={firestoreDB}
-      db={appdatabase}
-      uid={user?.id}
-      isDarkMode={theme === 'dark'}
-    />
-  ), [firestoreDB, appdatabase, user?.id, theme]);
+  const renderGameHub = useCallback(({ navigation }) => {
+    const GameHub = require('./Code/Engagement/GameHub').default;
+    return <GameHub navigation={navigation} />;
+  }, []);
+  const renderValueScreen = useCallback(() => {
+    const ValueScreen = require('./Code/ValuesScreen/ValueScreen').default;
+    return <ValueScreen selectedTheme={selectedTheme} />;
+  }, [selectedTheme]);
+  const renderSettings = useCallback(() => {
+    const SettingsScreen = require('./Code/SettingScreen/Setting').default;
+    return <SettingsScreen selectedTheme={selectedTheme} />;
+  }, [selectedTheme]);
+  const renderMyStuff = useCallback(() => {
+    const TradeJournal = require('./Code/Engagement/TradeJournal').default;
+    return (
+      <TradeJournal
+        firestoreDB={firestoreDB}
+        db={appdatabase}
+        uid={user?.id}
+        isDarkMode={theme === 'dark'}
+      />
+    );
+  }, [firestoreDB, appdatabase, user?.id, theme]);
 
   const handleCloseOfferwall = useCallback(() => setShowofferwall(false), []);
 
@@ -271,37 +278,40 @@ function App() {
                 </TouchableOpacity>
               ),
             }}
-            component={AdminUnbanScreen}
+            getComponent={() => require('./Code/AppHelper/AdminDashboard').default}
           />
 
-          <Stack.Screen name="Analytics" options={{ title: 'Market Analytics', ...headerOptions }} component={AnalyticsScreen} />
-          <Stack.Screen name="QuizBattleScreen" options={{ title: 'Quiz Battle', ...headerOptions }} component={QuizBattle} />
-          <Stack.Screen name="TradeShowdownScreen" options={{ title: 'Trade Showdown', ...headerOptions }} component={TradeShowdown} />
-          <Stack.Screen name="MysteryEggScreen" options={{ headerShown: false }} component={MysteryEggScreen} />
-          <Stack.Screen name="MyCosmeticsScreen" options={{ headerShown: false }} component={MyCosmeticsScreen} />
-          <Stack.Screen name="ArrowGameScreen" options={{ headerShown: false }} component={ArrowGameScreen} />
-          <Stack.Screen name="BadgesScreen" options={{ headerShown: false }} component={BadgesScreen} />
-          <Stack.Screen name="NotificationFeedScreen" options={{ title: 'Notifications', ...headerOptions }} component={NotificationFeed} />
-          <Stack.Screen name="SocialDashboardScreen" options={{ title: 'Friends', ...headerOptions }} component={SocialDashboard} />
+          <Stack.Screen name="Analytics" options={{ title: 'Market Analytics', ...headerOptions }} getComponent={() => require('./Code/Analytics/AnalyticsScreen').default} />
+          <Stack.Screen name="QuizBattleScreen" options={{ title: 'Quiz Battle', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/QuizBattle').default} />
+          <Stack.Screen name="TradeShowdownScreen" options={{ title: 'Trade Showdown', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/TradeShowdown').default} />
+          <Stack.Screen name="MysteryEggScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MysteryEgg').default} />
+          <Stack.Screen name="MyCosmeticsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MyCosmeticsScreen').default} />
+          <Stack.Screen name="ArrowGameScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ArrowGameScreen').default} />
+          <Stack.Screen name="BadgesScreen" options={{ headerShown: false }} getComponent={() => require('./Code/SettingScreen/BadgesScreen').default} />
+          <Stack.Screen name="NotificationFeedScreen" options={{ title: 'Notifications', ...headerOptions }} getComponent={() => require('./Code/Engagement/NotificationFeed').default} />
+          <Stack.Screen name="SocialDashboardScreen" options={{ title: 'Friends', ...headerOptions }} getComponent={() => require('./Code/AppHelper/SocialDashboard').default} />
           <Stack.Screen
             name="PrivateChatRoot"
             options={({ route }) => ({
-              headerTitle: () => (
-                <PrivateChatHeader
-                  selectedUser={route.params?.selectedUser}
-                  selectedTheme={selectedTheme}
-                  bannedUsers={[]}
-                  isDrawerVisible={route.params?._drawerVisible || false}
-                  setIsDrawerVisible={(v) => {}}
-                />
-              ),
+              headerTitle: () => {
+                const PrivateChatHeader = require('./Code/ChatScreen/PrivateChat/PrivateChatHeader').default;
+                return (
+                  <PrivateChatHeader
+                    selectedUser={route.params?.selectedUser}
+                    selectedTheme={selectedTheme}
+                    bannedUsers={[]}
+                    isDrawerVisible={route.params?._drawerVisible || false}
+                    setIsDrawerVisible={() => {}}
+                  />
+                );
+              },
               ...headerOptions,
             })}
           >
             {(props) => <PrivateChatRootWrapper {...props} />}
           </Stack.Screen>
-          <Stack.Screen name="LeaderboardScreen" options={{ title: 'Leaderboard', ...headerOptions }} component={LeaderboardScreen} />
-          <Stack.Screen name="ModsScreen" options={{ headerShown: false }} component={ModsScreen} />
+          <Stack.Screen name="LeaderboardScreen" options={{ title: 'Leaderboard', ...headerOptions }} getComponent={() => require('./Code/ChatScreen/GroupChat/LeaderboardScreen').default} />
+          <Stack.Screen name="ModsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ModsScreen').default} />
 
           <Stack.Screen name="GameHub" options={{ title: 'Game Hub', ...headerOptions }}>
             {renderGameHub}
@@ -321,7 +331,10 @@ function App() {
         </Stack.Navigator>
       </NavigationContainer>
 
-      {showofferwall && <SubscriptionScreen visible={showofferwall} onClose={handleCloseOfferwall} track='Home' showoffer={!single_offer_wall} oneWallOnly={single_offer_wall} />}
+      {showofferwall && (() => {
+        const SubscriptionScreen = require('./Code/SettingScreen/OfferWall').default;
+        return <SubscriptionScreen visible={showofferwall} onClose={handleCloseOfferwall} track='Home' showoffer={!single_offer_wall} oneWallOnly={single_offer_wall} />;
+      })()}
 
       {/* DOB gate — blocks app until user provides date of birth */}
       <DateOfBirthModal
@@ -345,8 +358,16 @@ export default function AppWrapper() {
     }
   }, [localState.isAppReady]);
   useEffect(() => {
-    if (!localState.showOnBoardingScreen) { (!localState.isPro) && AppOpenAdManager.initAndShow(); }
-  }, [localState.isPro]);
+    if (!localState.showOnBoardingScreen && !localState.isPro) {
+      const id = requestIdleCallback(() => {
+        try {
+          const AppOpenAdManager = require('./Code/Ads/openApp').default;
+          AppOpenAdManager.initAndShow();
+        } catch (_) {}
+      });
+      return () => cancelIdleCallback(id);
+    }
+  }, [localState.isPro, localState.showOnBoardingScreen]);
 
   const selectedTheme = useMemo(() => {
     if (!theme) {
@@ -361,6 +382,7 @@ export default function AppWrapper() {
   }, [updateLocalState]);
 
   if (localState.showOnBoardingScreen) {
+    const OnboardingScreen = require('./Code/AppHelper/OnBoardingScreen').default;
     return <OnboardingScreen onFinish={handleSplashFinish} selectedTheme={selectedTheme} />;
   }
 

@@ -91,12 +91,6 @@
 -dontwarn com.reactnativecompressor.**
 
 # ==============================
-# Mixpanel
-# ==============================
--keep class com.mixpanel.** { *; }
--dontwarn com.mixpanel.**
-
-# ==============================
 # BootSplash
 # ==============================
 -keep class com.zoontek.rnbootsplash.** { *; }

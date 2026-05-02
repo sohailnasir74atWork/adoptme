@@ -134,7 +134,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <View style={styles.sliderContainer}>{renderSlider(translateX3, thirdSliderImages)}</View></View> */}
             <View>
               {/* <View style={styles.spacer}></View> */}
-              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Petfolio AMV</Text>
+              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>Welcome to Petfolio</Text>
               <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>Track pets values & optimize your trades.</Text>
             </View>
           </View>

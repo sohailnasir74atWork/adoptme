@@ -17,11 +17,13 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import { ref, update, remove, set, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { ref, update, remove, set } from '@react-native-firebase/database';
 import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
+import { subscribeToChatMeta } from '../../Supabase/chatMetaBackend';
+import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
 const INITIAL_LOAD = 15; // ✅ Initial chats to display
@@ -38,11 +40,15 @@ const InboxScreen = ({ bannedUsers }) => {
   const [streaks, setStreaks] = useState(new Map());
   const [mutedChats, setMutedChats] = useState({}); // { otherUserId: boolean }
   const hasLoadedOnce = useRef(false); // ✅ Track if initial load is done
+  // Realtime channel health — debounced so a quick blip doesn't flash
+  // the "Reconnecting…" banner. Only shown if degraded for >1.5s.
+  const [reconnecting, setReconnecting] = useState(false);
+  const reconnectTimerRef = useRef(null);
 
-  // Listener attaches once per mount and stays alive across in-stack navigation.
-  // onChildAdded delivers each existing child on attach (acts as initial load) and
-  // onChildChanged delivers per-child deltas thereafter. mute state is derived from
-  // the same child events — no separate full read.
+  // Reads come from Supabase chat_meta_data; the mute toggle below and
+  // PrivateChat's unreadCount=0 reset still write to RTDB (source of
+  // truth) so notifyNewMessage and old app versions are unaffected. The
+  // mirror Cloud Function tails RTDB writes back into this table.
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setLocalChats([]);
@@ -52,7 +58,6 @@ const InboxScreen = ({ bannedUsers }) => {
 
     if (!hasLoadedOnce.current) setLocalLoading(true);
 
-    const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
     const chatsMap = new Map();
     const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
 
@@ -72,15 +77,15 @@ const InboxScreen = ({ bannedUsers }) => {
       }, 500);
     };
 
-    const handleChildChange = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      const chatData = snapshot.val();
-      if (!chatData || typeof chatData !== 'object') return;
+    const handleUpsert = (chatData) => {
+      if (!chatData || !chatData.partnerId) return;
 
-      const chatPartnerId = snapshot.key;
+      const chatPartnerId = chatData.partnerId;
       const isBlocked = banned.includes(chatPartnerId);
-      const rawUnread = chatData?.unreadCount || 0;
+      const rawUnread = chatData.unreadCount || 0;
 
+      // Block-user reset: write back to RTDB so the source of truth is
+      // corrected; the mirror CF will replay it back here.
       if (isBlocked && rawUnread > 0) {
         const blockedChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`);
         update(blockedChatRef, { unreadCount: 0 }).catch((error) => {
@@ -98,10 +103,10 @@ const InboxScreen = ({ bannedUsers }) => {
         otherUserName: chatData.receiverName || 'Anonymous',
       });
 
-      // Derive mute state from the same child event — avoids a second full read.
+      // Derive mute state from the same row — avoids a second read.
       setMutedChats(prev => {
         const wasMuted = !!prev[chatPartnerId];
-        const isMuted = !!chatData?.muted;
+        const isMuted = !!chatData.muted;
         if (wasMuted === isMuted) return prev;
         const next = { ...prev };
         if (isMuted) next[chatPartnerId] = true; else delete next[chatPartnerId];
@@ -111,21 +116,49 @@ const InboxScreen = ({ bannedUsers }) => {
       updateChatsList();
     };
 
-    const handleChildRemoved = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      chatsMap.delete(snapshot.key);
+    const handleRemove = (partnerId) => {
+      chatsMap.delete(partnerId);
       setMutedChats(prev => {
-        if (!prev[snapshot.key]) return prev;
+        if (!prev[partnerId]) return prev;
         const next = { ...prev };
-        delete next[snapshot.key];
+        delete next[partnerId];
         return next;
       });
       updateChatsList();
     };
 
-    const unsubAdded = onChildAdded(userChatsRef, handleChildChange);
-    const unsubChanged = onChildChanged(userChatsRef, handleChildChange);
-    const unsubRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
+    const unsubscribe = subscribeToChatMeta(user.id, {
+      onUpsert: handleUpsert,
+      onRemove: handleRemove,
+      // Empty-list path: subscribeToChatMeta still fires onReady once
+      // initial load + SUBSCRIBED both land, so we drop the spinner
+      // even when the user has zero chats.
+      onReady: () => {
+        if (!hasLoadedOnce.current) {
+          hasLoadedOnce.current = true;
+          setLocalLoading(false);
+        }
+      },
+      onStatus: (status) => {
+        // Show the reconnecting pill only after the channel has been
+        // degraded for >1.5s — a momentary handshake flicker shouldn't
+        // toggle UI. Once SUBSCRIBED, clear immediately.
+        if (status === 'SUBSCRIBED') {
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+          }
+          setReconnecting(false);
+          return;
+        }
+        if (!reconnectTimerRef.current) {
+          reconnectTimerRef.current = setTimeout(() => {
+            setReconnecting(true);
+            reconnectTimerRef.current = null;
+          }, 1500);
+        }
+      },
+    });
 
     const loadingFallback = setTimeout(() => {
       if (!hasLoadedOnce.current) {
@@ -135,11 +168,14 @@ const InboxScreen = ({ bannedUsers }) => {
     }, 2000);
 
     return () => {
-      unsubAdded();
-      unsubChanged();
-      unsubRemoved();
+      unsubscribe();
       clearTimeout(loadingFallback);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      setReconnecting(false);
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
@@ -412,8 +448,9 @@ const InboxScreen = ({ bannedUsers }) => {
 
   return (
     <View style={styles.container}>
+      <SyncBanner visible={reconnecting && !displayLoading} isDarkMode={isDarkMode} />
       {displayLoading ? (
-        <ActivityIndicator size="large" color="#1E88E5" style={{ flex: 1 }} />
+        <ChatListSkeleton count={6} isDarkMode={isDarkMode} />
       ) : filteredChats.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}> {t("chat.no_chats_available")}</Text>

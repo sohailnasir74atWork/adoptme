@@ -12,10 +12,12 @@ import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
-import { ref, update, get, onChildAdded, onChildChanged, onChildRemoved } from '@react-native-firebase/database';
+import { ref, update } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import AdminDashboard from '../AppHelper/AdminDashboard';
 import { useTranslation } from 'react-i18next';
+import { subscribeToChatMeta } from '../Supabase/chatMetaBackend';
+import { subscribeToGroupMeta } from '../Supabase/groupMetaBackend';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,16 +54,18 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   }), [selectedTheme]);
 
 
-  // ✅ COST-OPTIMIZED: Child listeners only — no redundant get() call
-  // onChildAdded fires once per existing child on attach, serving as initial load
-  // Removes duplicate download that get() + onChildAdded caused (was 2x bandwidth)
+  // Reads now come off Supabase (chat_meta_data table) — RTDB stays the
+  // source of truth for writes (notifyNewMessage CF + activeChats presence
+  // depend on it), and mirrorChatMetaToSupabase tails those writes here.
+  // Behaviour matches the previous RTDB child listeners: each existing row
+  // arrives once via the initial load, then realtime INSERT/UPDATE/DELETE
+  // keep the unread tally fresh.
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setunreadcount(0);
       return;
     }
 
-    const userChatsRef = ref(appdatabase, `chat_meta_data/${user.id}`);
     let totalUnread = 0;
     const unreadCounts = new Map();
 
@@ -73,15 +77,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       }, 500);
     };
 
-    const handleChildChange = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      const chatData = snapshot.val();
-      if (!chatData || typeof chatData !== 'object') return;
-
-      const chatPartnerId = snapshot.key;
+    const handleUpsert = (chatData) => {
+      if (!chatData || !chatData.partnerId) return;
+      const chatPartnerId = chatData.partnerId;
       const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
-      const rawUnread = chatData?.unreadCount || 0;
+      const rawUnread = chatData.unreadCount || 0;
 
+      // Block-user safety reset: write stays on RTDB so the source of
+      // truth is corrected; the mirror CF will replay it back here.
       if (isBlocked && rawUnread > 0) {
         update(
           ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
@@ -97,26 +100,27 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       recalcUnread();
     };
 
-    const handleChildRemoved = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      unreadCounts.delete(snapshot.key);
+    const handleRemove = (partnerId) => {
+      unreadCounts.delete(partnerId);
       recalcUnread();
     };
 
-    // onChildAdded fires for each existing child on attach — no separate get() needed
-    const unsubChatsAdded = onChildAdded(userChatsRef, handleChildChange);
-    const unsubChatsChanged = onChildChanged(userChatsRef, handleChildChange);
-    const unsubChatsRemoved = onChildRemoved(userChatsRef, handleChildRemoved);
+    const unsubscribe = subscribeToChatMeta(user.id, {
+      onUpsert: handleUpsert,
+      onRemove: handleRemove,
+    });
 
     return () => {
-      unsubChatsAdded();
-      unsubChatsChanged();
-      unsubChatsRemoved();
+      unsubscribe();
       if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
     };
   }, [user?.id, appdatabase, bannedUsers]);
 
-  // ✅ COST-OPTIMIZED: Child listeners + one-time empty-check to clear loading
+  // Group list reads off Supabase (group_meta_data table). Writes
+  // (createGroupChat, acceptGroupInvite, sendGroupMessage's per-member
+  // fan-out, mute toggles) stay on RTDB so notifyGroupMessage and
+  // /activeGroupChats presence are unaffected. mirrorGroupMetaToSupabase
+  // tails those writes into this table.
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setGroups([]);
@@ -125,22 +129,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     }
 
     setGroupsLoading(true);
-    const userGroupsRef = ref(appdatabase, `group_meta_data/${user.id}`);
     const groupsMap = new Map();
-
-    const parseGroupData = (groupId, groupData) => {
-      if (!groupData || typeof groupData !== 'object') return null;
-      return {
-        groupId,
-        groupName: groupData.groupName || 'Group',
-        groupAvatar: groupData.groupAvatar || null,
-        lastMessage: groupData.lastMessage || 'No messages yet',
-        lastMessageTimestamp: groupData.lastMessageTimestamp || 0,
-        unreadCount: groupData.unreadCount || 0,
-        memberCount: groupData.memberCount || 0,
-        createdBy: groupData.createdBy || null,
-      };
-    };
 
     const recalcAndSetState = () => {
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
@@ -152,49 +141,40 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
           setGroups(sortedGroups);
           const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
           setGroupUnreadCount(totalGroupUnread);
-          setGroupsLoading(false);
         });
       }, 300);
     };
 
-    // ✅ One-time check: if no group data exists, clear loading immediately
-    // This fixes the infinite loading bug when user has no groups
-    // (onChildAdded never fires for empty data)
-    get(userGroupsRef).then((snapshot) => {
-      if (!snapshot.exists()) {
-        setGroups([]);
-        setGroupsLoading(false);
-      }
-      // If data exists, onChildAdded will handle it and clear loading via recalcAndSetState
-    }).catch((error) => {
-      console.error('Error checking group data:', error);
-      setGroupsLoading(false);
-    });
-
-    // onChildAdded fires for each existing group on attach — serves as initial load
-    const handleChildAddedOrChanged = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      const parsed = parseGroupData(snapshot.key, snapshot.val());
-      if (parsed) {
-        groupsMap.set(snapshot.key, parsed);
-        recalcAndSetState();
-      }
-    };
-
-    const handleChildRemoved = (snapshot) => {
-      if (!snapshot || !snapshot.key) return;
-      groupsMap.delete(snapshot.key);
+    const handleUpsert = (g) => {
+      if (!g || !g.groupId) return;
+      groupsMap.set(g.groupId, {
+        groupId: g.groupId,
+        groupName: g.groupName || 'Group',
+        groupAvatar: g.groupAvatar || null,
+        lastMessage: g.lastMessage || 'No messages yet',
+        lastMessageTimestamp: g.lastMessageTimestamp || 0,
+        unreadCount: g.unreadCount || 0,
+        memberCount: g.memberCount || 0,
+        createdBy: g.createdBy || null,
+      });
       recalcAndSetState();
     };
 
-    const unsubGroupsAdded = onChildAdded(userGroupsRef, handleChildAddedOrChanged);
-    const unsubGroupsChanged = onChildChanged(userGroupsRef, handleChildAddedOrChanged);
-    const unsubGroupsRemoved = onChildRemoved(userGroupsRef, handleChildRemoved);
+    const handleRemove = (groupId) => {
+      groupsMap.delete(groupId);
+      recalcAndSetState();
+    };
+
+    const unsubscribe = subscribeToGroupMeta(user.id, {
+      onUpsert: handleUpsert,
+      onRemove: handleRemove,
+      // Initial load + first SUBSCRIBED both landed → safe to drop the
+      // spinner even if the user has zero groups (no rows ever delivered).
+      onReady: () => setGroupsLoading(false),
+    });
 
     return () => {
-      unsubGroupsAdded();
-      unsubGroupsChanged();
-      unsubGroupsRemoved();
+      unsubscribe();
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
     };
   }, [user?.id, appdatabase]);

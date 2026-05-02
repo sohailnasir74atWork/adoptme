@@ -680,7 +680,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
           {Platform.OS === 'ios' && (
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => Linking.openURL('https://apps.apple.com/us/app/tradex-roblox-community/id6759480366')}
+              onPress={() => Linking.openURL('https://apps.apple.com/us/app/runway-dti-outfits-codes/id6763716666')}
               style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
             >
               {/* Glow accents */}
@@ -689,7 +689,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
               <View style={styles.promoContent}>
                 <Image
-                  source={require('../../assets/trade-roblox.jpeg')}
+                  source={require('../../assets/runway.webp')}
                   style={styles.promoLogo}
                   resizeMode="cover"
                 />
@@ -697,8 +697,8 @@ const HomeTabScreen = ({ selectedTheme }) => {
                   <View style={styles.promoNewBadge}>
                     <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
                   </View>
-                  <Text style={styles.promoTitle}>{t('home_tab.tradex_title')}</Text>
-                  <Text style={styles.promoSubtitle}>{t('home_tab.tradex_desc')}</Text>
+                  <Text style={styles.promoTitle}>Runway: DTI Outfits & Codes</Text>
+                  <Text style={styles.promoSubtitle}>Dress to Impress outfit ideas & codes!</Text>
                 </View>
               </View>
               <View style={styles.promoBtn}>

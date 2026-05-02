@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../../GlobelStats';
-import { ref, get, onValue } from '@react-native-firebase/database';
+import { ref, onValue } from '@react-native-firebase/database';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 
 const GameResults = ({ roomData, currentUser }) => {
@@ -20,42 +20,31 @@ const GameResults = ({ roomData, currentUser }) => {
   const [userWins, setUserWins] = useState(null);
 
   // Fetch and listen to user points (RTDB) and wins (Firestore)
+  // Listener is scoped to /rewardPoints — listening on the parent /users/{uid}
+  // re-downloaded the entire user record on every xp/dailyStars/shop write.
   useEffect(() => {
     if (!appdatabase || !currentUser?.id) return;
 
-    const userRef = ref(appdatabase, `users/${currentUser.id}`);
+    const pointsRef = ref(appdatabase, `users/${currentUser.id}/rewardPoints`);
 
-    // Initial fetch
-    const fetchUserStats = async () => {
+    const fetchWins = async () => {
+      if (!firestoreDB) return;
       try {
-        const snapshot = await get(userRef);
-        if (snapshot.exists()) {
-          const userData = snapshot.val();
-          setUserPoints(userData.rewardPoints || 0);
-        }
-
-        // Wins are now tracked in Firestore only
-        if (firestoreDB) {
-          const statsRef = doc(firestoreDB, 'game_stats', currentUser.id);
-          const statsSnap = await getDoc(statsRef);
-          if (statsSnap.exists()) {
-            const stats = statsSnap.data() || {};
-            setUserWins(stats.petGameWins || 0);
-          }
+        const statsRef = doc(firestoreDB, 'game_stats', currentUser.id);
+        const statsSnap = await getDoc(statsRef);
+        if (statsSnap.exists()) {
+          const stats = statsSnap.data() || {};
+          setUserWins(stats.petGameWins || 0);
         }
       } catch (error) {
-        console.error('Error fetching user stats:', error);
+        console.error('Error fetching user wins:', error);
       }
     };
 
-    fetchUserStats();
+    fetchWins();
 
-    // Listen for real-time updates for points only (RTDB)
-    const unsubscribe = onValue(userRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const userData = snapshot.val();
-        setUserPoints(userData.rewardPoints || 0);
-      }
+    const unsubscribe = onValue(pointsRef, (snapshot) => {
+      setUserPoints(snapshot.exists() ? snapshot.val() || 0 : 0);
     });
 
     return () => unsubscribe();

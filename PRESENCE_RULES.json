@@ -242,6 +242,13 @@
       ".read": true,
       ".write": true
     },
+    "tradeJournal": {
+      ".read": true,
+      ".write": true,
+      "$uid": {
+        ".indexOn": ["completedAt"]
+      }
+    },
     "private_messages": {
       ".read": true,
       ".write": true
