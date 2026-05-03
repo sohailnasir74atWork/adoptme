@@ -19,7 +19,7 @@ import { validateContent } from '../../Helper/ContentModeration';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 
 
-import { Image as CompressorImage } from 'react-native-compressor';
+import { safeCompressImage } from '../../Helper/safeCompressImage';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 
@@ -165,31 +165,25 @@ const PrivateMessageInput = ({
             }
 
             if (fileSize > MAX_SIZE_BYTES) {
-              try {
-                const compressedUri = await CompressorImage.compress(asset.uri, {
-                  maxWidth: 1024,
-                  quality: 0.7,
-                  returnableOutputType: 'uri',
-                });
-                validUris.push(compressedUri);
-              } catch (compError) {
-                console.error('Compression failed:', compError);
-                rejectedCount.push(asset.fileName || 'image');
-              }
-            } else {
-              validUris.push(asset.uri);
-            }
-          } catch (error) {
-            console.warn('Error processing image:', error);
-            try {
-              const compressedUri = await CompressorImage.compress(asset.uri, {
+              const { uri: compressedUri } = await safeCompressImage(asset.uri, {
                 maxWidth: 1024,
                 quality: 0.7,
                 returnableOutputType: 'uri',
               });
               validUris.push(compressedUri);
-            } catch (fallbackError) {
-              console.warn('Fallback compression also failed:', fallbackError);
+            } else {
+              validUris.push(asset.uri);
+            }
+          } catch (error) {
+            console.warn('Error processing image:', error);
+            const { uri: compressedUri } = await safeCompressImage(asset.uri, {
+              maxWidth: 1024,
+              quality: 0.7,
+              returnableOutputType: 'uri',
+            });
+            if (compressedUri) {
+              validUris.push(compressedUri);
+            } else {
               rejectedCount.push(asset.fileName || 'image');
             }
           }

@@ -52,7 +52,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
-import { Image as CompressorImage } from 'react-native-compressor';
+import { safeCompressImage } from '../Helper/safeCompressImage';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import InterstitialAdManager from '../Ads/IntAd';
@@ -339,9 +339,8 @@ const ScammerDatabaseScreen = () => {
                 const fileSize = asset.fileSize || 0;
                 let uri = asset.uri;
                 if (fileSize > 1024 * 1024) {
-                    try {
-                        uri = await CompressorImage.compress(uri, { maxWidth: 800, quality: 0.6, returnableOutputType: 'uri' });
-                    } catch { /* use original */ }
+                    const result = await safeCompressImage(uri, { maxWidth: 800, quality: 0.6, returnableOutputType: 'uri' });
+                    uri = result.uri;
                 }
                 uris.push(uri);
             } catch { /* skip */ }

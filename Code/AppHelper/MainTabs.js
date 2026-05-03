@@ -20,67 +20,16 @@ import { setAppLanguage, loadLanguage } from '../../i18n';
 import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
 import { checkDailyStreak } from '../ChatScreen/GroupChat/badgeUtils';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-  withDelay,
-  cancelAnimation,
-} from 'react-native-reanimated';
-
-
 const Tab = createBottomTabNavigator();
 
-const AnimatedTabIcon = React.memo(({ iconName, color, size, focused, isDark }) => {
-  const scale = useSharedValue(1);
-  const translateY = useSharedValue(0);
-  const rotate = useSharedValue(0);
-
-  useEffect(() => {
-    if (focused) {
-      scale.value = withSequence(
-        withSpring(1.35, { damping: 3, stiffness: 300 }),
-        withSpring(1.15, { damping: 8, stiffness: 180 })
-      );
-      rotate.value = withSequence(
-        withTiming(8, { duration: 80 }),
-        withTiming(-8, { duration: 80 }),
-        withTiming(4, { duration: 60 }),
-        withTiming(0, { duration: 60 })
-      );
-    } else {
-      scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-      rotate.value = withTiming(0, { duration: 150 });
-    }
-
-    // ✅ Cancel running animations on unmount to prevent REANodesManager crash
-    return () => {
-      cancelAnimation(scale);
-      cancelAnimation(rotate);
-      cancelAnimation(translateY);
-    };
-  }, [focused]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotate: `${rotate.value}deg` },
-    ],
-  }));
-
-  return (
-    <Animated.View style={animatedStyle}>
-      <FontAwesome
-        name={iconName}
-        size={size}
-        color={color}
-        solid={focused}
-      />
-    </Animated.View>
-  );
-});
+const TabIcon = React.memo(({ iconName, color, size, focused }) => (
+  <FontAwesome
+    name={iconName}
+    size={size}
+    color={color}
+    solid={focused}
+  />
+));
 
 
 // ✅ PERF: Extracted TabBarButton to avoid recreating inline component on every render
@@ -181,12 +130,11 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
   // ✅ PERF: Memoize screenOptions — prevents recreation on every render cycle
   const screenOptions = useCallback(({ route }) => ({
     tabBarIcon: ({ focused }) => (
-      <AnimatedTabIcon
+      <TabIcon
         focused={focused}
         iconName={getTabIcon(route.name, focused)}
         color={focused ? config.colors.primary : (isDarkMode ? '#64748b' : '#94a3b8')}
         size={18}
-        isDark={isDarkMode}
       />
     ),
     tabBarButton: (props) => (
@@ -215,8 +163,6 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     lazy: true, // ✅ PERF: Only mount tab screen when first visited
-    animation: 'fade',
-    animationDuration: 200,
   }), [isDarkMode, selectedTheme, getTabIcon, tabBarButtonStyles]);
 
   // ✅ PERF: Memoize all tab children with useCallback to prevent remounting on tab switch

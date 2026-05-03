@@ -15,6 +15,7 @@
     "@notifee/react-native": "^9.1.8",
     "@react-native-camera-roll/camera-roll": "^7.10.2",
     "@react-native-clipboard/clipboard": "^1.16.1",
+    "@react-native-firebase/analytics": "^23.8.8",
     "@react-native-firebase/app": "^23.8.8",
     "@react-native-firebase/auth": "^23.8.8",
     "@react-native-firebase/crashlytics": "^23.8.8",

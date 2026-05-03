@@ -1,13 +1,81 @@
 {
   "rules": {
     "users": {
-      ".indexOn": ["isSelectedReminderEnabled", "isReminderEnabled", "fcmToken", "isModerator", "isBabyMod", "isTrusted", "isCMSR"],
+      ".indexOn": ["displayName", "isSelectedReminderEnabled", "isReminderEnabled", "fcmToken", "isModerator", "isBabyMod", "isTrusted", "isCMSR"],
+      ".read": true,
       "$userId": {
         ".read": true,
         ".write": true
       }
     },
     "xlsData": {
+      ".read": true,
+      ".write": true
+    },
+    "savedTrades": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeAcceptors": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeAcceptNotifications": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeJournal": {
+      ".read": true,
+      ".write": true,
+      "$uid": {
+        ".indexOn": ["completedAt"]
+      }
+    },
+    "tradeStats": {
+      ".read": true,
+      ".write": true
+    },
+    "feedRanking": {
+      ".read": true,
+      ".write": true
+    },
+    "mod": {
+      ".read": true,
+      ".write": true
+    },
+    "mods": {
+      ".read": true,
+      ".write": true
+    },
+    "mod_votes_by_user": {
+      ".read": true,
+      ".write": true
+    },
+    "mod_votes_summary": {
+      ".read": true,
+      ".write": true
+    },
+    "trusted": {
+      ".read": true,
+      ".write": false
+    },
+    "cmsr": {
+      ".read": true,
+      ".write": false
+    },
+    "chat_house_design": {
+      ".read": true,
+      ".write": true
+    },
+    "chat_help": {
+      ".read": true,
+      ".write": true
+    },
+    "chat_playing": {
+      ".read": true,
+      ".write": true
+    },
+    "analytics": {
       ".read": true,
       ".write": true
     },
@@ -28,7 +96,12 @@
     },
     "group_messages": {
       ".read": true,
-      ".write": true
+      ".write": true,
+      "$groupId": {
+        "messages": {
+          ".indexOn": ["timestamp"]
+        }
+      }
     },
     "single_offer_wall": {
       ".read": true,
@@ -51,11 +124,19 @@
       ".write": true
     },
     "banned_users_by_email": {
+      ".indexOn": ["bannedAt", "displayName"],
       ".read": true,
       ".write": true
     },
-  
+    "banned_users_by_email_post": {
+      ".read": true,
+      ".write": true
+    },
     "notifier": {
+      ".read": true,
+      ".write": true
+    },
+    "notifier_index": {
       ".read": true,
       ".write": true
     },
@@ -134,7 +215,52 @@
     "chat_new": {
       ".read": true,
       ".write": true,
-      ".indexOn": ["senderId"]
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_es": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_pt": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_fr": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_de": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_tr": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_ar": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_ja": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_ko": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
+    },
+    "chat_ru": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["senderId", "timestamp"]
     },
     "pin_messages": {
       ".read": true,
@@ -242,13 +368,6 @@
       ".read": true,
       ".write": true
     },
-    "tradeJournal": {
-      ".read": true,
-      ".write": true,
-      "$uid": {
-        ".indexOn": ["completedAt"]
-      }
-    },
     "private_messages": {
       ".read": true,
       ".write": true
@@ -267,4 +386,3 @@
     }
   }
 }
-

@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Image as CompressorImage } from 'react-native-compressor';
+import { safeCompressImage } from '../../Helper/safeCompressImage';
 import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -87,10 +87,9 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
 
         for (const asset of result.assets) {
           try {
-            // ✅ Always compress to ensure < 1MB and good quality
-            const uri = await CompressorImage.compress(asset.uri, {
-              maxWidth: 1024, // Good resolution
-              quality: 0.7,   // Good compression
+            const { uri } = await safeCompressImage(asset.uri, {
+              maxWidth: 1024,
+              quality: 0.7,
               returnableOutputType: 'uri',
             });
             compressed.push(uri);

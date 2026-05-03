@@ -18,6 +18,7 @@ target 'bloxfruitevalues' do
   config = use_native_modules!
   use_frameworks! :linkage => :static
   $RNFirebaseAsStaticFramework = true
+  $RNFirebaseAnalyticsWithoutAdIdSupport = true
 
   use_react_native!(
     :path => config[:reactNativePath],

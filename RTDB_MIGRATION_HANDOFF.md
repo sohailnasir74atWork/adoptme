@@ -101,7 +101,7 @@ This preserves: notification CFs, `/activeChats` + `/activeGroupChats` presence,
 | `mirrorGroupMetaToSupabase` deployed | ✅ done |
 | Backfill script run | ✅ done 2026-04-29 — chat=606,931 / group=2,671 rows in Supabase (4-worker parallel run) |
 | App build with new client code shipped | ❌ **not yet** |
-| RTDB rules redeployed (`PRESENCE_RULES.json` w/ tradeJournal index) | ❌ pending |
+| RTDB rules redeployed (`PRESENCE_RULES.json` w/ tradeJournal index) | ✅ done 2026-05-03 |
 
 ### Next steps for next agent
 

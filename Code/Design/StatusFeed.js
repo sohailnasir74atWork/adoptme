@@ -33,7 +33,7 @@ import {
   addDoc, serverTimestamp, Timestamp, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc,
 } from '@react-native-firebase/firestore';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Image as CompressorImage } from 'react-native-compressor';
+import { safeCompressImage } from '../Helper/safeCompressImage';
 import RNFS from 'react-native-fs';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
@@ -569,7 +569,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       // Try compression with a 5s timeout — if it fails/hangs, use picker's output
       let finalUri = asset.uri;
       try {
-        const compressPromise = CompressorImage.compress(asset.uri, {
+        const compressPromise = safeCompressImage(asset.uri, {
           maxWidth: 1200,
           quality: 0.7,
           returnableOutputType: 'uri',
@@ -577,7 +577,8 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Compression timeout')), 5000)
         );
-        finalUri = await Promise.race([compressPromise, timeoutPromise]);
+        const result = await Promise.race([compressPromise, timeoutPromise]);
+        finalUri = result?.uri || asset.uri;
       } catch (compErr) {
         console.warn('[StatusFeed] Compression skipped:', compErr?.message);
       }

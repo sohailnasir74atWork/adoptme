@@ -977,7 +977,10 @@ export const removeMemberFromGroup = async (firestoreDB, appdatabase, groupId, m
   try {
     const groupRef = doc(firestoreDB, 'groups', groupId);
 
-    return await runTransaction(firestoreDB, async (transaction) => {
+    // Firestore transaction: synchronous-after-read; return data the caller uses for RTDB cleanup.
+    // Doing async non-Firestore work inside the callback risks a `EnsureCommitNotCalled` native crash
+    // when the transaction retries on contention or finalizes before the awaits resolve.
+    const result = await runTransaction(firestoreDB, async (transaction) => {
       const groupSnap = await transaction.get(groupRef);
       if (!groupSnap.exists()) {
         throw new Error('Group not found');
@@ -987,40 +990,30 @@ export const removeMemberFromGroup = async (firestoreDB, appdatabase, groupId, m
       const currentMemberIds = groupData.memberIds || [];
       const currentMembers = groupData.members || {};
 
-      // ✅ Check if user has permission (must be creator)
       const isCreator = groupData.createdBy === adminId;
       if (!isCreator) {
         throw new Error('Only the creator can remove members');
       }
 
-      // Cannot remove creator
       if (groupData.createdBy === memberIdToRemove) {
         throw new Error('Cannot remove the group creator');
       }
 
-      // Cannot remove yourself (use leaveGroup instead)
       if (memberIdToRemove === adminId) {
         throw new Error('Cannot remove yourself. Use leave group instead.');
       }
 
-      // Check if member exists
       if (!currentMemberIds.includes(memberIdToRemove)) {
         throw new Error('User is not a member of this group');
       }
 
-      // Remove member
       const updatedMemberIds = currentMemberIds.filter(id => id !== memberIdToRemove);
       const updatedMembers = { ...currentMembers };
       delete updatedMembers[memberIdToRemove];
 
-      // If admin removed all members and is the only one left, delete group when admin leaves
-      // (This will be handled when admin calls leaveGroup)
-      // For now, just check if group becomes empty
       if (updatedMemberIds.length === 0) {
-        // Delete group if no members left
         transaction.delete(groupRef);
       } else {
-        // Update Firestore
         transaction.update(groupRef, {
           memberIds: updatedMemberIds,
           members: updatedMembers,
@@ -1029,35 +1022,37 @@ export const removeMemberFromGroup = async (firestoreDB, appdatabase, groupId, m
         });
       }
 
-      // Remove RTDB group_meta_data for the removed member
+      return { remainingMemberIds: updatedMemberIds };
+    });
+
+    // RTDB cleanup happens AFTER the Firestore transaction commits. These are best-effort —
+    // failures here don't roll back the membership change.
+    try {
+      const metaRef = ref(appdatabase, `group_meta_data/${memberIdToRemove}/${groupId}`);
+      await remove(metaRef);
+    } catch (metaError) {
+      console.warn(`Could not delete group metadata for removed member ${memberIdToRemove}:`, metaError);
       try {
         const metaRef = ref(appdatabase, `group_meta_data/${memberIdToRemove}/${groupId}`);
-        await remove(metaRef);
-      } catch (metaError) {
-        console.warn(`Could not delete group metadata for removed member ${memberIdToRemove}:`, metaError);
-        try {
-          const metaRef = ref(appdatabase, `group_meta_data/${memberIdToRemove}/${groupId}`);
-          await set(metaRef, null);
-        } catch (fallbackError) {
-          console.warn(`Fallback delete also failed for removed member ${memberIdToRemove}:`, fallbackError);
-        }
+        await set(metaRef, null);
+      } catch (fallbackError) {
+        console.warn(`Fallback delete also failed for removed member ${memberIdToRemove}:`, fallbackError);
       }
+    }
 
-      // Update memberCount in RTDB group_meta_data for all remaining members
-      if (updatedMemberIds.length > 0) {
-        const countUpdates = {};
-        for (const memberId of updatedMemberIds) {
-          countUpdates[`group_meta_data/${memberId}/${groupId}/memberCount`] = updatedMemberIds.length;
-        }
-        try {
-          await update(ref(appdatabase, '/'), countUpdates);
-        } catch (countError) {
-          console.warn('Could not update memberCount in RTDB for remaining members:', countError);
-        }
+    if (result.remainingMemberIds.length > 0) {
+      const countUpdates = {};
+      for (const memberId of result.remainingMemberIds) {
+        countUpdates[`group_meta_data/${memberId}/${groupId}/memberCount`] = result.remainingMemberIds.length;
       }
+      try {
+        await update(ref(appdatabase, '/'), countUpdates);
+      } catch (countError) {
+        console.warn('Could not update memberCount in RTDB for remaining members:', countError);
+      }
+    }
 
-      return { success: true };
-    });
+    return { success: true };
   } catch (error) {
     console.error('Error removing member from group:', error);
     return { success: false, error: error.message || 'Failed to remove member' };

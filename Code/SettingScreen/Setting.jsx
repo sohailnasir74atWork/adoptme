@@ -39,7 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { getFlag } from '../Helper/CountryCheck';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { setAppLanguage, loadLanguage } from '../../i18n';
-import { Image as CompressorImage } from 'react-native-compressor';
+import { safeCompressImage } from '../Helper/safeCompressImage';
 import RNFS from 'react-native-fs';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics } from '../Helper/cosmeticsCache';
@@ -679,7 +679,7 @@ export default function SettingsScreen({ selectedTheme }) {
       setUploadingAvatar(true);
 
       // 🔹 Compress to small DP-friendly size
-      const compressedUri = await CompressorImage.compress(asset.uri, {
+      const { uri: compressedUri } = await safeCompressImage(asset.uri, {
         maxWidth: 300,
         quality: 0.7,
       });
