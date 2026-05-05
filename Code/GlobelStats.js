@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged, signOut } from '@react-native-firebase/aut
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
+import { getBlocks, getRoblox } from './Supabase/userBackend';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, AppState, Appearance } from 'react-native';
@@ -229,19 +230,21 @@ export const GlobalStateProvider = ({ children }) => {
       // notifications, etc. — these can be lazy-loaded via getOrFetchProfile or
       // getOrFetchFullProfile. Single fat read of /users/{uid} used to scale with
       // user data growth, slowing every cold start.
+      // robloxUsername/robloxUserId/robloxUsernameVerified fetched from Supabase
+      // user_roblox below — removed from PROJECTION to save 3 RTDB reads.
       const PROJECTION = [
         'email', 'decodedEmail', 'createdAt',
         'displayName', 'avatar', 'userName',
-        'robloxUsername', 'robloxUserId', 'robloxUsernameVerified',
         'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
         'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
       ];
-      const fieldSnaps = await Promise.all(
-        PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`))),
-      );
-      // xp is a small object — fetch the whole sub-tree
-      const xpSnap = await get(ref(appdatabase, `users/${userId}/xp`));
+      // Fetch RTDB projection + Supabase roblox in parallel.
+      const [fieldSnaps, xpSnap, robloxRow] = await Promise.all([
+        Promise.all(PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)))),
+        get(ref(appdatabase, `users/${userId}/xp`)),
+        getRoblox(userId).catch(() => null),
+      ]);
       const exists = fieldSnaps.some((s) => s.exists()) || xpSnap.exists();
       let userData;
 
@@ -299,6 +302,14 @@ export const GlobalStateProvider = ({ children }) => {
         await set(userRef, userData);
       }
 
+      // Merge Supabase roblox fields. Supabase wins; fall back to whatever
+      // PROJECTION returned (brand-new user: robloxUsernameRef from signup).
+      if (robloxRow) {
+        userData.robloxUsername = robloxRow.robloxUsername ?? userData.robloxUsername ?? null;
+        userData.robloxUserId = robloxRow.robloxUserId ?? userData.robloxUserId ?? null;
+        userData.robloxUsernameVerified = robloxRow.robloxUsernameVerified ?? false;
+      }
+
       setUser(userData);
 
       // 🔥 Crashlytics: tag this user so crash reports show who was affected
@@ -335,6 +346,25 @@ export const GlobalStateProvider = ({ children }) => {
 
         if (loggedInUser?.uid) {
           await registerForNotifications(loggedInUser.uid);
+
+          // Hydrate localState.bannedUsers from Supabase user_blocks once per
+          // login. The list lives in MMKV across launches, so subsequent
+          // block/unblock writes still update it locally + RTDB (mirror CF
+          // replays to Supabase). This seed only runs at sign-in to cover
+          // first-install or device-switch cases where MMKV is empty.
+          // RTDB fallback (full /users/{uid}/blocked_users read) only fires
+          // if Supabase returns an error — null result for "no blocks" is
+          // an empty Set, not an error.
+          try {
+            const supaBlocks = await getBlocks(loggedInUser.uid);
+            if (supaBlocks instanceof Set) {
+              await updateLocalState('bannedUsers', [...supaBlocks]);
+            } else if (appdatabase) {
+              const snap = await get(ref(appdatabase, `users/${loggedInUser.uid}/blocked_users`));
+              const obj = snap.exists() ? (snap.val() || {}) : {};
+              await updateLocalState('bannedUsers', Object.keys(obj));
+            }
+          } catch {}
         }
 
         await updateLocalState('isAppReady', true);
@@ -446,7 +476,10 @@ export const GlobalStateProvider = ({ children }) => {
   }, [updateUserProStatus]);
 
   useEffect(() => {
-    updateLocalStateAndDatabase('lastActivity', new Date().toISOString());
+    // Stored as ms epoch (number) so it lines up with createdAt and the
+    // Supabase user_identity.last_activity_ms column (bigint). Used for
+    // "inactive 30+ days" cohort queries; resolution is per-cold-launch.
+    updateLocalStateAndDatabase('lastActivity', Date.now());
   }, []);
 
 

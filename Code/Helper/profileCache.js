@@ -13,10 +13,21 @@
  *   - Old messages still have avatar/isPro/sender fields → used first
  *   - New slim messages miss these fields → cache fills in
  *   - If cache misses too → sensible defaults (no crash)
+ *
+ * 🚀 WAVE 1+2 — moved to Supabase via userBackend:
+ *   - displayName, avatar              → user_identity
+ *   - isAdmin/isModerator/isBabyMod
+ *     /isTrusted/isCMSR                → user_roles
+ *   - isPro, topBadge                  → user_cosmetics
+ *   RTDB falls back per-field if Supabase has no row (mirror lag, brand-new
+ *   user, or backfill miss). Game state (hasRecentGameWin, lastGameWinAt,
+ *   robloxUsernameVerified) and shop subtree still read from RTDB —
+ *   they migrate in later waves (or stay on RTDB; shop deferred).
  */
 
 
 import { ref, get } from '@react-native-firebase/database';
+import { getIdentity, getRoles, getCosmetics, getRoblox } from '../Supabase/userBackend';
 
 let cache;
 try {
@@ -74,47 +85,80 @@ export const getOrFetchProfile = async (db, uid) => {
   const cached = getCachedProfile(uid);
   if (cached) return cached;
 
-  // 2. Fetch from RTDB — narrow per-field reads instead of the full
-  //    /users/{uid} subtree. Drops bandwidth ~90% per profile by skipping
-  //    counters/fcmToken/blocked_users/posts/etc. that chat never renders.
+  // 2. Fetch in parallel:
+  //    - identity (displayName + avatar)            → Supabase user_identity
+  //    - roles (isAdmin/isModerator/...)            → Supabase user_roles
+  //    - cosmetics (isPro, topBadge)                → Supabase user_cosmetics
+  //    - roblox (username/id/verified)              → Supabase user_roblox
+  //    - game state + shop                          → RTDB (not migrated)
+  //    All fire concurrently; latency = max, not sum. Each Supabase miss
+  //    falls back to the matching RTDB read still in the field list below —
+  //    so the code path is safe for brand-new users or any backfill miss.
   try {
     const base = `users/${uid}`;
+    // RTDB fallback fields. The first 7 are mirrored to Supabase but we
+    // keep reading them from RTDB as a fallback for mirror-lag /
+    // brand-new-user cases. Supabase wins when present.
     const fieldPaths = [
-      'displayName',
-      'avatar',
-      'isPro',
-      'robloxUsernameVerified',
+      'displayName',           // mirrored — fallback only
+      'avatar',                // mirrored — fallback only
+      'isPro',                 // mirrored — fallback only
+      'isAdmin',               // mirrored — fallback only
+      'isModerator',           // mirrored — fallback only
+      'isTrusted',             // mirrored — fallback only
+      'isCMSR',                // mirrored — fallback only
+      'topBadge',              // mirrored — fallback only
+      'robloxUsernameVerified', // mirrored — fallback only
+      // Not migrated (RTDB-only):
       'hasRecentGameWin',
       'lastGameWinAt',
-      'isAdmin',
-      'isModerator',
-      'isTrusted',
-      'isCMSR',
-      'topBadge',
     ];
 
-    const snaps = await Promise.all([
+    const [identityRow, rolesRow, cosmeticsRow, robloxRow, ...snaps] = await Promise.all([
+      getIdentity(uid),
+      getRoles(uid),
+      getCosmetics(uid),
+      getRoblox(uid),
       ...fieldPaths.map((p) => get(ref(db, `${base}/${p}`))),
       get(ref(db, `${base}/shop/activeItems`)),
     ]);
 
     const vals = snaps.map((s) => (s.exists() ? s.val() : null));
     const [
-      displayName,
-      avatar,
-      isPro,
-      robloxUsernameVerified,
+      rtdbDisplayName,
+      rtdbAvatar,
+      rtdbIsPro,
+      rtdbIsAdmin,
+      rtdbIsModerator,
+      rtdbIsTrusted,
+      rtdbIsCMSR,
+      rtdbTopBadge,
+      rtdbRobloxUsernameVerified,
       hasRecentGameWin,
       lastGameWinAt,
-      isAdmin,
-      isModerator,
-      isTrusted,
-      isCMSR,
-      topBadge,
       shopItems,
     ] = vals;
 
-    if (vals.every((v) => v == null)) return null;
+    // Prefer Supabase for migrated fields; fall back to RTDB if missing.
+    const displayName             = identityRow?.displayName          ?? rtdbDisplayName;
+    const avatar                  = identityRow?.avatar               ?? rtdbAvatar;
+    const isPro                   = cosmeticsRow?.isPro               ?? rtdbIsPro;
+    const topBadge                = cosmeticsRow?.topBadge            ?? rtdbTopBadge;
+    const isAdmin                 = rolesRow?.isAdmin                 ?? rtdbIsAdmin;
+    const isModerator             = rolesRow?.isModerator             ?? rtdbIsModerator;
+    const isTrusted               = rolesRow?.isTrusted               ?? rtdbIsTrusted;
+    const isCMSR                  = rolesRow?.isCMSR                  ?? rtdbIsCMSR;
+    const robloxUsernameVerified  = robloxRow?.robloxUsernameVerified ?? rtdbRobloxUsernameVerified;
+
+    if (
+      identityRow == null &&
+      rolesRow == null &&
+      cosmeticsRow == null &&
+      robloxRow == null &&
+      vals.every((v) => v == null)
+    ) {
+      return null;
+    }
 
     let chatTextColor = null;
     let profileFrame = null;
@@ -172,6 +216,10 @@ export const warmProfileCache = async (db, uids) => {
   if (uncached.length === 0) return;
 
   // Process all uncached uids in waves of 10 — bounded concurrency, no flooding.
+  // Each getOrFetchProfile call now does Supabase identity + RTDB rest in
+  // parallel (see implementation above); concurrency=10 means up to 10
+  // concurrent Supabase reads + 10 concurrent RTDB reads, both well within
+  // each backend's per-conn limits.
   const WAVE = 10;
   for (let i = 0; i < uncached.length; i += WAVE) {
     const wave = uncached.slice(i, i + WAVE);

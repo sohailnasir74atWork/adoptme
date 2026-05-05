@@ -34,6 +34,19 @@ export function fromGroupMetaRow(row) {
   };
 }
 
+// Reset group unread count directly in Supabase — mirrors resetUnreadCount()
+// in chatMetaBackend.js. Called when user opens a group so the badge clears
+// instantly without waiting for the mirror CF.
+export async function resetGroupUnreadCount(userId, groupId) {
+  if (!userId || !groupId) return;
+  await supabase
+    .from('group_meta_data')
+    .update({ unread_count: 0, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('group_id', groupId);
+  // Errors intentionally swallowed — RTDB + mirror CF is the fallback.
+}
+
 export async function loadGroupMeta(userId) {
   if (!userId) return [];
   const { data, error } = await supabase

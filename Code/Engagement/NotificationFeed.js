@@ -16,6 +16,7 @@ import {
   doc, updateDoc, writeBatch, startAfter, Timestamp, deleteDoc,
 } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
+import { getNotifications } from '../Supabase/userBackend';
 
 dayjs.extend(relativeTime);
 
@@ -98,11 +99,24 @@ const NotificationFeed = () => {
     useCallback(() => {
       hasMarkedRead.current = false; // allow re-mark on next focus
       fetchNotifications(true);
-      // Load mute preference
-      if (user?.id && appdatabase) {
-        get(ref(appdatabase, `users/${user.id}/muteTradeNotifs`)).then(snap => {
-          setMuted(snap.exists() ? !!snap.val() : false);
-        }).catch(() => {});
+      // Load mute preference. Prefer Supabase user_notifications; fall back
+      // to RTDB if the row hasn't been mirrored yet (mirror lag, brand-new
+      // user, backfill miss). Write path is unchanged — toggle below still
+      // writes RTDB and the mirror CF replays it to Supabase.
+      if (user?.id) {
+        (async () => {
+          const row = await getNotifications(user.id);
+          if (row != null) {
+            setMuted(!!row.muteTradeNotifs);
+            return;
+          }
+          if (appdatabase) {
+            try {
+              const snap = await get(ref(appdatabase, `users/${user.id}/muteTradeNotifs`));
+              setMuted(snap.exists() ? !!snap.val() : false);
+            } catch {}
+          }
+        })();
       }
     }, [user?.id, firestoreDB, appdatabase])
   );

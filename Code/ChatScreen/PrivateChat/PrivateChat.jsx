@@ -15,6 +15,7 @@ import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus, updateLastRead, useOtherLastRead } from '../utils';
+import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
 import { useLocalState } from '../../LocalGlobelStats';
 import { get, increment, ref, update, set, remove, onValue, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
@@ -747,10 +748,15 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
       const chatMetaRef = ref(appdatabase, `chat_meta_data/${user.id}/${selectedUserId}`);
 
-      // ✅ Reset unreadCount when entering chat
-      update(chatMetaRef, { unreadCount: 0 });
-
-      setActiveChat(user.id, chatKey);
+      // Set activeChats FIRST so notifyNewMessage CF sees the user as active
+      // before we reset unreadCount — prevents the race where a message arrives
+      // in the gap and sends a spurious push to someone already in the chat.
+      // Also reset directly in Supabase so the badge clears without waiting
+      // for the mirror CF (avoids stale badge under disk IO pressure).
+      setActiveChat(user.id, chatKey).then(() => {
+        update(chatMetaRef, { unreadCount: 0 });
+        resetUnreadCount(user.id, selectedUserId); // fire-and-forget
+      });
 
       // ✅ Mark messages as read — but only if the user has read receipts ON.
       // Otherwise the other side would see a blue tick on their messages

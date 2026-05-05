@@ -22,7 +22,7 @@ import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
-import { subscribeToChatMeta } from '../../Supabase/chatMetaBackend';
+import { subscribeToChatMeta, resetUnreadCount } from '../../Supabase/chatMetaBackend';
 import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
@@ -317,13 +317,16 @@ const InboxScreen = ({ bannedUsers }) => {
     }
 
     try {
-      // ✅ Update local state to reset unread count
+      // Reset unread immediately in both local state and Supabase so the
+      // badge clears without waiting for the mirror CF (which can lag
+      // 100–500ms, more under disk IO pressure).
       setLocalChats((prevChats) => {
         if (!Array.isArray(prevChats)) return prevChats;
         return prevChats.map((chat) =>
           chat?.chatId === chatId ? { ...chat, unreadCount: 0 } : chat
         );
       });
+      resetUnreadCount(user.id, otherUserId); // fire-and-forget
 
       // ✅ Navigate to PrivateChat with isOnline status
       if (navigation && typeof navigation.navigate === 'function') {

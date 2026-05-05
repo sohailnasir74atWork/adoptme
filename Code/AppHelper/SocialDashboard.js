@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { getDatabase, ref, get, query, orderByChild, startAt, endAt, limitToFirst } from '@react-native-firebase/database';
 import { warmProfileCache, getCachedProfile } from '../Helper/profileCache';
+import { getRobloxBatch } from '../Supabase/userBackend';
 import { collection, getDocs, query as firestoreQuery, where } from '@react-native-firebase/firestore';
 import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
@@ -128,25 +129,29 @@ const SocialDashboard = () => {
     const fetchUsersFromRTDB = useCallback(async (ids) => {
         if (!ids || ids.length === 0) return [];
 
-        // Warm profileCache once for displayName + avatar + robloxUsernameVerified.
-        // robloxUsername and users/{uid}/profileFrame are not in profileCache — kept as separate gets.
-        await warmProfileCache(db, ids);
+        // Warm profileCache (identity+roles+cosmetics+roblox) and batch-fetch
+        // roblox rows — single Supabase round-trip for all ids.
+        // profileFrame stays RTDB (shop subtree not migrated).
+        const [, robloxMap] = await Promise.all([
+            warmProfileCache(db, ids),
+            getRobloxBatch(ids).catch(() => new Map()),
+        ]);
 
         const results = await Promise.all(
             ids.map(async (friendId) => {
                 try {
-                    const [robloxUsernameSnap, profileFrameSnap] = await Promise.all([
-                        get(ref(db, `users/${friendId}/robloxUsername`)),
+                    const [profileFrameSnap] = await Promise.all([
                         get(ref(db, `users/${friendId}/profileFrame`)),
                     ]);
                     const cached = getCachedProfile(friendId);
+                    const robloxRow = robloxMap.get(friendId);
 
                     return {
                         id: friendId,
                         displayName: cached?.displayName || 'Unknown',
                         avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                        robloxUsername: robloxUsernameSnap.val() || null,
-                        robloxUsernameVerified: cached?.robloxUsernameVerified ?? false,
+                        robloxUsername: robloxRow?.robloxUsername ?? null,
+                        robloxUsernameVerified: robloxRow?.robloxUsernameVerified ?? cached?.robloxUsernameVerified ?? false,
                         profileFrame: profileFrameSnap.val() || null,
                     };
                 } catch (err) {

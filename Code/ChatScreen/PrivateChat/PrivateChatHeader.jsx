@@ -11,6 +11,7 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
+import { getRoblox } from '../../Supabase/userBackend';
 import { getThemeColors } from '../../Helper/themeColors';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getActiveCosmetics } from '../../Engagement/shopUtils';
@@ -60,12 +61,11 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     const fetchUserData = async () => {
       try {
-        // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
-        const [robloxUsernameSnap, robloxUserIdSnap, robloxUsernameVerifiedSnap,
-          isProSnap, lastGameWinAtSnap, isAdminSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap, profileFrameSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+        // Roblox fields from Supabase user_roblox; everything else RTDB.
+        // profileFrame stays RTDB (shop subtree not migrated).
+        const [robloxRow, isProSnap, lastGameWinAtSnap, isAdminSnap,
+          isModeratorSnap, isTrustedSnap, isCMSRSnap, profileFrameSnap] = await Promise.all([
+            getRoblox(selectedUserId).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isAdmin`)).catch(() => null),
@@ -77,11 +77,25 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
         if (!isMounted) return;
 
-        // ✅ Extract values only if they exist
+        // Fall back to individual RTDB reads only if Supabase row missing.
+        let robloxUsername = robloxRow?.robloxUsername ?? null;
+        let robloxUserId = robloxRow?.robloxUserId ?? null;
+        let robloxUsernameVerified = robloxRow?.robloxUsernameVerified ?? false;
+        if (robloxRow == null && appdatabase) {
+          const [unSnap, uidSnap, verSnap] = await Promise.all([
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
+          ]);
+          robloxUsername = unSnap?.exists() ? unSnap.val() : null;
+          robloxUserId = uidSnap?.exists() ? uidSnap.val() : null;
+          robloxUsernameVerified = verSnap?.exists() ? !!verSnap.val() : false;
+        }
+
         setUserData({
-          robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
-          robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
-          robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+          robloxUsername,
+          robloxUserId,
+          robloxUsernameVerified,
           isPro: isProSnap?.exists() ? isProSnap.val() : false,
           lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
           isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,

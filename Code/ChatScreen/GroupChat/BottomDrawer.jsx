@@ -45,6 +45,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { ref, get, set, remove } from '@react-native-firebase/database';
 import { getOrFetchFullProfile, invalidateFullProfile } from '../../Helper/profileCache';
+import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 
 // Kill-switch: set to false to revert to the original 16-get fetch path.
 const BOTTOM_DRAWER_CACHE_ENABLED = true;
@@ -383,18 +384,64 @@ const ProfileBottomDrawer = ({
         let emailToCheck;
 
         if (BOTTOM_DRAWER_CACHE_ENABLED) {
-          // Single cached read of /users/{uid}; covers all 16 fields.
-          const record = await getOrFetchFullProfile(appdatabase, selectedUserId);
+          // Fetch migrated fields from Supabase (5 tables in one round-trip set)
+          // + only lastGameWinAt from RTDB (game state not migrated yet).
+          // Falls back to getOrFetchFullProfile (full RTDB read) if all Supabase
+          // rows are missing (brand-new user, mirror lag, backfill miss).
+          const [identityRow, rolesRow, cosmeticsRow, robloxRow, badgesMap, lastGameWinAtSnap] = await Promise.all([
+            getIdentity(selectedUserId).catch(() => null),
+            getRoles(selectedUserId).catch(() => null),
+            getCosmetics(selectedUserId).catch(() => null),
+            getRoblox(selectedUserId).catch(() => null),
+            getBadges(selectedUserId).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
+          ]);
+
           if (!isMounted) return;
-          newUserData = buildFromRecord(record);
-          badgesValue = record?.badges || null;
-          emailToCheck = record?.email || selectedUser?.email;
+
+          const hasSupabaseData = identityRow || rolesRow || cosmeticsRow || robloxRow;
+          let rtdbRecord = null;
+
+          if (hasSupabaseData) {
+            newUserData = {
+              avatar:                  identityRow?.avatar               ?? null,
+              email:                   identityRow?.email                ?? null,
+              decodedEmail:            identityRow?.decodedEmail         ?? null,
+              dateOfBirth:             identityRow?.dateOfBirth          ?? null,
+              isPro:                   cosmeticsRow?.isPro               ?? false,
+              topBadge:                cosmeticsRow?.topBadge            ?? null,
+              isAdmin:                 rolesRow?.isAdmin                 ?? null,
+              isModerator:             rolesRow?.isModerator             ?? null,
+              isBabyMod:               rolesRow?.isBabyMod               ?? null,
+              isTrusted:               rolesRow?.isTrusted               ?? null,
+              isCMSR:                  rolesRow?.isCMSR                  ?? null,
+              robloxUsername:          robloxRow?.robloxUsername         ?? null,
+              robloxUserId:            robloxRow?.robloxUserId           ?? null,
+              robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
+              lastGameWinAt:           lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+            };
+            emailToCheck = identityRow?.email || selectedUser?.email;
+          } else {
+            // Full RTDB fallback — mirror lag or brand-new user.
+            rtdbRecord = await getOrFetchFullProfile(appdatabase, selectedUserId);
+            if (!isMounted) return;
+            newUserData = buildFromRecord(rtdbRecord);
+            emailToCheck = rtdbRecord?.email || selectedUser?.email;
+          }
+
+          if (badgesMap && badgesMap.size > 0) {
+            const flat = {};
+            for (const id of badgesMap.keys()) flat[id] = true;
+            badgesValue = flat;
+          } else {
+            // Supabase had no badges row — fall back to RTDB badges field.
+            // rtdbRecord is already fetched if we took the RTDB fallback path above.
+            if (!rtdbRecord) rtdbRecord = await getOrFetchFullProfile(appdatabase, selectedUserId);
+            badgesValue = rtdbRecord?.badges || null;
+          }
         } else {
           // Original 16-get fallback (kill-switch path).
           const [
-            robloxUsernameSnap,
-            robloxUserIdSnap,
-            robloxUsernameVerifiedSnap,
             isProSnap,
             lastGameWinAtSnap,
             isModeratorSnap,
@@ -407,11 +454,10 @@ const ProfileBottomDrawer = ({
             isBabyModSnap,
             isTrustedSnap,
             isCMSRSnap,
-            dateOfBirthSnap
+            dateOfBirthSnap,
+            supaBadgesMap,
+            supaRobloxRow,
           ] = await Promise.all([
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
@@ -425,13 +471,18 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
+            getBadges(selectedUserId).catch(() => null),
+            getRoblox(selectedUserId).catch(() => null),
           ]);
           if (!isMounted) return;
+          // If Supabase roblox row missing, keep null — the kill-switch path
+          // is rarely active (BOTTOM_DRAWER_CACHE_ENABLED=true in prod) and
+          // getOrFetchFullProfile already contains roblox fields from RTDB.
           newUserData = {
             avatar: avatarSnap?.exists() ? avatarSnap.val() : null,
-            robloxUsername: robloxUsernameSnap?.exists() ? robloxUsernameSnap.val() : null,
-            robloxUserId: robloxUserIdSnap?.exists() ? robloxUserIdSnap.val() : null,
-            robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+            robloxUsername: supaRobloxRow?.robloxUsername ?? null,
+            robloxUserId: supaRobloxRow?.robloxUserId ?? null,
+            robloxUsernameVerified: supaRobloxRow?.robloxUsernameVerified ?? false,
             isPro: isProSnap?.exists() ? isProSnap.val() : false,
             lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
             isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
@@ -444,7 +495,13 @@ const ProfileBottomDrawer = ({
             isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
             dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
           };
-          badgesValue = badgesSnap?.exists() ? (badgesSnap.val() || null) : null;
+          if (supaBadgesMap && supaBadgesMap.size > 0) {
+            const flat = {};
+            for (const id of supaBadgesMap.keys()) flat[id] = true;
+            badgesValue = flat;
+          } else {
+            badgesValue = badgesSnap?.exists() ? (badgesSnap.val() || null) : null;
+          }
           emailToCheck = emailSnap?.exists() ? emailSnap.val() : selectedUser?.email;
         }
 
@@ -1336,7 +1393,7 @@ const ProfileBottomDrawer = ({
         // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
         // 📅 2026-03-13: bio/ownedPets/wishlistPets migrated from reviews/{userId} → user_profiles/{userId}.
         //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fetch and its fallback reads below.
-        const [summaryDocSnap, createdSnap, rewardPointsSnap, profileDocSnap, reviewDocSnap, countSnapshot] = await Promise.all([
+        const [summaryDocSnap, createdSnap, rewardPointsSnap, profileDocSnap, reviewDocSnap, countSnapshot, identityForDates] = await Promise.all([
           getDoc(doc(firestoreDB, 'user_ratings_summary', selectedUserId)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
           get(ref(appdatabase, `users/${selectedUserId}/xp/total`)).catch(() => null),
@@ -1346,6 +1403,7 @@ const ProfileBottomDrawer = ({
           getCountFromServer(
             query(collection(firestoreDB, 'following'), where('followingId', '==', selectedUserId))
           ).catch(err => { console.error("Error fetching followers:", err); return { data: () => ({ count: 0 }) }; }),
+          getIdentity(selectedUserId).catch(() => null),
         ]);
 
         if (!isMounted) return;
@@ -1466,41 +1524,40 @@ const ProfileBottomDrawer = ({
         }
         setUserBio(bioValue || t('profile.bio_default'));
 
-        if (createdSnap.exists()) {
-          const raw = createdSnap.val();
-          let ts;
-          if (typeof raw === 'number') {
-            // Detect seconds vs milliseconds: timestamps < 1e12 are in seconds
-            ts = raw < 1e12 ? raw * 1000 : raw;
-          } else {
-            ts = Date.parse(raw);
-          }
-          if (!Number.isNaN(ts)) {
-            setCreatedAtText(formatCreatedAt(ts));
-            setUserCreatedAtMs(ts);
-          } else {
-            setCreatedAtText(null);
-          }
+        // Prefer Supabase user_identity for created_at_ms / last_activity_ms —
+        // those are already there from the backfill. Fall back to RTDB createdAt
+        // (already fetched above) for brand-new users or mirror-lag cases.
+        const supaCreatedMs = identityForDates?.createdAt ?? null; // user_identity.created_at_ms
+        const supaLastActivityMs = identityForDates?.lastActivity ?? null; // user_identity.last_activity_ms
+
+        const resolveTs = (raw) => {
+          if (raw == null) return NaN;
+          if (typeof raw === 'number') return raw < 1e12 ? raw * 1000 : raw;
+          return Date.parse(raw);
+        };
+
+        const createdTs = supaCreatedMs
+          ? resolveTs(supaCreatedMs)
+          : resolveTs(createdSnap.exists() ? createdSnap.val() : null);
+
+        if (!Number.isNaN(createdTs)) {
+          setCreatedAtText(formatCreatedAt(createdTs));
+          setUserCreatedAtMs(createdTs);
         } else {
-          // ✅ Fallback: If createdAt is missing, try lastActivity as an approximation
-          try {
-            const lastActivitySnap = await get(ref(appdatabase, `users/${selectedUserId}/lastActivity`));
-            if (lastActivitySnap.exists()) {
-              const raw = lastActivitySnap.val();
-              let ts = typeof raw === 'number'
-                ? (raw < 1e12 ? raw * 1000 : raw)
-                : Date.parse(raw);
-              if (!Number.isNaN(ts)) {
-                setCreatedAtText(formatCreatedAt(ts));
-                setUserCreatedAtMs(ts);
-              } else {
-                setCreatedAtText(null);
-              }
-            } else {
+          // Last resort: lastActivity from Supabase or RTDB
+          const lastActivityTs = resolveTs(supaLastActivityMs);
+          if (!Number.isNaN(lastActivityTs)) {
+            setCreatedAtText(formatCreatedAt(lastActivityTs));
+            setUserCreatedAtMs(lastActivityTs);
+          } else {
+            try {
+              const lastActivitySnap = await get(ref(appdatabase, `users/${selectedUserId}/lastActivity`));
+              const ts = resolveTs(lastActivitySnap.exists() ? lastActivitySnap.val() : null);
+              setCreatedAtText(!Number.isNaN(ts) ? formatCreatedAt(ts) : null);
+              if (!Number.isNaN(ts)) setUserCreatedAtMs(ts);
+            } catch {
               setCreatedAtText(null);
             }
-          } catch {
-            setCreatedAtText(null);
           }
         }
 

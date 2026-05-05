@@ -18,6 +18,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
+import { resetGroupUnreadCount } from '../../Supabase/groupMetaBackend';
 import { get, ref, update, set, remove, child, query as dbQuery, orderByKey, limitToLast, endAt, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -536,6 +537,9 @@ const GroupChatScreen = () => {
         }).catch((error) => {
           console.error('Error updating group meta:', error);
         });
+        // Also reset directly in Supabase so badge clears without waiting
+        // for mirror CF — same pattern as private chat resetUnreadCount().
+        resetGroupUnreadCount(user.id, groupId);
       }
 
       return () => {

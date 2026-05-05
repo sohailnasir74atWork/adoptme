@@ -31,6 +31,7 @@
     "@supabase/supabase-js": "^2.104.0",
     "axios": "^1.8.4",
     "dayjs": "^1.11.10",
+    "google-auth-library": "^10.6.2",
     "i18next": "^24.2.2",
     "leo-profanity": "^1.7.0",
     "lottie-react-native": "^7.3.6",
@@ -67,6 +68,7 @@
     "sp-react-native-in-app-updates": "^1.5.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@babel/core": "^7.25.2",
     "@babel/preset-env": "^7.25.3",
     "@babel/runtime": "^7.25.0",

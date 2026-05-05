@@ -57,7 +57,19 @@ export const LocalStateProvider = ({ children }) => {
     prenormalStock: safeParseJSON('prenormalStock', []),
     premirageStock: safeParseJSON('premirageStock', []),
     isAppReady: storage.getBoolean('isAppReady') ?? false,
-    lastActivity: storage.getString('lastActivity') || null,
+    // lastActivity used to be stored as ISO string; switched to ms epoch.
+    // Tolerate both during the transition release window (old MMKV reads
+    // as a string, new writes as a number).
+    lastActivity: (() => {
+      const n = storage.getNumber('lastActivity');
+      if (n) return n;
+      const s = storage.getString('lastActivity');
+      if (s) {
+        const parsed = Date.parse(s);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      return null;
+    })(),
     showOnBoardingScreen: storage.getBoolean('showOnBoardingScreen') ?? true,
     user_name: storage.getString('user_name') || 'Anonymous',
     translationUsage: safeParseJSON('translationUsage', { count: 0, date: new Date().toDateString() }),

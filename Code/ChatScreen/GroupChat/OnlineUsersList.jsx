@@ -23,6 +23,7 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import FramedAvatar from './FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
+import { getRobloxBatch } from '../../Supabase/userBackend';
 import CreateGroupModal from './CreateGroupModal';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { getUserAdminGroup, addMembersToGroup } from '../utils/groupUtils';
@@ -123,25 +124,27 @@ const OnlineUsersList = ({
     }
   }, [visible, mode]);
 
-  // ✅ Fetch user metadata from users node (only relevant fields)
-  // ✅ OPTIMIZED: Fetch only specific child paths instead of full user objects
+  // ✅ Fetch user metadata — identity/roles/cosmetics from Supabase, game
+  //    state (OS, isPlaying, lastGameWinAt) still from RTDB (not migrated).
+  //    robloxUsernameVerified from Supabase user_roblox via batch.
   const loadUserBatch = useCallback(async (userIds, alreadyLoaded) => {
     if (!appdatabase || userIds.length === 0) return;
 
     try {
-      // ✅ Fetch only specific fields by querying child paths in parallel
-      // This reduces data transfer significantly (from ~100KB to ~2-5KB per user)
-      const userPromises = userIds.map(async (userId) => {
-        if (alreadyLoaded.has(userId)) return null;
+      const toFetch = userIds.filter((id) => !alreadyLoaded.has(id));
+      if (toFetch.length === 0) return;
 
+      // One Supabase round-trip for roblox verified flags for the whole batch.
+      const robloxMap = await getRobloxBatch(toFetch).catch(() => new Map());
+
+      const userPromises = toFetch.map(async (userId) => {
         try {
-          // ✅ Fetch only the fields we need (parallel requests to specific child paths)
-          const [displayNameSnap, avatarSnap, isProSnap, robloxUsernameVerifiedSnap,
-            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap, isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
+          const [displayNameSnap, avatarSnap, isProSnap,
+            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap,
+            isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
               get(ref(appdatabase, `users/${userId}/displayName`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/avatar`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/isPro`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/robloxUsernameVerified`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/isAdmin`)).catch(() => null),
               get(ref(appdatabase, `users/${userId}/OS`)).catch(() => null),
@@ -151,21 +154,19 @@ const OnlineUsersList = ({
               get(ref(appdatabase, `users/${userId}/isCMSR`)).catch(() => null),
             ]);
 
-          // ✅ Extract values (only if snapshots exist)
           const displayName = displayNameSnap?.exists() ? displayNameSnap.val() : null;
-
-          // If no displayName found, user might not exist - return null
           if (!displayNameSnap || (!displayNameSnap.exists() && !avatarSnap?.exists())) {
             return null;
           }
 
+          const robloxRow = robloxMap.get(userId);
           return {
             id: userId,
             displayName: displayName || t('chat.anonymous'),
             avatar: avatarSnap?.exists() ? avatarSnap.val() :
               'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
             isPro: isProSnap?.exists() ? isProSnap.val() : false,
-            robloxUsernameVerified: robloxUsernameVerifiedSnap?.exists() ? robloxUsernameVerifiedSnap.val() : false,
+            robloxUsernameVerified: robloxRow?.robloxUsernameVerified ?? false,
             lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
             isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
             OS: OSSnap?.exists() ? OSSnap.val() : null,

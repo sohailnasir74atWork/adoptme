@@ -51,6 +51,23 @@ export async function loadChatMeta(ownerUid) {
 }
 
 // -----------------------------------------------------------------
+// Reset unread count directly in Supabase — called when user opens a
+// chat so the badge clears instantly without waiting for the mirror CF.
+// RTDB is still the source of truth; PrivateChat also writes unreadCount=0
+// to RTDB as before, and the mirror CF will upsert the same value shortly
+// after. The direct write here just prevents a stale badge flash.
+// -----------------------------------------------------------------
+export async function resetUnreadCount(ownerUid, partnerUid) {
+  if (!ownerUid || !partnerUid) return;
+  await supabase
+    .from('chat_meta_data')
+    .update({ unread_count: 0, updated_at: new Date().toISOString() })
+    .eq('owner_uid', ownerUid)
+    .eq('partner_uid', partnerUid);
+  // Errors are intentionally swallowed — RTDB + mirror CF is the fallback.
+}
+
+// -----------------------------------------------------------------
 // Realtime subscription
 //
 // Drop-in replacement for the onChildAdded/onChildChanged/onChildRemoved
