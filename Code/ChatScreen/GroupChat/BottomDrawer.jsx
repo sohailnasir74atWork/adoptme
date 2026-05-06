@@ -1288,6 +1288,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), true);
       invalidateFullProfile(selectedUserId);
+      updateLocalState('trustedRoster', null);
       setUserData(prev => ({ ...prev, isTrusted: true }));
       Alert.alert('Success', `${userName} now has the Trusted badge`);
     } catch (err) {
@@ -1307,6 +1308,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), null);
       invalidateFullProfile(selectedUserId);
+      updateLocalState('trustedRoster', null);
       setUserData(prev => ({ ...prev, isTrusted: false }));
       Alert.alert('Success', `${userName} no longer has the Trusted badge`);
     } catch (err) {
@@ -1327,6 +1329,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), true);
       invalidateFullProfile(selectedUserId);
+      updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: true }));
       Alert.alert('Success', `${userName} now has the CMSR badge`);
     } catch (err) {
@@ -1346,6 +1349,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), null);
       invalidateFullProfile(selectedUserId);
+      updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: false }));
       Alert.alert('Success', `${userName} no longer has the CMSR badge`);
     } catch (err) {

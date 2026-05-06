@@ -34,5 +34,7 @@
 	<string>1:541413670501:ios:f6bab2ea6e18aa852a108c</string>
 	<key>DATABASE_URL</key>
 	<string>https://adoptme-7b50c-default-rtdb.firebaseio.com</string>
+	<key>ADMOB_APP_ID</key>
+	<string>ca-app-pub-5740215782746766~9445378623</string>
 </dict>
 </plist>

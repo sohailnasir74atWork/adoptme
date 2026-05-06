@@ -54,6 +54,8 @@
 	<string>We need to save wallpapers to your photo library.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>This identifier will be used to deliver personalized ads to you.</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-5740215782746766~9445378623</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>
