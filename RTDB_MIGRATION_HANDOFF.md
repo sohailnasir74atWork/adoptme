@@ -1,6 +1,6 @@
 # RTDB Cost-Reduction Update — Handoff
 
-Last touched: 2026-05-04 (evening). Hand this to the next agent so nothing gets re-done or accidentally undone.
+Last touched: 2026-05-13 (Phase 5 server-side now live: SQL applied + both HTTPS notify CFs deployed in `adoptme-7b50c`). Hand this to the next agent so nothing gets re-done or accidentally undone.
 
 ## Why this work exists
 
@@ -33,6 +33,7 @@ A second 20-min RTDB profile was captured 2026-05-04 16:21. Numbers used for cos
 | 4 | Mirror `chat_meta_data` + `group_meta_data` to Supabase | ✅ deployed + backfilled — ⏳ app ship pending |
 | 5 | Mirror `/users/{uid}` into 8 Supabase tables — all client waves done | ✅ all code in — ⏳ app ship pending |
 | 6 | Swap `user_roblox` client reads to Supabase | ✅ all 5 read sites swapped (profileCache, PrivateChatHeader, OnlineUsersList, SocialDashboard, BottomDrawer, GlobelStats login) |
+| 7 | Phase 5 — SQL 005–011 applied + HTTPS notify CFs deployed | ✅ 2026-05-13 — ⏳ Supabase Database Webhook config + validation + M3 client swap pending |
 
 ---
 
@@ -412,7 +413,10 @@ Captures most of the ~$150-200/mo `/users` bandwidth target. Combined with Phase
 
 ---
 
-## Phase 5 plan: notification trigger swap (DO NOT IMPLEMENT YET)
+## Phase 5 plan: notification trigger swap (SUPERSEDED — see M1 section at end)
+
+**This section described the original clean-cut migration (force-update, old apps go silent). Direction changed 2026-05-12 to a backward-compatible two-way bridge — old + new app versions coexist indefinitely. Notification functions DO NOT need to be rewritten as HTTPS endpoints under the new plan; they stay RTDB-triggered on `chat_meta_data.unreadCount` because new-app clients still bump that. Kept below for context.**
+
 
 When messages are eventually moved off RTDB, `notifyNewMessage` and `notifyGroupMessage` stop firing — they're declared as `database.ref(...).onCreate(...)`, so no RTDB write = no invocation = silent app. **The body of the notification functions does NOT need to change. Only the trigger.**
 
@@ -540,3 +544,136 @@ Pick A for atomicity and lower latency.
 - Don't preemptively change the trigger now — it would silence notifications immediately.
 - Don't dual-write from the *client* to mirror messages into Supabase before Phase 5 schema exists. There's nowhere to write to.
 - Don't put the FCM-send logic in an Edge Function (Deno) — keep it in the existing Firebase function so Firebase Admin SDK + RTDB reads stay native. The Edge Function rewrite that #2 in the future-work list mentions is *not necessary* — the HTTP-trigger approach is simpler and reuses 100% of the existing FCM code.
+
+---
+
+## Phase 5 (clean-cut, Blox_Fruit pattern — IMPLEMENTED 2026-05-12)
+
+Direction changed mid-day on 2026-05-12 from the original two-way bridge plan (now reverted) to a full clean-cut Blox_Fruit-style migration. Old app builds keep working on RTDB but will not see new-app messages or metadata after this ships. Accepted tradeoff per user direction — no min-version enforcement either.
+
+### Architecture
+
+```
+OLD APP (RTDB only)                          NEW APP (Supabase only)
+   │                                              │
+   ▼                                              ▼
+RTDB /private_messages                  Supabase private_messages    ◄── notifyNewMessage (HTTPS webhook on INSERT)
+RTDB /group_messages                    Supabase group_messages      ◄── notifyGroupMessage (HTTPS webhook on INSERT)
+RTDB /chat_meta_data    ───mirror───►   Supabase chat_meta_data
+RTDB /group_meta_data   ───mirror───►   Supabase group_meta_data
+                            (old-app writes only)
+```
+
+- Existing `mirrorChatMetaToSupabase` / `mirrorGroupMetaToSupabase` CFs stay deployed — they only matter now for old-app writes (RTDB → Supabase). New-app writes hit Supabase directly via RPC.
+- `/activeChats`, `/activeGroupChats`, `/users/{uid}/fcmToken`, `/users/{uid}/notificationSettings` stay on RTDB. Notification CFs read them from there via Firebase Admin SDK.
+- No bridge functions. No backward-compat between old and new app for messages or metadata. Old and new users effectively partition.
+
+### Files added / changed
+
+| File | Role |
+|---|---|
+| [supabase/005_private_messages.sql](supabase/005_private_messages.sql) | `private_messages` table + RLS + realtime publication. `rtdb_key` column for backfill idempotency. |
+| [supabase/006_group_messages.sql](supabase/006_group_messages.sql) | `group_messages` table + `is_group_member()` SECURITY DEFINER helper + RLS. |
+| [supabase/007_meta_writable.sql](supabase/007_meta_writable.sql) | Open INSERT/UPDATE/DELETE policies on `chat_meta_data` + `group_meta_data` for participants (Phase 2 was service-role only). |
+| [supabase/008_meta_rpcs.sql](supabase/008_meta_rpcs.sql) | `increment_chat_unread` + `increment_group_unread` atomic helpers. |
+| [supabase/009_send_private_chat_meta.sql](supabase/009_send_private_chat_meta.sql) | Atomic two-sided pair-write RPC for private chat meta. Preserves `muted`. |
+| [supabase/010_send_group_message.sql](supabase/010_send_group_message.sql) | Idempotent group message insert RPC (bypasses RLS edge case on first-send). |
+| [supabase/011_fanout_group_meta.sql](supabase/011_fanout_group_meta.sql) | Bulk fan-out RPC: upsert group_meta_data for every member + unread bump for non-senders. |
+| [functions/notifyNewMessage.js](functions/notifyNewMessage.js) | **REWRITTEN** as HTTPS webhook on `private_messages` INSERT. Still reads `/activeChats`, fcmToken, muted from RTDB. |
+| [functions/notifyGroupMessage.js](functions/notifyGroupMessage.js) | **REWRITTEN** as HTTPS webhook on `group_messages` INSERT. Reads Firestore memberIds + RTDB presence + tokens. |
+
+### Deployment steps
+
+| Step | State |
+|---|---|
+| 1. SQL files 005–011 applied in Supabase | ✅ done 2026-05-13 |
+| 2. `SUPABASE_WEBHOOK_SECRET` set as Firebase secret | ✅ done 2026-05-12 (value at `.secrets/SUPABASE_WEBHOOK_SECRET.txt`, gitignored) |
+| 3. Old RTDB-triggered notify CFs deleted + redeployed as HTTPS | ✅ done 2026-05-13 — both `notifyNewMessage` and `notifyGroupMessage` live as HTTPS triggers in `adoptme-7b50c`, region `us-central1` |
+| 4. Supabase Database Webhooks (private_messages + group_messages) | ❌ **pending** — config values below |
+| 5. Server-side validation (Tests 1–4) | ❌ pending (do after step 4) |
+| 6. M3 client swap | ❌ pending (see below) |
+| 7. App build + ship | ❌ pending |
+
+**Step 3 gotcha — what bit us 2026-05-13:** the deploy of the rewritten functions silently kept the old `ref.write` trigger because the old functions weren't deleted first. Firebase won't change trigger type on the same function name — it just keeps the old trigger and the deploy reports success. **Always delete first when swapping trigger types:**
+```bash
+firebase functions:delete notifyNewMessage notifyGroupMessage --region us-central1 --force --project adoptme-7b50c
+firebase deploy --only functions:notifyNewMessage,functions:notifyGroupMessage --project adoptme-7b50c
+```
+
+**Step 3 secondary gotcha:** if you run any deploy from this repo with a wrong default project, it can land in `fruiteblocks` (Blox_Fruit's Firebase project) instead. On 2026-05-13 this happened — two orphan functions got created in `fruiteblocks` and had to be deleted with `firebase functions:delete ... --project fruiteblocks --force`. Blox_Fruit's real notification functions (`notifyPrivateMessage`, `notifyGroupNewMessage`) were untouched because they have different names. **Always pass `--project adoptme-7b50c` explicitly** when deploying from this repo.
+
+**Step 4 — Configure two Supabase Database Webhooks** (Dashboard → Database → Webhooks → Create):
+
+Webhook 1 — new private messages
+- Name: `notify_new_private_message`
+- Table: `public.private_messages`
+- Events: INSERT only
+- Type: HTTP Request, Method POST
+- URL: `https://us-central1-adoptme-7b50c.cloudfunctions.net/notifyNewMessage`
+- Header: `x-webhook-secret = <value from .secrets/SUPABASE_WEBHOOK_SECRET.txt>`
+- Timeout: 5000 ms
+
+Webhook 2 — new group messages
+- Name: `notify_new_group_message`
+- Table: `public.group_messages`
+- Events: INSERT only
+- Type: HTTP Request, Method POST
+- URL: `https://us-central1-adoptme-7b50c.cloudfunctions.net/notifyGroupMessage`
+- Header: `x-webhook-secret = <same value>`
+- Timeout: 10000 ms (group fan-out can read many fcmTokens)
+
+### Validation (server-side, before client swap)
+
+**Test 1 — Private notification round-trip:**
+- From Supabase SQL editor, insert a row directly (use real Firebase UIDs):
+  ```sql
+  insert into private_messages (chat_id, sender_id, recipient_id, text)
+  values ('uidA_uidB', 'uidA', 'uidB', 'webhook test');
+  ```
+- Within ~2 seconds confirm `notifyNewMessage` CF logs a successful invocation and an FCM push lands on the recipient device.
+
+**Test 2 — Group notification round-trip:** same approach against `group_messages`, with a `group_id` matching a real Firestore group.
+
+**Test 3 — Mute + active-chat suppression:** with the recipient inside the chat (setActiveChat triggered) or with muted=true in chat_meta_data, repeat Test 1 and confirm CF returns 200 "Skipped" without sending FCM.
+
+**Test 4 — RPC sanity (sender flow):**
+- From an authenticated client (or curl with a real Firebase ID token), invoke `send_private_chat_meta` RPC. Verify both sender + receiver rows appear with correct unread_count (0 for sender, 1 for receiver).
+- Invoke `send_group_message` + `fanout_group_message_meta` with a real group. Verify all members' `group_meta_data` rows update.
+
+### What this ship does NOT include
+
+- **No backfill.** Historical RTDB messages do not get copied to Supabase — new app starts with empty `private_messages` / `group_messages` views. If user wants the last 30 days backfilled, that's an optional separate task (Blox_Fruit pattern, ~half day).
+- **No client swap.** PrivateChat.jsx, GroupChatScreen.jsx, groupUtils.js still read/write RTDB today. M3 ships those changes in the next app build.
+- **Existing mirror CFs (mirrorChatMetaToSupabase / mirrorGroupMetaToSupabase) stay deployed.** They handle old-app RTDB writes → Supabase mirror so new-app users at least see what old-app users do on the metadata side. Eventually retire when old-app DAU is negligible.
+
+### Legacy notify CFs (deployed 2026-05-13 — keeps old-app push notifications working)
+
+When the old `notifyNewMessage` / `notifyGroupMessage` RTDB triggers were deleted (to make room for the HTTPS replacements), **old-app users instantly lost all chat push notifications** — they still write to RTDB but nothing listened. Mirror CFs only copy metadata; they don't fire FCM.
+
+Fix: re-deployed the pre-Phase-5 RTDB-triggered code under new names so it coexists with the HTTPS CFs.
+
+| Function | Trigger | File | For |
+|---|---|---|---|
+| `notifyNewMessage` | HTTPS (Supabase webhook) | [functions/notifyNewMessage.js](functions/notifyNewMessage.js) | new app |
+| `notifyNewMessageLegacy` | RTDB `/chat_meta_data/.../unreadCount` | [functions/notifyNewMessageLegacy.js](functions/notifyNewMessageLegacy.js) | old app |
+| `notifyGroupMessage` | HTTPS (Supabase webhook) | [functions/notifyGroupMessage.js](functions/notifyGroupMessage.js) | new app |
+| `notifyGroupMessageLegacy` | RTDB `/group_meta_data/.../unreadCount` | [functions/notifyGroupMessageLegacy.js](functions/notifyGroupMessageLegacy.js) | old app |
+
+No duplicate FCM risk: each user is on exactly one app version, so they hit exactly one path. Old app only writes to RTDB → only legacy fires. New app only writes to Supabase → only HTTPS fires.
+
+**Delete the legacy pair when old-app DAU is negligible** (~5% threshold suggested):
+```bash
+firebase functions:delete notifyNewMessageLegacy notifyGroupMessageLegacy --region us-central1 --force --project adoptme-7b50c
+```
+
+### Client work pending (M3 — separate task, before app ship)
+
+| File | Change |
+|---|---|
+| `Code/ChatScreen/PrivateChat/PrivateChat.jsx` | Replace RTDB `/private_messages` read/write with Supabase realtime subscribe + `send_private_chat_meta` RPC. Stop writing `chat_meta_data` to RTDB. |
+| `Code/ChatScreen/PrivateChat/PrivateMessageList.jsx` | Switch pagination from RTDB orderByKey to Supabase `(chat_id, created_at, id)` cursor. |
+| `Code/ChatScreen/GroupChat/GroupChatScreen.jsx` | Same swap for group messages. |
+| `Code/ChatScreen/utils/groupUtils.js` | `sendGroupMessage` becomes: `send_group_message` RPC + `fanout_group_message_meta` RPC; remove RTDB multi-path update. |
+| `Code/ChatScreen/ReportPopUp.jsx` | Update private/group report path to call Supabase UPDATE (set deleted=true OR bump report_count) instead of RTDB. |
+| `Code/Supabase/privateMessagesBackend.js` (new) | Realtime subscribe + send helpers. Copy from Blox_Fruit. |
+| `Code/Supabase/groupMessagesBackend.js` (new) | Same for group. |

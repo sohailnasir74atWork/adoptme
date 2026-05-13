@@ -1,63 +1,162 @@
+/**
+ * notifyNewMessage — HTTPS webhook handler for new private messages.
+ *
+ * Triggered by a Supabase Database Webhook configured in
+ *   Dashboard -> Database -> Webhooks
+ *   Table:  public.private_messages
+ *   Event:  INSERT
+ *   Method: POST
+ *   URL:    <this CF's HTTPS URL>
+ *   Header: x-webhook-secret = <SUPABASE_WEBHOOK_SECRET>
+ *
+ * Reads:
+ *   - /activeChats/{userId}             RTDB (presence-based push suppression)
+ *   - /users/{userId}/fcmToken          RTDB (FCM device token)
+ *   - chat_meta_data.muted              Supabase (per-pair mute). MUST be
+ *                                       Supabase, not RTDB: after Phase 5
+ *                                       new app builds toggle mute on
+ *                                       Supabase directly via 007_meta_writable
+ *                                       policies, so RTDB no longer reflects
+ *                                       new-app mute state.
+ *
+ * Replaces the old RTDB onCreate trigger at
+ *   /chat_meta_data/{userId}/{chatPartnerId}/unreadCount
+ * which is going away in Phase 5 because client writes flip from RTDB
+ * to Supabase.
+ *
+ * Required secrets:
+ *   firebase functions:secrets:set SUPABASE_WEBHOOK_SECRET
+ *
+ * Deployment:
+ *   firebase deploy --only functions:notifyNewMessage
+ */
+
 const admin = require("firebase-admin");
 const functions = require("firebase-functions/v1");
+const { getSupabaseAdmin } = require("./_supabaseAdmin");
 
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
-exports.notifyNewMessage = functions.database
-  .ref("/chat_meta_data/{userId}/{chatPartnerId}/unreadCount")
-  .onWrite(async (change, context) => {
-    const { userId, chatPartnerId } = context.params;
+function validateWebhookOrSend(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return null;
+  }
+  const expected = (process.env.SUPABASE_WEBHOOK_SECRET || '').trim();
+  const got = (req.headers['x-webhook-secret'] || '').trim();
+  if (!expected || got !== expected) {
+    res.status(401).send('Unauthorized');
+    return null;
+  }
+  const { type, record } = req.body || {};
+  if (type !== 'INSERT' || !record) {
+    res.status(200).send('Skipped: not an INSERT');
+    return null;
+  }
+  return record;
+}
 
-    const beforeUnread = change.before.val();
-    const afterUnread = change.after.val();
+function previewFor(r) {
+  if (r.text && String(r.text).trim()) return r.text;
+  if (r.image_url || (Array.isArray(r.image_urls) && r.image_urls.length > 0)) return '📷 Photo';
+  if (Array.isArray(r.fruits) && r.fruits.length > 0) {
+    return r.fruits.length === 1 ? '🐾 Sent a pet' : `🐾 Sent ${r.fruits.length} pets`;
+  }
+  return 'New message';
+}
 
-    if (!afterUnread || afterUnread <= beforeUnread) {
-      return null;
+exports.notifyNewMessage = functions
+  .runWith({
+    secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_WEBHOOK_SECRET'],
+    memory: '256MB',
+    timeoutSeconds: 30,
+  })
+  .https.onRequest(async (req, res) => {
+    const record = validateWebhookOrSend(req, res);
+    if (!record) return;
+
+    const senderId = record.sender_id;
+    const recipientId = record.recipient_id;
+    if (!senderId || !recipientId) {
+      res.status(200).send('Skipped: missing sender/recipient');
+      return;
     }
-
-    // ── Step 1: Cheap checks first (tiny reads — boolean, string, null) ──
-    const [activeUserSnap, mutedSnap, fcmTokenSnap] = await Promise.all([
-      admin.database().ref(`/activeChats/${userId}`).once("value"),
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/muted`).once("value"),
-      admin.database().ref(`/users/${userId}/fcmToken`).once("value"),
-    ]);
-
-    if (activeUserSnap.exists()) return null;
-    if (mutedSnap.val() === true) return null;
-
-    const fcmToken = fcmTokenSnap.val();
-    if (!fcmToken) return null;
-
-    // ── Step 2: Only now fetch the fields we need for the notification ──
-    const [nameSnap, msgSnap, chatIdSnap, tsSnap, receiverIdSnap] = await Promise.all([
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/receiverName`).once("value"),
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/lastMessage`).once("value"),
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/chatId`).once("value"),
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/timestamp`).once("value"),
-      admin.database().ref(`/chat_meta_data/${userId}/${chatPartnerId}/receiverId`).once("value"),
-    ]);
-
-    const receiverId = receiverIdSnap.val();
-    if (receiverId !== chatPartnerId) return null;
-
-    const payload = {
-      notification: {
-        title: nameSnap.val() || "New Message",
-        body: msgSnap.val() || "You have a new message.",
-      },
-      data: {
-        chatId: chatIdSnap.val() || "",
-        senderId: chatPartnerId,
-        timestamp: tsSnap.val() ? tsSnap.val().toString() : Date.now().toString(),
-      },
-      token: fcmToken,
-    };
+    if (senderId === recipientId) {
+      res.status(200).send('Skipped: self-message');
+      return;
+    }
 
     try {
-      await admin.messaging().send(payload);
-    } catch (error) {
-      console.error("❌ Failed to send notification:", error);
-    }
+      // Parallel: RTDB reads (presence + fcmToken) and Supabase lookup
+      // (muted + receiver_name in one query).
+      const supabase = getSupabaseAdmin();
+      const [activeChatSnap, fcmTokenSnap, chatMetaResult] = await Promise.all([
+        admin.database().ref(`/activeChats/${recipientId}`).once('value'),
+        admin.database().ref(`/users/${recipientId}/fcmToken`).once('value'),
+        supabase
+          .from('chat_meta_data')
+          .select('muted, receiver_name')
+          .eq('owner_uid', recipientId)
+          .eq('partner_uid', senderId)
+          .maybeSingle(),
+      ]);
 
-    return null;
+      // Active-chat suppression: recipient is viewing this exact chat,
+      // they'll see the message inline.
+      const activeChatId = activeChatSnap.val();
+      if (activeChatId && String(activeChatId) === String(record.chat_id)) {
+        res.status(200).send('Skipped: recipient on this chat');
+        return;
+      }
+      if (chatMetaResult?.data?.muted === true) {
+        res.status(200).send('Skipped: muted');
+        return;
+      }
+
+      const fcmToken = fcmTokenSnap.val();
+      if (!fcmToken || typeof fcmToken !== 'string') {
+        res.status(200).send('Skipped: no fcmToken');
+        return;
+      }
+
+      const senderName = chatMetaResult?.data?.receiver_name || 'New Message';
+
+      await admin.messaging().send({
+        token: fcmToken,
+        notification: {
+          title: senderName,
+          body: previewFor(record),
+        },
+        data: {
+          type: 'private_message',
+          chatId: String(record.chat_id || ''),
+          senderId: String(senderId),
+          messageId: String(record.id || ''),
+          timestamp: record.created_at
+            ? String(Date.parse(record.created_at))
+            : String(Date.now()),
+        },
+        android: {
+          priority: 'high',
+          notification: { sound: 'default', channelId: 'default' },
+        },
+        apns: {
+          payload: { aps: { sound: 'default', badge: 1 } },
+        },
+      });
+
+      res.status(200).send('OK');
+    } catch (err) {
+      console.error('[notifyNewMessage] error:', err);
+      // Clean up dead tokens so the CF doesn't retry pointlessly next time.
+      if (err && (err.code === 'messaging/invalid-registration-token'
+              || err.code === 'messaging/registration-token-not-registered')) {
+        try {
+          await admin.database().ref(`/users/${recipientId}/fcmToken`).remove();
+        } catch {}
+      }
+      res.status(500).send('Error');
+    }
   });
