@@ -1193,6 +1193,7 @@ const HomeScreen = ({ selectedTheme }) => {
         ...(user?.isModerator ? { isModerator: true } : {}),
         ...(user?.isTrusted ? { isTrusted: true } : {}),
         ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isHelper ? { isHelper: true } : {}),
         ...(user?.isBabyMod ? { isBabyMod: true } : {}),
         ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),
         ...(myCosmetics?.chatTextColor?.color ? { chatTextColor: myCosmetics.chatTextColor.color } : {}),

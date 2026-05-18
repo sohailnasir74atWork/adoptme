@@ -55,16 +55,18 @@ exports.scheduledFunction = functions.pubsub
 
       const normalizedNewData = normalizeForComparison(cleanedPetsData);
 
-      const ref = admin.database().ref("xlsData");
-      const snapshot = await ref.once("value");
-      const firebaseRawData = snapshot.val() || {};
-      const cleanedExistingData = cleanObject(firebaseRawData);
-      const normalizedExistingData = normalizeForComparison(cleanedExistingData);
+      // Write-only: we deliberately do NOT read the existing xlsData tree
+      // first. Doing so used to pull tens of MB on every run just to feed
+      // logDifferences() with key-by-key change logs — by far the largest
+      // remaining RTDB egress source after the user-data migration. If
+      // change tracking is needed again, do it via a small content-hash
+      // stored separately, not by re-downloading the whole tree.
+      await admin.database().ref("xlsData").set(normalizedNewData);
 
-      logDifferences(normalizedExistingData, normalizedNewData);
-      await ref.set(normalizedNewData);
-
-      console.log("✅ Data pushed to Firebase successfully without root nulls.");
+      const keyCount = Array.isArray(normalizedNewData)
+        ? normalizedNewData.length
+        : Object.keys(normalizedNewData || {}).length;
+      console.log(`✅ xlsData updated (${keyCount} top-level items).`);
 
     } catch (error) {
       console.error("❌ Error during process:", error);

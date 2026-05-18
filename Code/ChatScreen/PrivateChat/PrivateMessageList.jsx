@@ -116,13 +116,23 @@ const PrivateMessageList = ({
     showSuccessMessage(t('chat.success'), t('chat.message_copied'));
   }, [triggerHapticFeedback]);
 
-  // ✅ Memoize filteredMessages
+  // ✅ Memoize filteredMessages. Dedup-by-id guards against duplicate keys
+  // reaching the FlatList (can happen briefly when realtime onInsert races
+  // with pagination, or if the channel resubscribes and replays the buffer).
   const filteredMessages = useMemo(() => {
     if (!Array.isArray(messages)) return [];
-    if (isBanned && userId) {
-      return messages.filter((message) => message?.senderId === userId);
+    const base = (isBanned && userId)
+      ? messages.filter((message) => message?.senderId === userId)
+      : messages;
+    const seen = new Set();
+    const out = [];
+    for (const m of base) {
+      const id = m?.id != null ? String(m.id) : null;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      out.push(m);
     }
-    return messages;
+    return out;
   }, [messages, isBanned, userId]);
 
   // ✅ PERF: Store filteredMessages in a ref so renderMessage doesn't depend on the array

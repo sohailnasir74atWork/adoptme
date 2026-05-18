@@ -17,7 +17,7 @@
  * 🚀 WAVE 1+2 — moved to Supabase via userBackend:
  *   - displayName, avatar              → user_identity
  *   - isAdmin/isModerator/isBabyMod
- *     /isTrusted/isCMSR                → user_roles
+ *     /isTrusted/isCMSR/isHelper       → user_roles
  *   - isPro, topBadge                  → user_cosmetics
  *   RTDB falls back per-field if Supabase has no row (mirror lag, brand-new
  *   user, or backfill miss). Game state (hasRecentGameWin, lastGameWinAt,
@@ -85,77 +85,70 @@ export const getOrFetchProfile = async (db, uid) => {
   const cached = getCachedProfile(uid);
   if (cached) return cached;
 
-  // 2. Fetch in parallel:
-  //    - identity (displayName + avatar)            → Supabase user_identity
-  //    - roles (isAdmin/isModerator/...)            → Supabase user_roles
-  //    - cosmetics (isPro, topBadge)                → Supabase user_cosmetics
-  //    - roblox (username/id/verified)              → Supabase user_roblox
-  //    - game state + shop                          → RTDB (not migrated)
-  //    All fire concurrently; latency = max, not sum. Each Supabase miss
-  //    falls back to the matching RTDB read still in the field list below —
-  //    so the code path is safe for brand-new users or any backfill miss.
+  // Fetch strategy:
+  //   - identity / roles / cosmetics / roblox  → Supabase (always)
+  //   - hasRecentGameWin + lastGameWinAt       → RTDB (not mirrored)
+  //   - shop/activeItems                       → RTDB (not migrated)
+  //   - RTDB fallback for mirrored fields fires ONLY if the corresponding
+  //     Supabase table returned null (mirror lag / not-yet-backfilled user).
+  //     Common case: 0 RTDB reads for the mirrored fields. Was 9.
   try {
     const base = `users/${uid}`;
-    // RTDB fallback fields. The first 7 are mirrored to Supabase but we
-    // keep reading them from RTDB as a fallback for mirror-lag /
-    // brand-new-user cases. Supabase wins when present.
-    const fieldPaths = [
-      'displayName',           // mirrored — fallback only
-      'avatar',                // mirrored — fallback only
-      'isPro',                 // mirrored — fallback only
-      'isAdmin',               // mirrored — fallback only
-      'isModerator',           // mirrored — fallback only
-      'isTrusted',             // mirrored — fallback only
-      'isCMSR',                // mirrored — fallback only
-      'topBadge',              // mirrored — fallback only
-      'robloxUsernameVerified', // mirrored — fallback only
-      // Not migrated (RTDB-only):
-      'hasRecentGameWin',
-      'lastGameWinAt',
-    ];
 
-    const [identityRow, rolesRow, cosmeticsRow, robloxRow, ...snaps] = await Promise.all([
+    const [
+      identityRow, rolesRow, cosmeticsRow, robloxRow,
+      hasRecentGameWinSnap, lastGameWinAtSnap, shopSnap,
+    ] = await Promise.all([
       getIdentity(uid),
       getRoles(uid),
       getCosmetics(uid),
       getRoblox(uid),
-      ...fieldPaths.map((p) => get(ref(db, `${base}/${p}`))),
+      get(ref(db, `${base}/hasRecentGameWin`)),
+      get(ref(db, `${base}/lastGameWinAt`)),
       get(ref(db, `${base}/shop/activeItems`)),
     ]);
 
-    const vals = snaps.map((s) => (s.exists() ? s.val() : null));
-    const [
-      rtdbDisplayName,
-      rtdbAvatar,
-      rtdbIsPro,
-      rtdbIsAdmin,
-      rtdbIsModerator,
-      rtdbIsTrusted,
-      rtdbIsCMSR,
-      rtdbTopBadge,
-      rtdbRobloxUsernameVerified,
-      hasRecentGameWin,
-      lastGameWinAt,
-      shopItems,
-    ] = vals;
+    const hasRecentGameWin = hasRecentGameWinSnap.exists() ? hasRecentGameWinSnap.val() : null;
+    const lastGameWinAt    = lastGameWinAtSnap.exists()    ? lastGameWinAtSnap.val()    : null;
+    const shopItems        = shopSnap.exists()             ? shopSnap.val()             : null;
 
-    // Prefer Supabase for migrated fields; fall back to RTDB if missing.
-    const displayName             = identityRow?.displayName          ?? rtdbDisplayName;
-    const avatar                  = identityRow?.avatar               ?? rtdbAvatar;
-    const isPro                   = cosmeticsRow?.isPro               ?? rtdbIsPro;
-    const topBadge                = cosmeticsRow?.topBadge            ?? rtdbTopBadge;
-    const isAdmin                 = rolesRow?.isAdmin                 ?? rtdbIsAdmin;
-    const isModerator             = rolesRow?.isModerator             ?? rtdbIsModerator;
-    const isTrusted               = rolesRow?.isTrusted               ?? rtdbIsTrusted;
-    const isCMSR                  = rolesRow?.isCMSR                  ?? rtdbIsCMSR;
-    const robloxUsernameVerified  = robloxRow?.robloxUsernameVerified ?? rtdbRobloxUsernameVerified;
+    // Selective RTDB fallback — only for Supabase tables that returned null.
+    // This handles brand-new users and any backfill misses without paying
+    // the per-cache-miss RTDB tax for everyone else.
+    let fb = null;
+    const missingFields = [];
+    if (!identityRow)  missingFields.push('displayName', 'avatar');
+    // RTDB leaf for admin is `admin` (not `isAdmin`); Supabase exposes it
+    // as `isAdmin` via fromRolesRow. Use the correct RTDB name here so the
+    // fallback works when the mirror row is missing.
+    if (!rolesRow)     missingFields.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isHelper');
+    if (!cosmeticsRow) missingFields.push('isPro', 'topBadge');
+    if (!robloxRow)    missingFields.push('robloxUsernameVerified');
+    if (missingFields.length > 0) {
+      const snaps = await Promise.all(
+        missingFields.map((p) => get(ref(db, `${base}/${p}`)).catch(() => null))
+      );
+      fb = {};
+      missingFields.forEach((p, i) => {
+        if (snaps[i] && snaps[i].exists()) fb[p] = snaps[i].val();
+      });
+    }
+
+    const displayName             = identityRow?.displayName          ?? fb?.displayName;
+    const avatar                  = identityRow?.avatar               ?? fb?.avatar;
+    const isPro                   = cosmeticsRow?.isPro               ?? fb?.isPro;
+    const topBadge                = cosmeticsRow?.topBadge            ?? fb?.topBadge;
+    const isAdmin                 = rolesRow?.isAdmin                 ?? fb?.admin;
+    const isModerator             = rolesRow?.isModerator             ?? fb?.isModerator;
+    const isTrusted               = rolesRow?.isTrusted               ?? fb?.isTrusted;
+    const isCMSR                  = rolesRow?.isCMSR                  ?? fb?.isCMSR;
+    const isHelper                = rolesRow?.isHelper                ?? fb?.isHelper;
+    const robloxUsernameVerified  = robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified;
 
     if (
-      identityRow == null &&
-      rolesRow == null &&
-      cosmeticsRow == null &&
-      robloxRow == null &&
-      vals.every((v) => v == null)
+      identityRow == null && rolesRow == null && cosmeticsRow == null && robloxRow == null &&
+      hasRecentGameWin == null && lastGameWinAt == null && shopItems == null &&
+      (!fb || Object.keys(fb).length === 0)
     ) {
       return null;
     }
@@ -191,6 +184,7 @@ export const getOrFetchProfile = async (db, uid) => {
       isModerator: !!isModerator,
       isTrusted: !!isTrusted,
       isCMSR: !!isCMSR,
+      isHelper: !!isHelper,
       chatTextColor,
       profileFrame,
       tradeCardBg,
@@ -252,6 +246,7 @@ export const seedFromMessage = (msg) => {
     isModerator: !!msg.isModerator,
     isTrusted: !!msg.isTrusted,
     isCMSR: !!msg.isCMSR,
+    isHelper: !!msg.isHelper,
     topBadge: msg.topBadge || null,
     profileFrame: msg.profileFrame || null,
     chatTextColor: msg.chatTextColor || null,
@@ -264,7 +259,7 @@ export const seedFromMessage = (msg) => {
 //  This is the key "backwards compatible" resolver
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
-  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, hasRecentGameWin: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isTrusted: false, isCMSR: false };
+  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, hasRecentGameWin: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isTrusted: false, isCMSR: false, isHelper: false };
 
   const cached = getCachedProfile(msg.senderId);
 
@@ -281,6 +276,7 @@ export const resolveProfile = (msg) => {
     isModerator: msg.isModerator ?? cached?.isModerator ?? false,
     isTrusted: msg.isTrusted ?? cached?.isTrusted ?? false,
     isCMSR: msg.isCMSR ?? cached?.isCMSR ?? false,
+    isHelper: msg.isHelper ?? cached?.isHelper ?? false,
     chatTextColor: msg.chatTextColor ?? cached?.chatTextColor ?? null,
     profileFrame: msg.profileFrame ?? cached?.profileFrame ?? null,
     tradeCardBg: cached?.tradeCardBg ?? null,
@@ -362,6 +358,7 @@ export const seedCurrentUser = async (user, localState, db) => {
     isModerator: !!user.isModerator,
     isTrusted: !!user.isTrusted,
     isCMSR: !!user.isCMSR,
+    isHelper: !!user.isHelper,
     topBadge: user.topBadge || null,
     chatTextColor: null,
     profileFrame: null,

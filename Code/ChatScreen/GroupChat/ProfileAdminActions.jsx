@@ -9,8 +9,8 @@ const ProfileAdminActions = ({
   isBabyMod = false, isModerator = false,
   canManageBabyMod = false, targetIsBabyMod = false,
   handleMakeBabyMod, handleRemoveBabyMod,
-  canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false,
-  handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
+  canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
+  handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR, handleMakeHelper, handleRemoveHelper,
   handleDeleteUserData, deletingUser = false,
   canDeleteUser = false,
 }) => {
@@ -95,6 +95,13 @@ const ProfileAdminActions = ({
             label={targetIsCMSR ? 'Remove CMSR' : 'Make CMSR'}
             color={targetIsCMSR ? '#f59e0b' : '#6366f1'}
             onPress={targetIsCMSR ? handleRemoveCMSR : handleMakeCMSR}
+          />
+        )}
+        {canManageBadges && (
+          <Chip
+            label={targetIsHelper ? 'Remove Helper' : 'Make Helper'}
+            color={targetIsHelper ? '#f59e0b' : '#14b8a6'}
+            onPress={targetIsHelper ? handleRemoveHelper : handleMakeHelper}
           />
         )}
       </View>

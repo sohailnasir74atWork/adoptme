@@ -52,10 +52,11 @@ export async function loadChatMeta(ownerUid) {
 
 // -----------------------------------------------------------------
 // Reset unread count directly in Supabase — called when user opens a
-// chat so the badge clears instantly without waiting for the mirror CF.
-// RTDB is still the source of truth; PrivateChat also writes unreadCount=0
-// to RTDB as before, and the mirror CF will upsert the same value shortly
-// after. The direct write here just prevents a stale badge flash.
+// chat so the badge clears instantly. Phase 5 clean-cut: new app builds
+// are Supabase-only for chat_meta_data writes (PrivateChat send no
+// longer touches RTDB), so this is the canonical write, not an
+// optimistic shortcut. Old-app builds still write RTDB and the mirror
+// CF replays those here.
 // -----------------------------------------------------------------
 export async function resetUnreadCount(ownerUid, partnerUid) {
   if (!ownerUid || !partnerUid) return;
@@ -64,7 +65,72 @@ export async function resetUnreadCount(ownerUid, partnerUid) {
     .update({ unread_count: 0, updated_at: new Date().toISOString() })
     .eq('owner_uid', ownerUid)
     .eq('partner_uid', partnerUid);
-  // Errors are intentionally swallowed — RTDB + mirror CF is the fallback.
+  // Errors are intentionally swallowed — the realtime subscription
+  // will reconcile state on the next upstream event.
+}
+
+// -----------------------------------------------------------------
+// Toggle mute flag for one side of a chat pair. RLS (007_meta_writable)
+// permits either participant to UPDATE, but we always write the owner's
+// row — mute is a per-user preference, not symmetric.
+// -----------------------------------------------------------------
+export async function setChatMuted(ownerUid, partnerUid, muted) {
+  if (!ownerUid || !partnerUid) return;
+  const { error } = await supabase
+    .from('chat_meta_data')
+    .update({ muted: !!muted, updated_at: new Date().toISOString() })
+    .eq('owner_uid', ownerUid)
+    .eq('partner_uid', partnerUid);
+  if (error) throw error;
+}
+
+// -----------------------------------------------------------------
+// Delete the caller's inbox row for a single partner. One-sided on
+// purpose: matches the prior RTDB `remove()` behaviour where the other
+// participant kept their copy of the conversation in their inbox.
+// RLS (007_meta_writable) gates DELETE to owner_uid = firebase_uid().
+// -----------------------------------------------------------------
+export async function deleteChatMeta(ownerUid, partnerUid) {
+  if (!ownerUid || !partnerUid) return;
+  const { error } = await supabase
+    .from('chat_meta_data')
+    .delete()
+    .eq('owner_uid', ownerUid)
+    .eq('partner_uid', partnerUid);
+  if (error) throw error;
+}
+
+// -----------------------------------------------------------------
+// Admin-only helpers — backed by SECURITY DEFINER RPCs in
+// 013_admin_chat_meta.sql, each gated on user_roles.is_admin. Regular
+// users calling these will get a 42501 from Postgres.
+// -----------------------------------------------------------------
+
+// Paginated read of one user's inbox. Matches the cursor semantics of
+// the old RTDB query: pass `null` for the first page, then the
+// timestamp of the oldest row from the previous page to get the next.
+// Returns rows already flattened to the UI shape (via fromChatMetaRow).
+export async function adminListUserChats(ownerUid, cursorMs = null, pageSize = 20) {
+  if (!ownerUid) return [];
+  const { data, error } = await supabase.rpc('admin_list_user_chats', {
+    p_owner_uid: ownerUid,
+    p_cursor_ms: cursorMs ?? null,
+    p_limit: pageSize,
+  });
+  if (error) throw error;
+  return (data || []).map(fromChatMetaRow);
+}
+
+// Symmetric two-sided delete used by the admin "Delete Conversation"
+// tool. Removes both inbox rows; the RTDB /private_messages subtree is
+// handled by the caller as before.
+export async function adminDeleteChatPair(uid1, uid2) {
+  if (!uid1 || !uid2) throw new Error('adminDeleteChatPair: both uids required');
+  const { error } = await supabase.rpc('admin_delete_chat_pair', {
+    p_uid1: uid1,
+    p_uid2: uid2,
+  });
+  if (error) throw error;
 }
 
 // -----------------------------------------------------------------

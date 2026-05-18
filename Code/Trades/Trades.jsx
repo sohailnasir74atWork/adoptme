@@ -6,6 +6,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useGlobalState } from '../GlobelStats';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
+import UserBadgePill, { getFirstBadgeType } from '../Helper/UserBadgePill';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -1339,38 +1340,19 @@ const TradeList = ({ route }) => {
                   const pIsMod = p.isModerator ?? item.isModerator;
                   const pIsTrusted = p.isTrusted ?? item.isTrusted;
                   const pIsCMSR = p.isCMSR ?? item.isCMSR;
+                  const pIsHelper = p.isHelper ?? item.isHelper;
+                  const firstBadge = getFirstBadgeType({
+                    isAdmin: pIsAdmin, isModerator: pIsMod, isBabyMod: item.isBabyMod,
+                    isTrusted: pIsTrusted, isCMSR: pIsCMSR, isHelper: pIsHelper,
+                  });
                   return (
                     <>
-                      {pIsAdmin && (
-                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#EF4444' }]}>
-                          <Icon name="shield" size={8} color="#fff" />
-                          <Text style={badgeStyles.roleBadgeText}>Admin</Text>
-                        </View>
-                      )}
-                      {!pIsAdmin && pIsMod && (
-                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
-                          <Icon name="shield-checkmark" size={8} color="#fff" />
-                          <Text style={badgeStyles.roleBadgeText}>Mod</Text>
-                        </View>
-                      )}
-                      {!pIsAdmin && !pIsMod && item.isBabyMod && (
-                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#F59E0B' }]}>
-                          <Icon name="paw" size={8} color="#fff" />
-                          <Text style={badgeStyles.roleBadgeText}>JMD</Text>
-                        </View>
-                      )}
-                      {pIsTrusted && (
-                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#10B981' }]}>
-                          <Icon name="checkmark-circle" size={8} color="#fff" />
-                          <Text style={badgeStyles.roleBadgeText}>Trusted</Text>
-                        </View>
-                      )}
-                      {pIsCMSR && (
-                        <View style={[badgeStyles.roleBadge, { backgroundColor: '#F97316' }]}>
-                          <Icon name="briefcase" size={8} color="#fff" />
-                          <Text style={badgeStyles.roleBadgeText}>CMSR</Text>
-                        </View>
-                      )}
+                      {pIsAdmin && <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'admin'} />}
+                      {!pIsAdmin && pIsMod && <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'mod'} />}
+                      {!pIsAdmin && !pIsMod && item.isBabyMod && <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />}
+                      {pIsTrusted && <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />}
+                      {pIsCMSR && <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />}
+                      {pIsHelper && <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />}
                     </>
                   );
                 })()}

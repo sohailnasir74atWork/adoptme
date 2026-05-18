@@ -11,6 +11,7 @@ import { useColorScheme, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute } from '@react-native-firebase/crashlytics';
+import { getDeviceFingerprint } from './Helper/deviceFingerprint';
 
 
 
@@ -235,7 +236,7 @@ export const GlobalStateProvider = ({ children }) => {
       const PROJECTION = [
         'email', 'decodedEmail', 'createdAt',
         'displayName', 'avatar', 'userName',
-        'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR',
+        'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
         'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
       ];
@@ -322,6 +323,16 @@ export const GlobalStateProvider = ({ children }) => {
 
       // 🔥 Refresh and update FCM token
       await Promise.all([registerForNotifications(userId)]);
+
+      // Stamp the current device's fingerprint on users/{uid}/deviceId so
+      // mirrorBanToDevice can lock this device when the account is banned
+      // from any other session. Best-effort, fire-and-forget — failure here
+      // (Keychain locked, RTDB write rejected) only weakens device-ban
+      // enforcement for the current session, not core auth.
+      getDeviceFingerprint().then((fp) => {
+        if (!fp) return;
+        update(ref(appdatabase, `users/${userId}`), { deviceId: fp }).catch(() => {});
+      }).catch(() => {});
 
     } catch (error) {
       // console.error("❌ Auth state change error:", error);
@@ -478,8 +489,19 @@ export const GlobalStateProvider = ({ children }) => {
   useEffect(() => {
     // Stored as ms epoch (number) so it lines up with createdAt and the
     // Supabase user_identity.last_activity_ms column (bigint). Used for
-    // "inactive 30+ days" cohort queries; resolution is per-cold-launch.
-    updateLocalStateAndDatabase('lastActivity', Date.now());
+    // "inactive 30+ days" cohort queries — daily resolution is plenty,
+    // so we throttle the RTDB write (which fans out through the mirror
+    // CF to Supabase on every change). For active users opening the app
+    // many times a day this was the single hottest /users/{uid} write;
+    // throttling drops it to ~1/day per active user.
+    const HEARTBEAT_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6h
+    const prev = localStateRef.current?.lastActivity;
+    const prevMs = typeof prev === 'number'
+      ? prev
+      : (prev ? new Date(prev).getTime() : 0);
+    const now = Date.now();
+    if (Number.isFinite(prevMs) && now - prevMs < HEARTBEAT_THROTTLE_MS) return;
+    updateLocalStateAndDatabase('lastActivity', now);
   }, []);
 
 

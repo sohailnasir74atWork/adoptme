@@ -61,6 +61,7 @@ import {
 } from '@react-native-firebase/firestore';
 
 import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser } from '../ChatScreen/utils';
+import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -1157,8 +1158,18 @@ const AdminDashboard = () => {
   }, [db, chatPerson1, chatPerson2]);
 
   // Delete the entire private conversation between the two selected users.
-  // Removes /private_messages/{chatKey} and both /chat_meta_data inbox entries
-  // in one atomic multi-path update. Gated to admin + SUPER_ADMIN_ID at the UI.
+  //
+  // Two-store delete:
+  //   - RTDB: drops /private_messages/{chatKey} (still authoritative for
+  //     message bodies) and any legacy /chat_meta_data inbox rows from
+  //     old-app users. Done in one atomic multi-path update.
+  //   - Supabase: drops both chat_meta_data rows via the
+  //     admin_delete_chat_pair RPC (013_admin_chat_meta.sql). Required
+  //     because new-app builds only write the inbox to Supabase — the
+  //     RTDB delete won't reach them via the mirror CF since their
+  //     RTDB rows never existed.
+  //
+  // Gated to admin + SUPER_ADMIN_ID at the UI.
   const deletePrivateChat = useCallback(async () => {
     if (!chatPerson1?.id || !chatPerson2?.id) {
       Alert.alert('Error', 'Please select both users first.');
@@ -1195,6 +1206,10 @@ const AdminDashboard = () => {
       updates[`chat_meta_data/${id2}/${id1}`] = null;
       await update(ref(db), updates);
 
+      // Supabase side — required for new-app users whose inbox rows
+      // never existed in RTDB and so won't be cleaned by the mirror CF.
+      await adminDeleteChatPair(id1, id2);
+
       setChatMessages([]);
       Alert.alert('Deleted', 'Conversation removed.');
     } catch (err) {
@@ -1206,7 +1221,12 @@ const AdminDashboard = () => {
   }, [db, chatPerson1, chatPerson2]);
 
   // ─────────────────────────────────────────────
-  // User Chats Viewer — paginated list of all chats for a single user
+  // User Chats Viewer — paginated list of all chats for a single user.
+  // Reads via the admin_list_user_chats RPC (013_admin_chat_meta.sql),
+  // which is the only path that bypasses chat_meta_data's
+  // owner-only RLS. Cursor semantics match the prior RTDB query:
+  // first page passes null, subsequent pages pass the oldest row's
+  // timestamp from the previous response.
   const fetchUserChats = useCallback(async (targetUser, reset = false) => {
     if (!targetUser?.id) return;
     try {
@@ -1219,32 +1239,27 @@ const AdminDashboard = () => {
         setUserChatsLoadingMore(true);
       }
 
-      const baseRef = ref(db, `chat_meta_data/${targetUser.id}`);
       const cursor = userChatsCursorRef.current;
-      const q = cursor != null
-        ? query(baseRef, orderByChild('timestamp'), endAt(cursor - 1), limitToLast(USER_CHATS_PAGE_SIZE))
-        : query(baseRef, orderByChild('timestamp'), limitToLast(USER_CHATS_PAGE_SIZE));
+      const rows = await adminListUserChats(targetUser.id, cursor, USER_CHATS_PAGE_SIZE);
 
-      const snap = await get(q);
-      if (!snap.exists()) {
+      if (!rows || rows.length === 0) {
         setUserChatsHasMore(false);
         if (reset) setUserChatsList([]);
         return;
       }
 
-      const items = [];
-      snap.forEach((child) => {
-        const v = child.val() || {};
-        items.push({
-          partnerId: child.key,
-          chatId: v.chatId,
-          lastMessage: v.lastMessage || '',
-          timestamp: v.timestamp || 0,
-          unreadCount: v.unreadCount || 0,
-          partnerName: v.receiverName || 'Unknown',
-          partnerAvatar: v.receiverAvatar || DEFAULT_AVATAR,
-        });
-      });
+      const items = rows.map((r) => ({
+        partnerId: r.partnerId,
+        chatId: r.chatId,
+        lastMessage: r.lastMessage || '',
+        timestamp: r.timestamp || 0,
+        unreadCount: r.unreadCount || 0,
+        partnerName: r.receiverName || 'Unknown',
+        partnerAvatar: r.receiverAvatar || DEFAULT_AVATAR,
+      }));
+
+      // RPC already orders desc on timestamp_ms, but a stable client-side
+      // sort guards against null/missing values landing out of order.
       items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
       if (items.length > 0) {
@@ -1267,7 +1282,7 @@ const AdminDashboard = () => {
       setUserChatsLoading(false);
       setUserChatsLoadingMore(false);
     }
-  }, [db, userChatsHasMore, userChatsLoadingMore, userChatsLoading]);
+  }, [userChatsHasMore, userChatsLoadingMore, userChatsLoading]);
 
   const loadUserChatsForInput = useCallback(async () => {
     const id = userChatsInput.trim();

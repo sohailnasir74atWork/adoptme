@@ -55,9 +55,7 @@ exports.mirrorChatMetaToSupabase = functions
     // Mirror every field defined in the table. Coerce to expected types
     // so a stray null/undefined from a partial write doesn't break the
     // upsert (Postgres NOT NULL columns reject undefined).
-    const row = {
-      owner_uid: ownerUid,
-      partner_uid: partnerUid,
+    const rtdbView = {
       chat_id: v.chatId ?? null,
       last_message: typeof v.lastMessage === 'string' ? v.lastMessage : null,
       timestamp_ms: typeof v.timestamp === 'number' ? v.timestamp : null,
@@ -66,6 +64,44 @@ exports.mirrorChatMetaToSupabase = functions
       receiver_avatar: v.receiverAvatar ?? null,
       unread_count: typeof v.unreadCount === 'number' ? v.unreadCount : 0,
       muted: v.muted === true,
+    };
+
+    // Loop / no-op guard: read what Supabase already has for this pair.
+    // If every meaningful field matches the RTDB row, the write must have
+    // originated from mirrorChatMetaToRtdb (Supabase → RTDB) — skipping
+    // here prevents a Supabase ↔ RTDB ping-pong.
+    //
+    // Diff-based instead of marker-based because a persistent marker
+    // (`_mirroredFromSupabase: true`) stays on the RTDB row forever once
+    // written, which silenced legitimate OLD-app updates from ever
+    // reaching Supabase — and produced stale NULL Supabase rows that
+    // showed up as broken inbox entries in the NEW app.
+    const { data: current, error: readErr } = await supabase
+      .from('chat_meta_data')
+      .select('chat_id,last_message,timestamp_ms,receiver_id,receiver_name,receiver_avatar,unread_count,muted')
+      .eq('owner_uid', ownerUid)
+      .eq('partner_uid', partnerUid)
+      .maybeSingle();
+
+    if (!readErr && current) {
+      const same =
+        current.chat_id === rtdbView.chat_id &&
+        current.last_message === rtdbView.last_message &&
+        current.timestamp_ms === rtdbView.timestamp_ms &&
+        current.receiver_id === rtdbView.receiver_id &&
+        current.receiver_name === rtdbView.receiver_name &&
+        current.receiver_avatar === rtdbView.receiver_avatar &&
+        current.unread_count === rtdbView.unread_count &&
+        current.muted === rtdbView.muted;
+      if (same) {
+        return null;
+      }
+    }
+
+    const row = {
+      owner_uid: ownerUid,
+      partner_uid: partnerUid,
+      ...rtdbView,
       updated_at: new Date().toISOString(),
     };
 

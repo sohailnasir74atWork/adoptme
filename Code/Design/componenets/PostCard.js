@@ -13,6 +13,7 @@ import { useGlobalState } from '../../GlobelStats';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import { showMessage } from 'react-native-flash-message';
 import ReportModal from './ReportModal';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
@@ -193,38 +194,19 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
               const pIsMod = p.isModerator ?? item.isModerator;
               const pIsTrusted = p.isTrusted ?? item.isTrusted;
               const pIsCMSR = p.isCMSR ?? item.isCMSR;
+              const pIsHelper = p.isHelper ?? item.isHelper;
+              const firstBadge = getFirstBadgeType({
+                isAdmin: pIsAdmin, isModerator: pIsMod, isBabyMod: item.isBabyMod,
+                isTrusted: pIsTrusted, isCMSR: pIsCMSR, isHelper: pIsHelper,
+              });
               return (
                 <>
-                  {pIsAdmin && (
-                    <View style={s.roleBadge_admin}>
-                      <Ionicons name="shield" size={8} color="#fff" />
-                      <Text style={s.roleBadgeText}>Admin</Text>
-                    </View>
-                  )}
-                  {!pIsAdmin && pIsMod && (
-                    <View style={s.roleBadge_mod}>
-                      <Ionicons name="shield-checkmark" size={8} color="#fff" />
-                      <Text style={s.roleBadgeText}>Mod</Text>
-                    </View>
-                  )}
-                  {!pIsAdmin && !pIsMod && item.isBabyMod && (
-                    <View style={s.roleBadge_jmd}>
-                      <Ionicons name="paw" size={8} color="#fff" />
-                      <Text style={s.roleBadgeText}>JMD</Text>
-                    </View>
-                  )}
-                  {pIsTrusted && (
-                    <View style={s.roleBadge_trusted}>
-                      <Ionicons name="checkmark-circle" size={8} color="#fff" />
-                      <Text style={s.roleBadgeText}>Trusted</Text>
-                    </View>
-                  )}
-                  {pIsCMSR && (
-                    <View style={s.roleBadge_cmsr}>
-                      <Ionicons name="briefcase" size={8} color="#fff" />
-                      <Text style={s.roleBadgeText}>CMSR</Text>
-                    </View>
-                  )}
+                  {pIsAdmin && <UserBadgePill type="admin" size="sm" isDarkMode={isDark} glow={firstBadge === 'admin'} />}
+                  {!pIsAdmin && pIsMod && <UserBadgePill type="mod" size="sm" isDarkMode={isDark} glow={firstBadge === 'mod'} />}
+                  {!pIsAdmin && !pIsMod && item.isBabyMod && <UserBadgePill type="jmd" size="sm" isDarkMode={isDark} glow={firstBadge === 'jmd'} />}
+                  {pIsTrusted && <UserBadgePill type="trusted" size="sm" isDarkMode={isDark} glow={firstBadge === 'trusted'} />}
+                  {pIsCMSR && <UserBadgePill type="cmsr" size="sm" isDarkMode={isDark} glow={firstBadge === 'cmsr'} />}
+                  {pIsHelper && <UserBadgePill type="helper" size="sm" isDarkMode={isDark} glow={firstBadge === 'helper'} />}
                 </>
               );
             })()}

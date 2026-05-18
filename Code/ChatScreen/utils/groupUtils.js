@@ -1,4 +1,13 @@
 import { getDatabase, ref, set, update, get, increment, remove, push } from '@react-native-firebase/database';
+// Phase 5 group-chat M3: message bodies + per-member meta fan-out live in
+// Supabase. RTDB still holds /activeGroupChats (presence) and the legacy
+// group_meta_data subtree old apps write to (mirror CF copies it back).
+import {
+  sendGroupMessage as sbSendGroupMessage,
+  fanoutGroupMessageMeta as sbFanoutGroupMessageMeta,
+  softDeleteAllInGroup as sbSoftDeleteAllInGroup,
+  newClientMsgId,
+} from '../../Supabase/groupMessagesBackend';
 import {
   collection,
   doc,
@@ -537,9 +546,11 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
       const isLastMember = preCheckData.memberIds?.length === 1 && preCheckData.memberIds[0] === userId;
       if (isLastMember) {
         try {
-          // Delete group messages
+          // Delete group messages from RTDB (legacy tree — old-app writes
+          // still land here) and from Supabase (new-app source of truth).
           const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
           await remove(messagesRef).catch(() => {});
+          sbSoftDeleteAllInGroup(groupId, userId).catch(() => {});
 
           // Delete group node from RTDB
           const rtdbGroupRef = ref(appdatabase, `groups/${groupId}`);
@@ -655,9 +666,10 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
       try {
         // RTDB cleanup already done before transaction if preCleanedRTDB
         if (!result.preCleanedRTDB) {
-          // Delete group messages
+          // Delete group messages from RTDB (legacy) + Supabase.
           const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
           await remove(messagesRef).catch(() => {});
+          sbSoftDeleteAllInGroup(groupId, userId).catch(() => {});
 
           // Delete group node
           const rtdbGroupRef2 = ref(appdatabase, `groups/${groupId}`);
@@ -743,23 +755,14 @@ export const leaveGroup = async (firestoreDB, appdatabase, groupId, userId) => {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messageData, senderData, cachedGroupData = null) => {
-  if (!appdatabase || !firestoreDB || !groupId || !messageData || !senderData?.id) {
+  if (!firestoreDB || !groupId || !messageData || !senderData?.id) {
     return { success: false, error: 'Missing required parameters' };
   }
 
   try {
-    const timestamp = Date.now();
-    // Use push() for a unique key to prevent collisions when 2 users send at the same ms
-    const messagesListRef = ref(appdatabase, `group_messages/${groupId}/messages`);
-    const newMessageRef = push(messagesListRef);
-
-    // 1. Save message to RTDB
-    await set(newMessageRef, {
-      ...messageData,
-      timestamp,
-    });
-
-    // 2. Use cached group data if available, otherwise fetch from Firestore (1 read)
+    // Resolve member list from cached groupData or Firestore. Required for
+    // the meta fan-out; the RPC doesn't infer it server-side because the
+    // member list lives in Firestore, not Supabase.
     let groupData = cachedGroupData;
     if (!groupData?.memberIds) {
       const groupDoc = await getDoc(doc(firestoreDB, 'groups', groupId));
@@ -768,49 +771,57 @@ export const sendGroupMessage = async (appdatabase, firestoreDB, groupId, messag
       }
       groupData = groupDoc.data();
     }
-
     const memberIds = groupData.memberIds || [];
 
-    // Last message preview
     const lastMessagePreview =
       messageData.text?.trim() ||
       (messageData.imageUrl ? '📷 Photo' : messageData.fruits?.length ? `🐾 ${messageData.fruits.length} pet(s)` : '');
 
-    // 3. Batch check active members (1 read for all)
-    const activeGroupRef = ref(appdatabase, `activeGroupChats/${groupId}`);
-    const activeMembersSnap = await get(activeGroupRef);
-    const activeMemberIds = activeMembersSnap.exists()
-      ? Object.keys(activeMembersSnap.val() || {})
-      : [];
+    // 1. Insert the message body via Supabase SECURITY DEFINER RPC.
+    //    Idempotent on client_msg_id, so a retry returns the prior row.
+    const clientMsgId = newClientMsgId();
+    const inserted = await sbSendGroupMessage({
+      groupId,
+      senderId: senderData.id,
+      clientMsgId,
+      message: {
+        text: messageData.text ?? null,
+        imageUrl: messageData.imageUrl ?? null,
+        imageUrls: messageData.imageUrls ?? null,
+        fruits: messageData.fruits ?? [],
+        replyTo: messageData.replyTo ?? null,
+        sender: messageData.sender ?? senderData.displayName ?? null,
+        avatar: messageData.avatar ?? senderData.avatar ?? null,
+        isPro: !!messageData.isPro,
+        robloxUsernameVerified: !!messageData.robloxUsernameVerified,
+        hasRecentGameWin: !!messageData.hasRecentGameWin,
+        lastGameWinAt: messageData.lastGameWinAt ?? null,
+        isCreator: !!messageData.isCreator,
+        OS: messageData.OS ?? null,
+      },
+    });
 
-    // 4. Prepare batch updates for all members
-    const updates = {};
+    // 2. Fan out per-member meta in a single atomic Postgres call.
+    //    Sender stays at unread=0; non-senders' unread bumps by 1.
+    //    Active-chat suppression now happens server-side in the notify
+    //    Cloud Function (it reads /activeGroupChats from RTDB), so we no
+    //    longer need to special-case active members in the meta write.
+    await sbFanoutGroupMessageMeta({
+      groupId,
+      memberIds,
+      senderId: senderData.id,
+      senderName: senderData.displayName || 'Anonymous',
+      lastMessage: lastMessagePreview,
+      timestampMs: inserted?.timestamp ?? Date.now(),
+      groupName: groupData.name || 'Group Chat',
+    });
 
-    for (const memberId of memberIds) {
-      const isActive = activeMemberIds.includes(memberId);
-      const isSender = memberId === senderData.id;
-
-      // Always update lastMessage, timestamp, and groupName (for notifications)
-      updates[`group_meta_data/${memberId}/${groupId}/lastMessage`] = lastMessagePreview;
-      updates[`group_meta_data/${memberId}/${groupId}/lastMessageTimestamp`] = timestamp;
-      updates[`group_meta_data/${memberId}/${groupId}/lastMessageSenderId`] = senderData.id;
-      updates[`group_meta_data/${memberId}/${groupId}/lastMessageSenderName`] = senderData.displayName || 'Anonymous';
-      updates[`group_meta_data/${memberId}/${groupId}/groupName`] = groupData.name || 'Group Chat';
-
-      if (isSender) {
-        updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = 0;
-      } else if (isActive) {
-        updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = 0;
-      } else {
-        // ✅ COST-OPTIMIZED: Merge increment into same batch (was 2 separate update() calls)
-        updates[`group_meta_data/${memberId}/${groupId}/unreadCount`] = increment(1);
-      }
-    }
-
-    // Single batched write for all metadata + unread increments (saves 1 RTDB operation per message)
-    await update(ref(appdatabase, '/'), updates);
-
-    return { success: true, messageKey: newMessageRef.key, timestamp };
+    return {
+      success: true,
+      messageKey: inserted?.id,
+      timestamp: inserted?.timestamp ?? Date.now(),
+      message: inserted,
+    };
   } catch (error) {
     console.error('Error sending group message:', error);
     return { success: false, error: error.message || 'Failed to send message' };
@@ -1742,7 +1753,7 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
       }
     }
 
-    // Delete group messages from RTDB
+    // Delete group messages from RTDB (legacy) + Supabase (new source of truth).
     try {
       const messagesRef = ref(appdatabase, `group_messages/${groupId}`);
       const messagesSnapshot = await get(messagesRef);
@@ -1752,6 +1763,9 @@ export const deleteGroup = async (firestoreDB, appdatabase, groupId) => {
     } catch (messagesError) {
       console.warn('Could not delete group messages from RTDB:', messagesError);
     }
+    sbSoftDeleteAllInGroup(groupId, null).catch((e) => {
+      console.warn('Could not soft-delete group messages in Supabase:', e?.message || e);
+    });
 
     // Delete group metadata for all members from RTDB
     // This is critical - if metadata isn't deleted, groups will reappear on app restart

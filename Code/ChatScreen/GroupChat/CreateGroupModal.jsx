@@ -94,21 +94,24 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
   const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
   const { t } = useTranslation();
 
-  // Initialize selectedMemberIds from selectedUsers when modal opens (only once per modal open)
+  // Initialize selectedMemberIds from selectedUsers when modal opens.
+  // Depends on selectedUsers so a stale-empty first run (parent memo not yet
+  // propagated) re-tries when the prop populates. The ref only latches once
+  // we've actually captured members, so later updates from the parent can't
+  // clobber removals the user made inside the modal.
   React.useEffect(() => {
     if (visible && !isEditMode) {
-      // Only initialize once when modal opens
       if (!hasInitializedSelectedUsersRef.current) {
         const currentIds = selectedUsers.map((u) => u.id).filter((id) => id !== user?.id);
-        setSelectedMemberIds(currentIds);
-        hasInitializedSelectedUsersRef.current = true;
+        if (currentIds.length > 0) {
+          setSelectedMemberIds(currentIds);
+          hasInitializedSelectedUsersRef.current = true;
+        }
       }
     } else if (!visible) {
-      // Reset flag when modal closes
       hasInitializedSelectedUsersRef.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, isEditMode]); // Only depend on visible and isEditMode, not selectedUsers to avoid resetting when parent clears
+  }, [visible, isEditMode, selectedUsers, user?.id]);
 
   // Reset when modal closes
   React.useEffect(() => {

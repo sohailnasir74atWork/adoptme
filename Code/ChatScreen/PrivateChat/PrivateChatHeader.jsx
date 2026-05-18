@@ -11,8 +11,9 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
-import { getRoblox } from '../../Supabase/userBackend';
+import { getRoblox, getRoles, getCosmetics } from '../../Supabase/userBackend';
 import { getThemeColors } from '../../Helper/themeColors';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getActiveCosmetics } from '../../Engagement/shopUtils';
 
@@ -61,48 +62,50 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     const fetchUserData = async () => {
       try {
-        // Roblox fields from Supabase user_roblox; everything else RTDB.
-        // profileFrame stays RTDB (shop subtree not migrated).
-        const [robloxRow, isProSnap, lastGameWinAtSnap, isAdminSnap,
-          isModeratorSnap, isTrustedSnap, isCMSRSnap, profileFrameSnap] = await Promise.all([
+        // Identity-like fields (roles, cosmetics, roblox) → Supabase.
+        // Game state (lastGameWinAt) + profileFrame stay on RTDB.
+        const [rolesRow, cosmeticsRow, robloxRow, lastGameWinAtSnap, profileFrameSnap] =
+          await Promise.all([
+            getRoles(selectedUserId).catch(() => null),
+            getCosmetics(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/isAdmin`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/profileFrame`)).catch(() => null),
           ]);
 
         if (!isMounted) return;
 
-        // Fall back to individual RTDB reads only if Supabase row missing.
-        let robloxUsername = robloxRow?.robloxUsername ?? null;
-        let robloxUserId = robloxRow?.robloxUserId ?? null;
-        let robloxUsernameVerified = robloxRow?.robloxUsernameVerified ?? false;
-        if (robloxRow == null && appdatabase) {
-          const [unSnap, uidSnap, verSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsername`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUserId`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/robloxUsernameVerified`)).catch(() => null),
-          ]);
-          robloxUsername = unSnap?.exists() ? unSnap.val() : null;
-          robloxUserId = uidSnap?.exists() ? uidSnap.val() : null;
-          robloxUsernameVerified = verSnap?.exists() ? !!verSnap.val() : false;
+        // Selective RTDB fallback — only fields whose Supabase table came back null.
+        const missing = [];
+        // RTDB stores admin under `admin` (legacy name); Supabase exposes it
+        // as `isAdmin` via fromRolesRow. Use the correct RTDB leaf name in
+        // the fallback so admin pills don't silently miss when the mirror
+        // row is stale.
+        if (!rolesRow)     missing.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isHelper');
+        if (!cosmeticsRow) missing.push('isPro');
+        if (!robloxRow)    missing.push('robloxUsername', 'robloxUserId', 'robloxUsernameVerified');
+        let fb = null;
+        if (missing.length > 0) {
+          const snaps = await Promise.all(
+            missing.map((p) => get(ref(appdatabase, `users/${selectedUserId}/${p}`)).catch(() => null))
+          );
+          if (!isMounted) return;
+          fb = {};
+          missing.forEach((p, i) => { if (snaps[i] && snaps[i].exists()) fb[p] = snaps[i].val(); });
         }
 
         setUserData({
-          robloxUsername,
-          robloxUserId,
-          robloxUsernameVerified,
-          isPro: isProSnap?.exists() ? isProSnap.val() : false,
-          lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-          isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
-          isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
-          isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
-          isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
-          profileFrame: profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
+          robloxUsername:         robloxRow?.robloxUsername         ?? fb?.robloxUsername         ?? null,
+          robloxUserId:           robloxRow?.robloxUserId           ?? fb?.robloxUserId           ?? null,
+          robloxUsernameVerified: !!(robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified),
+          isPro:                  !!(cosmeticsRow?.isPro            ?? fb?.isPro),
+          lastGameWinAt:          lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+          isAdmin:                !!(rolesRow?.isAdmin              ?? fb?.admin),
+          isModerator:            !!(rolesRow?.isModerator          ?? fb?.isModerator),
+          isTrusted:              !!(rolesRow?.isTrusted            ?? fb?.isTrusted),
+          isCMSR:                 !!(rolesRow?.isCMSR               ?? fb?.isCMSR),
+          isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
+          profileFrame:           profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
         });
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
@@ -144,6 +147,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
       profileFrame: selectedUser?.profileFrame || userData.profileFrame || null,
     };
   }, [selectedUser, userData]);
@@ -278,18 +282,28 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
             {isOnline ? t('chat.online') : t('chat.offline')}
           </Text>
 
-          {mergedUser?.isAdmin && (
-            <Badge icon="shield" label={t('chat.admin')} color="#EF4444" />
-          )}
-          {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-            <Badge icon="shield-checkmark" label={t('chat.mod')} color="#8B5CF6" />
-          )}
-          {mergedUser?.isTrusted && (
-            <Badge icon="checkmark-circle" label="Trusted" color="#10B981" />
-          )}
-          {mergedUser?.isCMSR && (
-            <Badge icon="briefcase" label="CMSR" color="#F97316" />
-          )}
+          {(() => {
+            const firstBadge = getFirstBadgeType(mergedUser, ['admin', 'mod', 'trusted', 'cmsr', 'helper']);
+            return (
+              <>
+                {mergedUser?.isAdmin && (
+                  <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
+                )}
+                {!mergedUser?.isAdmin && mergedUser?.isModerator && (
+                  <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
+                )}
+                {mergedUser?.isTrusted && (
+                  <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
+                )}
+                {mergedUser?.isCMSR && (
+                  <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
+                )}
+                {mergedUser?.isHelper && (
+                  <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
+                )}
+              </>
+            );
+          })()}
         </View>
       </TouchableOpacity>
 

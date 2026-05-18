@@ -15,7 +15,8 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
-import { ref, get, query, orderByValue, equalTo, limitToFirst, startAfter, orderByChild, startAt, endAt } from '@react-native-firebase/database';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import { ref, get, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -23,7 +24,7 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import FramedAvatar from './FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
-import { getRobloxBatch } from '../../Supabase/userBackend';
+import { getIdentityBatch, getRolesBatch, getCosmeticsBatch, getRobloxBatch, getIdentity, searchIdentityByName, searchIdentityByEmail } from '../../Supabase/userBackend';
 import CreateGroupModal from './CreateGroupModal';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { getUserAdminGroup, addMembersToGroup } from '../utils/groupUtils';
@@ -124,9 +125,10 @@ const OnlineUsersList = ({
     }
   }, [visible, mode]);
 
-  // ✅ Fetch user metadata — identity/roles/cosmetics from Supabase, game
-  //    state (OS, isPlaying, lastGameWinAt) still from RTDB (not migrated).
-  //    robloxUsernameVerified from Supabase user_roblox via batch.
+  // Fetch user metadata. Identity / roles / cosmetics / roblox come from
+  // Supabase in 4 batched round-trips for the whole page (was 10 parallel
+  // RTDB reads PER user). Only game state (isPlaying, lastGameWinAt) is
+  // still RTDB — it isn't mirrored to Supabase yet by design.
   const loadUserBatch = useCallback(async (userIds, alreadyLoaded) => {
     if (!appdatabase || userIds.length === 0) return;
 
@@ -134,46 +136,47 @@ const OnlineUsersList = ({
       const toFetch = userIds.filter((id) => !alreadyLoaded.has(id));
       if (toFetch.length === 0) return;
 
-      // One Supabase round-trip for roblox verified flags for the whole batch.
-      const robloxMap = await getRobloxBatch(toFetch).catch(() => new Map());
+      const [identityMap, rolesMap, cosmeticsMap, robloxMap] = await Promise.all([
+        getIdentityBatch(toFetch).catch(() => new Map()),
+        getRolesBatch(toFetch).catch(() => new Map()),
+        getCosmeticsBatch(toFetch).catch(() => new Map()),
+        getRobloxBatch(toFetch).catch(() => new Map()),
+      ]);
 
       const userPromises = toFetch.map(async (userId) => {
         try {
-          const [displayNameSnap, avatarSnap, isProSnap,
-            lastGameWinAtSnap, isAdminSnap, OSSnap, isPlayingSnap,
-            isModeratorSnap, isTrustedSnap, isCMSRSnap] = await Promise.all([
-              get(ref(appdatabase, `users/${userId}/displayName`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/avatar`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isPro`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isAdmin`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/OS`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isModerator`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isTrusted`)).catch(() => null),
-              get(ref(appdatabase, `users/${userId}/isCMSR`)).catch(() => null),
-            ]);
-
-          const displayName = displayNameSnap?.exists() ? displayNameSnap.val() : null;
-          if (!displayNameSnap || (!displayNameSnap.exists() && !avatarSnap?.exists())) {
+          const identity = identityMap.get(userId);
+          // Same skip rule as before: no displayName AND no avatar = ghost row.
+          // Also covers brief Supabase-mirror lag for brand-new users; they'll
+          // appear on the next page load once the mirror catches up.
+          if (!identity || (!identity.displayName && !identity.avatar)) {
             return null;
           }
 
-          const robloxRow = robloxMap.get(userId);
+          const [lastGameWinAtSnap, isPlayingSnap] = await Promise.all([
+            get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
+            get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
+          ]);
+
+          const roles = rolesMap.get(userId);
+          const cosmetics = cosmeticsMap.get(userId);
+          const roblox = robloxMap.get(userId);
+
           return {
             id: userId,
-            displayName: displayName || t('chat.anonymous'),
-            avatar: avatarSnap?.exists() ? avatarSnap.val() :
+            displayName: identity.displayName || t('chat.anonymous'),
+            avatar: identity.avatar ||
               'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            isPro: isProSnap?.exists() ? isProSnap.val() : false,
-            robloxUsernameVerified: robloxRow?.robloxUsernameVerified ?? false,
+            isPro: cosmetics?.isPro ?? false,
+            robloxUsernameVerified: roblox?.robloxUsernameVerified ?? false,
             lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-            isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : false,
-            OS: OSSnap?.exists() ? OSSnap.val() : null,
+            isAdmin: roles?.isAdmin ?? false,
+            OS: identity.OS ?? null,
             isPlaying: isPlayingSnap?.exists() ? isPlayingSnap.val() : false,
-            isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : false,
-            isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : false,
-            isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : false,
+            isModerator: roles?.isModerator ?? false,
+            isTrusted: roles?.isTrusted ?? false,
+            isCMSR: roles?.isCMSR ?? false,
+            isHelper: roles?.isHelper ?? false,
           };
         } catch (error) {
           console.error(`Error fetching user ${userId}:`, error);
@@ -293,120 +296,70 @@ const OnlineUsersList = ({
     }
   }, [visible, mode]);
 
-  // ✅ Search users by displayName in RTDB (for inviting offline users)
+  // Search users (for inviting offline users). All identity lookups go to
+  // Supabase user_identity — ilike replaces the RTDB variant-permutation
+  // dance and the 500-row broad-scan fallback. Roles / cosmetics / roblox
+  // for the matched uids are pulled in 3 batched calls.
   const searchUsers = useCallback(async (searchText) => {
-    if (!appdatabase || !searchText || searchText.trim().length < 2) {
+    if (!searchText || searchText.trim().length < 2) {
       setSearchResults([]);
       return;
     }
 
     setSearching(true);
     try {
-      const usersRef = ref(appdatabase, 'users');
       const raw = searchText.trim();
-      const allResults = new Map();
-
-      const buildUserResult = (child) => {
-        const userData = child.val();
-        if (child.key === user?.id || allResults.has(child.key)) return;
-        allResults.set(child.key, {
-          id: child.key,
-          displayName: userData.displayName || t('chat.anonymous'),
-          avatar: userData.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-          isPro: userData.isPro || false,
-          robloxUsernameVerified: userData.robloxUsernameVerified || false,
-          isAdmin: userData.isAdmin || false,
-          isModerator: userData.isModerator || false,
-          isOnline: allOnlineUserIds.includes(child.key),
-        });
-      };
-
-      // ── Detect search type ──
       const isEmailSearch = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) || raw.includes('(dot)');
       const isIdSearch = raw.length >= 15 && /^[a-zA-Z0-9]+$/.test(raw);
 
+      let identities = [];
       if (isIdSearch) {
-        // ── ID SEARCH: direct lookup by Firebase user key ──
-        try {
-          const userSnap = await get(ref(appdatabase, `users/${raw}`));
-          if (userSnap.exists()) {
-            buildUserResult({ key: raw, val: () => userSnap.val() });
-          }
-        } catch (err) { /* ignore */ }
-
+        const row = await getIdentity(raw);
+        if (row) identities = [row];
       } else if (isEmailSearch) {
-        // ── EMAIL SEARCH: lookup by encoded email key ──
-        const email = raw.toLowerCase().trim();
-        const encodedEmail = email.replace(/\./g, '(dot)');
-
-        // Direct key lookup
-        try {
-          const directSnap = await get(ref(appdatabase, `users/${encodedEmail}`));
-          if (directSnap.exists()) {
-            buildUserResult({ key: encodedEmail, val: () => directSnap.val() });
-          }
-        } catch (err) { /* ignore */ }
-
-        // Also search by email field
-        if (allResults.size === 0) {
-          try {
-            const emailQ = query(usersRef, orderByChild('email'), startAt(email), endAt(email + '\uf8ff'), limitToFirst(10));
-            const emailSnap = await get(emailQ);
-            if (emailSnap.exists()) {
-              emailSnap.forEach((child) => buildUserResult(child));
-            }
-          } catch (err) { /* ignore */ }
-        }
-
+        identities = await searchIdentityByEmail(raw);
       } else {
-        // ── NAME SEARCH: multiple case variants ──
-        const lower = raw.toLowerCase();
-        const searchVariants = [...new Set([
-          raw,
-          lower.charAt(0).toUpperCase() + lower.slice(1),
-          lower,
-          raw.toUpperCase(),
-        ])];
-
-        const nameQueries = searchVariants.map(async (variant) => {
-          try {
-            const searchQ = query(usersRef, orderByChild('displayName'), startAt(variant), endAt(variant + '\uf8ff'), limitToFirst(30));
-            const snapshot = await get(searchQ);
-            if (snapshot.exists()) {
-              snapshot.forEach((child) => buildUserResult(child));
-            }
-          } catch (err) { /* ignore */ }
-        });
-
-        await Promise.all(nameQueries);
-
-        // ── FALLBACK: client-side contains match for emoji/special char names ──
-        if (allResults.size < 10 && lower.length >= 2) {
-          try {
-            const broadQ = query(usersRef, orderByChild('displayName'), limitToFirst(500));
-            const broadSnap = await get(broadQ);
-            if (broadSnap.exists()) {
-              broadSnap.forEach((child) => {
-                if (allResults.size >= 50) return;
-                const userData = child.val();
-                const name = (userData.displayName || '').toLowerCase();
-                if (name.includes(lower)) {
-                  buildUserResult(child);
-                }
-              });
-            }
-          } catch (err) { /* ignore */ }
-        }
+        identities = await searchIdentityByName(raw);
       }
 
-      setSearchResults(Array.from(allResults.values()));
+      identities = identities.filter((u) => u && u.uid && u.uid !== user?.id);
+      if (identities.length === 0) {
+        setSearchResults([]);
+        return;
+      }
+
+      const uids = identities.map((u) => u.uid);
+      const [rolesMap, cosmeticsMap, robloxMap] = await Promise.all([
+        getRolesBatch(uids).catch(() => new Map()),
+        getCosmeticsBatch(uids).catch(() => new Map()),
+        getRobloxBatch(uids).catch(() => new Map()),
+      ]);
+
+      const results = identities.map((ident) => {
+        const roles = rolesMap.get(ident.uid);
+        const cosmetics = cosmeticsMap.get(ident.uid);
+        const roblox = robloxMap.get(ident.uid);
+        return {
+          id: ident.uid,
+          displayName: ident.displayName || t('chat.anonymous'),
+          avatar: ident.avatar ||
+            'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          isPro: cosmetics?.isPro ?? false,
+          robloxUsernameVerified: roblox?.robloxUsernameVerified ?? false,
+          isAdmin: roles?.isAdmin ?? false,
+          isModerator: roles?.isModerator ?? false,
+          isOnline: allOnlineUserIds.includes(ident.uid),
+        };
+      });
+
+      setSearchResults(results);
     } catch (error) {
       console.error('Error searching users:', error);
       setSearchResults([]);
     } finally {
       setSearching(false);
     }
-  }, [appdatabase, user?.id, allOnlineUserIds, t]);
+  }, [user?.id, allOnlineUserIds, t]);
 
   // ✅ Handle manual search (triggered by button)
   const handleSearch = useCallback(() => {
@@ -612,15 +565,17 @@ const OnlineUsersList = ({
     return Array.from(combined.values());
   }, [allOnlineUsers, searchResults, selectedUserIds]);
 
-  // ✅ Combine search results with online users based on activeTab
+  // ✅ Combine search results with online users based on activeTab.
+  // In select mode the current user must not appear — picking yourself would
+  // pass the "≥1 selected" check here but the create modal filters self out,
+  // producing a confusing "Select at least 1 member" on tap.
   const displayUsers = useMemo(() => {
-    if (activeTab === 'search') {
-      // Search tab: show only search results
-      return searchResults;
+    const base = activeTab === 'search' ? searchResults : allOnlineUsers;
+    if (mode === 'select' && user?.id) {
+      return base.filter((u) => u.id !== user.id);
     }
-    // Online tab: show online users
-    return allOnlineUsers;
-  }, [activeTab, searchResults, allOnlineUsers]);
+    return base;
+  }, [activeTab, searchResults, allOnlineUsers, mode, user?.id]);
 
   // ✅ Memoize render user item
   const renderUserItem = useCallback(({ item }) => {
@@ -691,37 +646,38 @@ const OnlineUsersList = ({
                 />
               )}
 
-            {/* Admin Badge */}
-            {item?.isAdmin && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                <Icon name="shield" size={10} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
-              </View>
-            )}
-
-            {/* Moderator Badge */}
-            {!item?.isAdmin && item?.isModerator && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                <Icon name="shield-checkmark" size={10} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
-              </View>
-            )}
-
-            {/* Trusted Badge */}
-            {item?.isTrusted && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                <Icon name="checkmark-circle" size={10} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
-              </View>
-            )}
-
-            {/* CMSR Badge */}
-            {item?.isCMSR && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, marginLeft: 6 }}>
-                <Icon name="briefcase" size={10} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', marginLeft: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
-              </View>
-            )}
+            {(() => {
+              const firstBadge = getFirstBadgeType(item, ['admin', 'mod', 'trusted', 'cmsr', 'helper']);
+              return (
+                <>
+                  {item?.isAdmin && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
+                    </View>
+                  )}
+                  {!item?.isAdmin && item?.isModerator && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
+                    </View>
+                  )}
+                  {item?.isTrusted && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
+                    </View>
+                  )}
+                  {item?.isCMSR && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
+                    </View>
+                  )}
+                  {item?.isHelper && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
+                    </View>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Platform badge (for admins) */}
             {item?.isAdmin && item?.OS && (

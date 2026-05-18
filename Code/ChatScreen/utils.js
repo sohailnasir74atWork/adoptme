@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo, limitToLast, onValue } from '@react-native-firebase/database';
+import { getAuth } from '@react-native-firebase/auth';
 import { Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { getDeviceFingerprint } from '../Helper/deviceFingerprint';
 
 // Initialize the database reference
 const database = getDatabase();
@@ -463,6 +465,90 @@ export const handleDeleteLast300Messages = async (senderId, showAlert = false, c
 
 const encodeEmailForBan = (em) => (em || '').toLowerCase().trim().replace(/\./g, '(dot)');
 
+// Looks up the deviceId stamped on a user record by GlobelStats on auth.
+// Returns null if the user has no deviceId yet (older client / never signed in
+// since the device-ban feature shipped).
+const getUserDeviceId = async (userId) => {
+  if (!userId) return null;
+  try {
+    const db = getDatabase();
+    const snap = await get(ref(db, `users/${userId}/deviceId`));
+    const v = snap.val();
+    return typeof v === 'string' && v.length > 0 ? v : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+// Mirrors a ban onto banned_devices/{deviceId} so the same device can't sign
+// up with a fresh email and bypass the email-keyed ban. Writes BOTH the
+// stamped device id (from users/{uid}/deviceId) AND the currently-active
+// device's fingerprint when the ban is happening on the same device as the
+// banned user. Without that second write, a self-ban whose stamp lost the
+// race against the ban write left banned_devices empty — the user could
+// then sign in to a different account on the same device with no gate.
+//
+// Caller already wrote the email-ban entry; we additionally tag that entry
+// with `deviceId` so unbanUserWithEmail knows which device entry to clear.
+const mirrorBanToDevice = async (email, userId, banPayload) => {
+  const stampedDeviceId = await getUserDeviceId(userId);
+
+  // Self-ban / same-device fallback: if the caller's session matches the
+  // banned account, we know THIS device should be locked regardless of
+  // what users/{uid}/deviceId says (it may be stale, missing, or the user
+  // may have signed in pre-stamp).
+  let currentDeviceId = null;
+  const callerUid = getAuth()?.currentUser?.uid;
+  if (userId && callerUid && userId === callerUid) {
+    try {
+      currentDeviceId = await getDeviceFingerprint();
+    } catch (_) { /* fall through */ }
+  }
+
+  // Dedup so we don't write the same row twice.
+  const targets = Array.from(
+    new Set([stampedDeviceId, currentDeviceId].filter(Boolean))
+  );
+
+  if (targets.length === 0) {
+    console.warn(
+      'mirrorBanToDevice: no deviceId available for user',
+      userId,
+      '— device-side ban not written'
+    );
+    return null;
+  }
+
+  const payload = {
+    bannedUntil: banPayload.bannedUntil,
+    bannedAt: banPayload.bannedAt,
+    bannedBy: banPayload.bannedBy,
+    reason: banPayload.reason,
+    strikeCount: banPayload.strikeCount,
+    email,
+    userId: userId || null,
+  };
+
+  try {
+    const db = getDatabase();
+    await Promise.all(
+      targets.map((id) => set(ref(db, `banned_devices/${id}`), payload))
+    );
+    // Tag the email-ban entry with every device fp we wrote, so unban can
+    // clear all of them. Keep the legacy `deviceId` field set to the primary
+    // (stamped if available — more stable than current FP) for older clients.
+    const primary = stampedDeviceId || currentDeviceId;
+    await update(ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`), {
+      deviceId: primary,
+      deviceIds: targets,
+    });
+    return primary;
+  } catch (e) {
+    console.error('mirrorBanToDevice error:', e);
+    return null;
+  }
+};
+
 export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null) => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
@@ -510,6 +596,11 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
     };
 
     await set(banRef, banData);
+
+    // Mirror onto banned_devices so the same device can't bypass with a
+    // new email. Best-effort — if the user has no deviceId on file the
+    // email ban still applies as before.
+    mirrorBanToDevice(email, banData.userId, banData).catch(() => {});
 
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
     // let deletedCount = 0;
@@ -584,6 +675,9 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
     };
 
     await set(banRef, strikeData);
+
+    // Mirror onto banned_devices for cross-email enforcement.
+    mirrorBanToDevice(email, strikeData.userId, strikeData).catch(() => {});
 
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
     // let deletedCount = 0;
@@ -673,9 +767,38 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
     // Remove both lowercase and original-casing keys (handles legacy + new data)
     const keyLower = encodeEmailForBan(email);
     const keyOriginal = email.replace(/\./g, '(dot)');
+
+    // Collect mirrored banned_devices ids from BOTH key variants before
+    // deleting. mirrorBanToDevice writes a `deviceIds` array (newer) and a
+    // `deviceId` scalar (legacy) — honour both.
+    const mirroredIds = new Set();
+    for (const key of [keyLower, keyOriginal]) {
+      if (!key) continue;
+      try {
+        const snap = await get(ref(db, `banned_users_by_email/${key}`));
+        const v = snap.val();
+        if (Array.isArray(v?.deviceIds)) {
+          for (const id of v.deviceIds) {
+            if (typeof id === 'string' && id.length > 0) mirroredIds.add(id);
+          }
+        }
+        if (typeof v?.deviceId === 'string' && v.deviceId.length > 0) {
+          mirroredIds.add(v.deviceId);
+        }
+      } catch (_) { /* ignore */ }
+    }
+
     await set(ref(db, `banned_users_by_email/${keyLower}`), null);
     if (keyOriginal !== keyLower) {
       await set(ref(db, `banned_users_by_email/${keyOriginal}`), null);
+    }
+
+    if (mirroredIds.size > 0) {
+      Promise.all(
+        Array.from(mirroredIds).map((id) =>
+          set(ref(db, `banned_devices/${id}`), null).catch(() => {})
+        )
+      ).catch(() => {});
     }
 
     if (showAlert) Alert.alert('User Unbanned', 'Ban has been lifted.');
@@ -692,44 +815,79 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
  * Listens to `banned_users_by_email` in real-time.
  * Uses lowercase email to avoid auth/DB casing mismatch.
  */
+// Subscribes to BOTH email-ban (banned_users_by_email/{email}) and device-ban
+// (banned_devices/{fp}) paths. Either being active reports `isBanned: true`.
+//
+// `banDetails` prefers the email-ban payload when both fire (it's the
+// authoritative record); a device-only hit is surfaced with
+// `isAssociatedBan: true` so callers can show "this device is associated
+// with a banned account" copy when they want to differentiate. Default copy
+// works regardless — the payload shape is otherwise identical.
+//
+// The device-ban listener catches the bypass where a banned user signs out
+// and re-registers with a fresh email on the same device.
 export const useBanStatus = (email) => {
-  const [isBanned, setIsBanned] = useState(false);
-  const [banDetails, setBanDetails] = useState(null);
+  const [isEmailBanned, setIsEmailBanned] = useState(false);
+  const [emailBanDetails, setEmailBanDetails] = useState(null);
+  const [isDeviceBanned, setIsDeviceBanned] = useState(false);
+  const [deviceBanDetails, setDeviceBanDetails] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
-      if (!email) {
-        setIsBanned(false);
-        setBanDetails(null);
-        return;
+      const db = getDatabase();
+      let unsubEmail = null;
+      let unsubDevice = null;
+      let cancelled = false;
+
+      const evaluate = (data, setActive, setPayload) => {
+        if (!data) { setActive(false); setPayload(null); return; }
+        const now = Date.now();
+        let active = false;
+        if (data.bannedUntil === 'permanent') {
+          active = true;
+        } else if (typeof data.bannedUntil === 'number' && data.bannedUntil > now) {
+          active = true;
+        }
+        setActive(active);
+        setPayload(active ? data : null);
+      };
+
+      if (email) {
+        const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
+        unsubEmail = onValue(banRef, (snapshot) => {
+          evaluate(snapshot.exists() ? snapshot.val() : null, setIsEmailBanned, setEmailBanDetails);
+        });
+      } else {
+        setIsEmailBanned(false);
+        setEmailBanDetails(null);
       }
 
-      const db = getDatabase();
-      const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
-
-      const unsubscribe = onValue(banRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          const now = Date.now();
-
-          let active = false;
-          if (data.bannedUntil === 'permanent') {
-            active = true;
-          } else if (typeof data.bannedUntil === 'number' && data.bannedUntil > now) {
-            active = true;
-          }
-
-          setIsBanned(active);
-          setBanDetails(active ? data : null);
-        } else {
-          setIsBanned(false);
-          setBanDetails(null);
+      getDeviceFingerprint().then((fp) => {
+        if (cancelled || !fp) {
+          setIsDeviceBanned(false);
+          setDeviceBanDetails(null);
+          return;
         }
+        const devRef = ref(db, `banned_devices/${fp}`);
+        unsubDevice = onValue(devRef, (snapshot) => {
+          evaluate(snapshot.exists() ? snapshot.val() : null, setIsDeviceBanned, setDeviceBanDetails);
+        });
+      }).catch(() => {
+        setIsDeviceBanned(false);
+        setDeviceBanDetails(null);
       });
 
-      return () => unsubscribe();
+      return () => {
+        cancelled = true;
+        if (unsubEmail) unsubEmail();
+        if (unsubDevice) unsubDevice();
+      };
     }, [email])
   );
+
+  const isBanned = isEmailBanned || isDeviceBanned;
+  const banDetails = emailBanDetails
+    || (isDeviceBanned ? { ...deviceBanDetails, isAssociatedBan: true } : null);
 
   return { isBanned, banDetails };
 };

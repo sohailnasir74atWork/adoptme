@@ -19,6 +19,7 @@ import { parseMessageText } from '../ChatHelper';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
@@ -76,9 +77,27 @@ const MessagesList = ({
   const { triggerHapticFeedback } = useHaptic();
   const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
 
+  // Dedup-by-id before render. Realtime INSERT can race with pagination
+  // backfill (same row arrives via both paths), and the Supabase channel
+  // can replay its buffer on resubscribe — both produce the duplicate-key
+  // FlatList crash. Same guard PrivateMessageList and GroupMessageList
+  // already have.
+  const dedupedMessages = useMemo(() => {
+    if (!Array.isArray(messages)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const m of messages) {
+      const id = m?.id != null ? String(m.id) : null;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      out.push(m);
+    }
+    return out;
+  }, [messages]);
+
   // ✅ PERF: Store messages in a ref so renderMessage doesn't depend on the array
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  const messagesRef = useRef(dedupedMessages);
+  messagesRef.current = dedupedMessages;
 
   const { t } = useTranslation();
   const { isAdmin, api, freeTranslation } = useGlobalState();
@@ -447,36 +466,34 @@ const MessagesList = ({
                       <Image source={require('../../../assets/trophy.webp')} style={styles.icon} />
                     )}
 
-                    {!!item.isAdmin && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#EF4444' }]}>
-                        <Icon name="shield" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>{t("chat.admin")}</Text>
-                      </View>
-                    )}
-                    {!item.isAdmin && item.isModerator && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
-                        <Icon name="shield-checkmark" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>{t("chat.mod")}</Text>
-                      </View>
-                    )}
-                    {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#F59E0B' }]}>
-                        <Icon name="paw" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>JMD</Text>
-                      </View>
-                    )}
-                    {profile.isTrusted && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#10B981' }]}>
-                        <Icon name="checkmark-circle" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>Trusted</Text>
-                      </View>
-                    )}
-                    {profile.isCMSR && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#F97316' }]}>
-                        <Icon name="briefcase" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>CMSR</Text>
-                      </View>
-                    )}
+                    {(() => {
+                      const firstBadge = getFirstBadgeType({
+                        isAdmin: item.isAdmin, isModerator: item.isModerator, isBabyMod: item.isBabyMod,
+                        isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isHelper: profile.isHelper,
+                      });
+                      return (
+                        <>
+                          {!!item.isAdmin && (
+                            <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t("chat.admin")} glow={firstBadge === 'admin'} />
+                          )}
+                          {!item.isAdmin && item.isModerator && (
+                            <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t("chat.mod")} glow={firstBadge === 'mod'} />
+                          )}
+                          {!item.isAdmin && !item.isModerator && item.isBabyMod && (
+                            <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
+                          )}
+                          {profile.isTrusted && (
+                            <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
+                          )}
+                          {profile.isCMSR && (
+                            <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
+                          )}
+                          {profile.isHelper && (
+                            <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {isAdmin && item.OS && (
                       <View style={styles.platformBadge}>
@@ -491,7 +508,7 @@ const MessagesList = ({
 
 
 
-                  {item.gif && (
+                  {item.gif && !/\.gif(\?|$)/i.test(item.gif) && (
                     <View>
                       <Image
                         source={{ uri: item.gif }}
@@ -701,7 +718,7 @@ const MessagesList = ({
   return (
     <>
       <FlatList
-        data={messages}
+        data={dedupedMessages}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderMessage}
         contentContainerStyle={styles.chatList}

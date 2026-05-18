@@ -9,6 +9,7 @@ import {
 import ValueScreen from '../../ValuesScreen/ValueScreen';
 import { useGlobalState } from '../../GlobelStats';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
+import { MenuProvider } from 'react-native-popup-menu';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -47,26 +48,31 @@ const PetModal = ({
       visible={visible}
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
-        {/* Background – tap to close */}
-        <Pressable style={styles.backdrop} onPress={handleClose} />
+      {/* Local MenuProvider — react-native-popup-menu's top-level provider
+          in AppEntry can't render into RN Modal's separate native window
+          layer, so the category dropdown was appearing behind the modal. */}
+      <MenuProvider skipInstanceCheck>
+        <View style={styles.overlay}>
+          {/* Background – tap to close */}
+          <Pressable style={styles.backdrop} onPress={handleClose} />
 
-        {/* Bottom drawer */}
-        <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDark} style={[styles.drawer, { backgroundColor: drawerBackgroundColor }]}>
-          <ValueScreen 
-            fromChat={fromChat} 
-            selectedFruits={selectedFruits} 
-            setSelectedFruits={setSelectedFruits} 
-            onRequestClose={handleClose} 
-            fromSetting={fromSetting} 
-            owned={owned} 
-            ownedPets={ownedPets} 
-            setOwnedPets={setOwnedPets} 
-            wishlistPets={wishlistPets} 
-            setWishlistPets={setWishlistPets}
-          />
-        </SwipeableBottomDrawer>
-      </View>
+          {/* Bottom drawer */}
+          <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDark} style={[styles.drawer, { backgroundColor: drawerBackgroundColor }]}>
+            <ValueScreen
+              fromChat={fromChat}
+              selectedFruits={selectedFruits}
+              setSelectedFruits={setSelectedFruits}
+              onRequestClose={handleClose}
+              fromSetting={fromSetting}
+              owned={owned}
+              ownedPets={ownedPets}
+              setOwnedPets={setOwnedPets}
+              wishlistPets={wishlistPets}
+              setWishlistPets={setWishlistPets}
+            />
+          </SwipeableBottomDrawer>
+        </View>
+      </MenuProvider>
     </Modal>
   );
 };

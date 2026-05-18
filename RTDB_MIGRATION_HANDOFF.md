@@ -1,6 +1,159 @@
 # RTDB Cost-Reduction Update — Handoff
 
-Last touched: 2026-05-13 (Phase 5 server-side now live: SQL applied + both HTTPS notify CFs deployed in `adoptme-7b50c`). Hand this to the next agent so nothing gets re-done or accidentally undone.
+Last touched: 2026-05-18 (clean-cut completed: RTDB chat write rules locked so old-app users get a hard send error in both private and group; `chat_meta_data` writes also locked; verified the planned "bridge" Cloud Functions were never deployed so the originally planned teardown is a no-op; deprecation-notice scheduled CF text rewritten + auto-stop guard added).
+
+---
+
+## 2026-05-18 — clean-cut completed
+
+### RTDB rules locked (forces old-app users to update)
+The following RTDB rule changes have been applied in Firebase Console:
+
+| Path | `.write` | Why |
+|---|---|---|
+| `group_messages` | `false` (top-level) | Blocks old-app group sends. Old app errors with PERMISSION_DENIED → user sees send fail. New-app group send is on Supabase, unaffected. |
+| `private_messages/$chatId/messages` | `false` (granular) | Blocks old-app private message body writes. Old app errors → user sees send fail. New-app private send is on Supabase, unaffected. |
+| `private_messages/$chatId/unread` | `true` | Kept open — new app's [Code/ChatScreen/utils.js:310](Code/ChatScreen/utils.js#L310) unread zero-out still needs to write here. |
+| `private_messages/$chatId/lastRead` | `true` | Kept open — new app's read-receipt blue-tick at [Code/ChatScreen/utils.js:997](Code/ChatScreen/utils.js#L997) (write) + [Code/ChatScreen/utils.js:1018](Code/ChatScreen/utils.js#L1018) (listener) still needs this. New↔New read receipts still work. |
+| `chat_meta_data` | `false` | Blocks old-app inbox-row updates so old sends produce zero side effects (no ghost push to new-app users via `notifyNewMessageLegacy`). New-app client code does NOT write to RTDB `chat_meta_data` directly (writes go through Supabase RPC `send_private_chat_meta`), so this is safe. Audit-confirmed 2026-05-18: only AdminDashboard delete + BottomDrawer account-delete still touch RTDB `chat_meta_data`; both already dual-write to Supabase. |
+| `group_meta_data` | `true` (kept open) | New-app [Code/ChatScreen/utils/groupUtils.js](Code/ChatScreen/utils/groupUtils.js) still writes here directly for group create / join / member edits / mute / accept-invite. Per-user-per-group state has NOT been migrated to Supabase yet; locking this would break group create/join. |
+| `private_chat_new`, `private_chat` | `false` | No client code writes these in either old or new app (audited 2026-05-18). Locked for hygiene. |
+
+**Cost of the kept-open `chat_meta_data` rule reversion:** there was a brief window when `chat_meta_data` was first locked and immediately reverted because group create/join were broken. Resolution was to lock `chat_meta_data` (which new app doesn't write to anyway) and keep `group_meta_data` open (which new app DOES write to). See "What still needs a follow-up migration" below.
+
+### Resulting cross-version chat matrix
+
+| Direction | Private | Group |
+|---|---|---|
+| Old → Old | ✅ works (both RTDB) | ❌ PERMISSION_DENIED (rule) |
+| Old → New | ❌ PERMISSION_DENIED (rule) — visible error | ❌ PERMISSION_DENIED — visible error |
+| New → Old | ❌ silently invisible (no Supabase→RTDB bridge) | ❌ silently invisible |
+| New → New | ✅ Supabase | ✅ Supabase |
+
+Old-app users will see send errors on private + group, prompting them to update. They retain RTDB-only chat with other old users in private, but cannot send in groups at all.
+
+### "Bridge" Cloud Functions were never deployed
+`CHAT_BRIDGE_2DAY.md` documents 3 mirror functions that were supposedly deployed 2026-05-16 — but `firebase functions:list --project adoptme-7b50c` on 2026-05-18 shows **none of them exist** in the project:
+
+- ❌ `mirrorPrivateMessageToSupabase` (RTDB→Supabase private msg bridge)
+- ❌ `mirrorPrivateMessageToRtdb` (Supabase→RTDB private msg bridge)
+- ❌ `mirrorChatMetaToRtdb` (Supabase→RTDB chat_meta bridge)
+- ❌ `mirrorChatMetaToSupabase` (RTDB→Supabase chat_meta — was supposed to be modified, but also not deployed)
+
+The source files exist in [functions/mirrorPrivateMessageToSupabase.js](functions/mirrorPrivateMessageToSupabase.js), [functions/mirrorPrivateMessageToRtdb.js](functions/mirrorPrivateMessageToRtdb.js), [functions/mirrorChatMetaToRtdb.js](functions/mirrorChatMetaToRtdb.js), [functions/mirrorChatMetaToSupabase.js](functions/mirrorChatMetaToSupabase.js) but the deploy step on 2026-05-16 either failed silently or was never run. **The cross-version private bridge described in `CHAT_BRIDGE_2DAY.md` was therefore a no-op the entire window** — old-app users have been cut off from new-app users in private chat since Phase 5 went live, not just from today's rule lock. The rule lock just makes the failure explicit (PERMISSION_DENIED) instead of silent.
+
+**Implication:** no teardown is needed for those 3 functions. There is nothing to delete.
+
+### Cloud Functions to delete (now dead due to rule locks)
+
+Both are RTDB ref.write triggers on paths that are now write-locked at the rule level. They can never fire again — pure dead weight:
+
+```bash
+firebase functions:delete notifyNewMessageLegacy notifyGroupMessageLegacy \
+  --region us-central1 --project adoptme-7b50c --force
+```
+
+- `notifyNewMessageLegacy` — triggered on `chat_meta_data/.../unreadCount` writes. With `chat_meta_data` rule write:false, no client write can trigger it. (Admin SDK from CFs could, but no CF writes that path.)
+- `notifyGroupMessageLegacy` — triggered on `group_meta_data/.../unread` writes. `group_meta_data` is still write:true so it COULD fire, but it would push for stale RTDB group state that nobody updates anymore. Functionally dead.
+
+`cleanupOldPrivateChats` (scheduled CF) is also wind-down candidate — with `private_messages/$chatId/messages` write-locked, no new chats accumulate. The CF still works (Admin SDK bypasses rules) but operates on shrinking data. Leave it running for now to clean up the legacy backlog; delete later when RTDB private_messages tree is small enough.
+
+### Deprecation push CF updated
+[functions/sendUpdateNoticeMessage.js](functions/sendUpdateNoticeMessage.js) text rewritten to lead with the symptom users will actually see: "Can't send messages in group or private chat?" → that means you're on an older version → update. Added auto-stop guard so the function no-ops after 2026-05-19 00:00 Asia/Karachi (one cache-window past the rule-lock date). Function itself should be deleted manually in Firebase once you're satisfied old-app DAU has drained.
+
+### What still needs a follow-up migration
+
+The clean cut is functional, but these RTDB paths are still actively used by the **new** app and would block a future "delete the RTDB chat tree entirely" goal:
+
+1. **`group_meta_data/$userId/$groupId/*`** — per-user-per-group state (unread count, lastRead, mute, member metadata). Written by `groupUtils.js` for create/join/edit/mute/accept-invite. Read by Inbox + GroupsScreen for unread badges. No Supabase equivalent table exists yet. Migrating requires adding a `group_meta_data` table to Supabase (similar shape to private `chat_meta_data` table) + porting all `groupUtils.js` writes + the InboxScreen reads.
+2. **`private_messages/$chatId/lastRead/$userId`** — new app's read-receipt blue tick. Writer: [Code/ChatScreen/utils.js:997](Code/ChatScreen/utils.js#L997). Listener: [Code/ChatScreen/utils.js:1018](Code/ChatScreen/utils.js#L1018). Move to Supabase `chat_meta_data` table (add a `lastRead` column) or a separate `chat_read_receipts` table. Realtime via Supabase channel.
+3. **`private_messages/$chatId/unread/$userId`** — unread zero-out at [Code/ChatScreen/utils.js:310](Code/ChatScreen/utils.js#L310). Should be on Supabase already (the `reset_unread` RPC exists in `chatMetaBackend`) — this RTDB write looks like a leftover. Confirm with grep and delete if dual-writing.
+
+### Working-tree drift
+Significant uncommitted changes remain in working tree (Phase 5 client + Phase 5 server + today's notice/auto-stop edit + many session-old read migrations). Commit before further work.
+
+---
+
+## 2026-05-15 — session changes
+
+### Group M3 fully validated on device
+User confirmed group chat send/receive **and** reactions working end-to-end. SQL 012 (`supabase/012_group_message_reactions.sql`) is therefore confirmed applied in Supabase. `toggle_group_reaction` RPC live. M3 task closed; remaining work is just committing the working tree.
+
+### User backfill re-run (one-shot, 65 min)
+[scripts/backfill-users-to-supabase.js](scripts/backfill-users-to-supabase.js) re-executed locally to pick up users that were created/edited between the prior backfill (2026-05-04, 125,887 users) and today.
+
+Run command (key pulled from Firebase secrets):
+```bash
+KEY=$(firebase functions:secrets:access SUPABASE_SERVICE_ROLE_KEY | tail -1)
+NODE_PATH=/Volumes/Sohail/AI_Projects/adoptme-jan7/functions/node_modules \
+SUPABASE_URL=https://kvtbtzhtcaanhjblyick.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY="$KEY" \
+node scripts/backfill-users-to-supabase.js
+```
+
+Final Supabase row counts (post-run):
+
+| Table | Backfill processed | Supabase count | Delta from script |
+|---|---|---|---|
+| user_identity | 129,269 | 129,288 | +19 (mirror CF during run) |
+| user_roles | 129,269 | 129,270 | +1 |
+| user_cosmetics | 129,269 | 129,288 | +19 |
+| user_roblox | 129,269 | 129,270 | +1 |
+| user_notifications | 129,269 | 129,284 | +15 |
+| user_settings | 129,269 | 129,270 | +1 |
+| user_badges | 16,179 buffered | 16,188 | +9 |
+| user_blocks | 8,457 buffered | 8,463 | +6 |
+
+Deltas are users newly mirrored via the mirror CF during the run (new signups + `lastActivity` heartbeats). Coverage is now ~100% across the 8 split tables; the per-screen RTDB fallback paths added below will almost never fire.
+
+**Run gotcha:** the script needs `firebase-admin` + `@supabase/supabase-js` resolvable. They live in `functions/node_modules`, not at the project root — so set `NODE_PATH=functions/node_modules` when running from the repo root, or `cd functions && node ../scripts/backfill-users-to-supabase.js`. If you forget, you get `Cannot find module 'firebase-admin'`.
+
+**Output buffering gotcha:** don't pipe through `| tail -100`; pipes buffer the script's stdout until exit. Run unbuffered and tail the output file separately if you want to watch progress.
+
+### Read-side Supabase migrations shipped
+Goal: eliminate per-user RTDB reads on hot client paths now that backfill has full coverage. **Writes are unchanged** — RTDB stays the source of truth, mirror CF still propagates.
+
+| File | Before (RTDB) | After |
+|---|---|---|
+| [Code/ChatScreen/GroupChat/OnlineUsersList.jsx](Code/ChatScreen/GroupChat/OnlineUsersList.jsx) `loadUserBatch` | 10 narrow `get()` calls **per user** | `getIdentityBatch` + `getRolesBatch` + `getCosmeticsBatch` + `getRobloxBatch` (one round-trip each, page-wide). Per-user RTDB reduced to 2 calls (`isPlaying`, `lastGameWinAt` — game state, not mirrored). |
+| [Code/ChatScreen/GroupChat/OnlineUsersList.jsx](Code/ChatScreen/GroupChat/OnlineUsersList.jsx) `searchUsers` | Variant-permutation + 500-row broad-scan fallback on `users/displayName` orderByChild | Supabase `ILIKE` for names (case-insensitive native), 3 parallel `eq` queries for emails (`uid`/`email`/`decoded_email`), single `getIdentity` for IDs. Then `getRolesBatch + getCosmeticsBatch + getRobloxBatch` enrichment. |
+| [Code/Helper/profileCache.js](Code/Helper/profileCache.js) `getOrFetchProfile` | 4 Supabase + **12 RTDB always** (9 mirrored-field fallbacks + game state + shop) | 4 Supabase + 3 RTDB (game state + shop only). RTDB fallback for mirrored fields now fires **only when the corresponding Supabase table returned null** (mirror lag / pre-backfill case). Common case: 9 fewer RTDB reads per cache miss. |
+| [Code/ChatScreen/PrivateChat/PrivateChatHeader.jsx](Code/ChatScreen/PrivateChat/PrivateChatHeader.jsx) `fetchUserData` | 7 RTDB reads + 3 conditional roblox reads | `getRoles` + `getCosmetics` + `getRoblox` + 2 RTDB (`lastGameWinAt`, `profileFrame`). Selective fallback per missing Supabase row. |
+| [Code/ChatScreen/PrivateChat/BlockUserList.jsx](Code/ChatScreen/PrivateChat/BlockUserList.jsx) | 3 RTDB reads × N blocked users | One `getIdentityBatch` for the whole list. Also dropped the read of the dead `users/{uid}/profileFrame` path (always null per 004 field-mapping; frame is on shop subtree). |
+| [Code/ChatScreen/GroupChat/GroupsScreen.jsx](Code/ChatScreen/GroupChat/GroupsScreen.jsx) (3 spots: per-group creator + 2 list-of-creators) | 1-2 RTDB reads per group | `getIdentity` for single creator; `getIdentityBatch` for list-of-creators. |
+| [Code/ChatScreen/GroupChat/GroupChatScreen.jsx](Code/ChatScreen/GroupChat/GroupChatScreen.jsx) (pending-invite metadata fallback) | 2 RTDB reads per invited user | One `getIdentity` per invited user. |
+
+[Code/ChatScreen/GroupChat/BottomDrawer.jsx](Code/ChatScreen/GroupChat/BottomDrawer.jsx) was **already** migrated (kill-switch `BOTTOM_DRAWER_CACHE_ENABLED = true` in prod). Untouched this session.
+
+### New helpers in userBackend.js
+[Code/Supabase/userBackend.js](Code/Supabase/userBackend.js) gained:
+- `searchIdentityByName(term, limit = 50)` — Postgres `ILIKE` against `user_identity.display_name`. Case-insensitive by definition; replaces the RTDB variant-permutation dance.
+- `searchIdentityByEmail(emailOrEncoded, limit = 10)` — 3 parallel exact-match queries against `uid` (legacy encoded-email keys), `email`, `decoded_email`. Normalizes between `foo@bar.com` and `foo(dot)bar(dot)com`.
+
+### Side-effect: pre-existing isAdmin bug fixed
+`OnlineUsersList.loadUserBatch` previously read `users/{uid}/isAdmin` (the **dead** RTDB path per [supabase/004_users_split_FIELD_MAPPING.md](supabase/004_users_split_FIELD_MAPPING.md)). The canonical path is `users/{uid}/admin` (renamed to `is_admin` in Supabase `user_roles`). After the swap, the admin badge in OnlineUsersList actually works.
+
+### Defensive: FlatList duplicate-key dedup
+Intermittent "Encountered two children with the same key" warnings in chat and groups screens. **Symptom**, not root cause — the underlying data state occasionally contains two items with the same id (race between realtime onInsert and pagination, channel resubscribe replay, Firestore cursor boundary overlap, etc.). Patched the last hop before each FlatList renders:
+
+- [Code/ChatScreen/PrivateChat/PrivateMessageList.jsx](Code/ChatScreen/PrivateChat/PrivateMessageList.jsx) — `filteredMessages` dedups by `id`.
+- [Code/ChatScreen/GroupChat/GroupMessageList.jsx](Code/ChatScreen/GroupChat/GroupMessageList.jsx) — `filteredMessages` dedups by `id` before sorting.
+- [Code/ChatScreen/GroupChat/InboxScreen.jsx](Code/ChatScreen/GroupChat/InboxScreen.jsx) — `filteredChats` dedups by `chatId`.
+- [Code/ChatScreen/GroupChat/GroupsScreen.jsx](Code/ChatScreen/GroupChat/GroupsScreen.jsx) — `filteredGroups` dedups by `groupId`; new `dedupedAllGroups` / `dedupedInvitations` / `dedupedJoinRequests` useMemos feed the other three FlatLists.
+
+This silences the redbox regardless of which producer is emitting duplicates. The real fix is still owed (most likely the `getAllGroups` paginator boundary in `loadMoreGroups`, and the message-list realtime+pagination race window). Track that separately if it shows up again.
+
+### Other fixes
+- **CreateGroupModal init-effect race** ([Code/ChatScreen/GroupChat/CreateGroupModal.jsx:97-114](Code/ChatScreen/GroupChat/CreateGroupModal.jsx#L97-L114)) — modal opened with empty `selectedMemberIds` if the parent's `selectedUsers` memo hadn't propagated yet. Init effect now includes `selectedUsers` + `user?.id` in deps and only latches the "initialized" ref once it captured non-empty data, so a stale-empty first run re-tries when the prop populates.
+- **ATT redbox** (`Tried to resolve a promise more than once`) — `react-native-tracking-transparency@0.1.2` has a known double-resolve bug when the system dialog is interrupted (app loses/regains focus while prompt is up). Added [App.js](App.js) module-level `ensureAttRequested()` helper: short-circuits on already-determined status, caches in-flight promise so concurrent callers share it. The native lib bug remains; this guards us against ever hitting the buggy path.
+- **GroupsScreen popup menu dark-mode text** ([Code/ChatScreen/GroupChat/GroupsScreen.jsx:805-832](Code/ChatScreen/GroupChat/GroupsScreen.jsx#L805-L832)) — four menu items ("Group Info", "Mute Notifications", "Update Group Icon", "Edit") had no `color` prop, defaulting to black against the dark `#1e293b` menu background. Set to `c.text`.
+
+### Pending / verify on device
+1. **Commit working tree** — group M3 client changes + group reactions backend (`Code/Supabase/groupMessagesBackend.js`, `Code/Supabase/privateMessagesBackend.js`) + all of today's read migrations + bug fixes are uncommitted.
+2. **Real-search smoke test on Search Database tab** — confirm typing partial names returns expected users (was failing before the backfill re-run because some users had no Supabase row).
+3. **`lastActivity` heartbeat write** — biggest remaining cost lever; still on RTDB, fires per app launch per user, triggers mirror CF each time. Not addressed this session. See [Code/GlobelStats.js:482](Code/GlobelStats.js#L482). Options: debounce server-side, move to a Supabase RPC, or batch.
+
+---
 
 ## Why this work exists
 
@@ -677,3 +830,113 @@ firebase functions:delete notifyNewMessageLegacy notifyGroupMessageLegacy --regi
 | `Code/ChatScreen/ReportPopUp.jsx` | Update private/group report path to call Supabase UPDATE (set deleted=true OR bump report_count) instead of RTDB. |
 | `Code/Supabase/privateMessagesBackend.js` (new) | Realtime subscribe + send helpers. Copy from Blox_Fruit. |
 | `Code/Supabase/groupMessagesBackend.js` (new) | Same for group. |
+
+---
+
+## Session 2026-05-13 (cont'd) — audit + private-chat M3 partial + cleanup
+
+### M3 state after this session
+
+| Chat type | Client swap | Status |
+|---|---|---|
+| Private | `PrivateChat.jsx` | ✅ Swapped — **MODIFIED in working tree, NOT COMMITTED**. Uses `Code/Supabase/privateMessagesBackend.js` (untracked, ready). Reads + writes go to Supabase. |
+| Group | `GroupChatScreen.jsx`, `groupUtils.sendGroupMessage` | ✅ Swapped 2026-05-14 — **MODIFIED in working tree, NOT COMMITTED**. Reactions handled via SQL 012 + `toggleGroupReaction`. |
+
+Working tree at end of session:
+```
+M Code/ChatScreen/GroupChat/GroupChatScreen.jsx
+M Code/ChatScreen/PrivateChat/PrivateChat.jsx
+M Code/ChatScreen/utils/groupUtils.js
+M Code/Supabase/groupMessagesBackend.js
+M RTDB_MIGRATION_HANDOFF.md
+?? Code/Supabase/groupMessagesBackend.js  (initial create from previous session was untracked)
+?? Code/Supabase/privateMessagesBackend.js
+?? supabase/012_group_message_reactions.sql
+```
+
+### Reactions resolution 2026-05-14 — Option A taken
+
+Decision: jsonb column on `group_messages` + atomic toggle RPC (not a separate table). Rationale:
+- Group chat is group-scoped, not global → no Realtime-fanout problem that forced public chat to a separate `message_reactions` table.
+- Reactions ride along the existing UPDATE realtime broadcast on `group_messages`, so cross-user reactions sync for free without a second subscription.
+- Shape `{[userId]: emoji}` matches the RTDB layout exactly — UI renderer (`GroupMessageList` / `MessageActionDrawer`) unchanged.
+
+Files added / changed for reactions:
+- [supabase/012_group_message_reactions.sql](supabase/012_group_message_reactions.sql) — `ALTER TABLE ... ADD COLUMN reactions jsonb default '{}'` + `toggle_group_reaction(message_id, emoji)` SECURITY DEFINER RPC. Inline membership check (same trust model as `send_group_message`). Tap-same-emoji = clear (matches prior RTDB semantics).
+- [Code/Supabase/groupMessagesBackend.js](Code/Supabase/groupMessagesBackend.js) — `fromGroupMessageRow` now maps `reactions` field; new `toggleGroupReaction(messageId, emoji)` helper.
+- [Code/ChatScreen/GroupChat/GroupChatScreen.jsx](Code/ChatScreen/GroupChat/GroupChatScreen.jsx) `handleReaction` — optimistic-applies tap-same-removes locally, then calls Supabase RPC; realtime UPDATE delivers cross-user state.
+
+### Group M3 swap details 2026-05-14
+
+Files modified (all working-tree, uncommitted):
+- [Code/ChatScreen/GroupChat/GroupChatScreen.jsx](Code/ChatScreen/GroupChat/GroupChatScreen.jsx) — pagination (`loadGroupMessages`), realtime (`subscribeToGroupMessages`), soft-delete single + by-sender (admin mod actions), reactions, removed the RTDB `group_meta_data` write on chat-open (Supabase-only — `resetGroupUnreadCount` covers it). Optimistic-insert on send removed; realtime feeds own messages back (same pattern as PrivateChat).
+- [Code/ChatScreen/utils/groupUtils.js](Code/ChatScreen/utils/groupUtils.js) — `sendGroupMessage` rewritten: Firestore member list fetch retained, but message body now goes through the Supabase `send_group_message` RPC and meta fan-out through `fanout_group_message_meta` RPC. Return shape `{success, messageKey, timestamp, message}` is back-compatible with the existing call site in GroupChatScreen. Also: the three whole-group RTDB removes in `leaveGroup` (×2) and `deleteGroup` (×1) now ALSO call `softDeleteAllInGroup` against Supabase so deletes don't leave orphan rows there. RTDB removes stay because old-app writes still land in RTDB.
+- [Code/Supabase/groupMessagesBackend.js](Code/Supabase/groupMessagesBackend.js) — reactions mapper + `toggleGroupReaction` helper (see above).
+
+Files NOT changed (still RTDB or N/A):
+- `Code/ChatScreen/ReportPopUp.jsx` — group chat reporting is **not currently wired** (`GroupMessageList` passes `onReport` to `MessageActionDrawer` but `GroupChatScreen.jsx` doesn't pass anything for it). Skipped this file. If group reports get wired later, follow PrivateChat's pattern: pass `reportGroupMessage` from `groupMessagesBackend.js`.
+
+### ⏳ STILL PENDING before app ship (group M3)
+
+1. **Apply SQL 012 in Supabase** — `supabase/012_group_message_reactions.sql`. Single migration: `ALTER TABLE` is fast, RPC create is instant. Default `'{}'::jsonb` backfills existing rows. SQL editor rollback rule applies (whole migration aborts on any error) — file only has 2 statements + 1 grant, low risk.
+2. **Smoke-test toggle_group_reaction** from SQL editor or the app once 012 is live:
+   ```sql
+   select * from public.toggle_group_reaction('<some-message-uuid>'::uuid, '👍');
+   select * from public.toggle_group_reaction('<some-message-uuid>'::uuid, '👍');  -- should clear (existing == new)
+   ```
+3. **Smoke-test send + fan-out RPCs from the app** — send a group message from a new build; confirm `group_messages` row appears, `group_meta_data` rows for all members get the `last_message` / unread bump, and `notifyGroupMessage` webhook fires (push lands on other members).
+4. **Confirm Supabase realtime fires UPDATE on reactions** — toggle a reaction on one device, verify another member's device receives the row UPDATE event. If it doesn't, check `alter table group_messages replica identity full` is set (it is, in 006_group_messages.sql).
+5. Once validated end-to-end: commit the working-tree changes + ship the build.
+
+### Cross-version cost note after group ship
+
+Old-app users still write RTDB `group_messages` and `group_meta_data`. Mirror CF (`mirrorGroupMetaToSupabase`) still copies their meta into Supabase so new-app users see at least the old-app inbox previews. There is no reverse mirror, so:
+- Old → New: notification ✅, inbox preview ✅ (via meta mirror), message body ❌ (only in RTDB).
+- New → Old: notification ✅ (FCM tokens still on RTDB), inbox preview ❌, message body ❌.
+
+This is the same split-brain reality already documented for private chat. The option-B reverse mirror reconsideration applies equally to groups.
+
+### Cross-version chat behavior — confirmed from code audit
+
+Code audit (all 39 deployed CFs in `adoptme-7b50c` reviewed) confirms **no Supabase → RTDB bridge exists**. Mirrors are all one-way (RTDB → Supabase). So after both PrivateChat.jsx + GroupChatScreen.jsx M3 ship:
+
+| Test scenario | Notification | Message body | Inbox preview |
+|---|---|---|---|
+| Old app → New app | ✅ delivers | ❌ missing | ✅ updates (via existing mirror CF) |
+| New app → Old app | ✅ delivers | ❌ missing | ❌ stays stale |
+
+Notification CFs (`notifyNewMessage` HTTPS, `notifyGroupMessage` HTTPS) read FCM tokens from RTDB `/users/{uid}/fcmToken` — that's why pushes still reach old-app users when a new-app user sends. But the message body is never written to the old app's RTDB read path, and Supabase chat_meta_data never gets reverse-mirrored to RTDB, so the old-app user sees the push banner but nothing in-app when they tap it.
+
+### User position on force-update (2026-05-13)
+
+User explicitly rejected min-version / force-update — "min version means I launch a version and all users shift to that, not going to happen soon." So cross-version pairs will be in the split-brain state above for an **extended** period after ship (weeks to months while app-store auto-updates trickle).
+
+Options discussed, no decision yet:
+- **A. Staged Play Store rollout** + accept short-term breakage. Cheapest, no code changes.
+- **B. One-way Supabase → RTDB bridge** for chat_meta + message bodies (build the reverse mirrors the user explicitly didn't want to build on 2026-05-12). Keeps ~70% of bandwidth savings (reads still go to Supabase) and restores cross-version chat. User has previously built + reverted this — reconsider given the no-force-update reality.
+- **C. Kill chat in old app via remote-config flag** — only viable if shipped old-app code already reads a config flag for chat. Need to check `Code/` for such a hook.
+
+Next agent: surface this trade-off again before app ship.
+
+### Cloud Functions cleanup performed in this session
+
+Deleted from `adoptme-7b50c`:
+- `refreshModProfiles` — stale; replaced by `refreshAllRosters` in [functions/syncRosterMaintenance.js](functions/syncRosterMaintenance.js)
+- `manualUpdateGameLeaderboard` — orphan (GCS source already missing, 404 on download attempt)
+- `updateGameLeaderboardCache` — orphan (same — required `gcloud functions delete` after `firebase functions:delete` got stuck on scheduler 404)
+
+**Pending: re-deploy `seedModRoster`** from current local [functions/syncModRoster.js](functions/syncModRoster.js). Deployed source is the pre-refactor version. Low urgency (one-time seed, mods roster already populated, runs as no-op on schedule):
+```bash
+firebase deploy --only functions:seedModRoster --project adoptme-7b50c
+```
+
+After downloading all 39 deployed function sources via `gcloud functions ... :generateDownloadUrl` and diffing them against local: **32 byte-identical to local, 1 differs by trailing newline only, 4 shared via multi-export source files, 2 are the stale ones above**. Local `functions/` is the authoritative source.
+
+`functions/syncBadgeRoster.js` (exports `syncRoleTrusted` + `syncRoleCMSR`) is **local-only — neither function is deployed**. User says "pending — will deploy later". Don't delete.
+
+### Tooling state
+
+- `gcloud` CLI installed this session (`brew install --cask google-cloud-sdk`, v567.0.0)
+- Authed as `sohailnasir74business@gmail.com`, default project `adoptme-7b50c`
+- Useful for: downloading deployed CF source (Firebase CLI doesn't support this), force-deleting functions when `firebase functions:delete` gets stuck on Cloud Scheduler 404
+- Download trick: `curl -sX POST -H "Authorization: Bearer $(gcloud auth print-access-token)" 'https://cloudfunctions.googleapis.com/v2/projects/<PROJ>/locations/us-central1/functions/<FN>:generateDownloadUrl' -d '{}'` → returns signed GCS URL → `curl -L` to download the zip. v2 endpoint works for both v1 and v2 deployed functions. **Single-quote the URL** — the colon trips up zsh/bash unquoted.

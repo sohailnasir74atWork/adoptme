@@ -23,6 +23,7 @@ import { leaveGroup, acceptGroupInvite, declineGroupInvite, updateGroupAvatar, a
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
+import { getIdentity, getIdentityBatch } from '../../Supabase/userBackend';
 import { useLocalState } from '../../LocalGlobelStats';
 import GroupsGuideModal from './GroupsGuideModal';
 import OnlineUsersList from './OnlineUsersList';
@@ -577,23 +578,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         createdAt = createdAt.seconds * 1000;
       }
 
-      // Get creator info
+      // Creator info via Supabase identity (one row instead of 2 RTDB reads).
       let creatorName = 'Unknown';
       let creatorAvatar = null;
       if (createdBy) {
-        try {
-          // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
-          const [displayNameSnap, avatarSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${createdBy}/displayName`)).catch(() => null),
-            get(ref(appdatabase, `users/${createdBy}/avatar`)).catch(() => null),
-          ]);
-
-          if (displayNameSnap?.exists() || avatarSnap?.exists()) {
-            creatorName = displayNameSnap?.exists() ? displayNameSnap.val() : 'Unknown';
-            creatorAvatar = avatarSnap?.exists() ? avatarSnap.val() : null;
-          }
-        } catch (error) {
-          console.error('Error fetching creator info:', error);
+        const ident = await getIdentity(createdBy).catch(() => null);
+        if (ident) {
+          creatorName = ident.displayName || 'Unknown';
+          creatorAvatar = ident.avatar || null;
         }
       }
 
@@ -811,7 +803,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           }}>
             {/* Group Info */}
             <MenuOption onSelect={() => handleShowGroupInfo(groupId)}>
-              <Text style={{ fontSize: 16, padding: 10 }}>Group Info</Text>
+              <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Group Info</Text>
             </MenuOption>
             {/* Mute/Unmute Notifications */}
             <MenuOption onSelect={() => { }} closeOnSelect={false}>
@@ -822,7 +814,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 paddingHorizontal: 10,
                 paddingVertical: 10,
               }}>
-                <Text style={{ fontSize: 16, flex: 1 }}>Mute Notifications</Text>
+                <Text style={{ fontSize: 16, flex: 1, color: c.text }}>Mute Notifications</Text>
                 <Switch
                   value={mutedGroups[groupId] || false}
                   onValueChange={() => handleToggleMute(groupId, groupName)}
@@ -834,10 +826,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             {isGroupAdmin && (
               <>
                 <MenuOption onSelect={() => handleUpdateGroupIcon(groupId)}>
-                  <Text style={{ fontSize: 16, padding: 10 }}>Update Group Icon</Text>
+                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Update Group Icon</Text>
                 </MenuOption>
                 <MenuOption onSelect={() => handleEditGroup(groupId)}>
-                  <Text style={{ fontSize: 16, padding: 10 }}>Edit</Text>
+                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Edit</Text>
                 </MenuOption>
                 <MenuOption onSelect={() => handleDeleteGroup(groupId, groupName)}>
                   <Text style={{ color: 'red', fontSize: 16, padding: 10, fontWeight: 'bold' }}>Delete Group (Admin)</Text>
@@ -855,11 +847,56 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
   const filteredGroups = useMemo(() => {
     if (!Array.isArray(groups)) return [];
-    // Filter out any groups without a valid groupId
-    return groups
-      .filter(group => group && typeof group === 'object' && group.groupId)
-      .sort((a, b) => (b?.lastMessageTimestamp || 0) - (a?.lastMessageTimestamp || 0));
+    // Filter + dedup by groupId so the FlatList never sees duplicate keys
+    // (can happen on listener resubscribe or overlapping snapshot deliveries).
+    const seen = new Set();
+    const out = [];
+    for (const g of groups) {
+      if (!g || typeof g !== 'object' || !g.groupId) continue;
+      if (seen.has(g.groupId)) continue;
+      seen.add(g.groupId);
+      out.push(g);
+    }
+    return out.sort((a, b) => (b?.lastMessageTimestamp || 0) - (a?.lastMessageTimestamp || 0));
   }, [groups]);
+
+  // Defensive dedups for the other lists feeding FlatLists on this screen.
+  const dedupedAllGroups = useMemo(() => {
+    if (!Array.isArray(allGroups)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const g of allGroups) {
+      const key = g?.id || g?.groupId;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(g);
+    }
+    return out;
+  }, [allGroups]);
+
+  const dedupedInvitations = useMemo(() => {
+    if (!Array.isArray(pendingInvitations)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const inv of pendingInvitations) {
+      if (!inv?.id || seen.has(inv.id)) continue;
+      seen.add(inv.id);
+      out.push(inv);
+    }
+    return out;
+  }, [pendingInvitations]);
+
+  const dedupedJoinRequests = useMemo(() => {
+    if (!Array.isArray(pendingJoinRequests)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const req of pendingJoinRequests) {
+      if (!req?.id || seen.has(req.id)) continue;
+      seen.add(req.id);
+      out.push(req);
+    }
+    return out;
+  }, [pendingJoinRequests]);
 
   // ✅ Load initial 8 groups when "All Groups" tab is active
   useEffect(() => {
@@ -880,23 +917,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             setAllGroupsHasMore(result.hasMore || false);
             setAllGroupsLastDoc(result.lastDoc || null);
 
-            // ✅ Fetch creator names for all groups in parallel
+            // Creator names — single Supabase batch instead of N RTDB reads.
             const creatorIds = [...new Set(availableGroups.map(g => g.createdBy).filter(Boolean))];
-            // ✅ OPTIMIZED: Fetch only displayName instead of full user object
-            const creatorPromises = creatorIds.map(async (creatorId) => {
-              try {
-                const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
-                if (displayNameSnap?.exists()) {
-                  return { [creatorId]: displayNameSnap.val() || 'Creator' };
-                }
-                return { [creatorId]: 'Creator' };
-              } catch (error) {
-                return { [creatorId]: 'Creator' };
-              }
-            });
-
-            const creatorResults = await Promise.all(creatorPromises);
-            const namesMap = creatorResults.reduce((acc, curr) => ({ ...acc, ...curr }), {});
+            const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
+            const namesMap = {};
+            for (const id of creatorIds) {
+              namesMap[id] = identityMap.get(id)?.displayName || 'Creator';
+            }
             setCreatorNames(namesMap);
           } else {
             setAllGroups([]);
@@ -935,20 +962,11 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         // ✅ Fetch creator names for new groups
         const creatorIds = [...new Set(newGroups.map(g => g.createdBy).filter(Boolean))];
         // ✅ OPTIMIZED: Fetch only displayName instead of full user object
-        const creatorPromises = creatorIds.map(async (creatorId) => {
-          try {
-            const displayNameSnap = await get(ref(appdatabase, `users/${creatorId}/displayName`)).catch(() => null);
-            if (displayNameSnap?.exists()) {
-              return { [creatorId]: displayNameSnap.val() || 'Creator' };
-            }
-            return { [creatorId]: 'Creator' };
-          } catch (error) {
-            return { [creatorId]: 'Creator' };
-          }
-        });
-
-        const creatorResults = await Promise.all(creatorPromises);
-        const namesMap = creatorResults.reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
+        const namesMap = {};
+        for (const id of creatorIds) {
+          namesMap[id] = identityMap.get(id)?.displayName || 'Creator';
+        }
 
         setAllGroups(prev => [...prev, ...newGroups]);
         setCreatorNames(prev => ({ ...prev, ...namesMap }));
@@ -1334,7 +1352,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           {joinRequestsExpanded && (
             <View style={{ padding: 12 }}>
               <FlatList
-                data={pendingJoinRequests}
+                data={dedupedJoinRequests}
                 keyExtractor={(item) => item.id}
                 renderItem={renderJoinRequestItem}
                 scrollEnabled={false}
@@ -1422,7 +1440,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           {invitationsExpanded && (
             <View style={{ padding: 12 }}>
               <FlatList
-                data={pendingInvitations}
+                data={dedupedInvitations}
                 keyExtractor={(item) => item.id}
                 renderItem={renderInvitationItem}
                 scrollEnabled={false}
@@ -1500,7 +1518,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             </View>
           ) : (
             <FlatList
-              data={allGroups}
+              data={dedupedAllGroups}
               keyExtractor={(item, index) => item?.id || item?.groupId || `all-group-${index}`}
               onEndReached={() => {
                 if (allGroupsHasMore && !allGroupsLoadingMore) {

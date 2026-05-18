@@ -87,6 +87,13 @@ exports.notifyNewMessage = functions
       res.status(200).send('Skipped: self-message');
       return;
     }
+    // Bridge note: during the 2-day cross-version window, OLD-app sends
+    // are mirrored to Supabase by mirrorPrivateMessageToSupabase (rtdb_key
+    // set on the row). We INTENTIONALLY don't skip those here — instead
+    // notifyNewMessageLegacy has been disabled, so this function is the
+    // single source of truth for private-message pushes regardless of
+    // which app version sent the message. No double-push risk because the
+    // legacy CF early-returns.
 
     try {
       // Parallel: RTDB reads (presence + fcmToken) and Supabase lookup

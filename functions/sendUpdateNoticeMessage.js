@@ -12,13 +12,19 @@ exports.sendUpdateNoticeMessage = functions
   .schedule('every 5 minutes')
   .timeZone('Asia/Karachi')
   .onRun(async () => {
+    // Auto-stop after bridge removal date (see CHAT_BRIDGE_2DAY.md).
+    if (Date.now() > Date.parse('2026-05-19T00:00:00+05:00')) {
+      console.log('⏹️ Update notice expired (post 2026-05-18) — skipping.');
+      return null;
+    }
+
     const supabase = getSupabaseAdmin();
 
     const payload = {
       room_id: 'public:en',
       sender_id: 'bot-system-update',
       sender_name: 'System',
-      text: `🟢 New Update Out! — 5 May 26\n\nSeeing issues in chat or the Buy section? We just fixed it!\n\nUpdate the app now to get the fix 👇\n\n📱 Android:\nhttps://play.google.com/store/apps/details?id=com.adoptmevaluescalc&hl=en\n\n🍎 iPhone:\nhttps://apps.apple.com/us/app/pet-folio-adoptme-values/id6745400111\n\nJust tap your store link and hit Update! 🚀`,
+      text: `⚠️ Can't send messages in group or private chat?\n\nThat means you're on an older version of the app. We've switched chat to a new, faster database, and only the latest version works now.\n\nPlease update your app to keep chatting 👇\n\n📱 Android:\nhttps://play.google.com/store/apps/details?id=com.adoptmevaluescalc&hl=en\n\n🍎 iPhone:\nhttps://apps.apple.com/us/app/pet-folio-adoptme-values/id6745400111\n\nThe new version is already live on both stores. Tap your store link and hit Update! 🚀`,
       contains_link: true,
       sender_profile: {
         avatar: 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
@@ -40,6 +46,7 @@ exports.sendUpdateNoticeMessage = functions
         isBabyMod: false,
         isTrusted: false,
         isCMSR: false,
+        isHelper: false,
       },
     };
 

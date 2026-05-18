@@ -416,10 +416,26 @@ const ScammerDatabaseScreen = () => {
                     setUploadingImages(false);
                 }
 
+                // Pre-fetch any existing summary OUTSIDE the transaction. Doing `getDocs` inside
+                // the runTransaction callback can stall the native transaction long enough to hit
+                // a `EnsureCommitNotCalled` crash on iOS when Firestore retries.
+                const existingQ = query(
+                    collection(db, 'scammerSummaries'),
+                    where('reportedUsername_lc', '==', username.toLowerCase()),
+                    limit(1)
+                );
+                const existingSnap = await getDocs(existingQ);
+                const existingDocRef = existingSnap.docs[0]?.ref || null;
+                const existingPrevCount = existingSnap.docs[0]?.data()?.reportCount || 0;
+
                 // Transaction: rate limit check + create report
                 await runTransaction(db, async (tx) => {
                     const rateLimitRef = doc(db, 'userRateLimits', user.id);
-                    const rateLimitSnap = await tx.get(rateLimitRef);
+                    const reads = existingDocRef
+                        ? await Promise.all([tx.get(rateLimitRef), tx.get(existingDocRef)])
+                        : [await tx.get(rateLimitRef)];
+                    const rateLimitSnap = reads[0];
+                    const existingSummarySnap = reads[1] || null;
 
                     if (rateLimitSnap.exists()) {
                         const lastAt = rateLimitSnap.data()?.lastReportAt;
@@ -436,19 +452,10 @@ const ScammerDatabaseScreen = () => {
                     const summaryRef = doc(db, 'scammerSummaries', reportId);
                     const detailRef = doc(db, 'scammerDetails', reportId);
 
-                    // Check if this username already has a summary
-                    const existingQ = query(
-                        collection(db, 'scammerSummaries'),
-                        where('reportedUsername_lc', '==', username.toLowerCase()),
-                        limit(1)
-                    );
-                    const existingSnap = await getDocs(existingQ);
-
-                    if (existingSnap.docs.length > 0) {
+                    if (existingSummarySnap && existingSummarySnap.exists()) {
                         // Increment reportCount on existing summary
-                        const existingRef = existingSnap.docs[0].ref;
-                        const prevCount = existingSnap.docs[0].data()?.reportCount || 1;
-                        tx.update(existingRef, {
+                        const prevCount = existingSummarySnap.data()?.reportCount || existingPrevCount || 1;
+                        tx.update(existingDocRef, {
                             reportCount: prevCount + 1,
                             updatedAt: Timestamp.now(),
                         });

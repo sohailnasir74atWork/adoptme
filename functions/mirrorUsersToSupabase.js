@@ -135,7 +135,7 @@ async function mirrorRoblox(uid, before, after, supabase) {
   if (error) console.error('[mirrorUsers/roblox]', uid, error.message);
 }
 
-const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR'];
+const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper'];
 async function mirrorRoles(uid, before, after, supabase) {
   if (!anyKeyChanged(before, after, ROLES_KEYS)) return;
 
@@ -146,6 +146,7 @@ async function mirrorRoles(uid, before, after, supabase) {
     is_baby_mod: asBool(after.isBabyMod),
     is_trusted: asBool(after.isTrusted),
     is_cmsr: asBool(after.isCMSR),
+    is_helper: asBool(after.isHelper),
     updated_at: nowIso(),
   };
 

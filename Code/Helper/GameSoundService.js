@@ -59,16 +59,28 @@ export function setSoundEnabled(gameKey, val) {
 }
 
 export function playWoosh(gameKey) {
-    if (!isSoundEnabled(gameKey) || !wooshSound) return;
+    if (!isSoundEnabled(gameKey)) return;
+    const s = wooshSound;
+    if (!s) return;
     try {
-        wooshSound.stop(() => { wooshSound.play(); });
+        s.stop(() => {
+            if (wooshSound === s) {
+                try { s.play(); } catch {}
+            }
+        });
     } catch {}
 }
 
 export function playPop(gameKey) {
-    if (!isSoundEnabled(gameKey) || !popSound) return;
+    if (!isSoundEnabled(gameKey)) return;
+    const s = popSound;
+    if (!s) return;
     try {
-        popSound.stop(() => { popSound.play(); });
+        s.stop(() => {
+            if (popSound === s) {
+                try { s.play(); } catch {}
+            }
+        });
     } catch {}
 }
 

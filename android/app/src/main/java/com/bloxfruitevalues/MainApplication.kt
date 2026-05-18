@@ -9,6 +9,8 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import java.io.File
 
 
 class MainApplication : Application(), ReactApplication {
@@ -34,6 +36,46 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-   loadReactNative(this)
+    tagTamperedDevice()
+    loadReactNative(this)
+  }
+
+  private fun tagTamperedDevice() {
+    try {
+      FirebaseCrashlytics.getInstance().setCustomKey("is_tampered", isTamperedDevice())
+    } catch (_: Throwable) {
+    }
+  }
+
+  private fun isTamperedDevice(): Boolean {
+    val tamperClasses = arrayOf(
+      "de.robv.android.xposed.XposedBridge",
+      "de.robv.android.xposed.XC_MethodHook",
+      "com.saurik.substrate.MS",
+    )
+    for (cls in tamperClasses) {
+      try {
+        Class.forName(cls)
+        return true
+      } catch (_: Throwable) {
+      }
+    }
+    val tamperPaths = arrayOf(
+      "/system/framework/XposedBridge.jar",
+      "/system/lib/libxposed_art.so",
+      "/system/lib64/libxposed_art.so",
+      "/system/bin/su",
+      "/system/xbin/su",
+      "/sbin/su",
+      "/system/app/Superuser.apk",
+      "/data/local/tmp/frida-server",
+    )
+    for (path in tamperPaths) {
+      try {
+        if (File(path).exists()) return true
+      } catch (_: Throwable) {
+      }
+    }
+    return false
   }
 }

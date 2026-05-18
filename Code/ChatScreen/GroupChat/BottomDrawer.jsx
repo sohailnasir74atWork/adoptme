@@ -19,6 +19,7 @@ import {
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
 import Icon from 'react-native-vector-icons/Ionicons';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import { getStyles } from '../../SettingScreen/settingstyle';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
@@ -373,6 +374,7 @@ const ProfileBottomDrawer = ({
         isBabyMod: valOrNull('isBabyMod'),
         isTrusted: valOrNull('isTrusted'),
         isCMSR: valOrNull('isCMSR'),
+        isHelper: valOrNull('isHelper'),
         dateOfBirth: valOrNull('dateOfBirth'),
       };
     };
@@ -403,6 +405,33 @@ const ProfileBottomDrawer = ({
           let rtdbRecord = null;
 
           if (hasSupabaseData) {
+            // Per-row RTDB fallback for roles. The full-RTDB fallback below
+            // only triggers when ALL Supabase rows are missing — that's not
+            // enough for partial-mirror cases (e.g. identity row backfilled
+            // but user_roles never written for an admin granted pre-mirror).
+            // Without this, admin/mod/jmd/trusted/cmsr/helper pills silently
+            // miss in the drawer header for those users.
+            let roleFb = null;
+            if (!rolesRow) {
+              const [adminSnap, modSnap, jmdSnap, trustedSnap, cmsrSnap, helperSnap] = await Promise.all([
+                get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
+              ]);
+              if (!isMounted) return;
+              roleFb = {
+                isAdmin:     adminSnap?.exists()   ? adminSnap.val()   : null,
+                isModerator: modSnap?.exists()     ? modSnap.val()     : null,
+                isBabyMod:   jmdSnap?.exists()     ? jmdSnap.val()     : null,
+                isTrusted:   trustedSnap?.exists() ? trustedSnap.val() : null,
+                isCMSR:      cmsrSnap?.exists()    ? cmsrSnap.val()    : null,
+                isHelper:    helperSnap?.exists()  ? helperSnap.val()  : null,
+              };
+            }
+
             newUserData = {
               avatar:                  identityRow?.avatar               ?? null,
               email:                   identityRow?.email                ?? null,
@@ -410,11 +439,12 @@ const ProfileBottomDrawer = ({
               dateOfBirth:             identityRow?.dateOfBirth          ?? null,
               isPro:                   cosmeticsRow?.isPro               ?? false,
               topBadge:                cosmeticsRow?.topBadge            ?? null,
-              isAdmin:                 rolesRow?.isAdmin                 ?? null,
-              isModerator:             rolesRow?.isModerator             ?? null,
-              isBabyMod:               rolesRow?.isBabyMod               ?? null,
-              isTrusted:               rolesRow?.isTrusted               ?? null,
-              isCMSR:                  rolesRow?.isCMSR                  ?? null,
+              isAdmin:                 rolesRow?.isAdmin                 ?? roleFb?.isAdmin     ?? null,
+              isModerator:             rolesRow?.isModerator             ?? roleFb?.isModerator ?? null,
+              isBabyMod:               rolesRow?.isBabyMod               ?? roleFb?.isBabyMod   ?? null,
+              isTrusted:               rolesRow?.isTrusted               ?? roleFb?.isTrusted   ?? null,
+              isCMSR:                  rolesRow?.isCMSR                  ?? roleFb?.isCMSR      ?? null,
+              isHelper:                rolesRow?.isHelper                ?? roleFb?.isHelper    ?? null,
               robloxUsername:          robloxRow?.robloxUsername         ?? null,
               robloxUserId:            robloxRow?.robloxUserId           ?? null,
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
@@ -454,6 +484,7 @@ const ProfileBottomDrawer = ({
             isBabyModSnap,
             isTrustedSnap,
             isCMSRSnap,
+            isHelperSnap,
             dateOfBirthSnap,
             supaBadgesMap,
             supaRobloxRow,
@@ -470,6 +501,7 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
             getBadges(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
@@ -493,6 +525,7 @@ const ProfileBottomDrawer = ({
             isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
             isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
             isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
+            isHelper: isHelperSnap?.exists() ? isHelperSnap.val() : null,
             dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
           };
           if (supaBadgesMap && supaBadgesMap.size > 0) {
@@ -590,6 +623,7 @@ const ProfileBottomDrawer = ({
       isBabyMod: userData.isBabyMod ?? selectedUser?.isBabyMod ?? false,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
       dateOfBirth: userData.dateOfBirth || null,
     };
   }, [selectedUser, userData]);
@@ -1354,6 +1388,47 @@ const ProfileBottomDrawer = ({
       Alert.alert('Success', `${userName} no longer has the CMSR badge`);
     } catch (err) {
       Alert.alert('Error', 'Failed to remove CMSR badge');
+    }
+  };
+
+  // ── Helper badge handlers ──
+  const handleMakeHelper = async () => {
+    if (!selectedUserId || !appdatabase) return;
+    const confirm = await new Promise((resolve) => {
+      Alert.alert('Make Helper', `Give ${userName} the Helper badge?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Confirm', onPress: () => resolve(true) }
+      ]);
+    });
+    if (!confirm) return;
+    try {
+      await set(ref(appdatabase, `users/${selectedUserId}/isHelper`), true);
+      invalidateFullProfile(selectedUserId);
+      updateLocalState('helperRoster', null);
+      setUserData(prev => ({ ...prev, isHelper: true }));
+      Alert.alert('Success', `${userName} now has the Helper badge`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to set Helper badge');
+    }
+  };
+
+  const handleRemoveHelper = async () => {
+    if (!selectedUserId || !appdatabase) return;
+    const confirm = await new Promise((resolve) => {
+      Alert.alert('Remove Helper', `Remove the Helper badge from ${userName}?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
+      ]);
+    });
+    if (!confirm) return;
+    try {
+      await set(ref(appdatabase, `users/${selectedUserId}/isHelper`), null);
+      invalidateFullProfile(selectedUserId);
+      updateLocalState('helperRoster', null);
+      setUserData(prev => ({ ...prev, isHelper: false }));
+      Alert.alert('Success', `${userName} no longer has the Helper badge`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to remove Helper badge');
     }
   };
 
@@ -2781,36 +2856,27 @@ const ProfileBottomDrawer = ({
                   </View>
 
                   {/* Badge pills */}
+                  {(() => {
+                    const firstBadge = getFirstBadgeType(mergedUser);
+                    return (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 5 }}>
                     {mergedUser?.isAdmin && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
-                        <Icon name="shield" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.admin')}</Text>
-                      </View>
+                      <UserBadgePill type="admin" size="md" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
                     )}
                     {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B5CF6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
-                        <Icon name="shield-checkmark" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('chat.mod')}</Text>
-                      </View>
+                      <UserBadgePill type="mod" size="md" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
                     )}
                     {!mergedUser?.isAdmin && !mergedUser?.isModerator && mergedUser?.isBabyMod && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F59E0B', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
-                        <Icon name="paw" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>JMD</Text>
-                      </View>
+                      <UserBadgePill type="jmd" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
                     )}
                     {mergedUser?.isTrusted && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
-                        <Icon name="checkmark-circle" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Trusted</Text>
-                      </View>
+                      <UserBadgePill type="trusted" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
                     )}
                     {mergedUser?.isCMSR && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F97316', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, gap: 3 }}>
-                        <Icon name="briefcase" size={10} color="#fff" />
-                        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>CMSR</Text>
-                      </View>
+                      <UserBadgePill type="cmsr" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
+                    )}
+                    {mergedUser?.isHelper && (
+                      <UserBadgePill type="helper" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
                     )}
                     {mergedUser?.robloxUsernameVerified && (
                       <View style={{
@@ -2836,6 +2902,8 @@ const ProfileBottomDrawer = ({
                     )}
 
                   </View>
+                    );
+                  })()}
 
                   {/* Roblox username subtitle */}
                   {mergedUser?.robloxUsername && (
@@ -3259,10 +3327,13 @@ const ProfileBottomDrawer = ({
                         canManageBadges={canManageBadges}
                         targetIsTrusted={!!mergedUser?.isTrusted}
                         targetIsCMSR={!!mergedUser?.isCMSR}
+                        targetIsHelper={!!mergedUser?.isHelper}
                         handleMakeTrusted={handleMakeTrusted}
                         handleRemoveTrusted={handleRemoveTrusted}
                         handleMakeCMSR={handleMakeCMSR}
                         handleRemoveCMSR={handleRemoveCMSR}
+                        handleMakeHelper={handleMakeHelper}
+                        handleRemoveHelper={handleRemoveHelper}
                         handleDeleteUserData={handleDeleteUserData}
                         deletingUser={deletingUser}
                         canDeleteUser={canDeleteUser}

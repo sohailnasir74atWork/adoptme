@@ -17,12 +17,16 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import { ref, update, remove, set } from '@react-native-firebase/database';
 import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
-import { subscribeToChatMeta, resetUnreadCount } from '../../Supabase/chatMetaBackend';
+import {
+  subscribeToChatMeta,
+  resetUnreadCount,
+  setChatMuted,
+  deleteChatMeta,
+} from '../../Supabase/chatMetaBackend';
 import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
@@ -45,10 +49,11 @@ const InboxScreen = ({ bannedUsers }) => {
   const [reconnecting, setReconnecting] = useState(false);
   const reconnectTimerRef = useRef(null);
 
-  // Reads come from Supabase chat_meta_data; the mute toggle below and
-  // PrivateChat's unreadCount=0 reset still write to RTDB (source of
-  // truth) so notifyNewMessage and old app versions are unaffected. The
-  // mirror Cloud Function tails RTDB writes back into this table.
+  // Phase 5 clean-cut: this screen is Supabase-only for chat_meta_data
+  // — reads via subscribeToChatMeta, writes via setChatMuted / resetUnreadCount
+  // / deleteChatMeta. Mirrors PrivateChat's behaviour. Old-app builds
+  // still write RTDB and the mirror CF replays those rows into Supabase,
+  // so cross-version inbox state stays consistent during rollout.
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setLocalChats([]);
@@ -84,11 +89,11 @@ const InboxScreen = ({ bannedUsers }) => {
       const isBlocked = banned.includes(chatPartnerId);
       const rawUnread = chatData.unreadCount || 0;
 
-      // Block-user reset: write back to RTDB so the source of truth is
-      // corrected; the mirror CF will replay it back here.
+      // Block-user safety reset: zero the badge in Supabase directly so
+      // a blocked contact's row never shows unread. Fire-and-forget —
+      // the realtime channel will reconcile on the resulting UPDATE.
       if (isBlocked && rawUnread > 0) {
-        const blockedChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`);
-        update(blockedChatRef, { unreadCount: 0 }).catch((error) => {
+        resetUnreadCount(user.id, chatPartnerId).catch((error) => {
           console.error("Error resetting unread count:", error);
         });
       }
@@ -189,11 +194,11 @@ const InboxScreen = ({ bannedUsers }) => {
 
   // 🔔 Toggle mute for a private chat
   const handleToggleMute = useCallback(async (otherUserId, otherUserName) => {
-    if (!appdatabase || !user?.id || !otherUserId) return;
+    if (!user?.id || !otherUserId) return;
     const currentMuted = mutedChats[otherUserId] || false;
     const newMuted = !currentMuted;
     try {
-      await set(ref(appdatabase, `chat_meta_data/${user.id}/${otherUserId}/muted`), newMuted);
+      await setChatMuted(user.id, otherUserId, newMuted);
       setMutedChats(prev => ({ ...prev, [otherUserId]: newMuted }));
       showSuccessMessage(
         'Success',
@@ -205,18 +210,27 @@ const InboxScreen = ({ bannedUsers }) => {
       console.warn('[Inbox] toggle mute error:', error?.message);
       showError('Error', 'Failed to update notification settings.');
     }
-  }, [appdatabase, user?.id, mutedChats]);
+  }, [user?.id, mutedChats]);
 
   const allChats = localChats;
   const displayLoading = localLoading;
 
-  // ✅ Safety check for bannedUsers array and filter
+  // Safety: ban-filter + dedup-by-chatId so the FlatList never sees two rows
+  // with the same key (can happen if upstream meta delivery double-fires
+  // during reconnect / chat-meta sync churn).
   const filteredChats = useMemo(() => {
     if (!Array.isArray(allChats)) return [];
     const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
-    return allChats.filter(chat =>
-      chat?.chatId && !banned.includes(chat.otherUserId)
-    );
+    const seen = new Set();
+    const out = [];
+    for (const chat of allChats) {
+      if (!chat?.chatId) continue;
+      if (banned.includes(chat.otherUserId)) continue;
+      if (seen.has(chat.chatId)) continue;
+      seen.add(chat.chatId);
+      out.push(chat);
+    }
+    return out;
   }, [allChats, bannedUsers]);
 
   // ✅ OPTIMIZED: Only display paginated chats (15 initially, then 10 more on scroll)
@@ -280,8 +294,7 @@ const InboxScreen = ({ bannedUsers }) => {
               }
 
               // Delete chat metadata for the current user only (other user keeps their chat)
-              const senderChatRef = ref(appdatabase, `chat_meta_data/${user.id}/${otherUserId}`);
-              await remove(senderChatRef);
+              await deleteChatMeta(user.id, otherUserId);
 
               // 3. Update local state - ✅ Validate setChats callback
               setLocalChats((prevChats) => {

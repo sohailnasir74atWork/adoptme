@@ -19,7 +19,17 @@ import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
 import { resetGroupUnreadCount } from '../../Supabase/groupMetaBackend';
-import { get, ref, update, set, remove, child, query as dbQuery, orderByKey, limitToLast, endAt, onValue } from '@react-native-firebase/database';
+import {
+  loadGroupMessages,
+  subscribeToGroupMessages,
+  softDeleteGroupMessage,
+  softDeleteGroupMessagesBySender,
+  toggleGroupReaction,
+} from '../../Supabase/groupMessagesBackend';
+// RTDB still needed for /banned_users_by_email, /presence, and the
+// legacy group_meta_data path. Message bodies + reactions are on Supabase.
+import { get, ref, onValue } from '@react-native-firebase/database';
+import { getIdentity } from '../../Supabase/userBackend';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -68,8 +78,10 @@ const GroupChatScreen = () => {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null); // Highlighted message ID
   const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
   const flatListRef = useRef(null); // Ref for FlatList in GroupMessageList
-  const lastLoadedKeyRef = useRef(null); // Oldest message ID (for pagination)
-  const newestMessageIdRef = useRef(null); // Newest message ID (for real-time listener)
+  // Supabase composite cursor: { createdAt: ISO, id: uuid } of the oldest
+  // message currently in `messages`. null when no older page known yet OR
+  // end-of-history reached (handleLoadMore returns early when null).
+  const oldestCursorRef = useRef(null);
   const previousGroupIdRef = useRef(null);
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
@@ -105,11 +117,6 @@ const GroupChatScreen = () => {
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-
-  const messagesRef = useMemo(
-    () => (groupId ? ref(appdatabase, `group_messages/${groupId}/messages`) : null),
-    [groupId, appdatabase],
-  );
 
   // Load group data from Firestore and check access
   useEffect(() => {
@@ -280,28 +287,19 @@ const GroupChatScreen = () => {
             avatar = data.invitedUserAvatar;
           }
 
-          // 2. Fallback: Lazy load from RTDB users node ONLY if stored data not available (OPTIMIZATION: avoid unnecessary read)
+          // 2. Fallback: lazy-load via Supabase identity (single row instead
+          // of 2 RTDB reads). Only fires when invite doc lacked the stored fields.
           if (displayName === 'Anonymous' && invitedUserId && onlineUsersMap === null) {
-            try {
-              // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
-              const [displayNameSnap, avatarSnap] = await Promise.all([
-                get(ref(appdatabase, `users/${invitedUserId}/displayName`)).catch(() => null),
-                get(ref(appdatabase, `users/${invitedUserId}/avatar`)).catch(() => null),
-              ]);
-
-              if (displayNameSnap?.exists() || avatarSnap?.exists()) {
-                onlineUsersMap = {
-                  [invitedUserId]: {
-                    displayName: displayNameSnap?.exists() ? displayNameSnap.val() : 'Anonymous',
-                    avatar: avatarSnap?.exists() ? avatarSnap.val() : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                  }
-                };
-              } else {
-                onlineUsersMap = {}; // Mark as loaded (empty) to avoid retrying
-              }
-            } catch (onlineError) {
-              console.warn('Could not fetch user data for pending invites:', onlineError);
-              onlineUsersMap = {}; // Mark as loaded (empty) to avoid retrying
+            const ident = await getIdentity(invitedUserId).catch(() => null);
+            if (ident && (ident.displayName || ident.avatar)) {
+              onlineUsersMap = {
+                [invitedUserId]: {
+                  displayName: ident.displayName || 'Anonymous',
+                  avatar: ident.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                },
+              };
+            } else {
+              onlineUsersMap = {}; // mark loaded-empty to avoid retrying
             }
           }
 
@@ -349,106 +347,63 @@ const GroupChatScreen = () => {
     }
   }, [showMembersModal, fetchPendingInvitations, groupData, user?.id]);
 
-  // ✅ OPTIMIZED: Load messages with pagination (only if user is a member) - matching private chat strategy
+  // Load messages with Supabase composite (created_at desc, id desc) cursor.
+  // Mirrors PrivateChat — Supabase returns newest-first already, matching
+  // the inverted-FlatList render order. The pagination cursor is
+  // (createdAt ISO, id) of the oldest row in current state.
   const loadMessages = useCallback(
     async (reset = false) => {
-      if (!messagesRef || !isMember) return; // Don't load messages if not a member
+      if (!groupId || !isMember) return;
 
       if (reset) {
         setLoading(true);
         setMessages([]);
-        lastLoadedKeyRef.current = null;
-        newestMessageIdRef.current = null; // Reset newest message ID
+        oldestCursorRef.current = null;
       } else {
         setIsPaginating(true);
       }
 
       try {
-        const lastKey = lastLoadedKeyRef.current;
-        // ✅ Apply limit ONLY ONCE, at the end
-        // limitToLast gets the last N messages from the query result
-        // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
-        // ✅ Use same query pattern as private chat for consistency
-        const q = (!reset && lastKey)
-          ? dbQuery(messagesRef, orderByKey(), endAt(lastKey), limitToLast(limitSize))
-          : dbQuery(messagesRef, orderByKey(), limitToLast(limitSize));
+        const before = reset ? null : oldestCursorRef.current;
 
-        const snapshot = await get(q);
-        const data = snapshot.val() || {};
+        const parsedMessages = await loadGroupMessages(groupId, { limit: limitSize, before });
 
-        let parsedMessages = Object.entries(data)
-          .map(([key, value]) => ({ id: key, ...value }))
-          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0)); // ✅ DESCENDING: newest -> oldest (for inverted FlatList)
-
-        // ✅ Filter out the lastKey itself when loading more (to avoid duplicate)
-        if (!reset && lastKey && parsedMessages.length > 0) {
-          parsedMessages = parsedMessages.filter(msg => String(msg.id) !== String(lastKey));
-        }
-
-        // ✅ If reset and no messages found, return early
         if (parsedMessages.length === 0) {
-          if (reset) {
-            // Only clear if we explicitly reset
-          } else {
-            // ✅ No more messages to load - set ref to null to prevent further pagination
-            lastLoadedKeyRef.current = null;
-          }
+          if (!reset) oldestCursorRef.current = null;
           return;
         }
-
-        // ✅ Track new messages for pagination key update
-        const newMessagesRef = { value: parsedMessages };
 
         setMessages((prev) => {
           if (!Array.isArray(prev)) return parsedMessages;
           const existingIds = new Set(prev.map((m) => String(m?.id)));
-          newMessagesRef.value = parsedMessages.filter((m) => !existingIds.has(String(m?.id)));
+          const onlyNew = parsedMessages.filter((m) => !existingIds.has(String(m?.id)));
 
-          if (reset) {
-            // Initial load: use parsed messages as-is (already sorted descending)
-            return parsedMessages;
-          } else {
-            // Load more (older messages): append and maintain descending order
-            const combined = [...prev, ...newMessagesRef.value];
-            return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-          }
+          if (reset) return parsedMessages;
+          const combined = [...prev, ...onlyNew];
+          return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
         });
 
-        // ✅ Store oldest message ID in this batch (last item in descending array)
-        // ✅ Use newMessagesRef.value (actual new messages after duplicate filtering)
-        if (newMessagesRef.value.length > 0) {
-          // ✅ Use the oldest message from the new batch (last item in descending array)
-          lastLoadedKeyRef.current = newMessagesRef.value[newMessagesRef.value.length - 1]?.id;
-          // ✅ Store newest message ID (first item in descending array) for real-time listener
-          newestMessageIdRef.current = newMessagesRef.value[0]?.id;
-        } else if (parsedMessages.length > 0) {
-          // ✅ If all were duplicates, still update to oldest from parsed to prevent infinite loop
-          // ✅ This handles edge case where all messages in batch are duplicates
-          lastLoadedKeyRef.current = parsedMessages[parsedMessages.length - 1]?.id;
-          newestMessageIdRef.current = parsedMessages[0]?.id;
-        } else {
-          // ✅ No messages at all - set to null to stop pagination
-          lastLoadedKeyRef.current = null;
-          newestMessageIdRef.current = null;
+        const oldest = parsedMessages[parsedMessages.length - 1];
+        if (oldest) {
+          oldestCursorRef.current = {
+            createdAt: new Date(oldest.timestamp).toISOString(),
+            id: oldest.id,
+          };
         }
-
-        // Profile cache warming removed — messages embed full profile data
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
-        if (reset) {
-          setLoading(false);
-        }
+        if (reset) setLoading(false);
         setIsPaginating(false);
       }
     },
-    [messagesRef, isMember],
+    [groupId, isMember],
   );
 
   // Load messages when groupId changes (only if user is a member)
   useEffect(() => {
-    if (!messagesRef || !isMember) return;
+    if (!groupId || !isMember) return;
 
     const currentGroupId = groupId;
     const previousGroupId = previousGroupIdRef.current;
@@ -460,52 +415,52 @@ const GroupChatScreen = () => {
       previousGroupIdRef.current = currentGroupId;
       loadMessages(true);
     }
-  }, [groupId, messagesRef, loadMessages, isMember]);
+  }, [groupId, loadMessages, isMember]);
 
-  // ✅ Listen for new messages in real-time using onValue (more reliable than onChildAdded with limitToLast)
-  // onChildAdded + limitToLast(1) has known bugs in Firebase SDKs where remote writes don't fire
-  useEffect(() => {
-    if (!messagesRef || !isMember) {
-      return;
-    }
+  // Supabase realtime stream for INSERT / UPDATE / DELETE on this group.
+  // INSERTs feed all messages (own + others'); we don't optimistic-render
+  // any more — same as PrivateChat. UPDATEs cover soft-deletes AND the
+  // reactions jsonb edits (toggle_group_reaction touches the row), so
+  // cross-user reactions sync automatically without a second subscription.
+  // Hard DELETE is rare; remove by id when it fires.
+  useFocusEffect(
+    useCallback(() => {
+      if (!groupId || !isMember) return undefined;
 
-    let isMounted = true;
-
-    const latestQuery = dbQuery(messagesRef, orderByKey(), limitToLast(1));
-
-    const unsubscribe = onValue(latestQuery, (snapshot) => {
-      if (!isMounted || !snapshot.exists()) return;
-
-      snapshot.forEach((childSnap) => {
-        const key = childSnap.key;
-        const data = childSnap.val();
-        if (!key || !data || typeof data !== 'object') return;
-
-        const newMessage = { id: key, ...data };
-        if (!newMessage.timestamp) {
-          newMessage.timestamp = Date.now();
-        }
-
-        setMessages((prev) => {
-          if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
-          const exists = prev.some((m) => String(m?.id) === String(key));
-          if (exists) return prev;
-
-          // ✅ Keep DESCENDING order
-          const updated = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-          if (updated.length > 0) {
-            newestMessageIdRef.current = updated[0]?.id;
-          }
-          return updated;
-        });
+      const unsubscribe = subscribeToGroupMessages(groupId, {
+        onInsert: (newMessage) => {
+          if (!newMessage) return;
+          setMessages((prev) => {
+            if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
+            const exists = prev.some((m) =>
+              String(m?.id) === String(newMessage.id)
+              || (newMessage.clientMsgId && String(m?.clientMsgId) === String(newMessage.clientMsgId)),
+            );
+            if (exists) return prev;
+            return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+          });
+        },
+        onUpdate: (updated) => {
+          if (!updated) return;
+          setMessages((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            if (updated.deleted) {
+              return prev.filter((m) => String(m?.id) !== String(updated.id));
+            }
+            return prev.map((m) => (String(m?.id) === String(updated.id) ? updated : m));
+          });
+        },
+        onDelete: (id) => {
+          if (!id) return;
+          setMessages((prev) =>
+            Array.isArray(prev) ? prev.filter((m) => String(m?.id) !== String(id)) : prev,
+          );
+        },
       });
-    });
 
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [messagesRef, isMember]);
+      return () => unsubscribe();
+    }, [groupId, isMember]),
+  );
 
   // Set active chat and reset unread count
   useFocusEffect(
@@ -520,25 +475,15 @@ const GroupChatScreen = () => {
       hasSentMessageRef.current = 0;
       chatEnterTimeRef.current = Date.now();
 
-      // Only write/reset metadata if user is an actual member (in memberIds).
-      // Admins/mods can view groups without joining — skip metadata writes to
+      // Only reset unread if user is an actual member (in memberIds).
+      // Admins/mods can view groups without joining — skip writes to
       // prevent ghost entries in the "joined groups" list.
       const isRealMember = groupData?.memberIds?.includes(user.id);
-      // ✅ COST-OPTIMIZED: Single update() instead of get-then-set/update pattern
-      // Saves 1 read operation per group chat entry — update() creates or merges
       if (isRealMember) {
-        const groupMetaRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}`);
-        update(groupMetaRef, {
-          unreadCount: 0,
-          groupName: groupData?.name || route?.params?.groupName || 'Group',
-          groupAvatar: groupData?.avatar || groupData?.groupAvatar || null,
-          memberCount: groupData?.memberIds?.length || 0,
-          createdBy: groupData?.createdBy || null,
-        }).catch((error) => {
-          console.error('Error updating group meta:', error);
-        });
-        // Also reset directly in Supabase so badge clears without waiting
-        // for mirror CF — same pattern as private chat resetUnreadCount().
+        // Phase 5 clean-cut: no RTDB group_meta_data write. The badge
+        // reset goes straight to Supabase; static fields (name/avatar/
+        // memberCount/createdBy) are seeded by the create/join flows and
+        // the send fan-out, so chat-open doesn't need to re-write them.
         resetGroupUnreadCount(user.id, groupId);
       }
 
@@ -559,8 +504,7 @@ const GroupChatScreen = () => {
 
   // Handle load more
   const handleLoadMore = useCallback(() => {
-    // ✅ Prevent loading if already paginating, no more messages, or not a member
-    if (isPaginating || !lastLoadedKeyRef.current || !isMember) {
+    if (isPaginating || !oldestCursorRef.current || !isMember) {
       return;
     }
     loadMessages(false);
@@ -781,27 +725,10 @@ const GroupChatScreen = () => {
         if (!result.success) {
           showErrorMessage('Error', result.error || 'Failed to send message');
         } else {
-          // ✅ Optimistically add own message to local state (don't wait for listener)
-          if (result.messageKey) {
-            const optimisticMessage = {
-              id: result.messageKey,
-              ...messageData,
-              timestamp: result.timestamp || Date.now(),
-            };
-            setMessages((prev) => {
-              if (!Array.isArray(prev)) return [optimisticMessage];
-              const exists = prev.some((m) => String(m?.id) === String(result.messageKey));
-              if (exists) return prev;
-              const updated = [optimisticMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-              if (updated.length > 0) {
-                newestMessageIdRef.current = updated[0]?.id;
-              }
-              return updated;
-            });
-          }
-          // Clear reply after successful send
+          // No optimistic insert — Supabase realtime UPDATE/INSERT feeds
+          // own message back into state (same pattern as PrivateChat).
           setReplyTo(null);
-          hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
+          hasSentMessageRef.current += 1;
         }
       } catch (error) {
         console.error('Error sending message:', error);
@@ -811,9 +738,11 @@ const GroupChatScreen = () => {
     [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected]
   );
 
-  // Handle delete single message (admin/mod action)
+  // Soft-delete a single message in Supabase. The realtime UPDATE
+  // (deleted=true) is what removes it from every member's UI; we don't
+  // optimistic-prune because the subscription does it.
   const handleDeleteMessage = useCallback((messageId) => {
-    if (!messagesRef || !messageId) return;
+    if (!messageId) return;
     Alert.alert(
       'Delete Message',
       'Are you sure you want to delete this message?',
@@ -824,8 +753,7 @@ const GroupChatScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await remove(child(messagesRef, String(messageId)));
-              setMessages((prev) => prev.filter((m) => String(m?.id) !== String(messageId)));
+              await softDeleteGroupMessage(messageId, user?.id || null);
               showSuccessMessage('Success', 'Message deleted');
             } catch (error) {
               console.error('Error deleting message:', error);
@@ -835,11 +763,12 @@ const GroupChatScreen = () => {
         },
       ]
     );
-  }, [messagesRef]);
+  }, [user?.id]);
 
-  // Handle delete all messages from a sender (admin/mod action)
+  // Soft-delete the last N non-deleted messages from a sender. Limit 300
+  // matches the old RTDB scan window so the moderation UX is identical.
   const handleDeleteAllMessages = useCallback((senderId) => {
-    if (!messagesRef || !senderId) return;
+    if (!groupId || !senderId) return;
     Alert.alert(
       'Delete All Messages',
       'Delete all messages from this user?',
@@ -850,22 +779,12 @@ const GroupChatScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Get all messages, find ones from this sender, delete them
-              const snapshot = await get(dbQuery(messagesRef, orderByKey(), limitToLast(300)));
-              const data = snapshot.val();
-              if (!data) return;
-
-              const updates = {};
-              Object.entries(data).forEach(([key, msg]) => {
-                if (msg?.senderId === senderId) {
-                  updates[key] = null;
-                }
+              const { count } = await softDeleteGroupMessagesBySender(groupId, senderId, {
+                limit: 300,
+                deletedBy: user?.id || null,
               });
-
-              if (Object.keys(updates).length > 0) {
-                await update(messagesRef, updates);
-                setMessages((prev) => prev.filter((m) => m?.senderId !== senderId));
-                showSuccessMessage('Success', `Deleted ${Object.keys(updates).length} messages`);
+              if (count > 0) {
+                showSuccessMessage('Success', `Deleted ${count} messages`);
               }
             } catch (error) {
               console.error('Error deleting all messages:', error);
@@ -875,43 +794,37 @@ const GroupChatScreen = () => {
         },
       ]
     );
-  }, [messagesRef]);
+  }, [groupId, user?.id]);
 
-  // Handle reaction to a message
+  // Toggle caller's reaction via Supabase RPC. The RPC returns the updated
+  // row so we can promote optimistic state to canonical immediately; the
+  // realtime UPDATE delivers the same row to every other member.
   const handleReaction = useCallback(async (messageId, emoji) => {
-    if (!messagesRef || !messageId || !user?.id) return;
+    if (!messageId || !user?.id) return;
+
+    // Optimistic update mirrors the prior RTDB tap-same-removes semantics.
+    setMessages((prev) => prev.map((m) => {
+      if (String(m.id) !== String(messageId)) return m;
+      const current = m.reactions?.[user.id];
+      const newReactions = { ...(m.reactions || {}) };
+      if (current === emoji) {
+        delete newReactions[user.id];
+      } else {
+        newReactions[user.id] = emoji;
+      }
+      return { ...m, reactions: newReactions };
+    }));
 
     try {
-      const reactionRef = child(messagesRef, `${messageId}/reactions/${user.id}`);
-      const snapshot = await get(reactionRef);
-      const currentReaction = snapshot.val();
-
-      if (currentReaction === emoji) {
-        // Same emoji → remove reaction
-        await remove(reactionRef);
-        // Optimistic update
-        setMessages(prev => prev.map(m => {
-          if (String(m.id) !== String(messageId)) return m;
-          const newReactions = { ...(m.reactions || {}) };
-          delete newReactions[user.id];
-          return { ...m, reactions: newReactions };
-        }));
-      } else {
-        // New or different emoji → set reaction
-        await set(reactionRef, emoji);
-        // Optimistic update
-        setMessages(prev => prev.map(m => {
-          if (String(m.id) !== String(messageId)) return m;
-          return {
-            ...m,
-            reactions: { ...(m.reactions || {}), [user.id]: emoji },
-          };
-        }));
-      }
+      // Pass the new emoji unconditionally. The RPC interprets
+      // existing == new as a clear, matching the optimistic path.
+      await toggleGroupReaction(messageId, emoji);
     } catch (error) {
       console.error('Error toggling reaction:', error);
+      // Realtime UPDATE will eventually correct the optimistic state if
+      // the server rejected the change.
     }
-  }, [messagesRef, user?.id]);
+  }, [user?.id]);
 
   // Handle remove member (admin action)
   const handleRemoveMember = useCallback(async (memberId, memberName) => {

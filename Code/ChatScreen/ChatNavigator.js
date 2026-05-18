@@ -12,11 +12,10 @@ import BlockedUsersScreen from './PrivateChat/BlockUserList';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
 import ImageViewerScreenChat from './PrivateChat/ImageViewer';
-import { ref, update } from '@react-native-firebase/database';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import AdminDashboard from '../AppHelper/AdminDashboard';
 import { useTranslation } from 'react-i18next';
-import { subscribeToChatMeta } from '../Supabase/chatMetaBackend';
+import { subscribeToChatMeta, resetUnreadCount } from '../Supabase/chatMetaBackend';
 import { subscribeToGroupMeta } from '../Supabase/groupMetaBackend';
 
 const Stack = createNativeStackNavigator();
@@ -54,12 +53,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   }), [selectedTheme]);
 
 
-  // Reads now come off Supabase (chat_meta_data table) — RTDB stays the
-  // source of truth for writes (notifyNewMessage CF + activeChats presence
-  // depend on it), and mirrorChatMetaToSupabase tails those writes here.
-  // Behaviour matches the previous RTDB child listeners: each existing row
-  // arrives once via the initial load, then realtime INSERT/UPDATE/DELETE
-  // keep the unread tally fresh.
+  // Phase 5 clean-cut: chat_meta_data is Supabase-only for new app
+  // builds — reads via subscribeToChatMeta, the block-user reset below
+  // writes via resetUnreadCount. Old-app builds still write RTDB and
+  // the mirror CF replays those rows into Supabase, so the unread
+  // tally stays consistent across versions during rollout.
+  // Behaviour matches the previous RTDB child listeners: each existing
+  // row arrives once via the initial load, then realtime
+  // INSERT/UPDATE/DELETE keep the unread tally fresh.
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setunreadcount(0);
@@ -83,13 +84,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
       const rawUnread = chatData.unreadCount || 0;
 
-      // Block-user safety reset: write stays on RTDB so the source of
-      // truth is corrected; the mirror CF will replay it back here.
+      // Block-user safety reset: zero the badge in Supabase directly.
+      // Fire-and-forget — the realtime channel will reconcile state
+      // on the resulting UPDATE.
       if (isBlocked && rawUnread > 0) {
-        update(
-          ref(appdatabase, `chat_meta_data/${user.id}/${chatPartnerId}`),
-          { unreadCount: 0 }
-        ).catch((error) => {
+        resetUnreadCount(user.id, chatPartnerId).catch((error) => {
           console.error("Error resetting unread count:", error);
         });
         unreadCounts.set(chatPartnerId, 0);

@@ -16,6 +16,7 @@ import { getThemeColors } from '../../Helper/themeColors';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import { ref, get } from '@react-native-firebase/database';
+import { getTrustedRoster, getCmsrRoster, getHelperRoster } from '../../Supabase/userBackend';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import { mixpanel } from '../../AppHelper/MixPenel';
@@ -26,11 +27,13 @@ import ProfileBottomDrawer from './BottomDrawer';
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days — Top Picks
 const ROSTER_CACHE_MS = 4 * 60 * 60 * 1000;        // 4 hours — Trusted / CMSR
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+const ROSTER_PAGE_SIZE = 25;
 
 const TABS = [
   { key: 'topRated', label: 'Top Picks', icon: 'medal',             color: '#F59E0B' },
   { key: 'trusted',  label: 'Trusted',   icon: 'shield-checkmark',  color: '#10B981' },
   { key: 'cmsr',     label: 'CMSR',      icon: 'ribbon',            color: '#0EA5E9' },
+  { key: 'helper',   label: 'Helper',    icon: 'hand-left',         color: '#14B8A6' },
 ];
 
 const LeaderboardScreen = () => {
@@ -47,9 +50,18 @@ const LeaderboardScreen = () => {
   const [topRatedData, setTopRatedData] = useState([]);
   const [trustedData, setTrustedData] = useState([]);
   const [cmsrData, setCmsrData] = useState([]);
+  const [helperData, setHelperData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadedTabs, setLoadedTabs] = useState({}); // lazy-load tracker
+
+  // Per-roster pagination state. hasMore = result of last page filled the page.
+  const [trustedHasMore, setTrustedHasMore] = useState(true);
+  const [cmsrHasMore, setCmsrHasMore] = useState(true);
+  const [helperHasMore, setHelperHasMore] = useState(true);
+  const [trustedLoadingMore, setTrustedLoadingMore] = useState(false);
+  const [cmsrLoadingMore, setCmsrLoadingMore] = useState(false);
+  const [helperLoadingMore, setHelperLoadingMore] = useState(false);
 
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -113,29 +125,85 @@ const LeaderboardScreen = () => {
     }
   }, [firestoreDB, user?.id, updateLocalState]);
 
-  // ── Fetch RTDB roster (trusted or cmsr) — also writes to local cache ──
+  // Fetch first page of a role roster from Supabase. Backs the initial
+  // tab open + pull-to-refresh. The local MMKV cache only stores page 1.
   const fetchRoster = useCallback(async (node, cacheKey) => {
-    if (!appdatabase) return [];
     try {
-      const snap = await get(ref(appdatabase, node));
-      const list = snap.exists()
-        ? Object.entries(snap.val())
-            .map(([uid, v]) => ({
-              userId: uid,
-              displayName: v.displayName || 'Unknown',
-              avatar: v.avatar || DEFAULT_AVATAR,
-              role: v.role,
-              updatedAt: v.updatedAt || 0,
-            }))
-            .sort((a, b) => b.updatedAt - a.updatedAt)
-        : [];
+      const raw = node === 'trusted'
+        ? await getTrustedRoster({ limit: ROSTER_PAGE_SIZE, offset: 0 })
+        : node === 'cmsr'
+          ? await getCmsrRoster({ limit: ROSTER_PAGE_SIZE, offset: 0 })
+          : node === 'helper'
+            ? await getHelperRoster({ limit: ROSTER_PAGE_SIZE, offset: 0 })
+            : [];
+      const list = raw.map((r) => ({ ...r, avatar: r.avatar || DEFAULT_AVATAR }));
       updateLocalState(cacheKey, { data: list, timestamp: Date.now() });
+      if (node === 'trusted') setTrustedHasMore(list.length === ROSTER_PAGE_SIZE);
+      else if (node === 'cmsr') setCmsrHasMore(list.length === ROSTER_PAGE_SIZE);
+      else if (node === 'helper') setHelperHasMore(list.length === ROSTER_PAGE_SIZE);
       return list;
     } catch (e) {
       console.warn(`[Leaderboard] ${node} fetch error:`, e?.message);
       return [];
     }
-  }, [appdatabase, updateLocalState]);
+  }, [updateLocalState]);
+
+  // Append the next page on scroll. Bails out if already loading or no more
+  // rows. Not cached — only the first page persists in MMKV.
+  const loadMoreRoster = useCallback(async (node) => {
+    if (node === 'trusted') {
+      if (trustedLoadingMore || !trustedHasMore) return;
+      setTrustedLoadingMore(true);
+      try {
+        const raw = await getTrustedRoster({
+          limit: ROSTER_PAGE_SIZE,
+          offset: trustedData.length,
+        });
+        const page = raw.map((r) => ({ ...r, avatar: r.avatar || DEFAULT_AVATAR }));
+        setTrustedData((prev) => [...prev, ...page]);
+        setTrustedHasMore(page.length === ROSTER_PAGE_SIZE);
+      } catch (e) {
+        console.warn('[Leaderboard] trusted loadMore error:', e?.message);
+        setTrustedHasMore(false);
+      } finally {
+        setTrustedLoadingMore(false);
+      }
+    } else if (node === 'cmsr') {
+      if (cmsrLoadingMore || !cmsrHasMore) return;
+      setCmsrLoadingMore(true);
+      try {
+        const raw = await getCmsrRoster({
+          limit: ROSTER_PAGE_SIZE,
+          offset: cmsrData.length,
+        });
+        const page = raw.map((r) => ({ ...r, avatar: r.avatar || DEFAULT_AVATAR }));
+        setCmsrData((prev) => [...prev, ...page]);
+        setCmsrHasMore(page.length === ROSTER_PAGE_SIZE);
+      } catch (e) {
+        console.warn('[Leaderboard] cmsr loadMore error:', e?.message);
+        setCmsrHasMore(false);
+      } finally {
+        setCmsrLoadingMore(false);
+      }
+    } else if (node === 'helper') {
+      if (helperLoadingMore || !helperHasMore) return;
+      setHelperLoadingMore(true);
+      try {
+        const raw = await getHelperRoster({
+          limit: ROSTER_PAGE_SIZE,
+          offset: helperData.length,
+        });
+        const page = raw.map((r) => ({ ...r, avatar: r.avatar || DEFAULT_AVATAR }));
+        setHelperData((prev) => [...prev, ...page]);
+        setHelperHasMore(page.length === ROSTER_PAGE_SIZE);
+      } catch (e) {
+        console.warn('[Leaderboard] helper loadMore error:', e?.message);
+        setHelperHasMore(false);
+      } finally {
+        setHelperLoadingMore(false);
+      }
+    }
+  }, [trustedLoadingMore, trustedHasMore, trustedData.length, cmsrLoadingMore, cmsrHasMore, cmsrData.length, helperLoadingMore, helperHasMore, helperData.length]);
 
   // ── Switch tab + lazy fetch (cache-first for rosters) ──
   const switchTab = useCallback(async (tabKey) => {
@@ -143,11 +211,14 @@ const LeaderboardScreen = () => {
     setActiveTab(tabKey);
     if (loadedTabs[tabKey]) return;
 
-    // Try local cache first for rosters (4h TTL — saves RTDB reads)
+    // Try local cache first for rosters (4h TTL). Cache holds only page 1,
+    // so hasMore is true iff the cached page filled. The scroll handler then
+    // calls loadMoreRoster with offset=cached.data.length for fresh pages.
     if (tabKey === 'trusted') {
       const cached = localState.trustedRoster;
       if (cached?.data?.length > 0 && isCacheValid(cached, ROSTER_CACHE_MS)) {
         setTrustedData(cached.data);
+        setTrustedHasMore(cached.data.length >= ROSTER_PAGE_SIZE);
         setLoadedTabs(prev => ({ ...prev, trusted: true }));
         return;
       }
@@ -155,7 +226,16 @@ const LeaderboardScreen = () => {
       const cached = localState.cmsrRoster;
       if (cached?.data?.length > 0 && isCacheValid(cached, ROSTER_CACHE_MS)) {
         setCmsrData(cached.data);
+        setCmsrHasMore(cached.data.length >= ROSTER_PAGE_SIZE);
         setLoadedTabs(prev => ({ ...prev, cmsr: true }));
+        return;
+      }
+    } else if (tabKey === 'helper') {
+      const cached = localState.helperRoster;
+      if (cached?.data?.length > 0 && isCacheValid(cached, ROSTER_CACHE_MS)) {
+        setHelperData(cached.data);
+        setHelperHasMore(cached.data.length >= ROSTER_PAGE_SIZE);
+        setLoadedTabs(prev => ({ ...prev, helper: true }));
         return;
       }
     }
@@ -169,10 +249,13 @@ const LeaderboardScreen = () => {
     } else if (tabKey === 'cmsr') {
       const list = await fetchRoster('cmsr', 'cmsrRoster');
       setCmsrData(list);
+    } else if (tabKey === 'helper') {
+      const list = await fetchRoster('helper', 'helperRoster');
+      setHelperData(list);
     }
     setLoadedTabs(prev => ({ ...prev, [tabKey]: true }));
     setLoading(false);
-  }, [fetchTopRated, fetchRoster, loadedTabs, triggerHapticFeedback, localState.trustedRoster, localState.cmsrRoster, isCacheValid]);
+  }, [fetchTopRated, fetchRoster, loadedTabs, triggerHapticFeedback, localState.trustedRoster, localState.cmsrRoster, localState.helperRoster, isCacheValid]);
 
   // ── Pull-to-refresh: bypass cache and re-fetch the active tab ──
   const handleRefresh = useCallback(async () => {
@@ -185,6 +268,9 @@ const LeaderboardScreen = () => {
     } else if (activeTab === 'cmsr') {
       const list = await fetchRoster('cmsr', 'cmsrRoster');
       setCmsrData(list);
+    } else if (activeTab === 'helper') {
+      const list = await fetchRoster('helper', 'helperRoster');
+      setHelperData(list);
     }
     setRefreshing(false);
   }, [activeTab, fetchTopRated, fetchRoster]);
@@ -287,15 +373,28 @@ const LeaderboardScreen = () => {
   const activeData =
     activeTab === 'topRated' ? topRatedData :
     activeTab === 'trusted'  ? trustedData  :
-    cmsrData;
+    activeTab === 'cmsr'     ? cmsrData     :
+    helperData;
 
   const activeRenderer = activeTab === 'topRated' ? renderTopRatedItem : renderRosterItem;
   const activeMeta = TABS.find(tab => tab.key === activeTab);
 
-  const emptyText =
-    activeTab === 'topRated' ? 'No users found with 3.7+ rating' :
-    activeTab === 'trusted'  ? 'No trusted users yet' :
-    'No CMSR users yet';
+  const isLoggedOut = !user?.id;
+
+  // RLS on user_identity / user_roles requires an authenticated request, so
+  // logged-out users get zero rows back (no error). Show a clear sign-in CTA
+  // rather than the generic "no users yet" message in that case.
+  const emptyText = isLoggedOut
+    ? 'Sign in to see the leaderboard'
+    : activeTab === 'topRated' ? 'No users found with 3.7+ rating'
+    : activeTab === 'trusted'  ? 'No trusted users yet'
+    : activeTab === 'cmsr'     ? 'No CMSR users yet'
+    : 'No helpers yet';
+
+  const emptySubtext = isLoggedOut
+    ? `Log in to view the ${activeMeta?.label || 'leaderboard'} list.`
+    : activeTab === 'topRated' ? 'Leaderboard is updated daily'
+    : null;
 
   return (
     <>
@@ -328,10 +427,14 @@ const LeaderboardScreen = () => {
           </View>
         ) : activeData.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name={activeMeta.icon} size={48} color={config.colors.primary} />
+            <Icon
+              name={isLoggedOut ? 'log-in-outline' : activeMeta.icon}
+              size={48}
+              color={config.colors.primary}
+            />
             <Text style={styles.emptyText}>{emptyText}</Text>
-            {activeTab === 'topRated' && (
-              <Text style={styles.emptySubtext}>Leaderboard is updated daily</Text>
+            {emptySubtext && (
+              <Text style={styles.emptySubtext}>{emptySubtext}</Text>
             )}
           </View>
         ) : (
@@ -341,6 +444,20 @@ const LeaderboardScreen = () => {
             keyExtractor={(item) => item.userId}
             contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
             showsVerticalScrollIndicator={false}
+            onEndReachedThreshold={0.5}
+            onEndReached={() => {
+              // Top Picks is a single Firestore doc (50 entries), not paginated.
+              if (activeTab === 'trusted' || activeTab === 'cmsr' || activeTab === 'helper') loadMoreRoster(activeTab);
+            }}
+            ListFooterComponent={
+              (activeTab === 'trusted' && trustedLoadingMore) ||
+              (activeTab === 'cmsr' && cmsrLoadingMore) ||
+              (activeTab === 'helper' && helperLoadingMore) ? (
+                <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={config.colors.primary} />
+                </View>
+              ) : null
+            }
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

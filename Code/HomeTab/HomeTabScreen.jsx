@@ -676,38 +676,40 @@ const HomeTabScreen = ({ selectedTheme }) => {
             </Text>
           </TouchableOpacity>
 
-          {/* ═══ TradeX App Promo Card (iOS only) ═══ */}
-          {Platform.OS === 'ios' && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => Linking.openURL('https://apps.apple.com/us/app/runway-dti-outfits-codes/id6763716666')}
-              style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
-            >
-              {/* Glow accents */}
-              <View style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(139,92,246,0.15)' }} />
-              <View style={{ position: 'absolute', bottom: -15, left: -15, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(236,72,153,0.1)' }} />
+          {/* ═══ Runway App Promo Card ═══ */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => Linking.openURL(
+              Platform.OS === 'ios'
+                ? 'https://apps.apple.com/us/app/runway-dti-outfits-codes/id6763716666'
+                : 'https://play.google.com/store/apps/details?id=com.thesolanalabs.runway'
+            )}
+            style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
+          >
+            {/* Glow accents */}
+            <View style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(139,92,246,0.15)' }} />
+            <View style={{ position: 'absolute', bottom: -15, left: -15, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(236,72,153,0.1)' }} />
 
-              <View style={styles.promoContent}>
-                <Image
-                  source={require('../../assets/runway.webp')}
-                  style={styles.promoLogo}
-                  resizeMode="cover"
-                />
-                <View style={styles.promoTextWrap}>
-                  <View style={styles.promoNewBadge}>
-                    <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
-                  </View>
-                  <Text style={styles.promoTitle}>Runway: DTI Outfits & Codes</Text>
-                  <Text style={styles.promoSubtitle}>Dress to Impress outfit ideas & codes!</Text>
+            <View style={styles.promoContent}>
+              <Image
+                source={require('../../assets/runway.webp')}
+                style={styles.promoLogo}
+                resizeMode="cover"
+              />
+              <View style={styles.promoTextWrap}>
+                <View style={styles.promoNewBadge}>
+                  <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
                 </View>
+                <Text style={styles.promoTitle}>Runway: DTI Outfits & Codes</Text>
+                <Text style={styles.promoSubtitle}>Dress to Impress outfit ideas & codes!</Text>
               </View>
-              <View style={styles.promoBtn}>
-                <FontAwesome name="apple" size={14} color="#fff" />
-                <Text style={styles.promoBtnText}>{t('home_tab.download_now')}</Text>
-                <FontAwesome name="arrow-right" size={11} color="#fff" />
-              </View>
-            </TouchableOpacity>
-          )}
+            </View>
+            <View style={styles.promoBtn}>
+              <FontAwesome name={Platform.OS === 'ios' ? 'apple' : 'google-play'} size={14} color="#fff" />
+              <Text style={styles.promoBtnText}>{t('home_tab.download_now')}</Text>
+              <FontAwesome name="arrow-right" size={11} color="#fff" />
+            </View>
+          </TouchableOpacity>
 
           {/* ═══ SECTION 5: Footer ═══ */}
           <View style={styles.footer}>

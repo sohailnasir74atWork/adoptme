@@ -16,8 +16,18 @@ import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus, updateLastRead, useOtherLastRead } from '../utils';
 import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
+import {
+  loadPrivateMessages,
+  sendPrivateMessage,
+  sendPrivateChatMeta,
+  subscribeToPrivateMessages,
+  softDeletePrivateMessage,
+  newClientMsgId,
+} from '../../Supabase/privateMessagesBackend';
 import { useLocalState } from '../../LocalGlobelStats';
-import { get, increment, ref, update, set, remove, onValue, query as dbQuery, orderByKey, limitToLast, endAt } from '@react-native-firebase/database';
+// RTDB imports still needed for trade/post/ban subtrees, /activeChats, and
+// per-user side data — chat metadata + message bodies are now on Supabase.
+import { get, ref, update, set, onValue } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { showMessage } from 'react-native-flash-message';
@@ -51,8 +61,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isPaginating, setIsPaginating] = useState(false);
-  const lastLoadedKeyRef = useRef(null);
-  const [lastLoadedKey, setLastLoadedKey] = useState(null);
+  // Supabase pagination cursor: { createdAt: ISO, id: uuid } of the oldest
+  // message in the current `messages` array. null = no older page known yet
+  // OR end-of-history reached (handleLoadMore returns early when null).
+  const oldestCursorRef = useRef(null);
   const previousChatKeyRef = useRef(null); // ✅ Track previous chatKey to prevent unnecessary resets
   const [replyTo, setReplyTo] = useState(null);
   const [input, setInput] = useState('');
@@ -347,56 +359,34 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
 
 
-  const messagesRef = useMemo(
-    () => (chatKey ? ref(appdatabase, `private_messages/${chatKey}/messages`) : null),
-    [chatKey, appdatabase],
-  );
-
-  // console.log(selecte÷dUser)
-
-  // Load messages with pagination
+  // Load messages with pagination. Supabase composite cursor on
+  // (created_at desc, id desc); returns newest-first already, matching
+  // the inverted-FlatList render order.
   const loadMessages = useCallback(
     async (reset = false) => {
-      if (!messagesRef) return;
+      if (!chatKey) return;
 
       if (reset) {
         setLoading(true);
-        // ✅ Only clear messages if we're actually resetting (chat changed or manual refresh)
         setMessages([]);
-        lastLoadedKeyRef.current = null;
+        oldestCursorRef.current = null;
       } else {
         setIsPaginating(true);
       }
 
       try {
-        const lastKey = lastLoadedKeyRef.current;
-        // ✅ Apply limit ONLY ONCE, at the end
-        // Use INITIAL_PAGE_SIZE for first load, PAGE_SIZE for pagination
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
-        const q = (!reset && lastKey)
-          ? dbQuery(messagesRef, orderByKey(), endAt(lastKey), limitToLast(limitSize))
-          : dbQuery(messagesRef, orderByKey(), limitToLast(limitSize));
+        const before = reset ? null : oldestCursorRef.current;
 
-        const snapshot = await get(q);
-        const data = snapshot.val() || {};
+        const parsedMessages = await loadPrivateMessages(chatKey, { limit: limitSize, before });
 
-        let parsedMessages = Object.entries(data)
-          .map(([key, value]) => ({ id: key, ...value }))
-          .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0)); // ✅ DESCENDING: newest -> oldest (for inverted FlatList to show newest at bottom)
-
-        // ✅ If reset and no messages found, keep loading state but don't clear existing messages unnecessarily
         if (parsedMessages.length === 0) {
-          if (reset) {
-            // Only clear if we explicitly reset (manual refresh or chat change)
-            // This prevents accidental clearing
-          } else {
-            // ✅ No more messages to load - set ref to null to prevent further pagination
-            lastLoadedKeyRef.current = null;
+          if (!reset) {
+            // No more older messages — disable further pagination.
+            oldestCursorRef.current = null;
           }
           return;
         }
-
-        // console.log(parsedMessages.length)
 
         setMessages(prev => {
           if (!Array.isArray(prev)) return parsedMessages;
@@ -404,16 +394,21 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
           const onlyNew = parsedMessages.filter(m => !existingIds.has(String(m?.id)));
 
           if (reset) {
-            // Initial load: use parsed messages as-is (already sorted descending)
             return parsedMessages;
-          } else {
-            // Load more (older messages): append and maintain descending order
-            const combined = [...prev, ...onlyNew];
-            return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
           }
+          // Append older page; resort to keep descending invariant.
+          const combined = [...prev, ...onlyNew];
+          return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
         });
 
-        lastLoadedKeyRef.current = parsedMessages[parsedMessages.length - 1]?.id; // ✅ oldest in this batch (last item in descending array)
+        // Cursor = oldest row in this page (last element after descending sort).
+        const oldest = parsedMessages[parsedMessages.length - 1];
+        if (oldest) {
+          oldestCursorRef.current = {
+            createdAt: new Date(oldest.timestamp).toISOString(),
+            id: oldest.id,
+          };
+        }
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
@@ -421,7 +416,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         setIsPaginating(false);
       }
     },
-    [messagesRef],
+    [chatKey],
   );
 
 
@@ -429,7 +424,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   // ✅ Only load messages when chatKey actually changes (not when loadMessages reference changes)
   useEffect(() => {
-    if (!messagesRef) return;
+    if (!chatKey) return;
 
     // Only reset if chatKey actually changed
     const currentChatKey = chatKey;
@@ -445,22 +440,21 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       loadMessages(true);
     }
     // If chatKey hasn't changed, don't reload (preserves existing messages)
-  }, [chatKey, messagesRef, loadMessages]);
+  }, [chatKey, loadMessages]);
 
   const handleDeleteMessage = useCallback(async (messageId) => {
-    if (!messageId || !chatKey || !appdatabase) return;
+    if (!messageId) return;
     try {
-      const messageRef = ref(appdatabase, `private_messages/${chatKey}/messages/${messageId}`);
-      await remove(messageRef);
+      await softDeletePrivateMessage(messageId, myUserId);
       setMessages(prev => prev.filter(m => m.id !== messageId));
     } catch (e) {
       Alert.alert('Error', 'Failed to delete message.');
     }
-  }, [chatKey, appdatabase]);
+  }, [myUserId]);
 
   const handleLoadMore = useCallback(() => {
     // ✅ Prevent loading if already paginating or no more messages
-    if (isPaginating || !lastLoadedKeyRef.current) {
+    if (isPaginating || !oldestCursorRef.current) {
       return;
     }
     // explicitly say "this is NOT a reset"
@@ -649,85 +643,82 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     const timestamp = Date.now();
     const chatId = [myUserId, selectedUserId].sort().join('_');
 
-    // References
-    const messageRef = ref(appdatabase, `private_messages/${chatId}/messages/${timestamp}`);
-
-    // Build message payload
-    const messageData = {
-      text: trimmedText,
-      senderId: myUserId,
-      timestamp,
-      // flage: user.flage ? user.flage : null,
-    };
-
-    if (replyToMsg) {
-      messageData.replyTo = {
-        id: replyToMsg.id,
-        text: replyToMsg.text || '',
-        senderId: replyToMsg.senderId,
-        imageUrl: replyToMsg.imageUrl || null,
-        imageUrls: replyToMsg.imageUrls || null,
-        hasFruits: replyToMsg.fruits && replyToMsg.fruits.length > 0,
-        fruitsCount: replyToMsg.fruits ? replyToMsg.fruits.length : 0,
-      };
-    }
-
+    // Normalize image input to single + array form. Supabase stores both;
+    // the legacy single-image field stays for old-app fallback, the array
+    // is the new canonical form for multi-image sends.
+    let imageUrl = null;
+    let imageUrls = null;
     if (hasImage) {
-      // Store as array if multiple images, single string if one image
       if (Array.isArray(image)) {
-        messageData.imageUrls = image; // Array of image URLs
-        messageData.imageUrl = image[0]; // Keep first for backward compatibility
+        imageUrls = image;
+        imageUrl = image[0] ?? null;
       } else {
-        messageData.imageUrl = image; // Single image URL
+        imageUrl = image;
       }
     }
 
-    if (hasFruits) {
-      messageData.fruits = fruits;       // 👈 your array of selected fruits
-    }
+    const replyToPayload = replyToMsg ? {
+      id: replyToMsg.id,
+      text: replyToMsg.text || '',
+      senderId: replyToMsg.senderId,
+      imageUrl: replyToMsg.imageUrl || null,
+      imageUrls: replyToMsg.imageUrls || null,
+      hasFruits: replyToMsg.fruits && replyToMsg.fruits.length > 0,
+      fruitsCount: replyToMsg.fruits ? replyToMsg.fruits.length : 0,
+    } : null;
 
-    // What to show as last message in chat list
+    // What to show as last message in the inbox row.
     const imageCount = Array.isArray(image) ? image.length : (image ? 1 : 0);
     const lastMessagePreview =
       trimmedText ||
       (hasImage ? (imageCount > 1 ? t('chat.message_preview_photos', { count: imageCount }) : t('chat.message_preview_photo')) : hasFruits ? t('chat.message_preview_pets', { count: fruits.length }) : '');
 
+    // Identity fields written only on first message per session — saves
+    // ~200 bytes per subsequent send. RPC coalesces NULL → preserves
+    // existing values, so passing null on subsequent sends is correct.
+    const senderKey = `${myUserId}_${selectedUserId}`;
+    const receiverKey = `${selectedUserId}_${myUserId}`;
+    const writeSenderIdentity = !metaIdentityWrittenRef.current.has(senderKey);
+    const writeReceiverIdentity = !metaIdentityWrittenRef.current.has(receiverKey);
+
     try {
-      // Save the message
-      await set(messageRef, messageData);
+      // Insert the message body. Realtime listener will feed it back into
+      // the messages array; we don't optimistic-render (matches prior RTDB
+      // behaviour — wait for server-side commit before reflecting).
+      await sendPrivateMessage({
+        chatId,
+        senderId: myUserId,
+        recipientId: selectedUserId,
+        text: trimmedText || null,
+        imageUrl,
+        imageUrls,
+        fruits: hasFruits ? fruits : [],
+        replyTo: replyToPayload,
+        OS: Platform.OS,
+        clientMsgId: newClientMsgId(),
+      });
 
-      // ✅ COST-OPTIMIZED: Single batched multi-path write (was 3 ops: 1 get + 2 updates)
-      // - Removed get(receiverStatusRef) — always increment(1); receiver's useFocusEffect resets to 0
-      // - Only write receiverName/receiverAvatar once per session (they rarely change)
-      const senderPath = `chat_meta_data/${myUserId}/${selectedUserId}`;
-      const receiverPath = `chat_meta_data/${selectedUserId}/${myUserId}`;
-      const senderKey = `${myUserId}_${selectedUserId}`;
-      const receiverKey = `${selectedUserId}_${myUserId}`;
-      const metaUpdates = {};
-      metaUpdates[`${senderPath}/chatId`] = chatId;
-      metaUpdates[`${senderPath}/receiverId`] = selectedUserId;
-      metaUpdates[`${senderPath}/lastMessage`] = lastMessagePreview;
-      metaUpdates[`${senderPath}/timestamp`] = timestamp;
-      metaUpdates[`${senderPath}/unreadCount`] = 0;
-      metaUpdates[`${receiverPath}/chatId`] = chatId;
-      metaUpdates[`${receiverPath}/receiverId`] = myUserId;
-      metaUpdates[`${receiverPath}/lastMessage`] = lastMessagePreview;
-      metaUpdates[`${receiverPath}/timestamp`] = timestamp;
-      metaUpdates[`${receiverPath}/unreadCount`] = increment(1);
+      // Atomic two-sided chat_meta_data upsert. Replaces the prior
+      // RTDB multi-path update. Sender stays at unread=0; receiver
+      // unread bumps by 1. muted preserved on existing rows.
+      // Fire-and-forget — meta lag is acceptable; mirror CF won't run for
+      // new-app sends anyway since we no longer write RTDB chat_meta_data.
+      sendPrivateChatMeta({
+        partnerUid: selectedUserId,
+        lastMessage: lastMessagePreview,
+        timestampMs: timestamp,
+        senderName: writeReceiverIdentity ? (user?.displayName || t('chat.anonymous')) : null,
+        senderAvatar: writeReceiverIdentity
+          ? (user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
+          : null,
+        receiverName: writeSenderIdentity ? (selectedUser?.sender || t('chat.anonymous')) : null,
+        receiverAvatar: writeSenderIdentity
+          ? (selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
+          : null,
+      }).catch((err) => console.warn('[PrivateChat] sendPrivateChatMeta failed:', err?.message));
 
-      // Write identity fields only on first message per session — saves ~200 bytes per subsequent message
-      if (!metaIdentityWrittenRef.current.has(senderKey)) {
-        metaUpdates[`${senderPath}/receiverName`] = selectedUser?.sender || t('chat.anonymous');
-        metaUpdates[`${senderPath}/receiverAvatar`] = selectedUser?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png";
-        metaIdentityWrittenRef.current.add(senderKey);
-      }
-      if (!metaIdentityWrittenRef.current.has(receiverKey)) {
-        metaUpdates[`${receiverPath}/receiverName`] = user?.displayName || t('chat.anonymous');
-        metaUpdates[`${receiverPath}/receiverAvatar`] = user?.avatar || "https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png";
-        metaIdentityWrittenRef.current.add(receiverKey);
-      }
-
-      await update(ref(appdatabase, '/'), metaUpdates);
+      if (writeSenderIdentity) metaIdentityWrittenRef.current.add(senderKey);
+      if (writeReceiverIdentity) metaIdentityWrittenRef.current.add(receiverKey);
 
       setReplyTo(null);
       hasSentMessageRef.current += 1; // ✅ Track message count (for exit ad)
@@ -738,7 +729,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, appdatabase, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected]);
+  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB]);
 
 
 
@@ -746,15 +737,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     useCallback(() => {
       if (!user?.id || !selectedUserId) return;
 
-      const chatMetaRef = ref(appdatabase, `chat_meta_data/${user.id}/${selectedUserId}`);
-
-      // Set activeChats FIRST so notifyNewMessage CF sees the user as active
-      // before we reset unreadCount — prevents the race where a message arrives
-      // in the gap and sends a spurious push to someone already in the chat.
-      // Also reset directly in Supabase so the badge clears without waiting
-      // for the mirror CF (avoids stale badge under disk IO pressure).
+      // Set activeChats FIRST so the notifyNewMessage HTTPS CF sees the
+      // user as active before we reset unread_count — prevents the race
+      // where a message arrives in the gap and sends a spurious push to
+      // someone already in the chat. Then clear the badge in Supabase.
+      // (We no longer write RTDB chat_meta_data — clean-cut: new app is
+      // Supabase-only for chat metadata.)
       setActiveChat(user.id, chatKey).then(() => {
-        update(chatMetaRef, { unreadCount: 0 });
         resetUnreadCount(user.id, selectedUserId); // fire-and-forget
       });
 
@@ -787,37 +776,26 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
 
 
-  // ✅ OPTIMIZED: Only listen to the newest message to avoid duplicate reads
-  // Uses useFocusEffect to detach listener when navigating away (prevents freeze on rapid nav)
-  // ✅ Use onValue (more reliable than onChildAdded with limitToLast).
-  // onChildAdded + limitToLast(1) has known bugs in Firebase SDKs where remote writes don't fire.
+  // ✅ Supabase realtime stream for INSERT / UPDATE / DELETE on this chat.
+  // INSERTs feed new messages into state (own + partner's). UPDATEs cover
+  // soft-deletes — we treat `deleted=true` as a removal. Hard DELETE is
+  // rare (mod path) and removes by id. Uses useFocusEffect to detach the
+  // channel when navigating away (prevents stale subscriptions piling up
+  // on rapid nav).
   useFocusEffect(
     useCallback(() => {
-      if (!messagesRef) return;
+      if (!chatKey) return undefined;
 
-      const latestQuery = dbQuery(messagesRef, orderByKey(), limitToLast(1));
-      let isMounted = true;
+      const unsubscribe = subscribeToPrivateMessages(chatKey, {
+        onInsert: (newMessage) => {
+          if (!newMessage) return;
 
-      const unsubscribe = onValue(latestQuery, (snapshot) => {
-        if (!isMounted || !snapshot || !snapshot.exists()) return;
-
-        snapshot.forEach((childSnap) => {
-          const key = childSnap?.key;
-          const data = childSnap?.val();
-          if (!key || !data || typeof data !== 'object') return;
-
-          const newMessage = { id: key, ...data };
-          if (!newMessage.timestamp) {
-            newMessage.timestamp = Date.now();
-          }
-
-          // ✅ Update lastRead when a message from the other user arrives while we're viewing.
-          // Gated on the read-receipts toggle so the sender doesn't see a
-          // blue tick if the recipient has disabled read receipts.
+          // Update lastRead when a partner message arrives while we're viewing.
+          // Gated on the read-receipts toggle so a recipient with read
+          // receipts off doesn't accidentally signal a blue tick.
           if (
             newMessage.senderId &&
             newMessage.senderId !== myUserId &&
-            chatKey &&
             localState?.showReadReceipts !== false
           ) {
             updateLastRead(chatKey, myUserId);
@@ -825,20 +803,37 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
           setMessages(prev => {
             if (!Array.isArray(prev)) return [newMessage];
-            const exists = prev.some(m => String(m?.id) === String(newMessage.id));
-            if (exists) return prev; // don't duplicate
-
-            // ✅ Keep DESCENDING order: add to the beginning (newest first for inverted FlatList)
+            // Idempotency: client_msg_id or id collision means we already have it.
+            const exists = prev.some(m =>
+              String(m?.id) === String(newMessage.id)
+              || (newMessage.clientMsgId && String(m?.clientMsgId) === String(newMessage.clientMsgId)),
+            );
+            if (exists) return prev;
+            // Keep DESCENDING (newest first for inverted FlatList).
             return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
           });
-        });
+        },
+        onUpdate: (updated) => {
+          if (!updated) return;
+          setMessages(prev => {
+            if (!Array.isArray(prev)) return prev;
+            if (updated.deleted) {
+              // Soft-delete propagates to all clients as deleted=true.
+              return prev.filter(m => String(m?.id) !== String(updated.id));
+            }
+            return prev.map(m => (String(m?.id) === String(updated.id) ? updated : m));
+          });
+        },
+        onDelete: (id) => {
+          if (!id) return;
+          setMessages(prev =>
+            Array.isArray(prev) ? prev.filter(m => String(m?.id) !== String(id)) : prev,
+          );
+        },
       });
 
-      return () => {
-        isMounted = false;
-        unsubscribe();
-      };
-    }, [messagesRef, myUserId, chatKey, localState?.showReadReceipts])
+      return () => unsubscribe();
+    }, [chatKey, myUserId, localState?.showReadReceipts])
   );
 
 

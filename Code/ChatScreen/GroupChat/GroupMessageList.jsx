@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
+import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import { getStyles } from '../Style';
 import { useTranslation } from 'react-i18next';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -114,10 +115,21 @@ const GroupMessageList = ({
     return '[Deleted message]';
   }, []);
 
-  // Filtered messages (sorted descending for inverted FlatList)
+  // Filtered messages (sorted descending for inverted FlatList).
+  // Dedup-by-id guards against duplicate keys reaching the FlatList — can
+  // happen briefly when realtime onInsert races with pagination, or if the
+  // channel resubscribes and replays its buffer.
   const filteredMessages = useMemo(() => {
     if (!Array.isArray(messages)) return [];
-    return [...messages].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+    const seen = new Set();
+    const unique = [];
+    for (const m of messages) {
+      const id = m?.id != null ? String(m.id) : null;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      unique.push(m);
+    }
+    return unique.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
   }, [messages]);
 
   // ✅ PERF FIX: Use ref for filteredMessages inside renderMessage
@@ -287,24 +299,28 @@ const GroupMessageList = ({
                         <Text style={styles.roleBadgeText}>Creator</Text>
                       </View>
                     )}
-                    {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#F59E0B' }]}>
-                        <Icon name="paw" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>JMD</Text>
-                      </View>
-                    )}
-                    {profile.isTrusted && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#10B981' }]}>
-                        <Icon name="checkmark-circle" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>Trusted</Text>
-                      </View>
-                    )}
-                    {profile.isCMSR && (
-                      <View style={[styles.roleBadge, { backgroundColor: '#F97316' }]}>
-                        <Icon name="briefcase" size={8} color="#fff" />
-                        <Text style={styles.roleBadgeText}>CMSR</Text>
-                      </View>
-                    )}
+                    {(() => {
+                      const firstBadge = getFirstBadgeType(
+                        { isBabyMod: item.isBabyMod, isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isHelper: profile.isHelper },
+                        ['jmd', 'trusted', 'cmsr', 'helper'],
+                      );
+                      return (
+                        <>
+                          {!item.isAdmin && !item.isModerator && item.isBabyMod && (
+                            <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
+                          )}
+                          {profile.isTrusted && (
+                            <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
+                          )}
+                          {profile.isCMSR && (
+                            <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
+                          )}
+                          {profile.isHelper && (
+                            <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
+                          )}
+                        </>
+                      );
+                    })()}
                   </View>
                 </TouchableOpacity>
                 {/* Images - Support multiple images */}

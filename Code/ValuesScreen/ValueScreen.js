@@ -105,15 +105,22 @@ const getImageUrl = (item, baseImgUrl) => {
 // ✅ PERF FIX: Moved to module level so React.memo actually works.
 // When defined inside the component body, React creates a new component type every render,
 // which defeats React.memo entirely.
-const HIDE_BADGE_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
+//
+// Allowlist — only pets get the value-type (D/N/M) and modifier (F/R) badges.
+// Was a denylist (HIDE_BADGE_TYPES) but the data has variants the list didn't
+// cover (PETWEAR no-space, FOODS plural, future categories like GAME PASS), so
+// non-pet items were still showing M/F/R toggles. Matches the canonical pet
+// check used elsewhere (e.g. TradeShowdown, IceBreaker).
+const PET_TYPES = ['PETS', 'PET'];
+const isPetType = (type) => PET_TYPES.includes(String(type || '').toUpperCase());
 const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS', 'OTHER'];
 
 const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, fromChat, fromSetting, imgurl, t }) => {
   const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
   const badges = [];
 
-  // Only show badges if the item type is not in hideBadge
-  if (!HIDE_BADGE_TYPES.includes(item.type?.toUpperCase())) {
+  // Only pets get value-type / modifier badges.
+  if (isPetType(item.type)) {
     if (itemSelection.isFly) {
       badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
     }
@@ -182,7 +189,7 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
         </View>
       </View>
 
-      {!HIDE_BADGE_TYPES.includes(item.type?.toUpperCase()) && (
+      {isPetType(item.type) && (
         <View style={styles.badgesContainer}>
           {VALUE_TYPES.map((badge) => (
             <BadgeButton
@@ -256,9 +263,6 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const isMountedRef = useRef(true);
   const debounceTimeoutRef = useRef(null);
 
-
-  // ✅ PERF FIX: hideBadge moved to module-level HIDE_BADGE_TYPES
-  const hideBadge = HIDE_BADGE_TYPES;
 
   const editValuesRef = useRef({
     Value: '',
@@ -711,7 +715,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             {/* Selected / owned pets strip (chat/settings only) */}
 
 
-            {!fromChat && !fromSetting && <Menu>
+            <Menu>
               <MenuTrigger onPress={() => { }}>
                 <View style={styles.filterButton}>
                   <Text style={styles.filterText}>{displayedFilter}</Text>
@@ -738,7 +742,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 ))}
               </MenuOptions>
 
-            </Menu>}
+            </Menu>
             <TouchableOpacity
               style={styles.filterButton}
               onPress={() => {

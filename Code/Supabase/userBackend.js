@@ -84,6 +84,111 @@ export async function getIdentityBatch(uids) {
   return _batchByUid('user_identity', uids, fromIdentityRow);
 }
 
+// -----------------------------------------------------------------
+// Identity search — replaces RTDB orderByChild('displayName')/email
+// + 500-row broad-scan fallback that powered OnlineUsersList's
+// "invite offline user" picker. ilike does case-insensitive contains
+// in one query, no variant-permutation or client-side filtering.
+// -----------------------------------------------------------------
+export async function searchIdentityByName(term, limit = 50) {
+  if (!term || term.trim().length < 2) return [];
+  const { data, error } = await supabase
+    .from('user_identity')
+    .select('*')
+    .ilike('display_name', `%${term.trim()}%`)
+    .limit(limit);
+  if (error) {
+    console.warn('[userBackend] searchIdentityByName error:', error.message);
+    return [];
+  }
+  return (data || []).map(fromIdentityRow).filter(Boolean);
+}
+
+// Email lookup. Three exact-match queries in parallel:
+//   - uid (legacy users whose RTDB key IS the encoded email)
+//   - email
+//   - decoded_email
+// Caller may pass either real form (foo@bar.com) or RTDB-encoded form
+// (foo(dot)bar(dot)com); we normalize both ways before querying.
+export async function searchIdentityByEmail(emailOrEncoded, limit = 10) {
+  if (!emailOrEncoded) return [];
+  const raw = emailOrEncoded.trim().toLowerCase();
+  const decoded = raw.replace(/\(dot\)/g, '.');
+  const encoded = decoded.replace(/\./g, '(dot)');
+  const results = await Promise.all([
+    supabase.from('user_identity').select('*').eq('uid', encoded).limit(1),
+    supabase.from('user_identity').select('*').eq('email', decoded).limit(limit),
+    supabase.from('user_identity').select('*').eq('decoded_email', decoded).limit(limit),
+  ]);
+  const merged = new Map();
+  for (const { data, error } of results) {
+    if (error) continue;
+    for (const row of data || []) {
+      const mapped = fromIdentityRow(row);
+      if (mapped && !merged.has(mapped.uid)) merged.set(mapped.uid, mapped);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+// -----------------------------------------------------------------
+// Role rosters — leaderboard "Trusted" / "CMSR" tabs used to read
+// RTDB /trusted and /cmsr nodes (maintained by sync CFs). With Phase
+// 4 mirroring complete, the same set is queryable directly from
+// user_roles (sparse partial indexes on is_trusted / is_cmsr already
+// exist per supabase/004_users_split.sql). Two-step: pick uids by
+// role flag, then getIdentityBatch for displayName/avatar. Returns
+// rows shaped the same way the LeaderboardScreen UI already expects.
+// -----------------------------------------------------------------
+async function _getRoster(roleColumn, { limit, offset } = {}) {
+  const lim = Number.isFinite(limit) && limit > 0 ? limit : 25;
+  const off = Number.isFinite(offset) && offset > 0 ? offset : 0;
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select(`uid, updated_at`)
+    .eq(roleColumn, true)
+    .order('updated_at', { ascending: false })
+    .range(off, off + lim - 1);
+  if (error) {
+    console.warn(`[userBackend] _getRoster(${roleColumn}) error:`, error.message);
+    return [];
+  }
+  const rows = data || [];
+  if (rows.length === 0) return [];
+
+  const uids = rows.map((r) => r.uid).filter(Boolean);
+  const identityMap = await getIdentityBatch(uids).catch(() => new Map());
+
+  const roleLabel = roleColumn === 'is_trusted' ? 'trusted'
+    : roleColumn === 'is_cmsr' ? 'cmsr'
+    : roleColumn;
+
+  return rows.map((r) => {
+    const ident = identityMap.get(r.uid);
+    return {
+      userId: r.uid,
+      displayName: ident?.displayName || 'Unknown',
+      avatar: ident?.avatar || null,
+      role: roleLabel,
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0,
+    };
+  });
+}
+
+// Paginated. Caller passes { limit, offset }; result length < limit means
+// no more pages. Order is updated_at desc (most recently promoted first).
+export async function getTrustedRoster(opts = {}) {
+  return _getRoster('is_trusted', opts);
+}
+
+export async function getCmsrRoster(opts = {}) {
+  return _getRoster('is_cmsr', opts);
+}
+
+export async function getHelperRoster(opts = {}) {
+  return _getRoster('is_helper', opts);
+}
+
 // =================================================================
 // WAVE 2 — roles + cosmetics
 // =================================================================
@@ -97,6 +202,7 @@ export function fromRolesRow(row) {
     isBabyMod: !!row.is_baby_mod,
     isTrusted: !!row.is_trusted,
     isCMSR: !!row.is_cmsr,
+    isHelper: !!row.is_helper,
   };
 }
 

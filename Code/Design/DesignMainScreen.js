@@ -625,6 +625,7 @@ const DesignFeedScreen = ({ route }) => {
         ...(user?.isModerator ? { isModerator: true } : {}),
         ...(user?.isTrusted ? { isTrusted: true } : {}),
         ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isHelper ? { isHelper: true } : {}),
         ...(user?.isBabyMod ? { isBabyMod: true } : {}),
         ...(localState?.isPro ? { isPro: true } : {}),
         ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),

@@ -22,7 +22,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import RNBootSplash from "react-native-bootsplash";
-import { requestTrackingPermission } from 'react-native-tracking-transparency';
+import { requestTrackingPermission, getTrackingStatus } from 'react-native-tracking-transparency';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import Icon from 'react-native-vector-icons/Ionicons';
 import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
@@ -35,6 +35,26 @@ import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/databas
 
 
 
+
+// Module-level singleton for the ATT request. Native lib (0.1.2) can resolve
+// its promise twice if the system dialog is interrupted by a scene transition;
+// caching the in-flight promise + short-circuiting on already-determined
+// statuses ensures requestTrackingPermission is reached at most once per
+// app session, even if the caller is invoked multiple times.
+let _attPromise = null;
+async function ensureAttRequested() {
+  if (_attPromise) return _attPromise;
+  _attPromise = (async () => {
+    try {
+      const status = await getTrackingStatus().catch(() => 'unavailable');
+      if (status !== 'not-determined') return status;
+      return await requestTrackingPermission();
+    } catch {
+      return 'unavailable';
+    }
+  })();
+  return _attPromise;
+}
 
 const Stack = createNativeStackNavigator();
 const setNavigationBarAppearance = (theme) => {
@@ -158,9 +178,13 @@ function App() {
   // ✅ Memoize handleUserConsent to prevent recreation
   const handleUserConsent = useCallback(async () => {
     try {
-      // Request ATT permission on iOS before initializing ads
+      // Request ATT once per app session. Guard: skip if status is already
+      // determined (avoids triggering the prompt on every effect re-run), and
+      // share an in-flight promise so concurrent callers can't hit the library's
+      // known double-resolve bug when the system dialog is interrupted by a
+      // scene transition / app backgrounding.
       if (Platform.OS === 'ios') {
-        await requestTrackingPermission();
+        await ensureAttRequested();
       }
 
       const consentInfo = await AdsConsent.requestInfoUpdate();

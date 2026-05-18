@@ -9,6 +9,7 @@ import {
 
 } from 'react-native';
 import { get, ref, set } from '@react-native-firebase/database';
+import { getIdentityBatch } from '../../Supabase/userBackend';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -53,38 +54,26 @@ const BlockedUsersScreen = () => {
           return;
         }
 
-        // ✅ OPTIMIZED: Fetch only displayName and avatar instead of full user objects
-        const userDetailsPromises = bannedUserIds.map(async (id) => {
-          if (!id) return null;
+        // One Supabase batch for all blocked users. profileFrame is set
+        // to null without an RTDB call — the legacy /users/{uid}/profileFrame
+        // path is dead (see 004_users_split_FIELD_MAPPING.md); real frames
+        // live under shop/activeItems and aren't shown on this list.
+        const identityMap = await getIdentityBatch(bannedUserIds).catch(() => new Map());
 
-          try {
-            // ✅ Fetch only the fields we need (parallel requests to specific child paths)
-            const [displayNameSnap, avatarSnap, profileFrameSnap] = await Promise.all([
-              get(ref(appdatabase, `users/${id}/displayName`)).catch(() => null),
-              get(ref(appdatabase, `users/${id}/avatar`)).catch(() => null),
-              get(ref(appdatabase, `users/${id}/profileFrame`)).catch(() => null),
-            ]);
-
-            // ✅ Check if user exists (if no displayName and no avatar, user likely doesn't exist)
-            if (!displayNameSnap?.exists() && !avatarSnap?.exists()) {
-              return null;
-            }
-
+        const validUsers = bannedUserIds
+          .map((id) => {
+            if (!id) return null;
+            const ident = identityMap.get(id);
+            if (!ident || (!ident.displayName && !ident.avatar)) return null;
             return {
               id,
-              displayName: displayNameSnap?.exists() ? (displayNameSnap.val()?.trim() || t('chat.anonymous')) : t('chat.anonymous'),
-              avatar: avatarSnap?.exists() ? (avatarSnap.val()?.trim() || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
-                : 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-              profileFrame: profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
+              displayName: ident.displayName?.trim() || t('chat.anonymous'),
+              avatar: ident.avatar?.trim() ||
+                'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+              profileFrame: null,
             };
-          } catch (error) {
-            console.error(`❌ Error fetching user ${id}:`, error);
-            return null;
-          }
-        });
-
-        const resolvedUsers = await Promise.all(userDetailsPromises);
-        const validUsers = resolvedUsers.filter(user => user !== null);
+          })
+          .filter(Boolean);
 
         if (isMounted) {
           setBlockedUsers(validUsers);
