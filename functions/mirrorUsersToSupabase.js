@@ -157,13 +157,32 @@ async function mirrorRoles(uid, before, after, supabase) {
 }
 
 const COSMETICS_KEYS = ['topBadge', 'isPro'];
-async function mirrorCosmetics(uid, before, after, supabase) {
-  if (!anyKeyChanged(before, after, COSMETICS_KEYS)) return;
+// Active shop items mirrored as jsonb so the client (profileCache) can
+// do its own expiresAt check without us needing a re-mirror at expiry.
+const ACTIVE_ITEM_KEYS = ['profileFrame', 'chatTextColor', 'tradeCardBg', 'profileBanner', 'chatBubbleBg'];
 
+function activeItemsChanged(before, after) {
+  const beforeItems = before?.shop?.activeItems || {};
+  const afterItems  = after?.shop?.activeItems  || {};
+  for (const k of ACTIVE_ITEM_KEYS) {
+    if ((beforeItems[k] ?? null) !== (afterItems[k] ?? null)) return true;
+  }
+  return false;
+}
+
+async function mirrorCosmetics(uid, before, after, supabase) {
+  if (!anyKeyChanged(before, after, COSMETICS_KEYS) && !activeItemsChanged(before, after)) return;
+
+  const activeItems = after?.shop?.activeItems || {};
   const row = {
     uid,
     top_badge: asString(after.topBadge),
     is_pro: asBool(after.isPro),
+    profile_frame:   asJsonb(activeItems.profileFrame),
+    chat_text_color: asJsonb(activeItems.chatTextColor),
+    trade_card_bg:   asJsonb(activeItems.tradeCardBg),
+    profile_banner:  asJsonb(activeItems.profileBanner),
+    chat_bubble_bg:  asJsonb(activeItems.chatBubbleBg),
     updated_at: nowIso(),
   };
 

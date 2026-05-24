@@ -45,7 +45,7 @@ import {
   writeBatch,
 } from '@react-native-firebase/firestore';
 import { ref, get, set, remove } from '@react-native-firebase/database';
-import { getOrFetchFullProfile, invalidateFullProfile } from '../../Helper/profileCache';
+import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile } from '../../Helper/profileCache';
 import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 
 // Kill-switch: set to false to revert to the original 16-get fetch path.
@@ -386,17 +386,18 @@ const ProfileBottomDrawer = ({
         let emailToCheck;
 
         if (BOTTOM_DRAWER_CACHE_ENABLED) {
-          // Fetch migrated fields from Supabase (5 tables in one round-trip set)
-          // + only lastGameWinAt from RTDB (game state not migrated yet).
-          // Falls back to getOrFetchFullProfile (full RTDB read) if all Supabase
-          // rows are missing (brand-new user, mirror lag, backfill miss).
-          const [identityRow, rolesRow, cosmeticsRow, robloxRow, badgesMap, lastGameWinAtSnap] = await Promise.all([
+          // Fetch migrated fields from Supabase (5 tables in one round-trip set).
+          // lastGameWinAt comes from profileCache (warmed by chat / online list);
+          // cold cache degrades trophy badge silently rather than paying an
+          // RTDB read per drawer open. Falls back to getOrFetchFullProfile
+          // (full RTDB read) when all Supabase rows are missing.
+          const cached = getCachedProfile(selectedUserId);
+          const [identityRow, rolesRow, cosmeticsRow, robloxRow, badgesMap] = await Promise.all([
             getIdentity(selectedUserId).catch(() => null),
             getRoles(selectedUserId).catch(() => null),
             getCosmetics(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
             getBadges(selectedUserId).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
           ]);
 
           if (!isMounted) return;
@@ -448,7 +449,7 @@ const ProfileBottomDrawer = ({
               robloxUsername:          robloxRow?.robloxUsername         ?? null,
               robloxUserId:            robloxRow?.robloxUserId           ?? null,
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
-              lastGameWinAt:           lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+              lastGameWinAt:           cached?.lastGameWinAt ?? null,
             };
             emailToCheck = identityRow?.email || selectedUser?.email;
           } else {

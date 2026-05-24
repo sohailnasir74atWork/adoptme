@@ -4,7 +4,7 @@ import { getAuth, onAuthStateChanged, signOut } from '@react-native-firebase/aut
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
-import { getBlocks, getRoblox } from './Supabase/userBackend';
+import { getBlocks, getRoblox, setLastActivity } from './Supabase/userBackend';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, AppState, Appearance } from 'react-native';
@@ -490,10 +490,13 @@ export const GlobalStateProvider = ({ children }) => {
     // Stored as ms epoch (number) so it lines up with createdAt and the
     // Supabase user_identity.last_activity_ms column (bigint). Used for
     // "inactive 30+ days" cohort queries — daily resolution is plenty,
-    // so we throttle the RTDB write (which fans out through the mirror
-    // CF to Supabase on every change). For active users opening the app
-    // many times a day this was the single hottest /users/{uid} write;
-    // throttling drops it to ~1/day per active user.
+    // so we throttle to ~1 heartbeat per active user per day.
+    //
+    // The write goes STRAIGHT to Supabase (set_last_activity RPC, see
+    // supabase/018_user_last_activity.sql) instead of going through
+    // RTDB → mirrorUsersToSupabase. The mirror CF was firing on every
+    // 6h heartbeat for no other mirrored field's benefit — that was
+    // the largest remaining cost lever per the cost-reduction handoff.
     const HEARTBEAT_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6h
     const prev = localStateRef.current?.lastActivity;
     const prevMs = typeof prev === 'number'
@@ -501,7 +504,10 @@ export const GlobalStateProvider = ({ children }) => {
       : (prev ? new Date(prev).getTime() : 0);
     const now = Date.now();
     if (Number.isFinite(prevMs) && now - prevMs < HEARTBEAT_THROTTLE_MS) return;
-    updateLocalStateAndDatabase('lastActivity', now);
+    // Persist locally so the throttle survives app restarts.
+    updateLocalStateRef.current('lastActivity', now);
+    // Supabase-only write — skips the RTDB heartbeat and its CF fan-out.
+    setLastActivity().catch(() => {});
   }, []);
 
 
@@ -525,9 +531,6 @@ export const GlobalStateProvider = ({ children }) => {
 
 
       if (shouldFetch) {
-        let image = '';
-        // console.log(shouldFetch, 'shouldfetch')
-
         const valuesNotGG = `https://adoptme.b-cdn.net?cb=${Date.now()}`;
 
         // 🔹 Fetch non-GG data from Bunny CDN ONLY (no Firebase fallback)
@@ -563,10 +566,13 @@ export const GlobalStateProvider = ({ children }) => {
 
 
 
-        // 🔹 Fetch shared image_url
-        const imageSnapShot = await get(ref(appdatabase, 'image_url'));
-        image = imageSnapShot.exists() ? imageSnapShot.val() : '';
-        await updateLocalStateRef.current('imgurl', image);
+        // 🔹 Fetch shared image_url only if missing (essentially static config)
+        if (!ls.imgurl) {
+          const imageSnapShot = await get(ref(appdatabase, 'image_url'));
+          if (imageSnapShot.exists()) {
+            await updateLocalStateRef.current('imgurl', imageSnapShot.val());
+          }
+        }
         // console.log('updated everything')
       }
     } catch (error) {

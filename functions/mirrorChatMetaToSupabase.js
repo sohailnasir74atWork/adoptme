@@ -52,13 +52,27 @@ exports.mirrorChatMetaToSupabase = functions
 
     const v = change.after.val() || {};
 
+    // Ghost-row guard: skip writes where the parent RTDB node holds only a
+    // sub-leaf (e.g. legacy lastRead, _mirroredFromSupabase) with none of the
+    // identifying fields a real chat row carries. Without this we'd upsert
+    // a row with chat_id/last_message/timestamp_ms/receiver_* all null, and
+    // the inbox renders those as "Anonymous — No messages yet" entries from
+    // people the user never chatted with. ~10% of chat_meta_data was ghosts
+    // before this guard landed.
+    const hasChatId    = typeof v.chatId === 'string' && v.chatId.length > 0;
+    const hasLastMsg   = typeof v.lastMessage === 'string';
+    const hasTimestamp = typeof v.timestamp === 'number';
+    if (!hasChatId && !hasLastMsg && !hasTimestamp) {
+      return null;
+    }
+
     // Mirror every field defined in the table. Coerce to expected types
     // so a stray null/undefined from a partial write doesn't break the
     // upsert (Postgres NOT NULL columns reject undefined).
     const rtdbView = {
       chat_id: v.chatId ?? null,
-      last_message: typeof v.lastMessage === 'string' ? v.lastMessage : null,
-      timestamp_ms: typeof v.timestamp === 'number' ? v.timestamp : null,
+      last_message: hasLastMsg ? v.lastMessage : null,
+      timestamp_ms: hasTimestamp ? v.timestamp : null,
       receiver_id: v.receiverId ?? null,
       receiver_name: v.receiverName ?? null,
       receiver_avatar: v.receiverAvatar ?? null,

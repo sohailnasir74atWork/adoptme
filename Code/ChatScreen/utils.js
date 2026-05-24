@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo, limitToLast, onValue } from '@react-native-firebase/database';
+import { setChatLastRead, subscribeToChatLastRead } from '../Supabase/chatMetaBackend';
 import { getAuth } from '@react-native-firebase/auth';
 import { Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -303,12 +304,8 @@ export const setActiveChat = async (userId, chatId) => {
   }
 
   try {
-    const database = getDatabase();
-    const activeChatRef = ref(database, `/activeChats/${userId}`);
-    const unreadRef = ref(database, `/private_messages/${chatId}/unread/${userId}`);
-
+    const activeChatRef = ref(getDatabase(), `/activeChats/${userId}`);
     await set(activeChatRef, chatId);
-    await set(unreadRef, 0);
     await onDisconnect(activeChatRef).remove();
   } catch (error) {
     console.error(`❌ Failed to set active chat for user ${userId}:`, error);
@@ -818,76 +815,30 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
 // Subscribes to BOTH email-ban (banned_users_by_email/{email}) and device-ban
 // (banned_devices/{fp}) paths. Either being active reports `isBanned: true`.
 //
-// `banDetails` prefers the email-ban payload when both fire (it's the
-// authoritative record); a device-only hit is surfaced with
-// `isAssociatedBan: true` so callers can show "this device is associated
-// with a banned account" copy when they want to differentiate. Default copy
-// works regardless — the payload shape is otherwise identical.
-//
-// The device-ban listener catches the bypass where a banned user signs out
-// and re-registers with a fresh email on the same device.
 export const useBanStatus = (email) => {
-  const [isEmailBanned, setIsEmailBanned] = useState(false);
-  const [emailBanDetails, setEmailBanDetails] = useState(null);
-  const [isDeviceBanned, setIsDeviceBanned] = useState(false);
-  const [deviceBanDetails, setDeviceBanDetails] = useState(null);
+  const [isBanned, setIsBanned] = useState(false);
+  const [banDetails, setBanDetails] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
-      const db = getDatabase();
-      let unsubEmail = null;
-      let unsubDevice = null;
-      let cancelled = false;
-
-      const evaluate = (data, setActive, setPayload) => {
-        if (!data) { setActive(false); setPayload(null); return; }
-        const now = Date.now();
-        let active = false;
-        if (data.bannedUntil === 'permanent') {
-          active = true;
-        } else if (typeof data.bannedUntil === 'number' && data.bannedUntil > now) {
-          active = true;
-        }
-        setActive(active);
-        setPayload(active ? data : null);
-      };
-
-      if (email) {
-        const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
-        unsubEmail = onValue(banRef, (snapshot) => {
-          evaluate(snapshot.exists() ? snapshot.val() : null, setIsEmailBanned, setEmailBanDetails);
-        });
-      } else {
-        setIsEmailBanned(false);
-        setEmailBanDetails(null);
+      if (!email) {
+        setIsBanned(false);
+        setBanDetails(null);
+        return;
       }
-
-      getDeviceFingerprint().then((fp) => {
-        if (cancelled || !fp) {
-          setIsDeviceBanned(false);
-          setDeviceBanDetails(null);
-          return;
-        }
-        const devRef = ref(db, `banned_devices/${fp}`);
-        unsubDevice = onValue(devRef, (snapshot) => {
-          evaluate(snapshot.exists() ? snapshot.val() : null, setIsDeviceBanned, setDeviceBanDetails);
-        });
-      }).catch(() => {
-        setIsDeviceBanned(false);
-        setDeviceBanDetails(null);
+      const banRef = ref(getDatabase(), `banned_users_by_email/${encodeEmailForBan(email)}`);
+      const unsub = onValue(banRef, (snapshot) => {
+        const data = snapshot.exists() ? snapshot.val() : null;
+        const active = data && (
+          data.bannedUntil === 'permanent' ||
+          (typeof data.bannedUntil === 'number' && data.bannedUntil > Date.now())
+        );
+        setIsBanned(!!active);
+        setBanDetails(active ? data : null);
       });
-
-      return () => {
-        cancelled = true;
-        if (unsubEmail) unsubEmail();
-        if (unsubDevice) unsubDevice();
-      };
+      return () => unsub();
     }, [email])
   );
-
-  const isBanned = isEmailBanned || isDeviceBanned;
-  const banDetails = emailBanDetails
-    || (isDeviceBanned ? { ...deviceBanDetails, isAssociatedBan: true } : null);
 
   return { isBanned, banDetails };
 };
@@ -984,50 +935,48 @@ export const removeModerator = async (userId) => {
 
 
 // ========== Read Receipts (lastRead) ==========
+//
+// Moved to Supabase chat_meta_data — see supabase/017_chat_lastread.sql.
+// Writer hits set_chat_last_read RPC (updates both rows atomically);
+// reader subscribes to the caller's own chat_meta_data row and pulls
+// partner_last_read_ms out of the UPDATE payload. The previous RTDB
+// onValue listener on /private_messages/{chatKey}/lastRead/{uid} is
+// retired.
 
 /**
- * Update lastRead timestamp for the current user in a private chat.
- * Called when user enters or is actively viewing the chat.
+ * Write the caller's lastRead timestamp for a private chat. Used by
+ * PrivateChat on chat enter and when a partner message arrives while
+ * the screen is focused. Fire-and-forget — errors are logged inside
+ * setChatLastRead and surface as a stale blue tick rather than a crash.
  */
-export const updateLastRead = async (chatKey, userId) => {
-  if (!chatKey || !userId) return;
-
-  try {
-    const db = getDatabase();
-    const lastReadRef = ref(db, `private_messages/${chatKey}/lastRead/${userId}`);
-    await set(lastReadRef, Date.now());
-  } catch (error) {
+export const updateLastRead = (partnerUid) => {
+  if (!partnerUid) return;
+  setChatLastRead(partnerUid).catch((error) => {
     console.warn('updateLastRead error:', error?.message);
-  }
+  });
 };
 
 /**
- * Hook: listen to the OTHER user's lastRead timestamp.
- * Returns a timestamp (number) or 0 if not yet read.
+ * Hook: subscribe to the partner's lastRead timestamp for an open chat.
+ * Returns a ms-epoch number (0 until first read receipt lands).
  */
-export const useOtherLastRead = (chatKey, otherUserId) => {
+export const useOtherLastRead = (ownerUid, partnerUid) => {
   const [lastRead, setLastRead] = useState(0);
 
   useEffect(() => {
-    if (!chatKey || !otherUserId) {
+    if (!ownerUid || !partnerUid) {
       setLastRead(0);
-      return;
+      return undefined;
     }
 
-    const db = getDatabase();
-    const lastReadRef = ref(db, `private_messages/${chatKey}/lastRead/${otherUserId}`);
-
-    const unsubscribe = onValue(lastReadRef, (snapshot) => {
-      setLastRead(snapshot.exists() ? (Number(snapshot.val()) || 0) : 0);
-    }, (error) => {
-      console.warn('useOtherLastRead listener error:', error?.message);
-      setLastRead(0);
+    const unsubscribe = subscribeToChatLastRead(ownerUid, partnerUid, (ms) => {
+      setLastRead(ms);
     });
 
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [chatKey, otherUserId]);
+  }, [ownerUid, partnerUid]);
 
   return lastRead;
 };

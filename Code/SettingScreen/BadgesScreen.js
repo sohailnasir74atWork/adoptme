@@ -26,6 +26,7 @@ import {
 import { getStarStatus } from '../Engagement/starUtils';
 import DailyStarRewards from '../Engagement/DailyStarRewards';
 import SafeLottieView from '../Helper/SafeLottieView';
+import { getIdentity, getBadges } from '../Supabase/userBackend';
 
 // Lottie files for XP levels
 const LEVEL_LOTTIE = {
@@ -292,11 +293,17 @@ const BadgesScreen = ({ navigation }) => {
     getUserXP(appdatabase, user.id).then(data => setXp(data.total || 0));
     getStarStatus(appdatabase, user.id).then(setStreak);
 
-    const { ref, get } = require('@react-native-firebase/database');
-    get(ref(appdatabase, `users/${user.id}`)).then(snap => {
-      const data = snap.exists() ? snap.val() : {};
-      const computed = computeBadges(data, data.badges || {});
-      setBadges(computed);
+    // Pull createdAt (from user_identity) and badges (from user_badges) via
+    // Supabase instead of fetching the full /users/{uid} RTDB record. Saves
+    // ~1.9 KB RTDB read per screen open; computeBadges only uses createdAt
+    // from userData so the rest of the record was wasted bytes.
+    Promise.all([
+      getIdentity(user.id),
+      getBadges(user.id),
+    ]).then(([identity, badgesMap]) => {
+      const savedBadges = {};
+      if (badgesMap) for (const id of badgesMap.keys()) savedBadges[id] = true;
+      setBadges(computeBadges({ createdAt: identity?.createdAt || 0 }, savedBadges));
     }).catch(() => { });
   }, [user?.id, appdatabase]);
 

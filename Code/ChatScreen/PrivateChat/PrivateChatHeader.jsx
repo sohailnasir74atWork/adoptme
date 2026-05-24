@@ -12,6 +12,7 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
 import { getRoblox, getRoles, getCosmetics } from '../../Supabase/userBackend';
+import { getCachedProfile } from '../../Helper/profileCache';
 import { getThemeColors } from '../../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import FramedAvatar from '../GroupChat/FramedAvatar';
@@ -62,16 +63,16 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     const fetchUserData = async () => {
       try {
-        // Identity-like fields (roles, cosmetics, roblox) → Supabase.
-        // Game state (lastGameWinAt) + profileFrame stay on RTDB.
-        const [rolesRow, cosmeticsRow, robloxRow, lastGameWinAtSnap, profileFrameSnap] =
-          await Promise.all([
-            getRoles(selectedUserId).catch(() => null),
-            getCosmetics(selectedUserId).catch(() => null),
-            getRoblox(selectedUserId).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/profileFrame`)).catch(() => null),
-          ]);
+        // lastGameWinAt + profileFrame come from profileCache (warmed by any
+        // prior chat/drawer interaction with this user). Skipping the RTDB
+        // reads cuts 2 reads per chat open; cold cache degrades gracefully
+        // (no trophy / frame until cache warms).
+        const cached = getCachedProfile(selectedUserId);
+        const [rolesRow, cosmeticsRow, robloxRow] = await Promise.all([
+          getRoles(selectedUserId).catch(() => null),
+          getCosmetics(selectedUserId).catch(() => null),
+          getRoblox(selectedUserId).catch(() => null),
+        ]);
 
         if (!isMounted) return;
 
@@ -99,13 +100,13 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           robloxUserId:           robloxRow?.robloxUserId           ?? fb?.robloxUserId           ?? null,
           robloxUsernameVerified: !!(robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified),
           isPro:                  !!(cosmeticsRow?.isPro            ?? fb?.isPro),
-          lastGameWinAt:          lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
+          lastGameWinAt:          cached?.lastGameWinAt ?? null,
           isAdmin:                !!(rolesRow?.isAdmin              ?? fb?.admin),
           isModerator:            !!(rolesRow?.isModerator          ?? fb?.isModerator),
           isTrusted:              !!(rolesRow?.isTrusted            ?? fb?.isTrusted),
           isCMSR:                 !!(rolesRow?.isCMSR               ?? fb?.isCMSR),
           isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
-          profileFrame:           profileFrameSnap?.exists() ? profileFrameSnap.val() : null,
+          profileFrame:           cached?.profileFrame ?? null,
         });
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);

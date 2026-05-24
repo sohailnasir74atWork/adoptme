@@ -302,8 +302,9 @@ Scheduled Cloud Function that runs **every 12 hours** to aggregate trade analyti
 **Architecture:**
 ```
 Cloud Function (every 12h) → RTDB /analytics node (plain JSON)
-                                ↓ (you manually copy JSON)
-                           Bunny CDN (trade_analytics.json)
+                                ↓ (Bunny pull zone fetches on cache miss)
+                           Bunny CDN — analytics.b-cdn.net
+                           (origin: …/analytics.json, cache TTL 12h)
                                 ↓
                            App reads from CDN (zero Firebase reads)
                                 ↓
@@ -329,11 +330,17 @@ firebase deploy --only functions:aggregateTradeAnalytics
 ```
 
 **After deployment workflow:**
-1. Function runs automatically every 12 hours
-2. Go to Firebase Console → Realtime Database → `analytics` node
-3. Copy/export the JSON data
-4. Upload to Bunny CDN as `trade_analytics.json`
-5. App automatically picks it up (with MMKV cache)
+1. Function runs automatically every 12 hours, replacing `/analytics` in RTDB.
+2. The Bunny pull zone `analytics.b-cdn.net` fetches from the RTDB origin
+   (`https://adoptme-7b50c-default-rtdb.firebaseio.com/analytics.json`) on
+   cache miss — no manual copy step. Cache TTL is 12h, matching the CF
+   schedule.
+3. App reads from the Bunny URL with an MMKV cache layer.
+
+**Bunny pull-zone settings** (one-time, only changed if costs spike): enable
+Origin Shield, enable Request Coalescing, and set Browser Cache Expiration
+to 1h. These cut RTDB origin pulls from ~700/day to ~2-10/day. See
+`RTDB_COST_REDUCTION_HANDOFF.md` for context.
 
 ### Value Changes (Manual CDN File)
 

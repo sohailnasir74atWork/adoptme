@@ -185,7 +185,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   );
 
   // ✅ Track other user's last-read timestamp for blue tick read receipts
-  const otherLastRead = useOtherLastRead(chatKey, selectedUserId);
+  const otherLastRead = useOtherLastRead(myUserId, selectedUserId);
 
   // ✅ Memoize getUserPoints
   const getUserPoints = useCallback(async (userId) => {
@@ -752,7 +752,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // even though we're hiding it locally — that's the user-visible bug
       // ("I turned off read receipts but they still see I read it").
       if (localState?.showReadReceipts !== false) {
-        updateLastRead(chatKey, user.id);
+        updateLastRead(selectedUserId);
       }
 
       // ✅ Reset refs when entering chat (for exit ad logic)
@@ -798,7 +798,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
             newMessage.senderId !== myUserId &&
             localState?.showReadReceipts !== false
           ) {
-            updateLastRead(chatKey, myUserId);
+            updateLastRead(selectedUserId);
           }
 
           setMessages(prev => {

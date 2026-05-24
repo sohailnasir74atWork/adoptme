@@ -46,6 +46,26 @@ export function fromIdentityRow(row) {
 }
 
 // -----------------------------------------------------------------
+// Write-side helper: advance the caller's last_activity_ms heartbeat.
+// Bypasses the RTDB → mirrorUsersToSupabase round-trip (which fires a
+// Cloud Function invocation per heartbeat even though no other mirror
+// cares). Backed by set_last_activity() in supabase/018_user_last_activity.sql
+// — server-side clock is authoritative so client clock skew can't
+// back-date the timestamp.
+//
+// Fire-and-forget from the caller's perspective. Returns the ms-epoch
+// written, or 0 on failure / no auth.
+// -----------------------------------------------------------------
+export async function setLastActivity() {
+  const { data, error } = await supabase.rpc('set_last_activity');
+  if (error) {
+    console.warn('[userBackend] setLastActivity error:', error.message);
+    return 0;
+  }
+  return Number(data) || 0;
+}
+
+// -----------------------------------------------------------------
 // Single-uid identity read.
 //
 // Returns null on not-found OR on Supabase error — callers must treat
@@ -212,6 +232,13 @@ export function fromCosmeticsRow(row) {
     uid: row.uid,
     topBadge: row.top_badge ?? null,
     isPro: !!row.is_pro,
+    // Active shop items (jsonb mirrored from /users/{uid}/shop/activeItems).
+    // Raw shape preserved so callers can do their own expiresAt check.
+    profileFrame:  row.profile_frame   ?? null,
+    chatTextColor: row.chat_text_color ?? null,
+    tradeCardBg:   row.trade_card_bg   ?? null,
+    profileBanner: row.profile_banner  ?? null,
+    chatBubbleBg:  row.chat_bubble_bg  ?? null,
   };
 }
 

@@ -87,17 +87,18 @@ export const getOrFetchProfile = async (db, uid) => {
 
   // Fetch strategy:
   //   - identity / roles / cosmetics / roblox  → Supabase (always)
+  //   - cosmetics row also carries active shop items (profileFrame, etc.)
+  //     since 016_user_cosmetics_active migration — was 1 RTDB read here
   //   - hasRecentGameWin + lastGameWinAt       → RTDB (not mirrored)
-  //   - shop/activeItems                       → RTDB (not migrated)
   //   - RTDB fallback for mirrored fields fires ONLY if the corresponding
   //     Supabase table returned null (mirror lag / not-yet-backfilled user).
-  //     Common case: 0 RTDB reads for the mirrored fields. Was 9.
+  //     Common case: 0 RTDB reads for the mirrored fields.
   try {
     const base = `users/${uid}`;
 
     const [
       identityRow, rolesRow, cosmeticsRow, robloxRow,
-      hasRecentGameWinSnap, lastGameWinAtSnap, shopSnap,
+      hasRecentGameWinSnap, lastGameWinAtSnap,
     ] = await Promise.all([
       getIdentity(uid),
       getRoles(uid),
@@ -105,12 +106,21 @@ export const getOrFetchProfile = async (db, uid) => {
       getRoblox(uid),
       get(ref(db, `${base}/hasRecentGameWin`)),
       get(ref(db, `${base}/lastGameWinAt`)),
-      get(ref(db, `${base}/shop/activeItems`)),
     ]);
 
     const hasRecentGameWin = hasRecentGameWinSnap.exists() ? hasRecentGameWinSnap.val() : null;
     const lastGameWinAt    = lastGameWinAtSnap.exists()    ? lastGameWinAtSnap.val()    : null;
-    const shopItems        = shopSnap.exists()             ? shopSnap.val()             : null;
+    // Build a shopItems-shaped object from cosmeticsRow so the existing
+    // expiresAt filter below works without a code shape change. Cold
+    // cosmeticsRow (mirror lag) → null → no frame/bubble until mirror
+    // catches up; same graceful degradation as identity/roles fallback.
+    const shopItems = cosmeticsRow ? {
+      profileFrame:  cosmeticsRow.profileFrame,
+      chatTextColor: cosmeticsRow.chatTextColor,
+      tradeCardBg:   cosmeticsRow.tradeCardBg,
+      profileBanner: cosmeticsRow.profileBanner,
+      chatBubbleBg:  cosmeticsRow.chatBubbleBg,
+    } : null;
 
     // Selective RTDB fallback — only for Supabase tables that returned null.
     // This handles brand-new users and any backfill misses without paying

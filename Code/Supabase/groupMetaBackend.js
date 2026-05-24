@@ -47,17 +47,32 @@ export async function resetGroupUnreadCount(userId, groupId) {
   // Errors intentionally swallowed — RTDB + mirror CF is the fallback.
 }
 
+// Paginated via .range() because Supabase enforces a server-side
+// max_rows cap (default 1000) that .limit(N) doesn't override. Same
+// silent-truncation class as loadChatMeta — see that fn for context.
+const GROUP_META_PAGE = 1000;
+
 export async function loadGroupMeta(userId) {
   if (!userId) return [];
-  const { data, error } = await supabase
-    .from('group_meta_data')
-    .select('*')
-    .eq('user_id', userId);
-  if (error) {
-    console.warn('[groupMetaBackend] loadGroupMeta error:', error.message);
-    return [];
+  const out = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('group_meta_data')
+      .select('*')
+      .eq('user_id', userId)
+      .order('last_message_timestamp_ms', { ascending: false, nullsFirst: false })
+      .range(from, from + GROUP_META_PAGE - 1);
+    if (error) {
+      console.warn('[groupMetaBackend] loadGroupMeta error:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const row of data) out.push(fromGroupMetaRow(row));
+    if (data.length < GROUP_META_PAGE) break;
+    from += GROUP_META_PAGE;
   }
-  return (data || []).map(fromGroupMetaRow);
+  return out;
 }
 
 // Drop-in replacement for the group_meta_data onChildAdded/Changed/Removed

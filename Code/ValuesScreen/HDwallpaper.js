@@ -17,7 +17,7 @@ import {
 
 import Icon from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
-import { ref, onValue, update, increment } from "@react-native-firebase/database";
+import { ref, get, update, increment } from "@react-native-firebase/database";
 import { useGlobalState } from "../GlobelStats";
 import InterstitialAdManager from "../Ads/IntAd";
 import { useLocalState } from "../LocalGlobelStats";
@@ -45,42 +45,33 @@ const HDWallpaperScreen = () => {
   const [likeData, setLikeData] = useState({});
   const [loadMoreClickCount, setLoadMoreClickCount] = useState(0); // Track load more clicks for ad logic
 
-  // 🔢 Listen to Firebase count (pic_numbers)
+  // 🔢 Fetch pic_numbers once on mount — it's a counter that only changes
+  // when an admin adds wallpapers (very rare). The previous onValue
+  // listener cost a persistent RTDB subscription per active client.
   useEffect(() => {
     if (!appdatabase) return;
-
-    const picCountRef = ref(appdatabase, "pic_numbers"); // value like 55
-
-    const unsubscribe = onValue(picCountRef, (snapshot) => {
-      const total = snapshot.val() || 0;
+    get(ref(appdatabase, "pic_numbers")).then((snap) => {
+      const total = snap.val() || 0;
       setTotalPics(total);
-
-      // initialize or clamp visibleCount
       setVisibleCount((prev) => {
-        if (prev === 0) {
-          // first time: show up to PAGE_SIZE
-          return Math.min(PAGE_SIZE, total);
-        }
-        // if total decreased and now < visible, clamp
+        if (prev === 0) return Math.min(PAGE_SIZE, total);
         if (prev > total) return total;
         return prev;
       });
-    });
-
-    return () => unsubscribe();
+    }).catch(() => { /* leave totalPics at 0 */ });
   }, [appdatabase]);
 
-  // 🔁 Sync counters from /like_counter into separate state
+  // 📥 Fetch /like_counter once on mount instead of subscribing.
+  // The old onValue listener re-downloaded the entire like_counter object
+  // every time ANYONE liked anything anywhere — bandwidth scaled with both
+  // wallpaper count and total user activity. User's own likes update
+  // locally via toggleReaction (no listener needed for that). Cost:
+  // other users' likes don't update live while you're on this screen.
   useEffect(() => {
     if (!appdatabase) return;
-
-    const likeCounterRef = ref(appdatabase, "like_counter");
-    const unsubscribe = onValue(likeCounterRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      setLikeData(data);
-    });
-
-    return () => unsubscribe();
+    get(ref(appdatabase, "like_counter"))
+      .then((snap) => setLikeData(snap.val() || {}))
+      .catch(() => { /* keep empty likeData */ });
   }, [appdatabase]);
 
   // 🧱 Build base items whenever totalPics / visibleCount / likeData changes
@@ -227,21 +218,33 @@ const HDWallpaperScreen = () => {
     [pushCounters],
   );
 
-  const handleRefresh = useCallback(() => {
-    if (!totalPics) return;
+  const handleRefresh = useCallback(async () => {
+    if (!appdatabase) return;
 
     setRefreshing(true);
+    try {
+      // Re-pull both counters. Mount-time listeners were dropped to save
+      // RTDB bandwidth (see the two effects above), so pull-to-refresh is
+      // now the user's only way to see admin-added wallpapers and other
+      // users' like counts.
+      const [picSnap, likeSnap] = await Promise.all([
+        get(ref(appdatabase, "pic_numbers")).catch(() => null),
+        get(ref(appdatabase, "like_counter")).catch(() => null),
+      ]);
 
-    // Reset visible count (first page), items will rebuild from likeData
-    setVisibleCount(Math.min(PAGE_SIZE, totalPics));
+      const total = picSnap?.val() || 0;
+      setTotalPics(total);
+      setVisibleCount(Math.min(PAGE_SIZE, total));
+      setLikeData(likeSnap?.val() || {});
 
-    setLoadingIds({});
-    setSelected(null);
-    setFullImageLoading(false);
-    setLoadMoreClickCount(0); // Reset load more click counter
-
-    setRefreshing(false);
-  }, [totalPics]);
+      setLoadingIds({});
+      setSelected(null);
+      setFullImageLoading(false);
+      setLoadMoreClickCount(0);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [appdatabase]);
 
   const handleDownload = useCallback(
     async (item) => {

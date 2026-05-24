@@ -143,48 +143,44 @@ const OnlineUsersList = ({
         getRobloxBatch(toFetch).catch(() => new Map()),
       ]);
 
-      const userPromises = toFetch.map(async (userId) => {
-        try {
-          const identity = identityMap.get(userId);
-          // Same skip rule as before: no displayName AND no avatar = ghost row.
-          // Also covers brief Supabase-mirror lag for brand-new users; they'll
-          // appear on the next page load once the mirror catches up.
-          if (!identity || (!identity.displayName && !identity.avatar)) {
-            return null;
-          }
+      // Game state is per-user RTDB and was the biggest read leak.
+      // - isPlaying is only shown in gameInvite mode → skip fetch otherwise.
+      // - lastGameWinAt comes from profileCache when available (populated by
+      //   any chat/drawer that already fetched the user); skipping here means
+      //   the trophy badge degrades gracefully for cold profiles instead of
+      //   paying 2×N RTDB reads per modal open.
+      const needIsPlaying = mode === 'gameInvite';
+      const playingMap = needIsPlaying
+        ? new Map(await Promise.all(toFetch.map(async (id) => {
+            const snap = await get(ref(appdatabase, `users/${id}/isPlaying`)).catch(() => null);
+            return [id, snap?.exists() ? snap.val() : false];
+          })))
+        : null;
 
-          const [lastGameWinAtSnap, isPlayingSnap] = await Promise.all([
-            get(ref(appdatabase, `users/${userId}/lastGameWinAt`)).catch(() => null),
-            get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null),
-          ]);
-
-          const roles = rolesMap.get(userId);
-          const cosmetics = cosmeticsMap.get(userId);
-          const roblox = robloxMap.get(userId);
-
-          return {
-            id: userId,
-            displayName: identity.displayName || t('chat.anonymous'),
-            avatar: identity.avatar ||
-              'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-            isPro: cosmetics?.isPro ?? false,
-            robloxUsernameVerified: roblox?.robloxUsernameVerified ?? false,
-            lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
-            isAdmin: roles?.isAdmin ?? false,
-            OS: identity.OS ?? null,
-            isPlaying: isPlayingSnap?.exists() ? isPlayingSnap.val() : false,
-            isModerator: roles?.isModerator ?? false,
-            isTrusted: roles?.isTrusted ?? false,
-            isCMSR: roles?.isCMSR ?? false,
-            isHelper: roles?.isHelper ?? false,
-          };
-        } catch (error) {
-          console.error(`Error fetching user ${userId}:`, error);
-          return null;
-        }
-      });
-
-      const users = (await Promise.all(userPromises)).filter((u) => u !== null);
+      const users = toFetch.map((userId) => {
+        const identity = identityMap.get(userId);
+        if (!identity || (!identity.displayName && !identity.avatar)) return null;
+        const roles = rolesMap.get(userId);
+        const cosmetics = cosmeticsMap.get(userId);
+        const roblox = robloxMap.get(userId);
+        const cachedProfile = getCachedProfile(userId);
+        return {
+          id: userId,
+          displayName: identity.displayName || t('chat.anonymous'),
+          avatar: identity.avatar ||
+            'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+          isPro: cosmetics?.isPro ?? false,
+          robloxUsernameVerified: roblox?.robloxUsernameVerified ?? false,
+          lastGameWinAt: cachedProfile?.lastGameWinAt ?? null,
+          isAdmin: roles?.isAdmin ?? false,
+          OS: identity.OS ?? null,
+          isPlaying: playingMap ? playingMap.get(userId) : false,
+          isModerator: roles?.isModerator ?? false,
+          isTrusted: roles?.isTrusted ?? false,
+          isCMSR: roles?.isCMSR ?? false,
+          isHelper: roles?.isHelper ?? false,
+        };
+      }).filter((u) => u !== null);
 
       // ✅ Add new users to existing list
       setAllOnlineUsers((prev) => {
@@ -202,7 +198,7 @@ const OnlineUsersList = ({
     } catch (error) {
       console.error('Error loading user batch:', error);
     }
-  }, [appdatabase]);
+  }, [appdatabase, mode]);
 
   // ✅ Fetch online user IDs from RTDB presence node when modal opens
   useEffect(() => {

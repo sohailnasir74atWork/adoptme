@@ -12,7 +12,7 @@ import { navigationRef } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
-import { AdsConsent, AdsConsentStatus, MobileAds } from 'react-native-google-mobile-ads';
+import { AdsConsent, AdsConsentStatus, MaxAdContentRating, MobileAds } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
 import {
   MyDarkTheme,
@@ -188,6 +188,22 @@ function App() {
       }
 
       const consentInfo = await AdsConsent.requestInfoUpdate();
+
+      // Set request config BEFORE initialize() so the first ad request
+      // already respects it. maxAdContentRating='T' opens up Teen-rated
+      // inventory (game installs, teen-friendly brands) that AdMob's
+      // default 'G' ceiling silently locks out — matches our Play Console
+      // 13+ target audience. tagForChildDirectedTreatment=false confirms
+      // this is NOT a kids-app build, which avoids the conservative kids
+      // pricing AdMob applies when treatment is left unspecified.
+      // tagForUnderAgeOfConsent is intentionally NOT set: the EEA consent
+      // flow (AdsConsent above) already handles the under-16 case via the
+      // IAB TCF v2 string, so setting it globally here would suppress
+      // personalized ads for every user, not just under-age-of-consent ones.
+      await MobileAds().setRequestConfiguration({
+        maxAdContentRating: MaxAdContentRating.T,
+        tagForChildDirectedTreatment: false,
+      });
       await MobileAds().initialize();
 
 

@@ -29,6 +29,8 @@ export function fromChatMetaRow(row) {
     receiverAvatar: row.receiver_avatar ?? null,
     unreadCount: row.unread_count ?? 0,
     muted: !!row.muted,
+    ownerLastRead: row.owner_last_read_ms ?? 0,
+    partnerLastRead: row.partner_last_read_ms ?? 0,
   };
 }
 
@@ -36,18 +38,38 @@ export function fromChatMetaRow(row) {
 // Initial load — Supabase realtime doesn't replay history, so the
 // caller fetches once on attach and then keeps state in sync via the
 // realtime channel.
+//
+// Paginated via .range() because Supabase enforces a server-side
+// max_rows cap (default 1000) that `.limit(N)` does NOT override. Heavy
+// users (Tee was at 1,411) silently lost rows past row 1000 — old chats
+// whose row got bumped while the app was closed were invisible until
+// the partner happened to send while the user was online. Ordering by
+// timestamp_ms DESC keeps the most-recent chats in the first page so
+// the UI populates quickly even before later pages land.
 // -----------------------------------------------------------------
+const CHAT_META_PAGE = 1000;
+
 export async function loadChatMeta(ownerUid) {
   if (!ownerUid) return [];
-  const { data, error } = await supabase
-    .from('chat_meta_data')
-    .select('*')
-    .eq('owner_uid', ownerUid);
-  if (error) {
-    console.warn('[chatMetaBackend] loadChatMeta error:', error.message);
-    return [];
+  const out = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('chat_meta_data')
+      .select('*')
+      .eq('owner_uid', ownerUid)
+      .order('timestamp_ms', { ascending: false, nullsFirst: false })
+      .range(from, from + CHAT_META_PAGE - 1);
+    if (error) {
+      console.warn('[chatMetaBackend] loadChatMeta error:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const row of data) out.push(fromChatMetaRow(row));
+    if (data.length < CHAT_META_PAGE) break;
+    from += CHAT_META_PAGE;
   }
-  return (data || []).map(fromChatMetaRow);
+  return out;
 }
 
 // -----------------------------------------------------------------
@@ -67,6 +89,106 @@ export async function resetUnreadCount(ownerUid, partnerUid) {
     .eq('partner_uid', partnerUid);
   // Errors are intentionally swallowed — the realtime subscription
   // will reconcile state on the next upstream event.
+}
+
+// -----------------------------------------------------------------
+// Write the caller's lastRead timestamp into BOTH sides of the chat
+// pair via set_chat_last_read RPC. Backed by 017_chat_lastread.sql —
+// the RPC updates owner_last_read_ms on the caller's row and
+// partner_last_read_ms on the partner's row in one round-trip so the
+// blue-tick threshold rides on the existing chat_meta_data realtime
+// stream (no separate read-receipts channel).
+//
+// Returns the ms-epoch timestamp written, or 0 on failure / no auth.
+// -----------------------------------------------------------------
+export async function setChatLastRead(partnerUid) {
+  if (!partnerUid) return 0;
+  const { data, error } = await supabase.rpc('set_chat_last_read', {
+    p_partner_uid: partnerUid,
+  });
+  if (error) {
+    console.warn('[chatMetaBackend] setChatLastRead error:', error.message);
+    return 0;
+  }
+  return Number(data) || 0;
+}
+
+// -----------------------------------------------------------------
+// Single-row subscription for the open private-chat screen. Mirrors
+// the granularity of the prior RTDB `onValue` on
+// /private_messages/{chatKey}/lastRead/{partner}: one channel per open
+// chat, fires `onChange(partnerLastReadMs)` on every UPDATE that
+// touches the row.
+//
+// Realtime postgres_changes only supports a single equality filter, so
+// we filter by owner_uid and reject non-matching partner rows in JS.
+// That's cheap — for a logged-in user, the only frequent traffic on
+// chat_meta_data is their own row anyway.
+// -----------------------------------------------------------------
+export function subscribeToChatLastRead(ownerUid, partnerUid, onChange) {
+  if (!ownerUid || !partnerUid) return () => {};
+
+  let cancelled = false;
+  // lastEmitted guards against the seed-read landing AFTER a realtime
+  // UPDATE: partner_last_read_ms is monotonic, so anything less-or-
+  // equal is a stale read we should drop.
+  let lastEmitted = 0;
+  const emit = (ms) => {
+    const v = Number(ms) || 0;
+    if (cancelled || v <= lastEmitted) return;
+    lastEmitted = v;
+    onChange?.(v);
+  };
+
+  const topic = `chat-lastread:${ownerUid}:${partnerUid}:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const channel = supabase
+    .channel(topic)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_meta_data',
+        filter: `owner_uid=eq.${ownerUid}`,
+      },
+      (payload) => {
+        if (payload.new?.partner_uid !== partnerUid) return;
+        emit(payload.new.partner_last_read_ms);
+      },
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_meta_data',
+        filter: `owner_uid=eq.${ownerUid}`,
+      },
+      (payload) => {
+        if (payload.new?.partner_uid !== partnerUid) return;
+        emit(payload.new.partner_last_read_ms);
+      },
+    )
+    .subscribe();
+
+  // Seed with current value so the UI doesn't sit at 0 until the next
+  // partner-side updateLastRead lands.
+  supabase
+    .from('chat_meta_data')
+    .select('partner_last_read_ms')
+    .eq('owner_uid', ownerUid)
+    .eq('partner_uid', partnerUid)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error || !data) return;
+      emit(data.partner_last_read_ms);
+    });
+
+  return () => {
+    cancelled = true;
+    try { supabase.removeChannel(channel); } catch {}
+  };
 }
 
 // -----------------------------------------------------------------
