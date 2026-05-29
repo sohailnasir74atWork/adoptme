@@ -14,7 +14,7 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { clearActiveChat, useOnlineStatus, setActiveChat, useBanStatus, updateLastRead, useOtherLastRead } from '../utils';
+import { clearActiveChat, useOnlineStatus, setActiveChat, updateLastRead, useOtherLastRead } from '../utils';
 import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
 import {
   loadPrivateMessages,
@@ -54,7 +54,7 @@ const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
 
-  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB, isRTDBConnected } = useGlobalState();
+  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB, isRTDBConnected, isUserBlocked, deviceBanInfo } = useGlobalState();
   const [trade, setTrade] = useState(null)
   const [post, setPost] = useState(null)
   const [messages, setMessages] = useState([]);
@@ -92,8 +92,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     setIsDrawerVisible(false);
   };
 
-  // ✅ Check if current user is banned
-  const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+  // ✅ Check if current user is banned — global gate covers email + device
+  const isMeBanned = isUserBlocked;
+  const myBanDetails = strikeInfo || deviceBanInfo;
 
   // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
   // Uses useFocusEffect to detach listener when navigating away

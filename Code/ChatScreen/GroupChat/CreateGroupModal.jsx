@@ -22,7 +22,6 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
-import { useBanStatus } from '../utils';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 import FramedAvatar from './FramedAvatar';
@@ -72,7 +71,7 @@ const base64ToBytes = (base64) => {
 const MAX_GROUP_MEMBERS = 50;
 
 const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = null, editGroupName = null, editGroupDescription = null, editGroupAvatar = null, isAdmin = false, onGroupUpdated = null }) => {
-  const { theme, user, firestoreDB, appdatabase } = useGlobalState();
+  const { theme, user, firestoreDB, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const isEditMode = !!editGroupId;
   const { triggerHapticFeedback } = useHaptic();
   const navigation = useNavigation();
@@ -90,8 +89,9 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
   const initializedEditGroupIdRef = useRef(null);
   const hasInitializedSelectedUsersRef = useRef(false);
 
-  // ✅ Check if current user is banned
-  const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+  // ✅ Check if current user is banned — global gate covers email + device
+  const isMeBanned = isUserBlocked;
+  const myBanDetails = strikeInfo || deviceBanInfo;
   const { t } = useTranslation();
 
   // Initialize selectedMemberIds from selectedUsers when modal opens.

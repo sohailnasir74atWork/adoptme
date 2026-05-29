@@ -17,7 +17,7 @@ import GroupMessageList from './GroupMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat, useBanStatus } from '../utils';
+import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupChat } from '../utils';
 import { resetGroupUnreadCount } from '../../Supabase/groupMetaBackend';
 import {
   loadGroupMessages,
@@ -43,6 +43,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
 import InterstitialAdManager from '../../Ads/IntAd';
+import BannerAdComponent from '../../Ads/bannerAds';
 import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
 
 
@@ -55,7 +56,7 @@ const GroupChatScreen = () => {
   const navigation = useNavigation();
   const { groupId } = route.params || {};
 
-  const { user, theme, appdatabase, firestoreDB, isAdmin, isRTDBConnected } = useGlobalState();
+  const { user, theme, appdatabase, firestoreDB, isAdmin, isRTDBConnected, isUserBlocked, deviceBanInfo } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,8 +90,9 @@ const GroupChatScreen = () => {
 
   const { t } = useTranslation();
 
-  // ✅ Check if current user is banned
-  const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+  // ✅ Check if current user is banned — global gate covers email + device
+  const isMeBanned = isUserBlocked;
+  const myBanDetails = strikeInfo || deviceBanInfo;
 
   // ✅ Load strike/ban info from Firebase — paused when screen loses focus to prevent freeze
   useFocusEffect(
@@ -1204,6 +1206,8 @@ const GroupChatScreen = () => {
               onReaction={handleReaction}
             />
           )}
+
+          {!localState?.isPro && <BannerAdComponent />}
 
           <GroupMessageInput
             onSend={(text, image, fruits) => sendMessage(text, image, fruits, replyTo)}

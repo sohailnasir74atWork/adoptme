@@ -5,6 +5,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import { Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getDeviceFingerprint } from '../Helper/deviceFingerprint';
+import { getServerTime } from '../Helper/serverTime';
 
 // Initialize the database reference
 const database = getDatabase();
@@ -810,11 +811,12 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
 /**
  * Hook to check if a user is banned based on their email.
  * Listens to `banned_users_by_email` in real-time.
- * Uses lowercase email to avoid auth/DB casing mismatch.
+ *
+ * Server-time-validated so a user with a tampered device clock can't be
+ * shown as un-banned. See GlobelStats for the same pattern on the
+ * current-user listener — and `isUserBlocked` there for the canonical
+ * gate that ALSO checks device-bans.
  */
-// Subscribes to BOTH email-ban (banned_users_by_email/{email}) and device-ban
-// (banned_devices/{fp}) paths. Either being active reports `isBanned: true`.
-//
 export const useBanStatus = (email) => {
   const [isBanned, setIsBanned] = useState(false);
   const [banDetails, setBanDetails] = useState(null);
@@ -826,17 +828,58 @@ export const useBanStatus = (email) => {
         setBanDetails(null);
         return;
       }
-      const banRef = ref(getDatabase(), `banned_users_by_email/${encodeEmailForBan(email)}`);
-      const unsub = onValue(banRef, (snapshot) => {
-        const data = snapshot.exists() ? snapshot.val() : null;
-        const active = data && (
-          data.bannedUntil === 'permanent' ||
-          (typeof data.bannedUntil === 'number' && data.bannedUntil > Date.now())
-        );
-        setIsBanned(!!active);
-        setBanDetails(active ? data : null);
+
+      const db = getDatabase();
+      const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
+
+      let currentBan = null;
+      let expiryTimer = null;
+      let cancelled = false;
+
+      const evaluate = async () => {
+        if (cancelled) return;
+        if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
+
+        const data = currentBan;
+        if (!data) {
+          setIsBanned(false);
+          setBanDetails(null);
+          return;
+        }
+        if (data.bannedUntil === 'permanent') {
+          setIsBanned(true);
+          setBanDetails(data);
+          return;
+        }
+        if (typeof data.bannedUntil !== 'number') {
+          setIsBanned(false);
+          setBanDetails(null);
+          return;
+        }
+        const probeUid = getAuth()?.currentUser?.uid || encodeEmailForBan(email);
+        const serverNow = (await getServerTime(db, probeUid)).getTime();
+        if (cancelled) return;
+        const remaining = data.bannedUntil - serverNow;
+        if (remaining <= 0) {
+          setIsBanned(false);
+          setBanDetails(null);
+          return;
+        }
+        setIsBanned(true);
+        setBanDetails(data);
+        expiryTimer = setTimeout(evaluate, Math.min(remaining, 24 * 60 * 60 * 1000));
+      };
+
+      const unsubscribe = onValue(banRef, (snapshot) => {
+        currentBan = snapshot.exists() ? snapshot.val() : null;
+        evaluate();
       });
-      return () => unsub();
+
+      return () => {
+        cancelled = true;
+        if (expiryTimer) clearTimeout(expiryTimer);
+        unsubscribe();
+      };
     }, [email])
   );
 
@@ -868,7 +911,10 @@ export const checkBanStatus = async (email) => {
       };
     }
 
-    const now = Date.now();
+    // Compare against authoritative server time, not Date.now() — a
+    // tampered device clock would otherwise let a banned user slip past.
+    const probeUid = getAuth()?.currentUser?.uid || encodeEmailForBan(email);
+    const now = (await getServerTime(db, probeUid)).getTime();
     if (bannedUntil > now) {
       const diff = bannedUntil - now;
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));

@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
+import { useLocalState } from '../../LocalGlobelStats';
+import BannerAdComponent from '../../Ads/bannerAds';
 import { getThemeColors } from '../../Helper/themeColors';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
@@ -36,6 +38,7 @@ const LOAD_MORE = 10; // ✅ Load 10 more on scroll
 const InboxScreen = ({ bannedUsers }) => {
   const navigation = useNavigation();
   const { user, theme, appdatabase, firestoreDB } = useGlobalState();
+  const { localState } = useLocalState();
   const { t } = useTranslation();
   const [localLoading, setLocalLoading] = useState(false);
   const [localChats, setLocalChats] = useState([]);
@@ -493,6 +496,7 @@ const InboxScreen = ({ bannedUsers }) => {
           }
         />
       )}
+      {!localState.isPro && <BannerAdComponent />}
     </View>
   );
 };

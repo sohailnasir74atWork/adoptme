@@ -16,7 +16,6 @@ import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
-import { useBanStatus } from '../ChatScreen/utils';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { mixpanel } from '../AppHelper/MixPenel';
@@ -85,7 +84,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 
 const HomeScreen = ({ selectedTheme }) => {
   const navigation = useNavigation();
-  const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase } = useGlobalState();
+  const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
   const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -152,8 +151,9 @@ const HomeScreen = ({ selectedTheme }) => {
   }, []);
 
 
-  // ✅ Check ban status
-  const { isBanned, banDetails } = useBanStatus(user?.email);
+  // ✅ Check ban status — consumes the global gate so device-bans block too
+  const isBanned = isUserBlocked;
+  const banDetails = strikeInfo || deviceBanInfo;
 
   // ✅ Cleanup all timeouts and animation frames on unmount
   useEffect(() => {

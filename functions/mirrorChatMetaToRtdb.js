@@ -13,7 +13,7 @@
  *     compares it to the RTDB row; if all fields match, it skips
  *     (diff-based, no persistent marker). This naturally stops the
  *     Supabase → RTDB → Supabase ping-pong without leaving residue.
- *   - notifyNewMessageLegacy is patched to skip unread bumps from
+ *   - notifyNewMessageLegacy i;s patched to skip unread bumps from
  *     mirrored writes (otherwise NEW app sends would double-push:
  *     once via notifyNewMessage on the Supabase INSERT, once via
  *     notifyNewMessageLegacy on the mirrored RTDB unreadCount bump).

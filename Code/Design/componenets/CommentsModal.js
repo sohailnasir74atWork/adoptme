@@ -36,7 +36,6 @@ import { validateContent } from '../../Helper/ContentModeration';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
-import { useBanStatus } from '../../ChatScreen/utils';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 
 dayjs.extend(relativeTime);
@@ -52,14 +51,15 @@ const CommentModal = ({ visible, onClose, postId }) => {
   const [lastDoc, setLastDoc] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null); // { id, displayName }
   const inputRef = useRef(null);
-  const { user, theme, firestoreDB } = useGlobalState();
+  const { user, theme, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const { localState } = useLocalState();
   const navigation = useNavigation();
   const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
 
-  // ✅ Check if current user is banned
-  const { isBanned: isMeBanned, banDetails: myBanDetails } = useBanStatus(user?.email);
+  // ✅ Check if current user is banned — global gate covers email + device
+  const isMeBanned = isUserBlocked;
+  const myBanDetails = strikeInfo || deviceBanInfo;
 
   // ── Fetch initial comments (paginated) ──
   const fetchComments = useCallback(async () => {

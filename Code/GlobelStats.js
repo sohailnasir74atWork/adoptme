@@ -12,6 +12,7 @@ import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute } from '@react-native-firebase/crashlytics';
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
+import { getServerTime } from './Helper/serverTime';
 
 
 
@@ -66,6 +67,20 @@ export const GlobalStateProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(false);
   const [isRTDBConnected, setIsRTDBConnected] = useState(true); // optimistic — avoids blocking sends before first Firebase handshake
+
+  // Ban state — email-keyed and device-keyed are tracked separately so a
+  // banned user can't escape by re-registering with a fresh email on the
+  // same device. `isUserBlocked` is the OR of both — gates should read it
+  // instead of either flag in isolation.
+  const [_isEmailBanned, setIsEmailBanned] = useState(false);
+  const [_isDeviceBanned, setIsDeviceBanned] = useState(false);
+  const isUserBlocked = _isEmailBanned || _isDeviceBanned;
+  const [strikeInfo, setStrikeInfo] = useState(null);
+  // Full payload from `banned_devices/{fp}` when this device is flagged.
+  // Carries the email + userId of the ORIGINAL banned account so the
+  // ban-card UI can show "your associated account is banned" copy.
+  const [deviceBanInfo, setDeviceBanInfo] = useState(null);
+
   // const [robloxUsername, setRobloxUsername] = useState('');
   const robloxUsernameRef = useRef('');
 
@@ -611,6 +626,158 @@ export const GlobalStateProvider = ({ children }) => {
     return () => unsub();
   }, [appdatabase]);
 
+  // Email-side ban listener — server-time-validated so a banned user can't
+  // roll their device clock backward to bypass the gate. `bannedUntil` is
+  // compared against authoritative server time (getServerTime probe), and a
+  // setTimeout (monotonic, immune to wall-clock changes) auto-clears when
+  // the ban actually expires. AppState 'active' triggers a re-probe so a
+  // user who changes the clock while backgrounded still gets re-evaluated.
+  useEffect(() => {
+    if (!currentUserEmail || !appdatabase) {
+      setIsEmailBanned(false);
+      setStrikeInfo(null);
+      return;
+    }
+
+    const encodedEmail = currentUserEmail.replace(/\./g, '(dot)');
+    const banRef = ref(appdatabase, `banned_users_by_email/${encodedEmail}`);
+
+    let currentBan = null;
+    let expiryTimer = null;
+    let cancelled = false;
+
+    const evaluate = async () => {
+      if (cancelled) return;
+      const banData = currentBan;
+      if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
+
+      if (!banData) {
+        setIsEmailBanned(false);
+        return;
+      }
+      const { bannedUntil } = banData;
+      if (bannedUntil === 'permanent') {
+        setIsEmailBanned(true);
+        return;
+      }
+      if (typeof bannedUntil !== 'number') {
+        setIsEmailBanned(false);
+        return;
+      }
+
+      const probeUid = user?.id || currentUserEmail;
+      const serverNow = (await getServerTime(appdatabase, probeUid)).getTime();
+      if (cancelled) return;
+      const remaining = bannedUntil - serverNow;
+      if (remaining <= 0) {
+        setIsEmailBanned(false);
+        return;
+      }
+      setIsEmailBanned(true);
+      // Cap the timer at ~24h so long bans don't sit on a stale offset.
+      const wait = Math.min(remaining, 24 * 60 * 60 * 1000);
+      expiryTimer = setTimeout(evaluate, wait);
+    };
+
+    const unsubscribe = onValue(banRef, (snapshot) => {
+      const banData = snapshot.val();
+      currentBan = banData || null;
+      setStrikeInfo(currentBan);
+      evaluate();
+    });
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') evaluate();
+    });
+
+    return () => {
+      cancelled = true;
+      if (expiryTimer) clearTimeout(expiryTimer);
+      appStateSub.remove();
+      unsubscribe();
+    };
+  }, [currentUserEmail, appdatabase, user?.id]);
+
+  // Device-side ban listener. Closes the "ban the email, sign up with a
+  // fresh one on the same device" bypass. banned_devices entries are
+  // written by banUserwithEmail / setUserStrike when a user is banned,
+  // and removed by unbanUserWithEmail. Server-time-validated for the
+  // same reason as the email listener above.
+  useEffect(() => {
+    if (!appdatabase) {
+      setIsDeviceBanned(false);
+      return;
+    }
+
+    let unsub = null;
+    let cancelled = false;
+    let currentBan = null;
+    let expiryTimer = null;
+    let appStateSub = null;
+
+    const evaluate = async () => {
+      if (cancelled) return;
+      const data = currentBan;
+      if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
+
+      if (!data) {
+        setIsDeviceBanned(false);
+        setDeviceBanInfo(null);
+        return;
+      }
+      const { bannedUntil } = data;
+      if (bannedUntil === 'permanent') {
+        setIsDeviceBanned(true);
+        setDeviceBanInfo(data);
+        return;
+      }
+      if (typeof bannedUntil !== 'number') {
+        setIsDeviceBanned(false);
+        setDeviceBanInfo(null);
+        return;
+      }
+      const probeUid = user?.id || data?.userId || 'anon';
+      const serverNow = (await getServerTime(appdatabase, probeUid)).getTime();
+      if (cancelled) return;
+      const remaining = bannedUntil - serverNow;
+      if (remaining <= 0) {
+        setIsDeviceBanned(false);
+        setDeviceBanInfo(null);
+        return;
+      }
+      setIsDeviceBanned(true);
+      setDeviceBanInfo(data);
+      const wait = Math.min(remaining, 24 * 60 * 60 * 1000);
+      expiryTimer = setTimeout(evaluate, wait);
+    };
+
+    getDeviceFingerprint().then((fp) => {
+      if (cancelled || !fp) {
+        setIsDeviceBanned(false);
+        setDeviceBanInfo(null);
+        return;
+      }
+      const deviceBanRef = ref(appdatabase, `banned_devices/${fp}`);
+      unsub = onValue(deviceBanRef, (snapshot) => {
+        currentBan = snapshot.val() || null;
+        evaluate();
+      });
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') evaluate();
+      });
+    }).catch(() => {
+      setIsDeviceBanned(false);
+      setDeviceBanInfo(null);
+    });
+
+    return () => {
+      cancelled = true;
+      if (expiryTimer) clearTimeout(expiryTimer);
+      if (appStateSub) appStateSub.remove();
+      if (unsub) unsub();
+    };
+  }, [appdatabase, user?.id]);
+
   // ✅ Set up online status tracking using separate presence node (RTDB-only, optimized for scale)
   // ✅ Foreground-only presence (ACTIVE = online, background/inactive = offline)
   // ✅ Uses presence/{uid} instead of users/{uid}/online for better scalability
@@ -783,8 +950,11 @@ export const GlobalStateProvider = ({ children }) => {
       acceptedInviteRoom, // ✅ Accepted invite from toast
       setAcceptedInviteRoom, // ✅ Set accepted invite
       isRTDBConnected, // ✅ Firebase RTDB WebSocket connection state
+      strikeInfo, // ban payload from banned_users_by_email — used for displaying ban reason/duration
+      deviceBanInfo, // device-side ban payload — carries originating email/userId
+      isUserBlocked, // canonical gate: email-ban OR device-ban
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked]
   );
 
   return (

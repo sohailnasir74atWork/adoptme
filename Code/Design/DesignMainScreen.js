@@ -42,7 +42,6 @@ import { showMessage } from 'react-native-flash-message';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
-import { useBanStatus } from '../ChatScreen/utils';
 import PollCard from '../Trades/PollCard';
 import { awardBadge, incrementAndCheckBadge, REACTION_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
 
@@ -50,14 +49,14 @@ import { awardBadge, incrementAndCheckBadge, REACTION_BADGE_THRESHOLDS } from '.
 
 const DesignFeedScreen = ({ route }) => {
   const { selectedTheme } = route.params;
-  const { appdatabase, user, theme, firestoreDB } = useGlobalState();
+  const { appdatabase, user, theme, firestoreDB, isUserBlocked } = useGlobalState();
   const { localState } = useLocalState();
   const isDarkMode = theme === 'dark';
   const navigation = useNavigation();
   const { t } = useTranslation();
 
-  // ✅ Check if current user is banned
-  const { isBanned: isMeBanned } = useBanStatus(user?.email);
+  // ✅ Check if current user is banned — global gate covers email + device
+  const isMeBanned = isUserBlocked;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSigninDrawerVisible, setSigninDrawerVisible] = useState(false);

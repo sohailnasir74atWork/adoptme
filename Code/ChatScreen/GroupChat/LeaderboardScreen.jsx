@@ -23,6 +23,7 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import ProfileBottomDrawer from './BottomDrawer';
+import BannerAdComponent from '../../Ads/bannerAds';
 
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days — Top Picks
 const ROSTER_CACHE_MS = 4 * 60 * 60 * 1000;        // 4 hours — Trusted / CMSR
@@ -474,6 +475,8 @@ const LeaderboardScreen = () => {
             Last updated: {new Date(localState.leaderboardTop50.lastFetched).toLocaleDateString()}
           </Text>
         )}
+
+        {!localState.isPro && <BannerAdComponent />}
       </View>
 
       <ProfileBottomDrawer

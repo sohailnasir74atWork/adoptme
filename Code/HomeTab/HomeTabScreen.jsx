@@ -11,7 +11,6 @@ import { useLocalState } from '../LocalGlobelStats';
 import { doc, getDoc, collection, query, where, getDocs, limit } from '@react-native-firebase/firestore';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
-import { useBanStatus } from '../ChatScreen/utils';
 import { setAppLanguage, loadLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
@@ -30,6 +29,7 @@ import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
 import SafeLottieView from '../Helper/SafeLottieView';
+import BannerAdComponent from '../Ads/bannerAds';
 
 // Lottie files for XP levels
 const LEVEL_LOTTIE = {
@@ -67,7 +67,7 @@ const formatPlain = (v) => {
 };
 
 const HomeTabScreen = ({ selectedTheme }) => {
-  const { theme, user, tradingServerLink, appdatabase, firestoreDB } = useGlobalState();
+  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const { localState } = useLocalState();
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
@@ -92,8 +92,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
   const [ownedPets, setOwnedPets] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
-  // ✅ Ban status — shows ban card if user is actively banned
-  const { isBanned, banDetails } = useBanStatus(user?.email);
+  // ✅ Ban status — consumes the global gate so device-bans block too
+  const isBanned = isUserBlocked;
+  const banDetails = strikeInfo || deviceBanInfo;
 
   // Helper: require sign-in before performing action
   const requireSignIn = (action, message) => {
@@ -420,69 +421,110 @@ const HomeTabScreen = ({ selectedTheme }) => {
         {/* ── Page content with background ── */}
         <View style={{ backgroundColor: selectedTheme.colors.background }}>
 
-          {/* ═══ BAN STATUS CARD (only visible when actively banned) ═══ */}
-          {isBanned && banDetails && (
-            <View style={{
-              marginHorizontal: 16,
-              marginTop: 14,
-              marginBottom: 4,
-              borderRadius: 16,
-              overflow: 'hidden',
-              borderWidth: 1.5,
-              borderColor: isDarkMode ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)',
-            }}>
-              {/* Red gradient header */}
+          {/* ═══ BAN STATUS CARD ═══
+              Three scenarios this card has to handle (ported from Blox Fruit):
+                1. Direct account ban — strikeInfo populated (email-keyed)
+                   → "Account Banned" copy
+                2. Associated-device ban — only deviceBanInfo populated
+                   (a different account on this device was banned)
+                   → "Device Restricted" copy + surfaces the originating
+                     email so the user understands why a fresh signup
+                     didn't restore access.
+                3. Both — direct ban wins (it's the primary signal).
+          */}
+          {isBanned && (strikeInfo || deviceBanInfo) && (() => {
+            const info = strikeInfo || deviceBanInfo;
+            const isAssociatedBan = !strikeInfo && !!deviceBanInfo;
+            const associatedEmail = deviceBanInfo?.email || null;
+            const isPermanent = info.bannedUntil === 'permanent';
+            return (
               <View style={{
-                backgroundColor: isDarkMode ? 'rgba(239,68,68,0.15)' : '#FEF2F2',
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
+                marginHorizontal: 16,
+                marginTop: 14,
+                marginBottom: 4,
+                borderRadius: 16,
+                overflow: 'hidden',
+                borderWidth: 1.5,
+                borderColor: isDarkMode ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)',
               }}>
+                {/* Red header */}
                 <View style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: isDarkMode ? 'rgba(239,68,68,0.25)' : '#FEE2E2',
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Ionicons name="ban" size={18} color="#EF4444" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF4444' }}>
-                    ⚠️ Account {banDetails.bannedUntil === 'permanent' ? 'Permanently Banned' : 'Temporarily Restricted'}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: isDarkMode ? '#f87171' : '#DC2626', marginTop: 2 }}>
-                    Strike {banDetails.strikeCount || 1} • {
-                      banDetails.bannedUntil === 'permanent'
-                        ? 'Permanent'
-                        : (() => {
-                          const diff = (banDetails.bannedUntil || 0) - Date.now();
-                          if (diff <= 0) return 'Expired';
-                          const hrs = Math.floor(diff / (1000 * 60 * 60));
-                          const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                          if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h remaining`;
-                          if (hrs > 0) return `${hrs}h ${mins}m remaining`;
-                          return `${mins}m remaining`;
-                        })()
-                    }
-                  </Text>
-                </View>
-              </View>
-              {/* Reason body */}
-              {banDetails.reason && (
-                <View style={{
-                  paddingHorizontal: 16,
+                  backgroundColor: isDarkMode ? 'rgba(239,68,68,0.15)' : '#FEF2F2',
                   paddingVertical: 12,
-                  backgroundColor: isDarkMode ? 'rgba(239,68,68,0.06)' : '#FFFBFB',
+                  paddingHorizontal: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
                 }}>
-                  <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Reason</Text>
-                  <Text style={{ fontSize: 13, color: isDarkMode ? '#e5e5e5' : '#374151', lineHeight: 18 }}>
-                    {banDetails.reason}
-                  </Text>
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    backgroundColor: isDarkMode ? 'rgba(239,68,68,0.25)' : '#FEE2E2',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Ionicons name={isAssociatedBan ? 'phone-portrait' : 'ban'} size={18} color="#EF4444" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF4444' }}>
+                      ⚠️ {isAssociatedBan
+                        ? (isPermanent ? 'Device Permanently Restricted' : 'Device Temporarily Restricted')
+                        : (isPermanent ? 'Account Permanently Banned' : 'Account Temporarily Restricted')}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: isDarkMode ? '#f87171' : '#DC2626', marginTop: 2 }}>
+                      Strike {info.strikeCount || 1} • {
+                        isPermanent
+                          ? 'Permanent'
+                          : (() => {
+                            const diff = (info.bannedUntil || 0) - Date.now();
+                            if (diff <= 0) return 'Expired';
+                            const hrs = Math.floor(diff / (1000 * 60 * 60));
+                            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                            if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h remaining`;
+                            if (hrs > 0) return `${hrs}h ${mins}m remaining`;
+                            return `${mins}m remaining`;
+                          })()
+                      }
+                    </Text>
+                  </View>
                 </View>
-              )}
-            </View>
-          )}
+
+                {/* Why-you're-seeing-this — associated-device ban only */}
+                {isAssociatedBan && (
+                  <View style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    backgroundColor: isDarkMode ? 'rgba(239,68,68,0.06)' : '#FFFBFB',
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#FCE4E4',
+                  }}>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
+                      Why you are seeing this
+                    </Text>
+                    <Text style={{ fontSize: 13, color: isDarkMode ? '#e5e5e5' : '#374151', lineHeight: 18 }}>
+                      {associatedEmail
+                        ? `This device is linked to a banned account (${associatedEmail}). Signing in with a different email won't restore access.`
+                        : "This device is linked to a banned account. Signing in with a different email won't restore access."}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Reason body */}
+                {info.reason && (
+                  <View style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    backgroundColor: isDarkMode ? 'rgba(239,68,68,0.06)' : '#FFFBFB',
+                    borderTopWidth: isAssociatedBan ? StyleSheet.hairlineWidth : 0,
+                    borderTopColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#FCE4E4',
+                  }}>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ fontSize: 13, color: isDarkMode ? '#e5e5e5' : '#374151', lineHeight: 18 }}>
+                      {info.reason}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {/* ═══ SECTION 2: Quick Actions Row ═══ */}
           <View style={styles.quickActionsRow}>
@@ -725,6 +767,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
         </View>
       </ScrollView>
+
+      {/* ═══ Sticky Banner Ad (outside ScrollView) ═══ */}
+      {!localState.isPro && <BannerAdComponent />}
 
 
 

@@ -36,6 +36,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import BannerAdComponent from '../Ads/bannerAds';
 dayjs.extend(relativeTime);
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -2411,7 +2412,12 @@ const TradeJournal = ({
           </>
         )}
 
-
+        {/* Sticky Banner Ad (outside tab content) — pad bottom for system nav */}
+        {!localState?.isPro && (
+          <View style={{ paddingBottom: insets.bottom }}>
+            <BannerAdComponent />
+          </View>
+        )}
       </View>
 
       {/* Acceptors List — absolute overlay (avoids iOS nested Modal issues) */}

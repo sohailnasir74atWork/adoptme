@@ -1149,7 +1149,7 @@ const ProfileBottomDrawer = ({
       const success = await setUserStrike(
         actionEmail,
         strikeCount,
-        currentUser?.uid,
+        selectedUserId,
         true,
         bannerInfo,
         mergedUser,

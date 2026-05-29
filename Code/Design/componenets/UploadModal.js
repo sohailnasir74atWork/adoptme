@@ -23,7 +23,6 @@ import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { showMessage } from 'react-native-flash-message';
 import RNFS from 'react-native-fs';
 import { validateContent } from '../../Helper/ContentModeration';
-import { checkBanStatus } from '../../ChatScreen/utils';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 
@@ -42,7 +41,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
   const [imageUris, setImageUris] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedTags, setSelectedTags] = useState(['Discussion']);
-  const { currentUserEmail, appdatabase } = useGlobalState();
+  const { currentUserEmail, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const { theme } = useGlobalState();
   const isDark = theme === 'dark';
   const { localState } = useLocalState()
@@ -224,10 +223,15 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
       return;
     }
 
-    // 🔒 Check Ban Status
-    const banStatus = await checkBanStatus(currentUserEmail);
-    if (banStatus.isBanned) {
-      Alert.alert('Banned', banStatus.message);
+    // 🔒 Check Ban Status — reads global gate (email-ban OR device-ban),
+    // already validated against server time by GlobelStats listeners.
+    if (isUserBlocked) {
+      const info = strikeInfo || deviceBanInfo;
+      const strikeLabel = info?.strikeCount ? ` (Strike ${info.strikeCount})` : '';
+      const message = info?.bannedUntil === 'permanent'
+        ? `You are permanently banned${strikeLabel}.`
+        : `You are temporarily banned${strikeLabel}.`;
+      Alert.alert('Banned', message);
       return;
     }
 
