@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { mixpanel } from './AppHelper/MixPenel';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
+import { serverNowMs } from './Helper/serverTime';
 
 let storage;
 try {
@@ -153,7 +154,9 @@ export const LocalStateProvider = ({ children }) => {
     }
   }, []); // ✅ Empty deps - function is stable, doesn't depend on any props/state
   const canTranslate = useCallback(() => {
-    const today = new Date().toDateString();
+    // Server-time day key (warmed at app start) so moving the device clock
+    // forward can't reset the daily free-translation quota.
+    const today = new Date(serverNowMs()).toDateString();
     const { count, date } = localState.translationUsage || { count: 0, date: today };
 
     if (date !== today) {
@@ -174,7 +177,7 @@ export const LocalStateProvider = ({ children }) => {
   }, [localState.showAd1, updateLocalState]);
 
   const incrementTranslationCount = useCallback(() => {
-    const today = new Date().toDateString();
+    const today = new Date(serverNowMs()).toDateString();
     const { count, date } = localState.translationUsage || { count: 0, date: today };
 
     const updatedUsage = {

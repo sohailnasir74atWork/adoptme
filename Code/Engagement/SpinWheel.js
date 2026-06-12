@@ -27,9 +27,10 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
-import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
+import { getServerTime } from '../Helper/serverTime';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.floor(Math.min(SCREEN_WIDTH - 40, 320) / 2) * 2;
@@ -51,10 +52,12 @@ const REWARDS = [
   { label: '+20 XP',  xp: 20,  emoji: '🚀', color: '#84CC16' },
 ];
 
-const isSameDay = (timestamp) => {
-  if (!timestamp) return false;
+// `now` is an authoritative server-time Date (see getServerTime) so a user
+// can't roll their device clock to fake a new day. Day boundary is the
+// device's local calendar day on top of the server epoch.
+const isSameDay = (timestamp, now) => {
+  if (!timestamp || !now) return false;
   const d = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-  const now = new Date();
   return d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
@@ -102,13 +105,14 @@ const SpinWheel = ({ visible, onClose }) => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
         const data = snap.exists() ? snap.data() : {};
-        setHasSpunToday(isSameDay(data.lastSpinAt));
+        const serverNow = await getServerTime(db, uid);
+        setHasSpunToday(isSameDay(data.lastSpinAt, serverNow));
         setTotalSpins(data.totalSpins || 0);
-        setHasWatchedAd(isSameDay(data.lastSpinAdAt)); // persist ad limit per day
+        setHasWatchedAd(isSameDay(data.lastSpinAdAt, serverNow)); // persist ad limit per day
         setReward(null);
       } catch {}
     })();
-  }, [visible, firestoreDB, uid]);
+  }, [visible, firestoreDB, db, uid]);
 
   const createSlicePath = (startAngle, endAngle) => {
     const s = { x: CENTER + RADIUS * Math.cos((startAngle * Math.PI) / 180), y: CENTER + RADIUS * Math.sin((startAngle * Math.PI) / 180) };
@@ -128,9 +132,10 @@ const SpinWheel = ({ visible, onClose }) => {
       setHasSpunToday(false);
       setReward(null);
       setHasWatchedAd(true);
-      // Persist to Firestore
+      // Persist to Firestore — serverTimestamp so the stored time is
+      // server-authoritative, not the device clock.
       if (firestoreDB && uid) {
-        setDoc(doc(firestoreDB, 'games', uid), { lastSpinAdAt: new Date() }, { merge: true }).catch(() => {});
+        setDoc(doc(firestoreDB, 'games', uid), { lastSpinAdAt: serverTimestamp() }, { merge: true }).catch(() => {});
       }
     }
   }, [adLoading]);
@@ -179,7 +184,7 @@ const SpinWheel = ({ visible, onClose }) => {
       // Save to Firestore + award XP
       try {
         await setDoc(doc(firestoreDB, 'games', uid), {
-          lastSpinAt: new Date(),
+          lastSpinAt: serverTimestamp(),
           totalSpins: (totalSpins || 0) + 1,
         }, { merge: true });
         if (db) await addXP(db, uid, won.xp);

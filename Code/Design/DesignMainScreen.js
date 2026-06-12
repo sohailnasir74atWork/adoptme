@@ -37,8 +37,8 @@ import SignInDrawer from '../Firebase/SigninDrawer';
 import config from '../Helper/Environment';
 import { Platform } from 'react-native';
 import { showMessage } from 'react-native-flash-message';
-// import { nativeAdPool } from '../Ads/NativeAdPool';
-// import SingleNativeAd from '../Ads/SingleNative';
+import NativeAdCard from '../Ads/NativeAdCard';
+import { releaseByPrefix as releaseNativeAds } from '../Ads/NativeAdManager';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
@@ -267,10 +267,11 @@ const DesignFeedScreen = ({ route }) => {
     return ids;
   }, [firestoreDB]);
 
-  // useEffect(() => {
-  //   nativeAdPool.fillIfNeeded();
-  //   return () => nativeAdPool.destroyAll();
-  // }, []);
+  // Free this feed's cached native ad handles when it unmounts (keys are
+  // `ad-*`; trades use `trade-ad-*` so the two never clobber each other).
+  useEffect(() => {
+    return () => releaseNativeAds('ad-');
+  }, []);
 
 
   const fetchPostsByTag = async (tag) => {
@@ -687,6 +688,10 @@ const DesignFeedScreen = ({ route }) => {
       return <View style={[styles.skeletonPost, isDarkMode && { backgroundColor: '#444' }]} />;
     }
 
+    if (item?.__type === 'ad') {
+      return <NativeAdCard adKey={item.id} isDarkMode={isDarkMode} />;
+    }
+
     return (
       <PostCard
         item={item}
@@ -724,7 +729,7 @@ const DesignFeedScreen = ({ route }) => {
 
   const dataToRender = initialLoading
     ? skeletonArray
-    : interleaveAds(filteredBase, false);
+    : interleaveAds(filteredBase, !localState?.isPro);
 
   const keyExtractor = (item, index) =>
     // initialLoading ? `skeleton-${index}` : item?.id || `post-${index}`;

@@ -15,8 +15,9 @@ import ImageViewerScreenChat from './PrivateChat/ImageViewer';
 import CommunityChatHeader from './GroupChat/CommunityChatHeader';
 import AdminDashboard from '../AppHelper/AdminDashboard';
 import { useTranslation } from 'react-i18next';
-import { subscribeToChatMeta, resetUnreadCount } from '../Supabase/chatMetaBackend';
-import { subscribeToGroupMeta } from '../Supabase/groupMetaBackend';
+import { subscribeToChatMetaShared, resetUnreadCount } from '../Supabase/chatMetaBackend';
+import { subscribeToGroupMetaShared } from '../Supabase/groupMetaBackend';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +35,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const unreadDebounceRef = useRef(null);
   const groupDebounceRef = useRef(null);
   const isInChildScreenRef = useRef(false); // Track if user is in a child screen (chat, inbox, etc.)
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -48,9 +50,13 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
     headerBackTitleVisible: false,
+    // Reliable status-bar inset — the public chat's header icons (headerRight =
+    // CommunityChatHeader) drew under the status bar on edge-to-edge devices
+    // because the native-stack default inset detection returned 0 there.
+    headerStatusBarHeight: insets.top,
     animation: 'fade',
     animationDuration: 200,
-  }), [selectedTheme]);
+  }), [selectedTheme, insets.top]);
 
 
   // Phase 5 clean-cut: chat_meta_data is Supabase-only for new app
@@ -104,7 +110,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       recalcUnread();
     };
 
-    const unsubscribe = subscribeToChatMeta(user.id, {
+    const unsubscribe = subscribeToChatMetaShared(user.id, {
       onUpsert: handleUpsert,
       onRemove: handleRemove,
     });
@@ -164,7 +170,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       recalcAndSetState();
     };
 
-    const unsubscribe = subscribeToGroupMeta(user.id, {
+    const unsubscribe = subscribeToGroupMetaShared(user.id, {
       onUpsert: handleUpsert,
       onRemove: handleRemove,
       // Initial load + first SUBSCRIBED both landed → safe to drop the

@@ -14,7 +14,7 @@ import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { clearActiveChat, useOnlineStatus, setActiveChat, updateLastRead, useOtherLastRead } from '../utils';
+import { clearActiveChat, useOnlineStatus, setActiveChat, updateLastRead, flushLastRead, useOtherLastRead } from '../utils';
 import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
 import {
   loadPrivateMessages,
@@ -50,6 +50,10 @@ import { updateStreak } from '../../Helper/StreakHelper';
 
 const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
+// Cap the live in-memory list so a long session can't grow it unbounded
+// (every insert re-sorts the whole array → JS-thread freeze over time).
+// Scrolling past this re-fetches older pages from Supabase.
+const MAX_LIVE = 150;
 
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
@@ -87,6 +91,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   // ✅ Cost opt: write receiverName/receiverAvatar into chat_meta_data only once per session
   const metaIdentityWrittenRef = useRef(new Set());
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
+  // Set true when a partner message lands while this chat is focused. The
+  // sender's send_private_chat_meta bumps our unread_count server-side even
+  // though we're reading the message live, so we reset once on blur — but
+  // only if something actually arrived, to avoid a wasted write per visit.
+  const unreadWhileFocusedRef = useRef(false);
 
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);
@@ -759,9 +768,20 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // ✅ Reset refs when entering chat (for exit ad logic)
       hasSentMessageRef.current = 0;
       chatEnterTimeRef.current = Date.now();
+      unreadWhileFocusedRef.current = false;
 
       return () => {
         clearActiveChat(user.id);
+        // Land any debounced read receipt now instead of waiting out the window.
+        flushLastRead(selectedUserId);
+        // Phantom-badge fix: messages received while we were viewing bumped
+        // our unread_count server-side. Clear it once on blur, but only if a
+        // partner message actually arrived — keeps this to ~1 extra write per
+        // visit (and zero for quiet visits).
+        if (unreadWhileFocusedRef.current) {
+          unreadWhileFocusedRef.current = false;
+          resetUnreadCount(user.id, selectedUserId); // fire-and-forget
+        }
       };
     }, [user?.id, selectedUserId, chatKey, localState?.isPro, localState?.showReadReceipts])
   );
@@ -794,12 +814,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
           // Update lastRead when a partner message arrives while we're viewing.
           // Gated on the read-receipts toggle so a recipient with read
           // receipts off doesn't accidentally signal a blue tick.
-          if (
-            newMessage.senderId &&
-            newMessage.senderId !== myUserId &&
-            localState?.showReadReceipts !== false
-          ) {
-            updateLastRead(selectedUserId);
+          if (newMessage.senderId && newMessage.senderId !== myUserId) {
+            // Mark that our unread_count was bumped while focused so the
+            // blur cleanup clears it (see useFocusEffect above).
+            unreadWhileFocusedRef.current = true;
+            if (localState?.showReadReceipts !== false) {
+              updateLastRead(selectedUserId);
+            }
           }
 
           setMessages(prev => {
@@ -811,7 +832,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
             );
             if (exists) return prev;
             // Keep DESCENDING (newest first for inverted FlatList).
-            return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            const sorted = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            // Cap the live list (newest-first, so trim the oldest tail).
+            return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
           });
         },
         onUpdate: (updated) => {

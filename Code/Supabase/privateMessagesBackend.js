@@ -21,6 +21,12 @@ import { uuidv4 } from './uuid';
 
 const PAGE_SIZE_DEFAULT = 15;
 
+// Egress: only the columns fromPrivateMessageRow maps. Skips updated_at /
+// deleted_at / deleted_by on every paginated history fetch.
+const PRIVATE_MSG_COLS =
+  'id,client_msg_id,chat_id,sender_id,recipient_id,text,image_url,image_urls,' +
+  'fruits,reply_to,os,deleted,report_count,created_at';
+
 // Canonical chat id used by both RTDB and the Supabase chat_id column.
 // Sort the two UIDs alphabetically and join with an underscore.
 export function chatIdForPair(uidA, uidB) {
@@ -86,7 +92,7 @@ export async function loadPrivateMessages(chatId, { limit = PAGE_SIZE_DEFAULT, b
   if (!chatId) return [];
   let q = supabase
     .from('private_messages')
-    .select('*')
+    .select(PRIVATE_MSG_COLS)
     .eq('chat_id', chatId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })
@@ -116,7 +122,7 @@ export async function loadPrivateMessagesSince(chatId, since = null, { limit = 2
   if (!chatId) return [];
   let q = supabase
     .from('private_messages')
-    .select('*')
+    .select(PRIVATE_MSG_COLS)
     .eq('chat_id', chatId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })

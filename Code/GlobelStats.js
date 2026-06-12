@@ -4,7 +4,7 @@ import { getAuth, onAuthStateChanged, signOut } from '@react-native-firebase/aut
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
-import { getBlocks, getRoblox, setLastActivity } from './Supabase/userBackend';
+import { getBlocks, getRoblox, getIdentity, getRoles, getCosmetics, setLastActivity } from './Supabase/userBackend';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, AppState, Appearance } from 'react-native';
@@ -12,7 +12,7 @@ import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute } from '@react-native-firebase/crashlytics';
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
-import { getServerTime } from './Helper/serverTime';
+import { getServerTime, warmServerTime } from './Helper/serverTime';
 
 
 
@@ -241,13 +241,21 @@ export const GlobalStateProvider = ({ children }) => {
       const userId = loggedInUser.uid;
       const userRef = ref(appdatabase, `users/${userId}`);
 
-      // Project only the leaf fields that user state actually consumes.
-      // Skips shop/*, posts, blocked_users, levelRewards, dailyStars, fcmToken,
-      // notifications, etc. — these can be lazy-loaded via getOrFetchProfile or
-      // getOrFetchFullProfile. Single fat read of /users/{uid} used to scale with
-      // user data growth, slowing every cold start.
-      // robloxUsername/robloxUserId/robloxUsernameVerified fetched from Supabase
-      // user_roblox below — removed from PROJECTION to save 3 RTDB reads.
+      // ── RTDB-read reduction (login is the #1 RTDB read source) ─────────
+      // This used to fan out into ~21 individual RTDB leaf reads
+      // (users/{uid}/email, /displayName, /admin, …) on every login. Most of
+      // those fields are now mirrored into Supabase (user_identity /
+      // user_roles / user_cosmetics / user_roblox), so we read them there and
+      // only hit RTDB for the handful of leaves not yet mirrored.
+      //
+      // RTDB stays the source of truth — every write path is unchanged and the
+      // mirror CF keeps Supabase fresh. If the Supabase identity row is missing
+      // (brand-new user, mirror lag, or a not-yet-authed Supabase session) we
+      // fall back to the original full RTDB projection, so behaviour is
+      // identical in every edge case; we only skip the RTDB reads on the common
+      // path where the mirror already has the row. A partial mirror (identity
+      // present but roles/cosmetics missing) selectively re-reads just those
+      // leaves from RTDB so isPro / role flags can never be transiently lost.
       const PROJECTION = [
         'email', 'decodedEmail', 'createdAt',
         'displayName', 'avatar', 'userName',
@@ -255,13 +263,83 @@ export const GlobalStateProvider = ({ children }) => {
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
         'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
       ];
-      // Fetch RTDB projection + Supabase roblox in parallel.
-      const [fieldSnaps, xpSnap, robloxRow] = await Promise.all([
-        Promise.all(PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)))),
-        get(ref(appdatabase, `users/${userId}/xp`)),
+      // Leaves not yet mirrored to Supabase — still authoritative on RTDB.
+      // `flage` stays here too: the mirror renames it to `flag`, so reading the
+      // original leaf keeps country flags exactly correct.
+      const RTDB_ONLY = ['userName', 'flage', 'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying'];
+
+      const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap] = await Promise.all([
+        getIdentity(userId).catch(() => null),
+        getRoles(userId).catch(() => null),
+        getCosmetics(userId).catch(() => null),
         getRoblox(userId).catch(() => null),
+        Promise.all(RTDB_ONLY.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)).catch(() => null))),
+        get(ref(appdatabase, `users/${userId}/xp`)).catch(() => null),
       ]);
-      const exists = fieldSnaps.some((s) => s.exists()) || xpSnap.exists();
+
+      const xpVal = xpSnap && xpSnap.exists() ? xpSnap.val() : undefined;
+      const rtdbOnly = {};
+      RTDB_ONLY.forEach((f, i) => {
+        const s = rtdbOnlySnaps[i];
+        if (s && s.exists()) rtdbOnly[f] = s.val();
+      });
+
+      let existing = null;
+      if (identityRow) {
+        // Map mirrored Supabase rows back onto the RTDB leaf names the rest of
+        // this function (and the app) consume. Only present keys are set,
+        // matching how the old per-snapshot rebuild behaved.
+        existing = { ...rtdbOnly };
+        if (identityRow.email != null)             existing.email = identityRow.email;
+        if (identityRow.decodedEmail != null)      existing.decodedEmail = identityRow.decodedEmail;
+        if (identityRow.createdAt != null)         existing.createdAt = identityRow.createdAt;
+        if (identityRow.displayName != null)       existing.displayName = identityRow.displayName;
+        if (identityRow.avatar != null)            existing.avatar = identityRow.avatar;
+        if (identityRow.dateOfBirth != null)       existing.dateOfBirth = identityRow.dateOfBirth;
+        if (identityRow.lastProfileEditAt != null) existing.lastProfileEditAt = identityRow.lastProfileEditAt;
+        if (cosmeticsRow) {
+          existing.isPro = cosmeticsRow.isPro;
+          if (cosmeticsRow.topBadge != null) existing.topBadge = cosmeticsRow.topBadge;
+        }
+        if (rolesRow) {
+          existing.admin = rolesRow.isAdmin;
+          existing.isModerator = rolesRow.isModerator;
+          existing.isBabyMod = rolesRow.isBabyMod;
+          existing.isTrusted = rolesRow.isTrusted;
+          existing.isCMSR = rolesRow.isCMSR;
+          existing.isHelper = rolesRow.isHelper;
+        }
+        // Selective RTDB fallback for any table the mirror hasn't filled yet.
+        const missing = [];
+        if (!cosmeticsRow) missing.push('isPro', 'topBadge');
+        if (!rolesRow) missing.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper');
+        if (missing.length) {
+          const snaps = await Promise.all(
+            missing.map((p) => get(ref(appdatabase, `users/${userId}/${p}`)).catch(() => null))
+          );
+          missing.forEach((p, i) => {
+            if (snaps[i] && snaps[i].exists()) existing[p] = snaps[i].val();
+          });
+        }
+        if (xpVal !== undefined) existing.xp = xpVal;
+      } else {
+        // Supabase identity miss → authoritative full RTDB projection (the
+        // original path). Disambiguates brand-new vs mirror-lag so we never
+        // clobber an existing RTDB user by treating them as new.
+        const fieldSnaps = await Promise.all(
+          PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)).catch(() => null))
+        );
+        const anyExists = fieldSnaps.some((s) => s && s.exists()) || xpVal !== undefined;
+        if (anyExists) {
+          existing = {};
+          PROJECTION.forEach((f, i) => {
+            if (fieldSnaps[i] && fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
+          });
+          if (xpVal !== undefined) existing.xp = xpVal;
+        }
+      }
+
+      const exists = existing !== null;
       let userData;
 
       const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com' || loggedInUser.email === 'sohailnasir74@gmail.com';
@@ -269,12 +347,7 @@ export const GlobalStateProvider = ({ children }) => {
       setCurrentuserEmail(loggedInUser.email)
 
       if (exists) {
-        // ⏳ USER EXISTS → Keep existing createdAt
-        const existing = {};
-        PROJECTION.forEach((f, i) => {
-          if (fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
-        });
-        if (xpSnap.exists()) existing.xp = xpSnap.val();
+        // ⏳ USER EXISTS → existing built above (Supabase mirror or RTDB fallback)
 
         // ✅ SELF-HEALING: Update email if missing or changed
         if (loggedInUser.email && (!existing.email || existing.email !== loggedInUser.email)) {
@@ -625,6 +698,23 @@ export const GlobalStateProvider = ({ children }) => {
     });
     return () => unsub();
   }, [appdatabase]);
+
+  // Warm the authoritative server-time offset early (and again whenever the
+  // app returns to foreground — the user may have changed the clock while
+  // backgrounded). The synchronous serverNowMs()/getServerTimeQuick() helpers
+  // (translation daily cap, cosmetic countdowns) read this cached offset, and
+  // the ban listeners only probe when a ban actually exists — so without this,
+  // a never-banned user's offset would stay cold and those sync paths would
+  // fall back to the raw device clock.
+  useEffect(() => {
+    if (!appdatabase) return;
+    const probeUid = user?.id || 'anon';
+    warmServerTime(appdatabase, probeUid);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') warmServerTime(appdatabase, probeUid);
+    });
+    return () => sub.remove();
+  }, [appdatabase, user?.id]);
 
   // Email-side ban listener — server-time-validated so a banned user can't
   // roll their device clock backward to bypass the gate. `bannedUntil` is

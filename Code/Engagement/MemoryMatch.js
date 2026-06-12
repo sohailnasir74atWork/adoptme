@@ -28,11 +28,12 @@ import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
-import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
 import { fetchAnalyticsData, normalizeName } from '../Helper/analyticsDataHelper';
 import { incrementAndCheckBadge, MEMORY_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
+import { getServerTime } from '../Helper/serverTime';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 8;
@@ -59,10 +60,12 @@ const FALLBACK_PETS = [
 
 const CARD_COLORS = ['#8B5CF6', '#10B981', '#F59E0B', '#EC4899'];
 
-const isSameDay = (timestamp) => {
-  if (!timestamp) return false;
+// `now` is an authoritative server-time Date (see getServerTime) so a user
+// can't roll their device clock to fake a new day. Day boundary is the
+// device's local calendar day on top of the server epoch.
+const isSameDay = (timestamp, now) => {
+  if (!timestamp || !now) return false;
   const d = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-  const now = new Date();
   return d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
@@ -160,9 +163,10 @@ const MemoryMatch = ({ visible, onClose }) => {
       setPlaysToday(prev => Math.max(0, prev - 2)); // grant 2 extra plays
       setPhase('ready');
       setHasWatchedAd(true);
-      // Persist to Firestore
+      // Persist to Firestore — serverTimestamp so the stored time is
+      // server-authoritative, not the device clock.
       if (firestoreDB && uid) {
-        setDoc(doc(firestoreDB, 'games', uid), { lastMemoryAdAt: new Date() }, { merge: true }).catch(() => {});
+        setDoc(doc(firestoreDB, 'games', uid), { lastMemoryAdAt: serverTimestamp() }, { merge: true }).catch(() => {});
       }
     }
   };
@@ -174,17 +178,18 @@ const MemoryMatch = ({ visible, onClose }) => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
         const data = snap.exists() ? snap.data() : {};
-        const today = isSameDay(data.lastMemoryAt);
+        const serverNow = await getServerTime(appdatabase, uid);
+        const today = isSameDay(data.lastMemoryAt, serverNow);
         const plays = today ? (data.memoryPlaysToday || 0) : 0;
         setPlaysToday(plays);
         setBestMoves(data.memoryBestMoves || 0);
-        setHasWatchedAd(isSameDay(data.lastMemoryAdAt)); // persist ad limit per day
+        setHasWatchedAd(isSameDay(data.lastMemoryAdAt, serverNow)); // persist ad limit per day
         setPhase(plays >= MAX_PLAYS ? 'result' : 'ready');
       } catch {
         setPhase('ready');
       }
     })();
-  }, [visible, firestoreDB, uid]);
+  }, [visible, firestoreDB, appdatabase, uid]);
 
   // Setup new game
   const startGame = () => {
@@ -408,7 +413,7 @@ const MemoryMatch = ({ visible, onClose }) => {
       setBestMoves(newBest);
 
       await setDoc(doc(firestoreDB, 'games', uid), {
-        lastMemoryAt: new Date(),
+        lastMemoryAt: serverTimestamp(),
         memoryPlaysToday: newPlays,
         memoryBestMoves: newBest,
       }, { merge: true });

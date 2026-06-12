@@ -12,6 +12,7 @@
 
 import { ref, get, update, increment } from '@react-native-firebase/database';
 import { addXP, XP_ACTIONS } from './xpUtils';
+import { getServerTime } from '../Helper/serverTime';
 
 // ────────────────────────────────────────────────────────
 //  DAILY REWARDS TABLE
@@ -28,30 +29,20 @@ export const DAILY_REWARDS = [
 
 // ────────────────────────────────────────────────────────
 //  SERVER TIME — prevents device clock manipulation
+//
+//  Uses the tamper-proof write-then-read probe in Helper/serverTime.js
+//  (the old `.info/serverTimeOffset` read went stale the moment a user
+//  changed their clock after the SDK connected — bypassable). Day strings
+//  are formatted in the device's local timezone on top of the server epoch,
+//  so the streak still rolls over at the player's local midnight.
 // ────────────────────────────────────────────────────────
-let _serverOffset = 0;
-let _offsetFetched = false;
-
-const fetchServerOffset = async (db) => {
-  if (_offsetFetched) return;
-  try {
-    const snap = await get(ref(db, '.info/serverTimeOffset'));
-    _serverOffset = snap.val() || 0;
-    _offsetFetched = true;
-  } catch {
-    _serverOffset = 0;
-  }
-};
-
-const getServerDate = () => new Date(Date.now() + _serverOffset);
-
 const formatDate = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-const getToday = () => formatDate(getServerDate());
+const getToday = (serverDate) => formatDate(serverDate);
 
-const getYesterday = () => {
-  const d = getServerDate();
+const getYesterday = (serverDate) => {
+  const d = new Date(serverDate.getTime());
   d.setDate(d.getDate() - 1);
   return formatDate(d);
 };
@@ -63,7 +54,7 @@ export const getStarStatus = async (db, uid) => {
   if (!db || !uid) return { canClaim: false, currentDay: 1, cycleNumber: 1 };
 
   try {
-    await fetchServerOffset(db);
+    const serverDate = await getServerTime(db, uid);
     const snap = await get(ref(db, `users/${uid}/dailyStars`));
     const data = snap.exists() ? snap.val() : null;
 
@@ -72,8 +63,8 @@ export const getStarStatus = async (db, uid) => {
       return { canClaim: true, currentDay: 1, cycleNumber: 1, totalStarsEarned: 0, isNew: true };
     }
 
-    const today = getToday();
-    const yesterday = getYesterday();
+    const today = getToday(serverDate);
+    const yesterday = getYesterday(serverDate);
 
     if (data.lastClaimDate === today) {
       // Already claimed today
@@ -118,17 +109,17 @@ export const claimDailyStar = async (db, uid) => {
   if (!db || !uid) return null;
 
   try {
-    await fetchServerOffset(db);
     const status = await getStarStatus(db, uid);
     if (!status.canClaim) return null;
 
+    const serverDate = await getServerTime(db, uid);
     const reward = DAILY_REWARDS.find(r => r.day === status.currentDay) || DAILY_REWARDS[0];
 
     // Update RTDB
     await update(ref(db, `users/${uid}/dailyStars`), {
       currentDay: status.currentDay,
       cycleNumber: status.cycleNumber,
-      lastClaimDate: getToday(),
+      lastClaimDate: getToday(serverDate),
       totalStarsEarned: increment(reward.stars || 1),
       starBalance: increment(reward.stars || 1), // Track spendable balance
     });

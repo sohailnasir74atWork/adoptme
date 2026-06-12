@@ -50,6 +50,10 @@ import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
 const INITIAL_PAGE_SIZE = 10; // ✅ Initial load: 10 messages
 const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
+// Cap the live in-memory list so a long session can't grow it unbounded
+// (every insert re-sorts the whole array → JS-thread freeze over time).
+// Scrolling past this re-fetches older pages from Supabase.
+const MAX_LIVE = 150;
 
 const GroupChatScreen = () => {
   const route = useRoute();
@@ -87,6 +91,11 @@ const GroupChatScreen = () => {
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
   const highlightTimerRef = useRef(null); // Track highlight timeout for cleanup
+  // Set true when another member's message lands while this group is focused.
+  // fanout_group_message_meta bumps our unread_count server-side even though
+  // we're reading live, so we reset once on blur — gated so quiet visits add
+  // no extra write.
+  const unreadWhileFocusedRef = useRef(false);
 
   const { t } = useTranslation();
 
@@ -432,6 +441,11 @@ const GroupChatScreen = () => {
       const unsubscribe = subscribeToGroupMessages(groupId, {
         onInsert: (newMessage) => {
           if (!newMessage) return;
+          // Another member's message bumped our unread_count server-side while
+          // we're viewing — flag it so the blur cleanup clears it once.
+          if (newMessage.senderId && newMessage.senderId !== user?.id) {
+            unreadWhileFocusedRef.current = true;
+          }
           setMessages((prev) => {
             if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
             const exists = prev.some((m) =>
@@ -439,7 +453,9 @@ const GroupChatScreen = () => {
               || (newMessage.clientMsgId && String(m?.clientMsgId) === String(newMessage.clientMsgId)),
             );
             if (exists) return prev;
-            return [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            const sorted = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            // Cap the live list (newest-first, so trim the oldest tail).
+            return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
           });
         },
         onUpdate: (updated) => {
@@ -461,7 +477,7 @@ const GroupChatScreen = () => {
       });
 
       return () => unsubscribe();
-    }, [groupId, isMember]),
+    }, [groupId, isMember, user?.id]),
   );
 
   // Set active chat and reset unread count
@@ -476,6 +492,7 @@ const GroupChatScreen = () => {
       // ✅ Reset refs when entering chat (for exit ad logic)
       hasSentMessageRef.current = 0;
       chatEnterTimeRef.current = Date.now();
+      unreadWhileFocusedRef.current = false;
 
       // Only reset unread if user is an actual member (in memberIds).
       // Admins/mods can view groups without joining — skip writes to
@@ -493,6 +510,15 @@ const GroupChatScreen = () => {
         clearActiveChat(user.id);
         clearActiveGroupChat(user.id, groupId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        // Phantom-badge fix: messages received while viewing bumped our
+        // unread_count. Clear once on blur, only if something arrived and
+        // we're a real member (mirrors the enter-reset gate).
+        if (unreadWhileFocusedRef.current) {
+          unreadWhileFocusedRef.current = false;
+          if (groupData?.memberIds?.includes(user.id)) {
+            resetGroupUnreadCount(user.id, groupId);
+          }
+        }
       };
     }, [user?.id, groupId, appdatabase, groupData?.name, groupData?.avatar, groupData?.memberIds?.length, groupData?.createdBy])
   );

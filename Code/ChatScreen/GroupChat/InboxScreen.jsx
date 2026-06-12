@@ -24,11 +24,12 @@ import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
 import {
-  subscribeToChatMeta,
+  subscribeToChatMetaShared,
   resetUnreadCount,
   setChatMuted,
   deleteChatMeta,
 } from '../../Supabase/chatMetaBackend';
+import { chatIdForPair } from '../../Supabase/privateMessagesBackend';
 import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 // ✅ Constants for pagination (moved outside component to avoid recreation)
@@ -76,8 +77,11 @@ const InboxScreen = ({ bannedUsers }) => {
           const updatedChats = Array.from(chatsMap.values())
             .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
           setLocalChats(updatedChats);
-          setDisplayedChatsCount(INITIAL_LOAD);
+          // Only seed the page size on the first load. Resetting it on every
+          // realtime batch would snap the list back to 15 rows and discard
+          // the user's "load more" progress whenever any chat updates.
           if (!hasLoadedOnce.current) {
+            setDisplayedChatsCount(INITIAL_LOAD);
             hasLoadedOnce.current = true;
             setLocalLoading(false);
           }
@@ -102,7 +106,11 @@ const InboxScreen = ({ bannedUsers }) => {
       }
 
       chatsMap.set(chatPartnerId, {
-        chatId: chatData.chatId,
+        // Some mirrored rows landed with chat_id = null (the source RTDB row
+        // had no chatId), which the filteredChats guard would otherwise hide —
+        // user gets the push but never sees the chat. chat_id is just the
+        // sorted UID pair, so derive it when missing.
+        chatId: chatData.chatId || (user?.id ? chatIdForPair(user.id, chatPartnerId) : null),
         otherUserId: chatPartnerId,
         lastMessage: chatData.lastMessage || 'No messages yet',
         lastMessageTimestamp: chatData.timestamp || 0,
@@ -135,7 +143,7 @@ const InboxScreen = ({ bannedUsers }) => {
       updateChatsList();
     };
 
-    const unsubscribe = subscribeToChatMeta(user.id, {
+    const unsubscribe = subscribeToChatMetaShared(user.id, {
       onUpsert: handleUpsert,
       onRemove: handleRemove,
       // Empty-list path: subscribeToChatMeta still fires onReady once

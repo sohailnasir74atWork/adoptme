@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NotifierDrawer from './Notifier';
 
 const Stack = createNativeStackNavigator();
@@ -69,6 +70,7 @@ export const TradeStack = ({ selectedTheme }) => {
   const isDarkMode = theme === 'dark';
   // const navigation = useNavigation()
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const insets = useSafeAreaInsets();
 
 
   const headerOptions = useMemo(
@@ -76,10 +78,15 @@ export const TradeStack = ({ selectedTheme }) => {
       headerStyle: { backgroundColor: selectedTheme.colors.background },
       headerTintColor: selectedTheme.colors.text,
       headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
+      // Force the status-bar inset from safe-area-context. The native-stack
+      // header's own inset detection returns 0 under edge-to-edge on some
+      // devices (MIUI/Xiaomi), so the header drew under the status bar; this
+      // value is reliable on every device.
+      headerStatusBarHeight: insets.top,
       animation: 'fade',
       animationDuration: 200,
     }),
-    [selectedTheme]
+    [selectedTheme, insets.top]
   );
 
   return (

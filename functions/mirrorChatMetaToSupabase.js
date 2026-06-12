@@ -66,11 +66,18 @@ exports.mirrorChatMetaToSupabase = functions
       return null;
     }
 
+    // Derive chat_id from the path UIDs when the RTDB row lacks it. Some
+    // source rows had no chatId field, so this previously upserted chat_id
+    // = null — which the new app's inbox filters out, leaving users notified
+    // but unable to see the chat. chat_id is the canonical sorted UID pair
+    // ([a,b].sort().join('_')), so it's always reconstructable here.
+    const derivedChatId = [ownerUid, partnerUid].sort().join('_');
+
     // Mirror every field defined in the table. Coerce to expected types
     // so a stray null/undefined from a partial write doesn't break the
     // upsert (Postgres NOT NULL columns reject undefined).
     const rtdbView = {
-      chat_id: v.chatId ?? null,
+      chat_id: hasChatId ? v.chatId : derivedChatId,
       last_message: hasLastMsg ? v.lastMessage : null,
       timestamp_ms: hasTimestamp ? v.timestamp : null,
       receiver_id: v.receiverId ?? null,

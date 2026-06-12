@@ -162,3 +162,62 @@ export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onSt
     try { supabase.removeChannel(channel); } catch {}
   };
 }
+
+// -----------------------------------------------------------------
+// Shared (ref-counted) group-meta subscription. Sister of
+// subscribeToChatMetaShared — see that fn for rationale. Collapses the
+// duplicate group_meta_data channels into one underlying subscription and
+// replays cached rows / status to late-joining consumers.
+// -----------------------------------------------------------------
+const _groupMetaShared = new Map(); // userId -> entry
+
+export function subscribeToGroupMetaShared(userId, handlers = {}) {
+  if (!userId) return () => {};
+
+  let entry = _groupMetaShared.get(userId);
+  if (!entry) {
+    entry = {
+      listeners: new Set(),
+      rows: new Map(),     // groupId -> row
+      ready: false,
+      lastStatus: null,
+      unsubscribe: null,
+    };
+    _groupMetaShared.set(userId, entry);
+
+    entry.unsubscribe = subscribeToGroupMeta(userId, {
+      onUpsert: (row) => {
+        if (row?.groupId) entry.rows.set(row.groupId, row);
+        entry.listeners.forEach((l) => l.onUpsert?.(row));
+      },
+      onRemove: (groupId) => {
+        entry.rows.delete(groupId);
+        entry.listeners.forEach((l) => l.onRemove?.(groupId));
+      },
+      onReady: () => {
+        entry.ready = true;
+        entry.listeners.forEach((l) => l.onReady?.());
+      },
+      onStatus: (status, err) => {
+        entry.lastStatus = status;
+        entry.listeners.forEach((l) => l.onStatus?.(status, err));
+      },
+    });
+  }
+
+  entry.listeners.add(handlers);
+
+  if (entry.rows.size > 0) {
+    entry.rows.forEach((row) => handlers.onUpsert?.(row));
+  }
+  if (entry.lastStatus) handlers.onStatus?.(entry.lastStatus);
+  if (entry.ready) handlers.onReady?.();
+
+  return () => {
+    entry.listeners.delete(handlers);
+    if (entry.listeners.size === 0) {
+      try { entry.unsubscribe?.(); } catch {}
+      _groupMetaShared.delete(userId);
+    }
+  };
+}

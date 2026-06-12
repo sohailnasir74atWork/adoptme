@@ -62,9 +62,29 @@ export const getServerTime = async (db, uid, forceProbe = false) => {
 
 /**
  * Instant server-time estimate using the cached probe offset.
- * Use for UI display (countdowns). NOT for anti-cheat validation.
+ * Use for UI display (countdowns) and for cheap day-boundary checks AFTER
+ * warmServerTime() has run. NOT for hard anti-cheat validation — for that
+ * await getServerTime() so a fresh probe is guaranteed.
  */
 export const getServerTimeQuick = () => new Date(Date.now() + _probeOffset);
+
+/** Sync ms-epoch server-time estimate (cached offset). See getServerTimeQuick. */
+export const serverNowMs = () => Date.now() + _probeOffset;
+
+/** True once at least one successful probe has populated the offset. */
+export const isServerTimeWarm = () => _lastProbeAt > 0;
+
+/**
+ * Warm the cached offset with a real probe. Call once early (e.g. on app
+ * start / sign-in) so the synchronous getServerTimeQuick()/serverNowMs()
+ * helpers are accurate for sync call sites (translation cap, UI countdowns)
+ * that can't await. Best-effort — swallows errors.
+ */
+export const warmServerTime = async (db, uid) => {
+  try {
+    await getServerTime(db, uid, true);
+  } catch {}
+};
 
 /** Format a Date as "YYYY-MM-DD" in UTC */
 export const formatServerDate = (d) =>

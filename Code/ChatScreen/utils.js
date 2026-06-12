@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, ref, update, get, set, onDisconnect, query, orderByChild, equalTo, limitToLast, onValue } from '@react-native-firebase/database';
-import { setChatLastRead, subscribeToChatLastRead } from '../Supabase/chatMetaBackend';
+import { setChatLastRead, subscribeToChatMetaShared } from '../Supabase/chatMetaBackend';
 import { getAuth } from '@react-native-firebase/auth';
 import { Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -994,12 +994,59 @@ export const removeModerator = async (userId) => {
  * PrivateChat on chat enter and when a partner message arrives while
  * the screen is focused. Fire-and-forget — errors are logged inside
  * setChatLastRead and surface as a stale blue tick rather than a crash.
+ *
+ * Cost note: set_chat_last_read updates BOTH chat_meta_data rows, each of
+ * which fans out as a realtime message to every subscriber on that owner.
+ * Called per incoming message (as PrivateChat does), that's the dominant
+ * driver of Realtime Message billing. So we COALESCE: write immediately on
+ * the leading edge (blue tick still feels instant), suppress repeats within
+ * a short window, and write once more on the trailing edge if any were
+ * suppressed. Rapid bursts collapse from N writes to 2. Per-partner so two
+ * open conversations don't starve each other.
  */
-export const updateLastRead = (partnerUid) => {
-  if (!partnerUid) return;
+const LAST_READ_DEBOUNCE_MS = 4000;
+const _lastReadTimers = new Map();   // partnerUid -> timeout id (window open)
+const _lastReadPending = new Map();  // partnerUid -> bool (calls suppressed in window)
+
+const _fireLastRead = (partnerUid) => {
   setChatLastRead(partnerUid).catch((error) => {
     console.warn('updateLastRead error:', error?.message);
   });
+};
+
+export const updateLastRead = (partnerUid) => {
+  if (!partnerUid) return;
+  if (!_lastReadTimers.has(partnerUid)) {
+    // Leading edge: write now, open a coalescing window.
+    _fireLastRead(partnerUid);
+    _lastReadPending.set(partnerUid, false);
+    _lastReadTimers.set(partnerUid, setTimeout(() => {
+      _lastReadTimers.delete(partnerUid);
+      const hadPending = _lastReadPending.get(partnerUid);
+      _lastReadPending.delete(partnerUid);
+      if (hadPending) _fireLastRead(partnerUid); // trailing edge
+    }, LAST_READ_DEBOUNCE_MS));
+  } else {
+    // Within the window — mark that a trailing write is owed.
+    _lastReadPending.set(partnerUid, true);
+  }
+};
+
+/**
+ * Flush any owed lastRead write immediately and close the window. Call on
+ * chat blur/unmount so the final read receipt lands promptly instead of
+ * waiting out the debounce. No-op if nothing is pending.
+ */
+export const flushLastRead = (partnerUid) => {
+  if (!partnerUid) return;
+  const timer = _lastReadTimers.get(partnerUid);
+  if (timer) {
+    clearTimeout(timer);
+    _lastReadTimers.delete(partnerUid);
+  }
+  const hadPending = _lastReadPending.get(partnerUid);
+  _lastReadPending.delete(partnerUid);
+  if (hadPending) _fireLastRead(partnerUid);
 };
 
 /**
@@ -1015,8 +1062,21 @@ export const useOtherLastRead = (ownerUid, partnerUid) => {
       return undefined;
     }
 
-    const unsubscribe = subscribeToChatLastRead(ownerUid, partnerUid, (ms) => {
-      setLastRead(ms);
+    // Cost: partner_last_read_ms already rides in the chat_meta_data stream
+    // that ChatNavigator keeps open for this same ownerUid. Reuse that shared
+    // subscription (ref-counted) instead of opening a dedicated per-chat
+    // lastRead channel — the partner row's partnerLastRead is exactly the
+    // blue-tick threshold. Zero extra realtime channels.
+    let last = 0; // monotonic guard — partner_last_read_ms only moves forward
+    const unsubscribe = subscribeToChatMetaShared(ownerUid, {
+      onUpsert: (row) => {
+        if (!row || row.partnerId !== partnerUid) return;
+        const v = Number(row.partnerLastRead) || 0;
+        if (v > last) {
+          last = v;
+          setLastRead(v);
+        }
+      },
     });
 
     return () => {

@@ -14,6 +14,7 @@
 
 import React, { useRef } from 'react';
 import { View, Animated, PanResponder, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SWIPE_THRESHOLD = 80; // px needed to trigger close
 
@@ -26,6 +27,7 @@ const SwipeableBottomDrawer = ({
   pillColor,
   showPill = true,
 }) => {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
@@ -88,6 +90,10 @@ const SwipeableBottomDrawer = ({
           transform: [{ translateY }],
         },
         style,
+        // Lift content above the Android nav bar / iOS home indicator. Applied
+        // last so it overrides any fake hardcoded `paddingBottom` a caller used
+        // to fake a safe area — the drawer's own background fills this gap.
+        { paddingBottom: insets.bottom },
       ]}
       {...panResponder.panHandlers}
     >

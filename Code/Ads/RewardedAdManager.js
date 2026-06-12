@@ -26,6 +26,8 @@ import {
   AdEventType,
 } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
+import { ensureAdsInitialized } from './init';
+import { setFullScreenAdVisible } from './adVisibility';
 
 const adUnitId = getAdUnitId('rewarded');
 
@@ -57,8 +59,11 @@ class RewardedAdManager {
     // Clean up previous instance
     this._cleanup();
 
+    // 'kids' removed: it contradicts our 'T' content rating +
+    // tagForChildDirectedTreatment:false and pulls lower-value / policy-
+    // sensitive inventory.
     this.ad = RewardedAd.createForAdRequest(adUnitId, {
-      keywords: ['games', 'pets', 'kids'],
+      keywords: ['games', 'pets'],
     });
 
     const onLoaded = this.ad.addAdEventListener(
@@ -80,7 +85,8 @@ class RewardedAdManager {
     );
 
     this.unsubscribeEvents = [onLoaded, onError];
-    this._load();
+    // Config-before-load: don't request until the request config is applied.
+    ensureAdsInitialized().then(() => this._load()).catch(() => {});
   }
 
   // ── Safe load (prevents duplicate loads) ──
@@ -164,6 +170,7 @@ class RewardedAdManager {
 
     this.isLoaded = false;
     this.lastShownAt = Date.now();
+    setFullScreenAdVisible(true);
     let didEarnReward = false;
 
     // Listen for EARNED_REWARD (user completed the action)
@@ -178,6 +185,7 @@ class RewardedAdManager {
     const unsubClose = this.ad.addAdEventListener(
       AdEventType.CLOSED,
       () => {
+        setFullScreenAdVisible(false);
         unsubReward();
         unsubClose();
 
@@ -195,6 +203,7 @@ class RewardedAdManager {
     try {
       this.ad.show();
     } catch {
+      setFullScreenAdVisible(false);
       unsubReward();
       unsubClose();
       this._createAndLoad();

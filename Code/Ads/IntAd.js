@@ -6,18 +6,20 @@ import {
 import { Platform } from 'react-native';
 import getAdUnitId from './ads';
 import config from '../Helper/Environment';
+import { ensureAdsInitialized } from './init';
+import { setFullScreenAdVisible } from './adVisibility';
 
 // ✅ Two ad unit IDs for A/B testing
 const interstitialAdUnitId = getAdUnitId('interstitial');
-const gameInterstitialAdUnitId = Platform.OS === 'ios' 
-  ? config.gameInterstitialIOS 
+const gameInterstitialAdUnitId = Platform.OS === 'ios'
+  ? config.gameInterstitialIOS
   : config.gameInterstitialAndroid;
 
 class InterstitialAdManager {
   // ✅ Two ad instances for A/B testing
   static adA = InterstitialAd.createForAdRequest(interstitialAdUnitId);
   static adB = InterstitialAd.createForAdRequest(gameInterstitialAdUnitId);
-  
+
   static isAdALoaded = false;
   static isAdBLoaded = false;
   static isAdALoading = false;
@@ -34,7 +36,16 @@ class InterstitialAdManager {
   
   // ✅ Wait timeout for ad to load (improves show rate)
   static WAIT_TIMEOUT_MS = 3000;
-  
+
+  // ✅ Global frequency cap. There are ~15 interstitial call sites across the
+  // app firing independently (search, upload, post, save, share…). Without a
+  // shared cooldown, two quick actions (e.g. two searches in a row) serve two
+  // back-to-back interstitials — ad fatigue, lower eCPM, and AdMob
+  // ad-serving-limit risk. When inside the cooldown we skip the ad and run the
+  // caller's callback immediately so content is never blocked.
+  static lastShownAt = 0;
+  static COOLDOWN_MS = 60000;
+
   static init() {
     if (this.hasInitialized) return;
 
@@ -77,11 +88,16 @@ class InterstitialAdManager {
     );
 
     this.unsubscribeEvents = [onAdALoaded, onAdAError, onAdBLoaded, onAdBError];
-    
-    // ✅ Load both ads immediately
-    this.loadAdA();
-    this.loadAdB();
-    
+
+    // ✅ Load both ads once the request config is applied (config-before-load,
+    // so the first impression isn't served at AdMob's default 'G' ceiling).
+    ensureAdsInitialized()
+      .then(() => {
+        this.loadAdA();
+        this.loadAdB();
+      })
+      .catch(() => {});
+
     this.hasInitialized = true;
   }
 
@@ -136,6 +152,13 @@ class InterstitialAdManager {
   static showAd(onAdClosedCallback, onAdUnavailableCallback) {
     if (!this.hasInitialized) {
       this.init();
+    }
+
+    // ✅ Global frequency cap: inside the cooldown window, skip the ad and let
+    // the caller proceed immediately (content is never gated on the ad).
+    if (Date.now() - this.lastShownAt < this.COOLDOWN_MS) {
+      if (typeof onAdClosedCallback === 'function') onAdClosedCallback();
+      return;
     }
 
     // ✅ Determine which ad to try first (A/B test: 50/50 split)
@@ -215,12 +238,15 @@ class InterstitialAdManager {
   static showAdA(onAdClosedCallback) {
     // ✅ Mark as not loaded BEFORE showing to prevent double-show
     this.isAdALoaded = false;
-    
+    this.lastShownAt = Date.now();
+    setFullScreenAdVisible(true);
+
     const unsubscribeClose = this.adA.addAdEventListener(
       AdEventType.CLOSED,
       () => {
+        setFullScreenAdVisible(false);
         this.loadAdA(); // Preload next immediately
-        
+
         if (typeof onAdClosedCallback === 'function') {
           onAdClosedCallback();
         }
@@ -231,6 +257,7 @@ class InterstitialAdManager {
     try {
       this.adA.show();
     } catch (error) {
+      setFullScreenAdVisible(false);
       unsubscribeClose();
       this.loadAdA();
       if (typeof onAdClosedCallback === 'function') {
@@ -242,12 +269,15 @@ class InterstitialAdManager {
   static showAdB(onAdClosedCallback) {
     // ✅ Mark as not loaded BEFORE showing to prevent double-show
     this.isAdBLoaded = false;
-    
+    this.lastShownAt = Date.now();
+    setFullScreenAdVisible(true);
+
     const unsubscribeClose = this.adB.addAdEventListener(
       AdEventType.CLOSED,
       () => {
+        setFullScreenAdVisible(false);
         this.loadAdB(); // Preload next immediately
-        
+
         if (typeof onAdClosedCallback === 'function') {
           onAdClosedCallback();
         }
@@ -258,6 +288,7 @@ class InterstitialAdManager {
     try {
       this.adB.show();
     } catch (error) {
+      setFullScreenAdVisible(false);
       unsubscribeClose();
       this.loadAdB();
       if (typeof onAdClosedCallback === 'function') {

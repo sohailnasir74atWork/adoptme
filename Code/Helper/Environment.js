@@ -14,7 +14,7 @@ const config = {
   andriodIntestial: isNoman ? 'ca-app-pub-1340655056171083/7602595440' : 'ca-app-pub-3701208411582706/2820664136',
   andriodRewarded: isNoman ? 'ca-app-pub-1340655056171083/7759261705' : 'ca-app-pub-3701208411582706/5175818984',
   andriodOpenApp: isNoman ? 'ca-app-pub-1340655056171083/4976432101' : 'ca-app-pub-3701208411582706/2295931822',
-  andriodNative: isNoman ? 'ca-app-pub-1340655056171083/4915996008' : 'ca-app-pub-3701208411582706/5457520430',
+  andriodNative: isNoman ? 'ca-app-pub-1340655056171083/2859512911' : 'ca-app-pub-3701208411582706/5457520430',
   IOsIntestial: isNoman ? 'ca-app-pub-5740215782746766/5910517787' : '',
   // Game interstitial ad IDs (used for A/B testing in IntAd.js)
   gameInterstitialAndroid: 'ca-app-pub-1340655056171083/1763031352',
@@ -22,7 +22,7 @@ const config = {
   IOsBanner: isNoman ? 'ca-app-pub-5740215782746766/9032339297' : '',
   IOsRewarded: isNoman ? 'ca-app-pub-5740215782746766/6913442412' : '',
   IOsOpenApp: isNoman ? 'ca-app-pub-5740215782746766/6747304345' : '',
-  IOsNative: isNoman ? 'ca-app-pub-5740215782746766/8838394066' : '',
+  IOsNative: isNoman ? 'ca-app-pub-5740215782746766/6484578523' : '',
 
   apiKey: isNoman ? rev_cat_id : rev_cat_id,
 

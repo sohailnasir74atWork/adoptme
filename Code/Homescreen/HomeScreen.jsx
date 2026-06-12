@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, 
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import config from '../Helper/Environment';
@@ -84,6 +85,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
 
 const HomeScreen = ({ selectedTheme }) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
@@ -1826,7 +1828,7 @@ const HomeScreen = ({ selectedTheme }) => {
             onRequestClose={() => setIsDrawerVisible(false)}
           >
             <Pressable style={styles.modalOverlay} onPress={() => setIsDrawerVisible(false)} />
-            <View style={styles.drawerContainer}>
+            <View style={[styles.drawerContainer, { paddingBottom: insets.bottom }]}>
               <View style={styles.drawerHeader}>
                 <TextInput
                   style={styles.searchInput}
@@ -1971,7 +1973,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)} />
             <ConditionalKeyboardWrapper>
               <View style={{ flexDirection: 'row', flex: 1 }}>
-                <View style={[styles.drawerContainer2, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
+                <View style={[styles.drawerContainer2, { backgroundColor: isDarkMode ? '#3B404C' : 'white', paddingBottom: insets.bottom + 16 }]}>
                   <Text style={styles.modalMessage}>
                     {t("home.trade_description")}
                   </Text>

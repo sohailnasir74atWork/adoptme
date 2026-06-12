@@ -10,6 +10,7 @@ import { ref, get, update, push, set, increment } from '@react-native-firebase/d
 import { updateMyCosmeticType } from '../Helper/cosmeticsCache';
 import { EGGS, ALL_ITEMS, COSMETIC_TYPE, getItemsByRarity } from './shopItems';
 import { spendStars } from './starUtils';
+import { getServerTime, getServerTimeQuick } from '../Helper/serverTime';
 
 // ════════════════════════════════════════════════════════════
 //  SPEND XP — Atomic decrement with balance check (UNUSED NOW, but kept for legacy)
@@ -116,8 +117,9 @@ export const purchaseEgg = async (db, uid, eggId) => {
     return { success: false, error: 'Failed to generate reward' };
   }
 
-  // 3. Calculate expiry
-  const now = Date.now();
+  // 3. Calculate expiry — server time so a tampered device clock can't
+  // mint longer-lived (or never-expiring) cosmetics.
+  const now = (await getServerTime(db, uid)).getTime();
   const expiresAt = reward.duration === -1
     ? -1 // permanent
     : now + (reward.duration * 24 * 60 * 60 * 1000);
@@ -219,7 +221,8 @@ export const getActiveCosmetics = async (db, uid) => {
     if (!snap.exists()) return { profileFrame: null, chatTextColor: null, tradeCardBg: null, profileBanner: null, chatBubbleBg: null };
 
     const items = snap.val();
-    const now = Date.now();
+    // Server time: expiry must not be cheatable by rolling the device clock back.
+    const now = (await getServerTime(db, uid)).getTime();
     const result = { profileFrame: null, chatTextColor: null, tradeCardBg: null, profileBanner: null, chatBubbleBg: null };
 
     // Check profile frame
@@ -300,7 +303,8 @@ export const getShopStats = async (db, uid) => {
 export const isItemExpired = (item) => {
   if (!item) return true;
   if (item.expiresAt === -1) return false; // permanent
-  return Date.now() > item.expiresAt;
+  // Cached server-time estimate (warmed at app start) — not the raw device clock.
+  return getServerTimeQuick().getTime() > item.expiresAt;
 };
 
 // ════════════════════════════════════════════════════════════
@@ -309,7 +313,7 @@ export const isItemExpired = (item) => {
 export const formatTimeRemaining = (expiresAt) => {
   if (expiresAt === -1) return 'Permanent ✨';
 
-  const remaining = expiresAt - Date.now();
+  const remaining = expiresAt - getServerTimeQuick().getTime();
   if (remaining <= 0) return 'Expired';
 
   const hours = Math.floor(remaining / (1000 * 60 * 60));
@@ -329,7 +333,7 @@ export const getInventory = async (db, uid) => {
   if (!db || !uid) return {};
 
   try {
-    const now = Date.now();
+    const now = (await getServerTime(db, uid)).getTime();
     const result = {};
 
     // Helper to add item to result, avoiding duplicates by id

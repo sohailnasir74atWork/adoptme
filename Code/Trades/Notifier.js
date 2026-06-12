@@ -9,12 +9,14 @@ import InterstitialAdManager from '../Ads/IntAd';
 import { requestPermission } from '../Helper/PermissionCheck';
 import { showMessage } from 'react-native-flash-message';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import config from '../Helper/Environment';
 
 const NotifierDrawer = () => {
   const { user, appdatabase, theme } = useGlobalState();
   const { localState } = useLocalState();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const isDarkMode = theme === 'dark';
 
   const [mode, setMode] = useState('buy');
@@ -375,7 +377,17 @@ const NotifierDrawer = () => {
 
 
       <Modal visible={isDrawerVisible} animationType="slide">
-        <View style={[styles.drawerContainer, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
+        <View
+          style={[
+            styles.drawerContainer,
+            {
+              backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+              // Edge-to-edge: keep the Close button and last grid rows clear of
+              // the Android nav bar / iOS home indicator (12 = existing padding).
+              paddingBottom: insets.bottom + 12,
+            },
+          ]}
+        >
           <Text style={[styles.sectionTitle, { fontWeight: 'bold', color: isDarkMode ? '#fff' : '#000' }]}>{t("trade.notifier.select_items_title")}</Text>
 
           {/* Search Input */}

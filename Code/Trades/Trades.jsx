@@ -18,6 +18,8 @@ import SubscriptionScreen from '../SettingScreen/OfferWall';
 import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
+import NativeAdCard from '../Ads/NativeAdCard';
+import { releaseByPrefix as releaseNativeAds } from '../Ads/NativeAdManager';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
@@ -1240,12 +1242,35 @@ const TradeList = ({ route }) => {
     setIsSigninDrawerVisible(false);
   };
 
+  // Interleave a native ad every Nth trade for non-Pro users. Keys are
+  // `trade-ad-*` so they don't collide with the design feed's `ad-*` slots in
+  // the shared NativeAdManager cache.
+  const TRADE_AD_FREQUENCY = 8;
+  const tradesWithAds = useMemo(() => {
+    if (isProStatus || !Array.isArray(filteredTrades) || filteredTrades.length === 0) {
+      return filteredTrades;
+    }
+    const out = [];
+    let count = 0;
+    for (let i = 0; i < filteredTrades.length; i++) {
+      out.push(filteredTrades[i]);
+      count++;
+      if (count % TRADE_AD_FREQUENCY === 0) {
+        out.push({ __type: 'ad', id: `trade-ad-${i}` });
+      }
+    }
+    return out;
+  }, [filteredTrades, isProStatus]);
+
+  // Free this screen's native ad handles on unmount.
+  useEffect(() => () => releaseNativeAds('trade-ad-'), []);
 
   const renderTrade = ({ item, index }) => {
+    // Native ad row (interleaved into the data below for non-Pro users).
+    if (item?.__type === 'ad') {
+      return <NativeAdCard adKey={item.id} isDarkMode={isDarkMode} />;
+    }
     const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : "Unknown";
-    // if ((index + 1) % 10 === 0 && !isProStatus) {
-    //   return <MyNativeAdComponent />;
-    // }
     // Function to group items and count duplicates
     const groupItems = (items) => {
       const grouped = {};
@@ -1811,9 +1836,9 @@ const TradeList = ({ route }) => {
 
       <FlatList
         ref={flatListRef}
-        data={filteredTrades}
+        data={tradesWithAds}
         renderItem={renderTrade}
-        keyExtractor={(item) => item.isFeatured ? `featured-${item.id}` : item.id}
+        keyExtractor={(item) => item.__type === 'ad' ? item.id : item.isFeatured ? `featured-${item.id}` : item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={filteredTrades.length === 0 ? { flexGrow: 1, paddingBottom: 20 } : { paddingBottom: 20 }}
         onEndReached={handleEndReached}

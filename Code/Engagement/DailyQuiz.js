@@ -25,10 +25,11 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
-import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
 import { incrementAndCheckBadge, QUIZ_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
+import { getServerTime } from '../Helper/serverTime';
 
 // ── Question bank (shuffled + pick 5 each time) ──
 const QUESTION_BANK = [
@@ -58,10 +59,12 @@ const TIMER_SECONDS = 12;
 const XP_PER_CORRECT = 20;
 const XP_PERFECT_BONUS = 50;
 
-const isSameDay = (timestamp) => {
-  if (!timestamp) return false;
+// `now` is an authoritative server-time Date (see getServerTime) so a user
+// can't roll their device clock to fake a new day. Day boundary is the
+// device's local calendar day on top of the server epoch.
+const isSameDay = (timestamp, now) => {
+  if (!timestamp || !now) return false;
   const d = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-  const now = new Date();
   return d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
@@ -123,9 +126,10 @@ const DailyQuiz = ({ visible, onClose }) => {
       setCurrentQ(0);
       setSelected(null);
       setHasWatchedAd(true);
-      // Persist to Firestore
+      // Persist to Firestore — serverTimestamp so the stored time is
+      // server-authoritative, not the device clock.
       if (firestoreDB && uid) {
-        setDoc(doc(firestoreDB, 'games', uid), { lastQuizAdAt: new Date() }, { merge: true }).catch(() => {});
+        setDoc(doc(firestoreDB, 'games', uid), { lastQuizAdAt: serverTimestamp() }, { merge: true }).catch(() => {});
       }
     }
   };
@@ -137,10 +141,11 @@ const DailyQuiz = ({ visible, onClose }) => {
       try {
         const snap = await getDoc(doc(firestoreDB, 'games', uid));
         const data = snap.exists() ? snap.data() : {};
-        const played = isSameDay(data.lastQuizAt);
+        const serverNow = await getServerTime(db, uid);
+        const played = isSameDay(data.lastQuizAt, serverNow);
         setHasPlayedToday(played);
         setBestScore(data.quizBestScore || 0);
-        setHasWatchedAd(isSameDay(data.lastQuizAdAt)); // persist ad limit per day
+        setHasWatchedAd(isSameDay(data.lastQuizAdAt, serverNow)); // persist ad limit per day
         setPhase(played ? 'result' : 'ready');
         setScore(played ? (data.lastQuizScore || 0) : 0);
         setCurrentQ(0);
@@ -149,7 +154,7 @@ const DailyQuiz = ({ visible, onClose }) => {
         setPhase('ready');
       }
     })();
-  }, [visible, firestoreDB, uid]);
+  }, [visible, firestoreDB, db, uid]);
 
   // Start quiz
   const startQuiz = () => {
@@ -230,7 +235,7 @@ const DailyQuiz = ({ visible, onClose }) => {
       setBestScore(newBest);
 
       await setDoc(doc(firestoreDB, 'games', uid), {
-        lastQuizAt: new Date(),
+        lastQuizAt: serverTimestamp(),
         lastQuizScore: finalScore,
         quizBestScore: newBest,
       }, { merge: true });

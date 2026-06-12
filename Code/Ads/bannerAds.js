@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
@@ -28,6 +28,39 @@ const BannerAdComponent = ({
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
   const unitId = getAdUnitId(adType);
+
+  // No-fill retry: a banner's FIRST load can fail (no fill / transient
+  // network). The <BannerAd> won't re-request on its own until something
+  // forces a remount, so the slot would stay blank for the whole screen
+  // visit — a silently lost impression on every such screen. We bump
+  // reloadKey (used as the BannerAd `key`) after a delay to force one fresh
+  // request. Once an ad has loaded, the SDK's own auto-refresh takes over and
+  // we stop interfering, so we never remount a working banner.
+  const [reloadKey, setReloadKey] = useState(0);
+  const hasEverLoaded = useRef(false);
+  const retryTimer = useRef(null);
+
+  const handleAdLoaded = useCallback(() => {
+    hasEverLoaded.current = true;
+    setIsAdLoaded(true);
+  }, []);
+
+  const handleAdFailedToLoad = useCallback(() => {
+    setIsAdLoaded(false);
+    // Only nudge the first-ever load; let the SDK own refresh failures.
+    if (hasEverLoaded.current || retryTimer.current) return;
+    retryTimer.current = setTimeout(() => {
+      retryTimer.current = null;
+      setReloadKey((k) => k + 1);
+    }, 30000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    },
+    [],
+  );
 
   // Stable request options — recomputed only when consent flips so the
   // BannerAd component below doesn't see a new object reference on every
@@ -64,11 +97,12 @@ const BannerAdComponent = ({
   return (
     <View style={containerStyle}>
       <BannerAd
+        key={reloadKey}
         unitId={unitId}
         size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
         requestOptions={requestOptions}
-        onAdLoaded={() => setIsAdLoaded(true)}
-        onAdFailedToLoad={() => setIsAdLoaded(false)}
+        onAdLoaded={handleAdLoaded}
+        onAdFailedToLoad={handleAdFailedToLoad}
       />
     </View>
   );

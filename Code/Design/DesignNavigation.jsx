@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DesignFeedScreen from './DesignMainScreen';
 import PrivateChatScreen from '../ChatScreen/PrivateChat/PrivateChat';
@@ -25,15 +26,19 @@ export const DesignStack = ({ selectedTheme }) => {
 
   const openDrawer = useCallback(() => setIsDrawerVisible(true), []);
   const closeDrawer = useCallback(() => setIsDrawerVisible(false), []);
+  const insets = useSafeAreaInsets();
   // console.log('dsignnavigator')
 
   const headerOptions = useMemo(() => ({
     headerStyle: { backgroundColor: selectedTheme.colors.background },
     headerTintColor: selectedTheme.colors.text,
     headerTitleStyle: { fontWeight: 'bold', fontSize: 24 },
+    // Reliable status-bar inset (native-stack default detection fails under
+    // edge-to-edge on some devices, so the "Feed" header drew under the bar).
+    headerStatusBarHeight: insets.top,
     animation: 'fade',
     animationDuration: 200,
-  }), [selectedTheme]);
+  }), [selectedTheme, insets.top]);
 
   const sharedParams = useMemo(() => ({
     bannedUsers,

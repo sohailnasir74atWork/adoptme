@@ -4503,7 +4503,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - RNGoogleMobileAds (16.3.0):
+  - RNGoogleMobileAds (16.3.3):
     - boost
     - DoubleConversion
     - fast_float
@@ -5569,7 +5569,7 @@ SPEC CHECKSUMS:
   RNFBMessaging: c19ae4965abe8f473ca75750db14735407218dcd
   RNFS: 4ac0f0ea233904cb798630b3c077808c06931688
   RNGestureHandler: 1f7ac76fa9d6ffedfdde38ce781442ffadac8880
-  RNGoogleMobileAds: ceecda3820e1118fee43e1f8e49e8a045411eb7b
+  RNGoogleMobileAds: cdca0d42f39c49d7fd671b7e14e8942372e69287
   RNGoogleSignin: 3593186e676d55c10d95130278d5f5b26d8fe7f5
   RNKeychain: d0bdaca4688ae123909b137de08491f49a6cf6b1
   RNLocalize: 842268670666fae0b00edd62e7a8a0330cb86986

@@ -24,6 +24,13 @@ import { uuidv4 } from './uuid';
 
 const PAGE_SIZE_DEFAULT = 25;
 
+// Egress: only the columns fromGroupMessageRow maps. Skips updated_at /
+// deleted_at / deleted_by on every paginated history fetch.
+const GROUP_MSG_COLS =
+  'id,client_msg_id,group_id,sender_id,sender_name,sender_avatar,text,image_url,' +
+  'image_urls,fruits,reply_to,is_pro,roblox_username_verified,has_recent_game_win,' +
+  'last_game_win_at,is_creator,os,deleted,report_count,reactions,created_at';
+
 export function newClientMsgId() {
   return uuidv4();
 }
@@ -75,7 +82,7 @@ export async function loadGroupMessages(groupId, { limit = PAGE_SIZE_DEFAULT, be
   if (!groupId) return [];
   let q = supabase
     .from('group_messages')
-    .select('*')
+    .select(GROUP_MSG_COLS)
     .eq('group_id', groupId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })
@@ -102,7 +109,7 @@ export async function loadGroupMessagesSince(groupId, since = null, { limit = 20
   if (!groupId) return [];
   let q = supabase
     .from('group_messages')
-    .select('*')
+    .select(GROUP_MSG_COLS)
     .eq('group_id', groupId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })

@@ -188,7 +188,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   useEffect(() => {
     isAtBottomRef.current = isAtBottom;
     if (isAtBottom && pendingMessages.length > 0) {
-      setMessages((prev) => [...pendingMessages, ...prev]);
+      setMessages((prev) => {
+        const next = [...pendingMessages, ...prev];
+        return next.length > MAX_LIVE ? next.slice(0, MAX_LIVE) : next;
+      });
       setPendingMessages([]);
     }
   }, [isAtBottom, pendingMessages]);
@@ -208,6 +211,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
   const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
   const PENDING_CAP = 50;
+  // Cap the live in-memory list. Without this the array grew unbounded for
+  // the whole session (every insert prepends), so per-event cost + render
+  // cost climbed until the JS thread froze — the "app lags, have to refresh"
+  // complaint. Scrolling past this re-fetches older pages from Supabase.
+  const MAX_LIVE = 150;
 
   const navigation = useNavigation()
   // ✅ Memoize openProfileDrawer
@@ -593,7 +601,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
           if (isAtBottomRef.current) {
             newestMessageIdRef.current = newMessage.id;
-            return [newMessage, ...prev];
+            const next = [newMessage, ...prev];
+            return next.length > MAX_LIVE ? next.slice(0, MAX_LIVE) : next;
           }
           shouldQueue = true;
           return prev;

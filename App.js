@@ -12,7 +12,7 @@ import { navigationRef } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
-import { AdsConsent, AdsConsentStatus, MaxAdContentRating, MobileAds } from 'react-native-google-mobile-ads';
+import { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
 import {
   MyDarkTheme,
@@ -26,6 +26,7 @@ import { requestTrackingPermission, getTrackingStatus } from 'react-native-track
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import Icon from 'react-native-vector-icons/Ionicons';
 import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
+import AttPrimer from './Code/AppHelper/AttPrimer';
 import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/database';
 
 // Heavy screens stay out of the eager-import graph and are loaded on first
@@ -42,12 +43,21 @@ import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/databas
 // statuses ensures requestTrackingPermission is reached at most once per
 // app session, even if the caller is invoked multiple times.
 let _attPromise = null;
-async function ensureAttRequested() {
+async function ensureAttRequested(beforePrompt) {
   if (_attPromise) return _attPromise;
   _attPromise = (async () => {
     try {
       const status = await getTrackingStatus().catch(() => 'unavailable');
       if (status !== 'not-determined') return status;
+      // First launch only: show our own priming screen explaining WHY we
+      // ask before triggering Apple's one-shot system dialog. A higher
+      // opt-in rate here directly lifts iOS eCPM (IDFA → personalised ads +
+      // clean SKAdNetwork attribution). The primer is informational only,
+      // so a failure/skip must never block the real prompt — hence the
+      // swallow. beforePrompt resolves when the user taps "Continue".
+      if (typeof beforePrompt === 'function') {
+        try { await beforePrompt(); } catch {}
+      }
       return await requestTrackingPermission();
     } catch {
       return 'unavailable';
@@ -122,6 +132,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [showofferwall, setShowofferwall] = useState(false);
+  // ATT priming pre-prompt (iOS). The resolver ref lets the async consent
+  // flow await the user tapping "Continue" before Apple's system dialog fires.
+  const [attPrimerVisible, setAttPrimerVisible] = useState(false);
+  const attPrimerResolveRef = React.useRef(null);
 
 
   // Deferred to idle so it doesn't compete with first paint. Ad SDK init and
@@ -170,6 +184,22 @@ function App() {
 
 
 
+  // Shows the ATT primer and resolves once the user taps "Continue", so the
+  // consent flow can then trigger Apple's real tracking dialog.
+  const showAttPrimer = useCallback(
+    () => new Promise((resolve) => {
+      attPrimerResolveRef.current = resolve;
+      setAttPrimerVisible(true);
+    }),
+    [],
+  );
+  const handleAttPrimerContinue = useCallback(() => {
+    setAttPrimerVisible(false);
+    const resolve = attPrimerResolveRef.current;
+    attPrimerResolveRef.current = null;
+    if (resolve) resolve();
+  }, []);
+
   // ✅ Memoize saveConsentStatus to prevent recreation
   const saveConsentStatus = useCallback((status) => {
     updateLocalState('consentStatus', status);
@@ -184,7 +214,7 @@ function App() {
       // known double-resolve bug when the system dialog is interrupted by a
       // scene transition / app backgrounding.
       if (Platform.OS === 'ios') {
-        await ensureAttRequested();
+        await ensureAttRequested(showAttPrimer);
       }
 
       const consentInfo = await AdsConsent.requestInfoUpdate();
@@ -200,11 +230,14 @@ function App() {
       // flow (AdsConsent above) already handles the under-16 case via the
       // IAB TCF v2 string, so setting it globally here would suppress
       // personalized ads for every user, not just under-age-of-consent ones.
-      await MobileAds().setRequestConfiguration({
-        maxAdContentRating: MaxAdContentRating.T,
-        tagForChildDirectedTreatment: false,
-      });
-      await MobileAds().initialize();
+      // Single source of truth for config-before-init: setRequestConfiguration
+      // (maxAdContentRating 'T', child-treatment flag) then initialize(). The
+      // ad managers await this SAME shared promise before they load, so no ad
+      // is ever requested before the config lands — previously the config and
+      // the ad loads ran in two separate idle callbacks and raced, letting the
+      // first (highest-value) impressions serve at AdMob's default 'G' ceiling.
+      const { ensureAdsInitialized } = require('./Code/Ads/init');
+      await ensureAdsInitialized();
 
 
       if (
@@ -222,7 +255,7 @@ function App() {
     } catch (error) {
       // Silently handle consent errors
     }
-  }, [saveConsentStatus]);
+  }, [saveConsentStatus, showAttPrimer]);
 
   // ✅ Fixed: Use ref to track if reviewCount was updated to prevent infinite loop
   const reviewCountUpdatedRef = React.useRef(false);
@@ -296,11 +329,11 @@ function App() {
   return (
     <View style={{ flex: 1 }}>
       <NavigationContainer ref={navigationRef} theme={selectedTheme}>
-        <StatusBar
-          barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-          translucent={true}
-          backgroundColor="transparent"
-        />
+        {/* Edge-to-edge: backgroundColor/translucent are ignored by the OS
+            here, and forcing them conflicted with the window on some older
+            devices (whole-screen shift). Only barStyle (icon color) is set;
+            all spacing comes from useSafeAreaInsets on each screen. */}
+        <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
 
         <Stack.Navigator screenOptions={headerOptions}>
           <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
@@ -382,6 +415,14 @@ function App() {
         onSubmit={handleDobSubmit}
         isDarkMode={theme === 'dark'}
       />
+
+      {/* ATT priming pre-prompt (iOS) — shown once before Apple's system
+          tracking dialog to lift opt-in, which lifts iOS eCPM. */}
+      <AttPrimer
+        visible={attPrimerVisible}
+        onContinue={handleAttPrimerContinue}
+        isDarkMode={theme === 'dark'}
+      />
     </View>
   );
 }
@@ -402,7 +443,9 @@ export default function AppWrapper() {
       const id = requestIdleCallback(() => {
         try {
           const AppOpenAdManager = require('./Code/Ads/openApp').default;
-          AppOpenAdManager.initAndShow();
+          // Registers the AppState listener so the App Open ad shows on every
+          // background→foreground return (capped + Pro-gated), not just once.
+          AppOpenAdManager.start();
         } catch (_) {}
       });
       return () => cancelIdleCallback(id);

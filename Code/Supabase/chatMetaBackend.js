@@ -49,6 +49,13 @@ export function fromChatMetaRow(row) {
 // -----------------------------------------------------------------
 const CHAT_META_PAGE = 1000;
 
+// Egress: only the columns fromChatMetaRow actually maps. Dropping select('*')
+// avoids shipping updated_at/created_at/owner_uid/id on every row of a load
+// that spans the whole 292 MB table for heavy inboxes.
+const CHAT_META_COLS =
+  'partner_uid,chat_id,last_message,timestamp_ms,receiver_id,receiver_name,' +
+  'receiver_avatar,unread_count,muted,owner_last_read_ms,partner_last_read_ms';
+
 export async function loadChatMeta(ownerUid) {
   if (!ownerUid) return [];
   const out = [];
@@ -56,7 +63,7 @@ export async function loadChatMeta(ownerUid) {
   while (true) {
     const { data, error } = await supabase
       .from('chat_meta_data')
-      .select('*')
+      .select(CHAT_META_COLS)
       .eq('owner_uid', ownerUid)
       .order('timestamp_ms', { ascending: false, nullsFirst: false })
       .range(from, from + CHAT_META_PAGE - 1);
@@ -357,5 +364,72 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
   return () => {
     cancelled = true;
     try { supabase.removeChannel(channel); } catch {}
+  };
+}
+
+// -----------------------------------------------------------------
+// Shared (ref-counted) chat-meta subscription.
+//
+// ChatNavigator (unread badge) and InboxScreen (chat list) both need the
+// same owner_uid stream. Subscribing twice opened TWO realtime channels and
+// every chat_meta_data change was delivered — and BILLED — twice. This
+// multiplexes a single underlying subscribeToChatMeta to N in-process
+// consumers and tears it down only when the last one detaches.
+//
+// Late joiners (e.g. InboxScreen mounting after ChatNavigator) are replayed
+// the rows cached so far, plus the latest status / ready, so they see the
+// same initial-load semantics as a direct subscription.
+// -----------------------------------------------------------------
+const _chatMetaShared = new Map(); // ownerUid -> entry
+
+export function subscribeToChatMetaShared(ownerUid, handlers = {}) {
+  if (!ownerUid) return () => {};
+
+  let entry = _chatMetaShared.get(ownerUid);
+  if (!entry) {
+    entry = {
+      listeners: new Set(),
+      rows: new Map(),     // partnerId -> row (current snapshot)
+      ready: false,
+      lastStatus: null,
+      unsubscribe: null,
+    };
+    _chatMetaShared.set(ownerUid, entry);
+
+    entry.unsubscribe = subscribeToChatMeta(ownerUid, {
+      onUpsert: (row) => {
+        if (row?.partnerId) entry.rows.set(row.partnerId, row);
+        entry.listeners.forEach((l) => l.onUpsert?.(row));
+      },
+      onRemove: (partnerId) => {
+        entry.rows.delete(partnerId);
+        entry.listeners.forEach((l) => l.onRemove?.(partnerId));
+      },
+      onReady: () => {
+        entry.ready = true;
+        entry.listeners.forEach((l) => l.onReady?.());
+      },
+      onStatus: (status, err) => {
+        entry.lastStatus = status;
+        entry.listeners.forEach((l) => l.onStatus?.(status, err));
+      },
+    });
+  }
+
+  entry.listeners.add(handlers);
+
+  // Replay current state to the late joiner so it doesn't miss the load.
+  if (entry.rows.size > 0) {
+    entry.rows.forEach((row) => handlers.onUpsert?.(row));
+  }
+  if (entry.lastStatus) handlers.onStatus?.(entry.lastStatus);
+  if (entry.ready) handlers.onReady?.();
+
+  return () => {
+    entry.listeners.delete(handlers);
+    if (entry.listeners.size === 0) {
+      try { entry.unsubscribe?.(); } catch {}
+      _chatMetaShared.delete(ownerUid);
+    }
   };
 }

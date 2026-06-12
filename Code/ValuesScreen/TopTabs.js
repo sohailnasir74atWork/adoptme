@@ -152,7 +152,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrapper, { paddingTop: Platform.OS === 'ios' ? insets.top : (StatusBar.currentHeight || 24) + 12 }]}>
+    <View style={[styles.wrapper, { paddingTop: insets.top + 8 }]}>
       {/* Tabs header */}
       <View style={styles.container}>
         <ScrollView
