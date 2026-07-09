@@ -12,6 +12,7 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import config from '../../Helper/Environment';
+import { serverNowMs } from '../../Helper/serverTime';
 import { useGlobalState } from '../../GlobelStats';
 import SignInDrawer from '../../Firebase/SigninDrawer';
 import ChatHeaderContent from './ChatHeaderContent';
@@ -25,7 +26,6 @@ import leoProfanity from 'leo-profanity';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useLocalState } from '../../LocalGlobelStats';
-import database, { onValue, ref } from '@react-native-firebase/database';
 import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
 import {
   loadMessages as sbLoadMessages,
@@ -86,7 +86,7 @@ const CHANNELS = [
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
   setModalVisibleChatinfo, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
-  const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail } = useGlobalState();
+  const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail, strikeInfo, isUserBlocked } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -104,7 +104,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const { t, i18n } = useTranslation();
   const [pendingMessages, setPendingMessages] = useState([]);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [strikeInfo, setStrikeInfo] = useState(null);
+  // strikeInfo comes from GlobelStats context — the app-wide
+  // banned_users_by_email/{email} listener. The per-screen duplicate
+  // listener was removed (profiler: 43k reads/20min across the 4 copies).
   const [petModalVisible, setPetModalVisible] = useState(false);
   const [selectedFruits, setSelectedFruits] = useState([]);
   const [device, setDevice] = useState(null)
@@ -169,6 +171,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const gapFillTimerRef = useRef(null);
   const lastRealtimeStatusRef = useRef(null);
 
+  // Latest-ref for loadMessages so gapFillSince can trigger a reset load
+  // WITHOUT depending on it. loadMessages is memoised on lastLoadedKey,
+  // so a direct dep would re-create gapFillSince → scheduleGapFill → the
+  // focus effect on every pagination, tearing down and resubscribing the
+  // (billed) realtime channel each time the user scrolls back a page.
+  const loadMessagesRef = useRef(null);
+
   // CHANNEL_ERROR / TIMED_OUT recovery. Supabase Realtime does NOT
   // auto-reheal a channel that hits CHANNEL_ERROR (e.g. InvalidJWTToken
   // when the Firebase ID token expires across a laptop sleep, or when
@@ -179,6 +188,44 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   const channelErrorAttemptsRef = useRef(0);
   const channelRetryTimerRef = useRef(null);
   const [resubKey, setResubKey] = useState(0);
+
+  // -------------------------------------------------------------------
+  // Idle auto-pause for the (billed) public-room realtime stream.
+  // -------------------------------------------------------------------
+  // The room channel fans EVERY message out to EVERY subscriber, so a user
+  // who leaves the chat open but stops interacting is pure realtime-message
+  // cost — the dominant line on the Supabase bill. After IDLE_PAUSE_MS with
+  // no interaction we tear the subscription down and show a resume bar; any
+  // touch (scroll/tap/type) flips realtimePaused back to false, the
+  // subscription effect re-subscribes (same path as resubKey), and the
+  // existing onStatus → scheduleGapFill backfills whatever was missed.
+  const IDLE_PAUSE_MS = 180000; // 3 min — tune for cost vs. interruption
+  const [realtimePaused, setRealtimePaused] = useState(false);
+  const idleTimerRef = useRef(null);
+
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
+  const armIdleTimer = useCallback(() => {
+    clearIdleTimer();
+    idleTimerRef.current = setTimeout(() => {
+      idleTimerRef.current = null;
+      setRealtimePaused(true);
+    }, IDLE_PAUSE_MS);
+  }, [clearIdleTimer]);
+
+  // Wire onto every interaction signal (container onTouchStart, send,
+  // reaction). Resumes if paused and restarts the idle countdown. Returning
+  // the same value from the updater makes React bail out, so touches while
+  // already-live cost no re-render.
+  const registerChatActivity = useCallback(() => {
+    setRealtimePaused((paused) => (paused ? false : paused));
+    armIdleTimer();
+  }, [armIdleTimer]);
 
   const flatListRef = useRef();
 
@@ -357,74 +404,78 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     },
     [roomId, lastLoadedKey, validateMessage, bannedUsers]
   );
+  loadMessagesRef.current = loadMessages;
   // Fetch messages newer than our anchor cursor and merge them in.
   // Called on realtime recovery (channel went CHANNEL_ERROR/TIMED_OUT/
   // CLOSED and came back SUBSCRIBED) to backfill any INSERTs that fired
   // while we were disconnected — those events are NOT replayed by
   // Supabase Realtime, so without this the chat silently drops messages.
   //
-  // Pages forward if the result hits the limit (someone might have sent
-  // >200 messages while we were away). Bounded by MAX_PAGES to avoid
-  // runaway loops on a mis-advancing cursor.
+  // COST NOTE: loadMessagesSince returns the NEWEST rows after the
+  // cursor, so the old 5×200 forward-paging loop could never reach the
+  // older remainder of a large gap — after page 1 the advanced cursor
+  // made every later page come back empty. It only ever did one useful
+  // (200-wide-row) iteration. New shape: fetch ONE small page — short
+  // blips (the common case) transfer a handful of rows; if the page
+  // comes back full the gap is bigger than a screenful, so do a reset
+  // load of the newest page instead, which is both cheaper and hole-free
+  // versus merging a large backlog nobody will scroll through.
   const gapFillSince = useCallback(async () => {
     if (!roomId) return;
     if (!initialLoadDoneRef.current) return; // initial load hasn't anchored yet
     try {
-      const GAP_PAGE_SIZE = 200;
-      const MAX_PAGES = 5; // hard ceiling: 1000 messages max per recovery
-      let cursor = newestCursorRef.current;
+      const GAP_LIMIT = 60;
+      const cursor = newestCursorRef.current;
       if (!cursor) return;
 
-      for (let i = 0; i < MAX_PAGES; i++) {
-        const fetched = await sbLoadMessagesSince(roomId, cursor, { limit: GAP_PAGE_SIZE });
-        if (!fetched.length) return;
+      const fetched = await sbLoadMessagesSince(roomId, cursor, { limit: GAP_LIMIT });
+      if (!fetched.length) return;
 
-        const bannedIds = Array.isArray(bannedUsers)
-          ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
-          : [];
-        const filtered = fetched
-          .map(m => validateMessage(m))
-          .filter(m => m?.senderId && !bannedIds.includes(m.senderId));
-
-        if (filtered.length) {
-          // Hydrate reactions for the new rows.
-          const reactionMap = await sbLoadReactionsFor(filtered.map(m => m.id));
-          filtered.forEach(m => { m.reactions = reactionMap[m.id] || {}; });
-
-          setMessages((prev) => {
-            const byId = new Set(prev.map(m => String(m.id)));
-            const byClientId = new Set(prev.map(m => m.clientMsgId).filter(Boolean));
-            const toAdd = filtered.filter(m => {
-              if (byId.has(String(m.id))) return false;
-              if (m.clientMsgId && byClientId.has(m.clientMsgId)) return false;
-              return true;
-            });
-            if (!toAdd.length) return prev;
-            // Replace any optimistic placeholders whose server row we just fetched.
-            const merged = prev.map((m) => {
-              if (!m._pending || !m.clientMsgId) return m;
-              const real = filtered.find(r => r.clientMsgId === m.clientMsgId);
-              return real ? { ...real } : m;
-            });
-            return [...toAdd, ...merged].sort(
-              (a, b) => (b?.timestamp || 0) - (a?.timestamp || 0),
-            );
-          });
-
-          // Advance cursor to the newest row we just merged.
-          const newest = filtered[0];
-          newestCursorRef.current = {
-            createdAt: new Date(newest.timestamp).toISOString(),
-            id: newest.id,
-          };
-        }
-
-        if (fetched.length < GAP_PAGE_SIZE) return; // drained
-        cursor = {
-          createdAt: new Date(fetched[0].timestamp).toISOString(),
-          id: fetched[0].id,
-        };
+      if (fetched.length >= GAP_LIMIT) {
+        // Gap exceeds one page — start fresh from the newest messages
+        // (re-anchors newestCursorRef and pagination key internally).
+        await loadMessagesRef.current?.(true);
+        return;
       }
+
+      const bannedIds = Array.isArray(bannedUsers)
+        ? bannedUsers.map(u => (typeof u === 'string' ? u : u?.id)).filter(Boolean)
+        : [];
+      const filtered = fetched
+        .map(m => validateMessage(m))
+        .filter(m => m?.senderId && !bannedIds.includes(m.senderId));
+      if (!filtered.length) return;
+
+      // Hydrate reactions for the new rows.
+      const reactionMap = await sbLoadReactionsFor(filtered.map(m => m.id));
+      filtered.forEach(m => { m.reactions = reactionMap[m.id] || {}; });
+
+      setMessages((prev) => {
+        const byId = new Set(prev.map(m => String(m.id)));
+        const byClientId = new Set(prev.map(m => m.clientMsgId).filter(Boolean));
+        const toAdd = filtered.filter(m => {
+          if (byId.has(String(m.id))) return false;
+          if (m.clientMsgId && byClientId.has(m.clientMsgId)) return false;
+          return true;
+        });
+        if (!toAdd.length) return prev;
+        // Replace any optimistic placeholders whose server row we just fetched.
+        const merged = prev.map((m) => {
+          if (!m._pending || !m.clientMsgId) return m;
+          const real = filtered.find(r => r.clientMsgId === m.clientMsgId);
+          return real ? { ...real } : m;
+        });
+        return [...toAdd, ...merged].sort(
+          (a, b) => (b?.timestamp || 0) - (a?.timestamp || 0),
+        );
+      });
+
+      // Advance cursor to the newest row we just merged.
+      const newest = filtered[0];
+      newestCursorRef.current = {
+        createdAt: new Date(newest.timestamp).toISOString(),
+        id: newest.id,
+      };
     } catch (error) {
       console.error('[gapFill] failed:', error?.message || error);
     }
@@ -484,12 +535,19 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
   }, [roomId]);
 
-  useEffect(() => {
-    if (!roomId) return;
-    fetchPinned();
-    const unsub = sbSubscribeToPinned(roomId, { onChange: fetchPinned });
-    return () => { unsub(); };
-  }, [roomId, fetchPinned]);
+  // Focus-gated like the messages channel: tears the pinned channel down
+  // when the chat tab blurs instead of holding an idle WebSocket channel
+  // open (peak-connection billing). The fetchPinned() on re-focus replays
+  // any pin/unpin that happened while blurred — pins change rarely, so a
+  // refetch is strictly cheaper than an always-on subscription.
+  useFocusEffect(
+    useCallback(() => {
+      if (!roomId) return;
+      fetchPinned();
+      const unsub = sbSubscribeToPinned(roomId, { onChange: fetchPinned });
+      return () => { unsub(); };
+    }, [roomId, fetchPinned])
+  );
 
   // ✅ Channel switch handler — resets state for new channel
   const handleChannelSwitch = useCallback((channel) => {
@@ -556,6 +614,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   useFocusEffect(
     useCallback(() => {
     if (!roomId) return;
+
+    // Idle auto-pause: while paused we hold NO room subscription (zero
+    // realtime-message billing). The previous run's cleanup already tore the
+    // channel down; resuming flips realtimePaused false, re-runs this effect,
+    // and re-subscribes (then onStatus → scheduleGapFill backfills).
+    if (realtimePaused) return;
 
     // Advance the gap-fill cursor whenever a realtime-delivered row lands
     // on screen, so reconnects resume from the last thing we actually saw.
@@ -668,6 +732,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       },
     };
 
+    // Start the idle countdown now that we're committing to a (billed)
+    // subscription. Interaction re-arms it via registerChatActivity.
+    armIdleTimer();
+
     // Pre-flight the realtime auth so the channel JOIN goes out with a
     // valid JWT in its payload. supabase-js's internal connect-time auth
     // is fire-and-forget; if the WS opens before our async accessToken
@@ -681,6 +749,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     return () => {
       cancelled = true;
       unsubscribe();
+      clearIdleTimer();
       hasInitializedRef.current = false;
       lastRealtimeStatusRef.current = null;
       if (channelRetryTimerRef.current) {
@@ -699,7 +768,15 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     // torn down, and a new one opens with the token attached. The
     // existing onStatus → scheduleGapFill path then backfills anything
     // missed during the window.
-    }, [roomId, bannedUsers, scheduleGapFill, flushRetryQueue, firebaseUid, resubKey])
+    }, [roomId, bannedUsers, scheduleGapFill, flushRetryQueue, firebaseUid, resubKey, realtimePaused, armIdleTimer, clearIdleTimer])
+  );
+
+  // Always resume live when (re)entering the room: the cleanup clears any
+  // idle-pause left from a prior visit on blur, so the next focus starts
+  // subscribed. Stable empty deps — a channel switch resumes via the pill
+  // tap's onTouchStart, and setRealtimePaused is referentially stable.
+  useFocusEffect(
+    useCallback(() => () => { setRealtimePaused(false); }, []),
   );
 
   // (Reactions realtime intentionally omitted — see chatBackend.js comment.
@@ -804,21 +881,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
 
-  useEffect(() => {
-    if (!currentUserEmail || !appdatabase) return;
-
-    const encodedEmail = currentUserEmail.toLowerCase().trim().replace(/\./g, '(dot)');
-    const banRef = ref(appdatabase, `banned_users_by_email/${encodedEmail}`);
-
-    const unsubscribe = onValue(banRef, (snapshot) => {
-      const banData = snapshot.val();
-      setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
-    });
-
-    return () => unsubscribe();
-  }, [currentUserEmail, appdatabase]);
-
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadMessages(true);
@@ -882,9 +944,26 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
 
     // ---- Strike / ban checks ----
+    // Primary gate: isUserBlocked from GlobelStats is validated against a
+    // fresh SERVER-time probe (email ban + device ban) — the display block
+    // below can't be fooled by a tampered device clock, but this is the
+    // authoritative check. This screen previously had no isUserBlocked gate
+    // at all, so rolling the device clock forward slipped past the
+    // Date.now() comparison below and let banned users post here.
+    if (isUserBlocked) {
+      showMessage({
+        message: t('chat.access_denied', { defaultValue: 'Access Denied' }),
+        description: t('chat.banned_message', { defaultValue: 'You are banned from sending messages.' }),
+        type: 'danger',
+      });
+      return;
+    }
+
     if (strikeInfo) {
       const { strikeCount, bannedUntil } = strikeInfo;
-      const now = Date.now();
+      // Server-time estimate (cached probe offset) — never the raw device
+      // clock, which users were changing to bypass temp bans.
+      const now = serverNowMs();
 
       // Permanent ban
       if (bannedUntil === 'permanent') {
@@ -1078,7 +1157,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     <>
       <GestureHandlerRootView>
 
-        <View style={styles.container}>
+        <View style={styles.container} onTouchStart={registerChatActivity}>
           {/* ✅ Channel Pill Switcher */}
           <ScrollView
             horizontal
@@ -1163,6 +1242,24 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
               />
             )}
             {!localState.isPro && <BannerAdComponent />}
+            {realtimePaused && (
+              <TouchableOpacity
+                onPress={registerChatActivity}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                  backgroundColor: config.colors.primary,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
+                  ⏸  Live chat paused to save data — tap to resume
+                </Text>
+              </TouchableOpacity>
+            )}
             {user.id ? (
               <MessageInput
                 input={input}

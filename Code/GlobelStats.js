@@ -40,6 +40,13 @@ export const GlobalStateProvider = ({ children }) => {
   const [freeTranslation, setFreeTranslation] = useState(null);
   const [currentUserEmail, setCurrentuserEmail] = useState('')
   const [single_offer_wall, setSingle_offer_wall] = useState(false)
+  // World Cup feature kill switch. Default true (feature on); set RTDB
+  // /worldcup_enabled = false from the backend to hide the whole feature.
+  const [worldCupEnabled, setWorldCupEnabled] = useState(true);
+  // Moderator ban/mute kill switch. Default true (mods can ban/mute); admins
+  // flip RTDB /mod_controls_enabled = false in the Admin Dashboard to strip
+  // ban/mute/strike from moderators. Admins are never affected.
+  const [modControlsEnabled, setModControlsEnabled] = useState(true);
   const [tradingServerLink, setTradingServerLink] = useState(null); // Trading server link from admin servers
 
 
@@ -518,6 +525,33 @@ export const GlobalStateProvider = ({ children }) => {
 
     fetchAPIKeys();
   }, []);
+
+  // World Cup kill switch — fully isolated so a read failure can NEVER affect
+  // other flags. Default stays ON; only an explicit `false` hides the feature.
+  // NOTE: requires an RTDB read rule for /worldcup_enabled (rules are per-node
+  // with no root default-read), otherwise the read is denied and we stay ON.
+  useEffect(() => {
+    if (!appdatabase) return;
+    get(ref(appdatabase, 'worldcup_enabled'))
+      .then((snap) => setWorldCupEnabled(snap.val() !== false))
+      .catch(() => { /* denied / offline → leave feature ON */ });
+  }, [appdatabase]);
+
+  // Moderator ban/mute kill switch — live subscription so an admin flipping it
+  // takes effect on every moderator's device immediately. Default stays ON;
+  // only an explicit `false` strips ban/mute/strike from moderators.
+  // NOTE: requires an RTDB read rule on /mod_controls_enabled — without it the
+  // read is denied and the flag stays ON (the OFF state would not propagate).
+  useEffect(() => {
+    if (!appdatabase) return;
+    const r = ref(appdatabase, 'mod_controls_enabled');
+    const unsub = onValue(
+      r,
+      (snap) => setModControlsEnabled(snap.val() !== false),
+      () => { /* denied / offline → leave ON */ }
+    );
+    return () => { try { unsub(); } catch (e) { /* noop */ } };
+  }, [appdatabase]);
 
   // Fetch trading server link with 3 hour caching
   // ✅ FIXED: Run once on mount only — deps no longer include values this effect updates
@@ -1043,8 +1077,10 @@ export const GlobalStateProvider = ({ children }) => {
       strikeInfo, // ban payload from banned_users_by_email — used for displaying ban reason/duration
       deviceBanInfo, // device-side ban payload — carries originating email/userId
       isUserBlocked, // canonical gate: email-ban OR device-ban
+      worldCupEnabled, // World Cup feature kill switch (RTDB /worldcup_enabled)
+      modControlsEnabled, // moderator ban/mute kill switch (RTDB /mod_controls_enabled)
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled]
   );
 
   return (

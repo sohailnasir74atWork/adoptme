@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AdoptMe Values — Marketing Work Dashboard</title>
+<style>
+  :root{
+    --accent:#2563eb; --accent-dark:#1d4ed8; --ink:#15233b; --muted:#5b6b85;
+    --line:#e1e7f0; --soft:#f5f8fd; --card:#ffffff; --bg:#eef2f9;
+    --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --shade:#e8eefb;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.5;}
+  header{background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;padding:20px 24px;}
+  header h1{margin:0;font-size:21px;}
+  header p{margin:4px 0 0;font-size:13px;opacity:.9;}
+  .wrap{max-width:1040px;margin:0 auto;padding:20px 24px 80px;}
+  .row{display:flex;flex-wrap:wrap;gap:14px;}
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:18px 0;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .stat .num{font-size:26px;font-weight:700;line-height:1.1;}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.03em;}
+  /* tabs */
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 16px;border-bottom:2px solid var(--line);}
+  .tab{background:none;border:0;padding:10px 16px;font-size:14px;font-weight:600;color:var(--muted);
+       cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  /* cards / forms */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px;}
+  .card h2{margin:0 0 14px;font-size:17px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+       font-size:14px;font-family:inherit;background:#fff;color:var(--ink);}
+  textarea{resize:vertical;min-height:42px;}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:0;
+       padding:10px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn:hover{background:var(--accent-dark);}
+  .btn.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent);}
+  .btn.sm{padding:5px 10px;font-size:12px;}
+  .btn.gray{background:#eef1f6;color:var(--ink);}
+  .btn.danger{background:#fff;color:var(--bad);border:1px solid #f3c2c2;}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{border-bottom:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top;}
+  th{background:var(--soft);font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);}
+  tr:hover td{background:#fafcff;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .pill.help{background:#e0f2fe;color:#0369a1;}
+  .pill.value{background:#dcfce7;color:#15803d;}
+  .pill.debate{background:#fef3c7;color:#b45309;}
+  .pill.promo{background:#fae8ff;color:#a21caf;}
+  .pill.trend{background:#ede9fe;color:#6d28d9;}
+  .pill.Pending{background:#f1f5f9;color:#475569;}
+  .pill.Approved{background:#dcfce7;color:#15803d;}
+  .pill.Rejected{background:#fee2e2;color:#b91c1c;}
+  .muted{color:var(--muted);}
+  .empty{text-align:center;color:var(--muted);padding:26px;font-size:14px;}
+  /* progress meters */
+  .meter{margin:10px 0;}
+  .meter .top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;}
+  .bar{height:12px;background:#eef1f6;border-radius:999px;overflow:hidden;}
+  .bar > span{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .3s;}
+  .bar.ok > span{background:var(--ok);}
+  .bar.warn > span{background:var(--warn);}
+  .bar.bad > span{background:var(--bad);}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px;}
+  .filters > div{min-width:140px;}
+  .note{font-size:12.5px;color:var(--muted);background:var(--soft);border:1px solid var(--line);
+        border-radius:8px;padding:10px 12px;margin-top:6px;}
+  .score{font-size:34px;font-weight:800;color:var(--accent);}
+  .pill.image{background:#e0e7ff;color:#4338ca;}
+  /* checklist */
+  .chk-group{margin-bottom:16px;}
+  .chk-group h3{margin:0 0 8px;font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:.03em;}
+  .chk-item{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid var(--line);
+       border-radius:9px;margin-bottom:7px;background:#fff;cursor:pointer;}
+  .chk-item:hover{background:var(--soft);}
+  .chk-item input{width:18px;height:18px;margin-top:1px;flex:none;cursor:pointer;}
+  .chk-item.done{background:#f0fdf4;border-color:#bbf7d0;}
+  .chk-item.done .ci-text{text-decoration:line-through;color:var(--muted);}
+  .ci-text{font-size:13.5px;font-weight:600;}
+  .ci-sub{font-size:12px;color:var(--muted);}
+  /* ai review */
+  .ai-verdict{border-radius:10px;padding:14px 16px;margin:14px 0 10px;font-size:14px;}
+  .ai-verdict.ok{background:#f0fdf4;border:1px solid #bbf7d0;}
+  .ai-verdict.bad{background:#fef2f2;border:1px solid #fecaca;}
+  .ai-line{padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;}
+  .ai-line:last-child{border:0;}
+  .ai-line .s{font-weight:700;}
+  .codebox{width:100%;min-height:120px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;}
+  @media print{
+    body{background:#fff;}
+    header,.tabs,.no-print,#statCards{display:none !important;}
+    .wrap{padding:0;max-width:none;}
+    .card{border:none;padding:0;}
+    #reportArea{display:block !important;}
+    @page{margin:14mm;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>AdoptMe Values — Marketing Work Dashboard</h1>
+  <p>Daily checklist · log your work · submit post links for an AI quality-check · track progress. Saved in this browser.</p>
+</header>
+
+<div class="wrap">
+
+  <!-- Shared-store status -->
+  <div id="cloudBanner" class="note" style="margin:0 0 14px;display:none;align-items:center;gap:10px;justify-content:space-between;">
+    <span id="cloudBannerText"></span>
+    <button class="btn sm gray no-print" id="cloudRefresh" style="display:none;">↻ Refresh</button>
+  </div>
+
+  <!-- This-week summary -->
+  <div class="stats" id="statCards"></div>
+
+  <!-- Tabs -->
+  <div class="tabs no-print">
+    <button class="tab active" data-tab="log">➕ Log Work</button>
+    <button class="tab" data-tab="checklist">✅ Daily Checklist</button>
+    <button class="tab" data-tab="subs">📋 My Submissions</button>
+    <button class="tab" data-tab="ai">🤖 AI Review (owner)</button>
+    <button class="tab" data-tab="progress">📈 Progress</button>
+    <button class="tab" data-tab="report">📄 Report &amp; Export</button>
+    <button class="tab" data-tab="settings">⚙️ Settings</button>
+  </div>
+
+  <!-- LOG WORK -->
+  <section class="panel active" id="panel-log">
+    <div class="card">
+      <h2>Log a piece of work</h2>
+      <div class="grid">
+        <div>
+          <label>Date</label>
+          <input type="date" id="f-date" />
+        </div>
+        <div>
+          <label>Platform</label>
+          <select id="f-platform">
+            <option>Discord</option><option>Reddit</option><option>Facebook</option>
+            <option>TikTok (Photo Mode)</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Activity</label>
+          <select id="f-activity">
+            <option value="Post">Post / Video</option>
+            <option value="Comment">Comments (batch)</option>
+            <option value="Link">Link share</option>
+            <option value="Outreach">Creator outreach (DM)</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Post type</label>
+          <select id="f-type">
+            <option value="help">Help (answer, no selling)</option>
+            <option value="value">Value / News</option>
+            <option value="debate">Debate (honest opinion)</option>
+            <option value="promo">Promo (soft)</option>
+            <option value="image">Image post (screenshot)</option>
+            <option value="">— (not a post)</option>
+          </select>
+        </div>
+        <div>
+          <label>How many? (count)</label>
+          <input type="number" id="f-count" min="1" value="1" />
+        </div>
+        <div>
+          <label>Link / URL (the proof)</label>
+          <input type="url" id="f-url" placeholder="https://..." />
+        </div>
+        <div>
+          <label>Views (optional — your estimate)</label>
+          <input type="number" id="f-views" min="0" placeholder="AI fills the real number" />
+        </div>
+        <div>
+          <label>Likes (optional)</label>
+          <input type="number" id="f-likes" min="0" placeholder="AI fills the real number" />
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <label>Notes (optional)</label>
+        <textarea id="f-notes" placeholder="What did you do? Any result?"></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn" id="addBtn">Add to my work log</button>
+        <button class="btn gray" id="cancelEditBtn" style="display:none;">Cancel edit</button>
+        <span class="muted" id="addMsg"></span>
+      </div>
+      <div class="note">💡 <b>You fill:</b> date, platform, activity, post type, count, <b>link</b>, notes. Always include the link — that's your proof. Views/likes are optional. <b>The owner runs the AI Review</b> to verify each link and fill the score, verdict, and real reach — you don't do that step. For comments, set Activity = “Comments (batch)” and put the count (e.g. 20).</div>
+    </div>
+  </section>
+
+  <!-- DAILY CHECKLIST -->
+  <section class="panel" id="panel-checklist">
+    <div class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;">
+        <div>
+          <h2 style="margin-bottom:4px;">Daily checklist</h2>
+          <div class="muted" style="font-size:13px;">Tick each task as you do it. Saved per day in this browser.</div>
+        </div>
+        <div style="min-width:160px;">
+          <label>Day</label>
+          <input type="date" id="chk-date" />
+        </div>
+      </div>
+      <div class="meter" style="margin-top:14px;">
+        <div class="top"><span>Today's progress</span><span id="chk-pct">0%</span></div>
+        <div class="bar ok"><span id="chk-bar" style="width:0%"></span></div>
+      </div>
+      <div id="chk-list" style="margin-top:14px;"></div>
+      <div class="note">✅ This follows the marketing plan's daily routine. Always: read each place's rules first · reword every script · never drop a link as your first message.</div>
+    </div>
+  </section>
+
+  <!-- SUBMISSIONS -->
+  <section class="panel" id="panel-subs">
+    <div class="card">
+      <h2>My submissions</h2>
+      <div class="filters no-print">
+        <div>
+          <label>Filter person</label>
+          <select id="flt-operator"><option value="">Everyone</option></select>
+        </div>
+        <div>
+          <label>Filter platform</label>
+          <select id="flt-platform"><option value="">All</option></select>
+        </div>
+        <div>
+          <label>Filter type</label>
+          <select id="flt-type">
+            <option value="">All</option>
+            <option value="help">Help</option>
+            <option value="value">Value / News</option>
+            <option value="debate">Debate</option>
+            <option value="promo">Promo</option>
+            <option value="image">Image post</option>
+          </select>
+        </div>
+        <div>
+          <label>Search notes/URL</label>
+          <input type="text" id="flt-search" placeholder="type to search..." />
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="subsTable">
+          <thead>
+            <tr>
+              <th>Date</th><th>Who</th><th>Platform</th><th>Activity</th><th>Type</th>
+              <th>Qty</th><th>Views</th><th>Link</th><th>Status</th><th class="no-print">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="subsBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="subsEmpty">No work logged yet. Go to “Log Work” to add your first entry.</div>
+    </div>
+  </section>
+
+  <!-- AI REVIEW -->
+  <section class="panel" id="panel-ai">
+    <div class="card">
+      <h2>AI work-quality review <span class="pill promo" style="vertical-align:middle;">OWNER STEP</span></h2>
+      <p class="muted" style="font-size:13.5px;margin-top:0;">
+        The employee just logs each post link in <b>Log Work</b>. <b>You (the owner) run this step</b> — it sends those
+        links to AI to check each post is <b>real, live, on-brand and genuinely helpful</b>, fills the score / verdict /
+        real reach, and tells you whether everything is working. The employee never does verification.
+      </p>
+      <div class="stats" style="margin:6px 0 14px;">
+        <div class="stat"><div class="num" id="ai-total">0</div><div class="lbl">Links with a URL</div></div>
+        <div class="stat"><div class="num" id="ai-pending">0</div><div class="lbl">Awaiting AI review</div></div>
+        <div class="stat"><div class="num" id="ai-done">0</div><div class="lbl">AI reviewed</div></div>
+      </div>
+
+      <h3 style="font-size:14px;margin:0 0 6px;">Step 1 — copy the audit request</h3>
+      <div class="actions" style="margin-top:0;">
+        <button class="btn" id="ai-copy">📋 Copy AI audit request</button>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--muted);margin:0;">
+          <input type="checkbox" id="ai-only-pending" checked style="width:auto;" /> only un-reviewed links
+        </label>
+        <span class="muted" id="ai-copymsg"></span>
+      </div>
+      <div class="note">Paste it into <b>Claude</b> (Claude Code or claude.ai). Claude opens each link, checks it, and replies with a JSON result.</div>
+
+      <h3 style="font-size:14px;margin:16px 0 6px;">Step 2 — paste Claude's JSON result back</h3>
+      <textarea id="ai-paste" class="codebox" placeholder='Paste the JSON Claude gives you, e.g.&#10;[{"url":"https://...","live":true,"mentions_app":true,"quality":8,"verdict":"good","note":"helpful WFL answer"}]'></textarea>
+      <div class="actions">
+        <button class="btn" id="ai-apply">✅ Apply AI results</button>
+        <span class="muted" id="ai-applymsg"></span>
+      </div>
+
+      <div id="ai-summary"></div>
+    </div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section class="panel" id="panel-progress">
+    <div class="card">
+      <h2>This week vs targets</h2>
+      <div id="progressMeters"></div>
+    </div>
+    <div class="row">
+      <div class="card" style="flex:1;min-width:260px;">
+        <h2>Post-mix balance (90/10 rule)</h2>
+        <div id="mixMeters"></div>
+        <div class="note" id="promoNote"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:220px;text-align:center;">
+        <h2>Your score this week</h2>
+        <div class="score" id="weekScore">0</div>
+        <div class="muted" style="font-size:12px;">Posts +5 · Comments +1 · Links +3 · Approved +5 · per 1k views +1</div>
+        <hr style="border:0;border-top:1px solid var(--line);margin:14px 0;">
+        <div class="muted" style="font-size:13px;">All-time score: <b id="allScore">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORT -->
+  <section class="panel" id="panel-report">
+    <div class="card no-print">
+      <h2>Weekly report &amp; export</h2>
+      <div class="filters">
+        <div>
+          <label>Report for week starting (Mon)</label>
+          <input type="date" id="rep-week" />
+        </div>
+        <div style="align-self:flex-end;">
+          <button class="btn" id="genReport">Generate report</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="printReport">🖨️ Save report as PDF</button>
+        <button class="btn gray" id="expCsv">⬇️ Export all (CSV)</button>
+        <button class="btn gray" id="expJson">⬇️ Backup (JSON)</button>
+        <button class="btn gray" id="impBtn">⬆️ Import (JSON)</button>
+        <input type="file" id="impFile" accept="application/json" style="display:none;" />
+      </div>
+      <div class="note">To send your week to the owner: click <b>Save report as PDF</b> (then email it), or <b>Export all (CSV)</b> for a spreadsheet. The owner can load your <b>JSON backup</b> with Import to review and approve.</div>
+    </div>
+    <div class="card" id="reportArea" style="display:none;">
+      <div id="reportContent"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="panel-settings">
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="grid">
+        <div>
+          <label>Your name</label>
+          <input type="text" id="s-name" placeholder="Operator name" />
+        </div>
+      </div>
+      <h2 style="margin-top:18px;">Weekly targets</h2>
+      <div class="grid">
+        <div><label>Posts / videos</label><input type="number" id="s-t-posts" min="0" /></div>
+        <div><label>Comments</label><input type="number" id="s-t-comments" min="0" /></div>
+        <div><label>Links submitted</label><input type="number" id="s-t-links" min="0" /></div>
+        <div><label>Tracked clicks</label><input type="number" id="s-t-clicks" min="0" /></div>
+        <div><label>Total views (reach)</label><input type="number" id="s-t-views" min="0" /></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="saveSettings">Save settings</button>
+        <span class="muted" id="setMsg"></span>
+      </div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:18px 0;">
+      <button class="btn danger" id="clearAll">Delete ALL data</button>
+      <div class="note">Data lives only in this browser (localStorage). Use Backup (JSON) often so you never lose it.</div>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+"use strict";
+/* =========================================================================
+   AdoptMe Values — Marketing Work Dashboard
+   Single-file app. Shared store via Supabase (data only); falls back to
+   this browser's localStorage when not configured.
+   ========================================================================= */
+
+/* ============ CONFIG — paste your SEPARATE Supabase project values ========
+   Get these from your new project: Settings -> API.
+   Leave blank to keep the tool offline (saves only in this browser).      */
+const SUPABASE_URL = "";        // e.g. https://abcdefgh.supabase.co
+const SUPABASE_ANON_KEY = "";   // your project's "anon public" key
+/* ======================================================================== */
+
+const CLOUD = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+const db = CLOUD ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const STORAGE_KEY = "amv_dashboard_v1";
+
+const TYPE_LABELS = {
+  help:"Help", value:"Value / News", debate:"Debate",
+  promo:"Promo", image:"Image post", trend:"Trend / Fun", "":"—"
+};
+
+const DEFAULT_STATE = {
+  operatorName: "",
+  targets: { posts:10, comments:120, links:7, clicks:30, views:5000 },
+  entries: [],
+  checklists: {}
+};
+
+/* Daily checklist — follows the marketing plan's daily routine */
+const CHECKLIST = [
+  ["☀️ Morning (~45 min)", [
+    ["m1","Reply to all overnight comments & messages","fast replies build trust + reach"],
+    ["m2","Post today's value movers where allowed","use an app screenshot"]
+  ]],
+  ["🌤️ Midday (~90 min)", [
+    ["d1","Discord: 8–15 high-quality helpful answers","soft-mention the app only where it helps & is allowed"],
+    ["d2","Reddit: 10–15 helpful comments","answer first, never link first"]
+  ]],
+  ["🌆 Afternoon (~60 min)", [
+    ["a1","Facebook: 1 value post + ~10 helpful comments","rotate groups, follow each group's rules"],
+    ["a2","Optional: 1 TikTok Photo Mode image post","photos only · link in bio"],
+    ["a3","Reply again to any new comments",""],
+    ["a4","(Week 4+) DM 2 small creators","honest offer · free perks · never cash"]
+  ]],
+  ["🛡️ Every day — safety", [
+    ["s1","Read the rules before posting in any new place",""],
+    ["s2","Reword every script — never paste the same line twice",""],
+    ["s3","Log each post + its link in 'Log Work'","so the owner & AI can verify it"]
+  ]]
+];
+
+/* ---------- Persistence ---------- */
+function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return deepClone(DEFAULT_STATE);
+    const parsed = JSON.parse(raw);
+    return Object.assign(deepClone(DEFAULT_STATE), parsed);
+  }catch(e){ return deepClone(DEFAULT_STATE); }
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+let state = loadState();
+let editingId = null;   // when set, the Log Work form edits this entry instead of adding
+
+/* ---------- Date helpers (ISO week, Monday start) ---------- */
+function toISODate(d){ return d.toISOString().slice(0,10); }
+function mondayOf(dateStr){
+  const d = new Date(dateStr + "T00:00:00");
+  const day = (d.getDay() + 6) % 7;          // Mon=0 ... Sun=6
+  d.setDate(d.getDate() - day);
+  return toISODate(d);
+}
+function thisMonday(){ return mondayOf(toISODate(new Date())); }
+function inWeek(entryDate, weekMonday){
+  const start = new Date(weekMonday + "T00:00:00");
+  const end = new Date(start); end.setDate(end.getDate() + 7);
+  const d = new Date(entryDate + "T00:00:00");
+  return d >= start && d < end;
+}
+
+/* ---------- Derived metrics ---------- */
+function weekEntries(weekMonday){ return state.entries.filter(e => inWeek(e.date, weekMonday)); }
+function sum(arr, f){ return arr.reduce((t,x)=>t + (Number(f(x))||0), 0); }
+
+function metricsFor(entries){
+  const posts    = sum(entries.filter(e=>e.activity==="Post"), e=>e.count);
+  const comments = sum(entries.filter(e=>e.activity==="Comment"), e=>e.count);
+  const links    = entries.filter(e=>e.url && e.url.trim()).length;
+  const views    = sum(entries, e=>e.views);
+  const likes    = sum(entries, e=>e.likes);
+  const approved = entries.filter(e=>e.status==="Approved").length;
+  const postEntries = entries.filter(e=>e.activity==="Post");
+  const byType = { help:0, value:0, debate:0, promo:0, image:0, trend:0 };
+  postEntries.forEach(e=>{ if(byType[e.type]!==undefined) byType[e.type] += (Number(e.count)||1); });
+  const totalTyped = Object.values(byType).reduce((a,b)=>a+b,0);
+  const promoPct = totalTyped ? Math.round(byType.promo / totalTyped * 100) : 0;
+  return { posts, comments, links, views, likes, approved, byType, totalTyped, promoPct };
+}
+function scoreFor(entries){
+  const m = metricsFor(entries);
+  return Math.round(m.posts*5 + m.comments*1 + m.links*3 + m.approved*5 + m.views/1000);
+}
+
+/* ---------- Rendering ---------- */
+function renderStatCards(){
+  const m = metricsFor(weekEntries(thisMonday()));
+  const cards = [
+    ["Posts this week", m.posts],
+    ["Comments", m.comments],
+    ["Links submitted", m.links],
+    ["Total reach (views)", m.views.toLocaleString()],
+    ["Promo share", m.promoPct + "%"]
+  ];
+  document.getElementById("statCards").innerHTML = cards.map(c =>
+    `<div class="stat"><div class="num">${c[1]}</div><div class="lbl">${c[0]}</div></div>`).join("");
+}
+
+function typePill(t){ return `<span class="pill ${t||'help'}">${TYPE_LABELS[t]||"—"}</span>`; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderSubs(){
+  const fo = document.getElementById("flt-operator").value;
+  const fp = document.getElementById("flt-platform").value;
+  const ft = document.getElementById("flt-type").value;
+  const fs = document.getElementById("flt-search").value.toLowerCase();
+  let rows = [...state.entries].sort((a,b)=> b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
+  if(fo) rows = rows.filter(e=>e.operator===fo);
+  if(fp) rows = rows.filter(e=>e.platform===fp);
+  if(ft) rows = rows.filter(e=>e.type===ft);
+  if(fs) rows = rows.filter(e=> (e.notes||"").toLowerCase().includes(fs) || (e.url||"").toLowerCase().includes(fs));
+
+  const body = document.getElementById("subsBody");
+  document.getElementById("subsEmpty").style.display = rows.length ? "none" : "block";
+  body.innerHTML = rows.map(e=>`
+    <tr>
+      <td>${esc(e.date)}</td>
+      <td>${esc(e.operator||'')}</td>
+      <td>${esc(e.platform)}</td>
+      <td>${esc(e.activity)}</td>
+      <td>${typePill(e.type)}</td>
+      <td>${esc(e.count)}</td>
+      <td>${Number(e.views||0).toLocaleString()}</td>
+      <td>${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">open</a>` : '<span class="muted">—</span>'}</td>
+      <td><span class="pill ${e.status}">${e.status}</span></td>
+      <td class="no-print">
+        <button class="btn sm ghost" data-edit="${e.id}">edit</button>
+        <button class="btn sm gray" data-cycle="${e.id}">approve</button>
+        <button class="btn sm danger" data-del="${e.id}">del</button>
+      </td>
+    </tr>`).join("");
+}
+
+function meter(label, value, target){
+  const pct = target>0 ? Math.min(100, Math.round(value/target*100)) : 0;
+  const cls = pct>=100 ? "ok" : pct>=50 ? "" : "warn";
+  return `<div class="meter">
+      <div class="top"><span>${label}</span><span><b>${value}</b> / ${target} (${pct}%)</span></div>
+      <div class="bar ${cls}"><span style="width:${pct}%"></span></div>
+    </div>`;
+}
+
+function renderProgress(){
+  const m = metricsFor(weekEntries(thisMonday()));
+  const t = state.targets;
+  document.getElementById("progressMeters").innerHTML =
+    meter("Posts / videos", m.posts, t.posts) +
+    meter("Comments", m.comments, t.comments) +
+    meter("Links submitted", m.links, t.links) +
+    meter("Total reach (views)", m.views, t.views);
+
+  // post mix
+  const mix = m.byType, tot = m.totalTyped || 1;
+  const order = [["help","Help"],["value","Value / News"],["debate","Debate"],["promo","Promo"],["image","Image post"]];
+  document.getElementById("mixMeters").innerHTML = order.map(([k,lbl])=>{
+    const pct = Math.round((mix[k]||0)/tot*100);
+    return `<div class="meter"><div class="top"><span>${lbl}</span><span>${mix[k]||0} (${pct}%)</span></div>
+      <div class="bar"><span style="width:${pct}%"></span></div></div>`;
+  }).join("");
+
+  const promoNote = document.getElementById("promoNote");
+  if(m.promoPct > 15){
+    promoNote.style.color = "var(--bad)";
+    promoNote.textContent = `⚠️ Promo is ${m.promoPct}% of your posts — too high. Keep it around 10%. Post more Help/Value content.`;
+  }else{
+    promoNote.style.color = "var(--ok)";
+    promoNote.textContent = `✅ Promo is ${m.promoPct}% of posts — good. The 90/10 balance is healthy.`;
+  }
+
+  document.getElementById("weekScore").textContent = scoreFor(weekEntries(thisMonday()));
+  document.getElementById("allScore").textContent = scoreFor(state.entries);
+}
+
+function renderFilters(){
+  const platforms = [...new Set(state.entries.map(e=>e.platform))];
+  const sel = document.getElementById("flt-platform");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All</option>' + platforms.map(p=>`<option>${esc(p)}</option>`).join("");
+  sel.value = cur;
+
+  const people = [...new Set(state.entries.map(e=>e.operator).filter(Boolean))].sort();
+  const op = document.getElementById("flt-operator");
+  const curOp = op.value;
+  op.innerHTML = '<option value="">Everyone</option>' + people.map(p=>`<option>${esc(p)}</option>`).join("");
+  op.value = curOp;
+}
+
+function renderAll(){
+  renderStatCards();
+  renderFilters();
+  renderSubs();
+  renderProgress();
+  renderChecklist();
+  renderAi();
+  saveState();
+}
+
+/* ---------- Actions ---------- */
+function newId(){
+  return (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : (String(Date.now()) + Math.random().toString(16).slice(2));
+}
+function formValues(){
+  return {
+    date: document.getElementById("f-date").value || toISODate(new Date()),
+    platform: document.getElementById("f-platform").value,
+    activity: document.getElementById("f-activity").value,
+    type: document.getElementById("f-type").value,
+    count: Math.max(1, parseInt(document.getElementById("f-count").value||"1",10)),
+    url: document.getElementById("f-url").value.trim(),
+    views: parseInt(document.getElementById("f-views").value||"0",10),
+    likes: parseInt(document.getElementById("f-likes").value||"0",10),
+    notes: document.getElementById("f-notes").value.trim(),
+  };
+}
+function resetForm(){
+  document.getElementById("f-url").value = "";
+  document.getElementById("f-views").value = "";
+  document.getElementById("f-likes").value = "";
+  document.getElementById("f-notes").value = "";
+  document.getElementById("f-count").value = "1";
+}
+function flash(text){
+  const msg = document.getElementById("addMsg");
+  msg.textContent = text; setTimeout(()=>msg.textContent="", 1800);
+}
+// Add a new entry, or save edits to the one currently being edited.
+function addEntry(){
+  const f = formValues();
+  if(editingId){
+    const e = state.entries.find(x=>String(x.id)===String(editingId));
+    if(e){
+      const urlChanged = (e.url||"") !== f.url;
+      Object.assign(e, f);
+      // If the link changed, the old AI verdict no longer applies — reset it.
+      if(urlChanged){ e.status = "Pending"; e.aiScore = null; e.aiVerdict = undefined; e.aiNote = ""; }
+      cloudUpdate(e);
+    }
+    exitEditMode();
+    resetForm();
+    flash("✓ Updated");
+    renderAll();
+    return;
+  }
+  const entry = Object.assign({ id:newId(), operator: state.operatorName || "(no name)", status:"Pending" }, f);
+  state.entries.push(entry);
+  cloudInsert(entry);
+  resetForm();
+  flash("✓ Saved");
+  renderAll();
+}
+function startEdit(id){
+  const e = state.entries.find(x=>String(x.id)===String(id));
+  if(!e) return;
+  editingId = e.id;
+  document.getElementById("f-date").value = e.date || toISODate(new Date());
+  document.getElementById("f-platform").value = e.platform || "Discord";
+  document.getElementById("f-activity").value = e.activity || "Post";
+  document.getElementById("f-type").value = e.type || "";
+  document.getElementById("f-count").value = e.count || 1;
+  document.getElementById("f-url").value = e.url || "";
+  document.getElementById("f-views").value = e.views || 0;
+  document.getElementById("f-likes").value = e.likes || 0;
+  document.getElementById("f-notes").value = e.notes || "";
+  document.getElementById("addBtn").textContent = "Save changes";
+  document.getElementById("cancelEditBtn").style.display = "inline-flex";
+  switchTab("log");
+  window.scrollTo({ top:0, behavior:"smooth" });
+}
+function exitEditMode(){
+  editingId = null;
+  document.getElementById("addBtn").textContent = "Add to my work log";
+  document.getElementById("cancelEditBtn").style.display = "none";
+}
+function cancelEdit(){
+  exitEditMode();
+  resetForm();
+  flash("Edit cancelled");
+}
+
+function cycleStatus(id){
+  const e = state.entries.find(x=>String(x.id)===String(id)); if(!e) return;
+  e.status = e.status==="Pending" ? "Approved" : e.status==="Approved" ? "Rejected" : "Pending";
+  renderAll();
+  cloudUpdate(e);
+}
+function delEntry(id){
+  if(!confirm("Delete this entry?")) return;
+  state.entries = state.entries.filter(x=>String(x.id)!==String(id));
+  renderAll();
+  cloudDelete(id);
+}
+
+/* ---------- Report ---------- */
+function generateReport(){
+  const wk = document.getElementById("rep-week").value || thisMonday();
+  const monday = mondayOf(wk);
+  const entries = weekEntries(monday).sort((a,b)=>a.date.localeCompare(b.date));
+  const m = metricsFor(entries);
+  const end = new Date(monday+"T00:00:00"); end.setDate(end.getDate()+6);
+  const name = state.operatorName ? esc(state.operatorName) : "Operator";
+
+  const rows = entries.map(e=>`<tr>
+      <td>${esc(e.date)}</td><td>${esc(e.platform)}</td><td>${esc(e.activity)}</td>
+      <td>${TYPE_LABELS[e.type]||"—"}</td><td>${esc(e.count)}</td>
+      <td>${Number(e.views||0).toLocaleString()}</td>
+      <td>${e.url?esc(e.url):"—"}</td><td>${e.status}</td></tr>`).join("");
+
+  document.getElementById("reportContent").innerHTML = `
+    <h2 style="margin-top:0;">Weekly Report — ${name}</h2>
+    <p class="muted">Week of ${esc(monday)} to ${esc(toISODate(end))}</p>
+    <div class="stats">
+      <div class="stat"><div class="num">${m.posts}</div><div class="lbl">Posts</div></div>
+      <div class="stat"><div class="num">${m.comments}</div><div class="lbl">Comments</div></div>
+      <div class="stat"><div class="num">${m.links}</div><div class="lbl">Links</div></div>
+      <div class="stat"><div class="num">${m.views.toLocaleString()}</div><div class="lbl">Total views</div></div>
+      <div class="stat"><div class="num">${m.promoPct}%</div><div class="lbl">Promo share</div></div>
+      <div class="stat"><div class="num">${scoreFor(entries)}</div><div class="lbl">Score</div></div>
+    </div>
+    <p><b>Post mix:</b> Help ${m.byType.help} · Value ${m.byType.value} · Debate ${m.byType.debate} · Promo ${m.byType.promo} · Image ${m.byType.image}</p>
+    ${(()=>{const ad=entries.filter(e=>e.aiVerdict);const ag=ad.filter(e=>e.aiVerdict==="good").length;return `<p><b>AI review:</b> ${ad.length?`${ag}/${ad.length} links verified good`:'no links AI-reviewed yet'}</p>`;})()}
+    ${entries.length ? `<table><thead><tr><th>Date</th><th>Platform</th><th>Activity</th><th>Type</th><th>Qty</th><th>Views</th><th>Link</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No work logged for this week.</p>'}
+  `;
+  document.getElementById("reportArea").style.display = "block";
+}
+
+/* ---------- Export / Import ---------- */
+function download(filename, text, type){
+  const blob = new Blob([text], {type});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function exportCsv(){
+  const head = ["date","platform","activity","type","count","url","views","likes","status","notes"];
+  const lines = [head.join(",")];
+  state.entries.forEach(e=>{
+    const row = [e.date,e.platform,e.activity,TYPE_LABELS[e.type]||"",e.count,e.url,e.views,e.likes,e.status,(e.notes||"").replace(/\n/g," ")]
+      .map(v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`);
+    lines.push(row.join(","));
+  });
+  download("amv-marketing-work.csv", lines.join("\n"), "text/csv");
+}
+function exportJson(){ download("amv-dashboard-backup.json", JSON.stringify(state,null,2), "application/json"); }
+function importJson(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.entries)) throw new Error("bad file");
+      if(confirm("Import "+data.entries.length+" entries? This MERGES with current data.")){
+        const ids = new Set(state.entries.map(e=>e.id));
+        data.entries.forEach(e=>{ if(!ids.has(e.id)) state.entries.push(e); });
+        if(data.operatorName && !state.operatorName) state.operatorName = data.operatorName;
+        if(data.targets) state.targets = Object.assign(state.targets, data.targets);
+        renderAll(); loadSettingsForm();
+        alert("Imported. Total entries: "+state.entries.length);
+      }
+    }catch(err){ alert("Could not read that file. Make sure it is a dashboard JSON backup."); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- Settings ---------- */
+function loadSettingsForm(){
+  document.getElementById("s-name").value = state.operatorName||"";
+  document.getElementById("s-t-posts").value = state.targets.posts;
+  document.getElementById("s-t-comments").value = state.targets.comments;
+  document.getElementById("s-t-links").value = state.targets.links;
+  document.getElementById("s-t-clicks").value = state.targets.clicks;
+  document.getElementById("s-t-views").value = state.targets.views;
+}
+function saveSettings(){
+  state.operatorName = document.getElementById("s-name").value.trim();
+  state.targets = {
+    posts:+document.getElementById("s-t-posts").value||0,
+    comments:+document.getElementById("s-t-comments").value||0,
+    links:+document.getElementById("s-t-links").value||0,
+    clicks:+document.getElementById("s-t-clicks").value||0,
+    views:+document.getElementById("s-t-views").value||0
+  };
+  const msg = document.getElementById("setMsg");
+  msg.textContent = "✓ Saved"; setTimeout(()=>msg.textContent="",1800);
+  renderAll();
+  if(CLOUD) cloudStatus("ok");
+}
+
+/* ---------- Daily checklist ---------- */
+function chkDate(){ return document.getElementById("chk-date").value || toISODate(new Date()); }
+function renderChecklist(){
+  const date = chkDate();
+  const done = state.checklists[date] || {};
+  let total = 0, doneCount = 0;
+  const html = CHECKLIST.map(([title, items])=>{
+    const lis = items.map(([id,txt,sub])=>{
+      total++; const isDone = !!done[id]; if(isDone) doneCount++;
+      return `<label class="chk-item ${isDone?'done':''}">
+        <input type="checkbox" data-chk="${id}" ${isDone?'checked':''}/>
+        <span><span class="ci-text">${esc(txt)}</span>${sub?`<br><span class="ci-sub">${esc(sub)}</span>`:''}</span>
+      </label>`;
+    }).join("");
+    return `<div class="chk-group"><h3>${esc(title)}</h3>${lis}</div>`;
+  }).join("");
+  document.getElementById("chk-list").innerHTML = html;
+  const pct = total ? Math.round(doneCount/total*100) : 0;
+  document.getElementById("chk-pct").textContent = pct + "% (" + doneCount + "/" + total + ")";
+  document.getElementById("chk-bar").style.width = pct + "%";
+}
+function toggleChk(id, val){
+  const date = chkDate();
+  if(!state.checklists[date]) state.checklists[date] = {};
+  if(val) state.checklists[date][id] = true; else delete state.checklists[date][id];
+  saveState(); renderChecklist();
+}
+
+/* ---------- AI review ---------- */
+function aiEntriesWithUrl(){ return state.entries.filter(e=>e.url && e.url.trim()); }
+function buildAuditRequest(){
+  const onlyPending = document.getElementById("ai-only-pending").checked;
+  let list = aiEntriesWithUrl();
+  if(onlyPending) list = list.filter(e=>!e.aiVerdict);
+  if(!list.length) return null;
+  const items = list.map((e,i)=>`${i+1}. [${e.platform} · ${TYPE_LABELS[e.type]||e.activity}] ${e.url}`).join("\n");
+  return (
+`You are auditing marketing posts our worker made to promote the AdoptMe Values app `+
+`(website adoptmevalues.app — a Roblox "Adopt Me" trade-value / WFL checker app).\n`+
+`For EACH link below, open it and check:\n`+
+`  (a) is it real and currently LIVE (not deleted / removed / blocked)?\n`+
+`  (b) does it genuinely HELP the community (not pure spam)?\n`+
+`  (c) if it mentions our app, is it natural / soft (90/10 rule), not spammy?\n`+
+`  (d) quality score 1-10.\n`+
+`Be strict: deleted, off-topic, spammy, duplicate, or rule-breaking posts get verdict "bad".\n\n`+
+`Reply with ONLY a JSON array, one object per link, exactly this shape:\n`+
+`[{"url":"<the url>","live":true,"mentions_app":true,"quality":8,"verdict":"good","note":"short reason"}]\n`+
+`(verdict must be "good" or "bad").\n\n`+
+`LINKS:\n${items}`
+  );
+}
+function copyAudit(){
+  const req = buildAuditRequest();
+  const msg = document.getElementById("ai-copymsg");
+  if(!req){ msg.textContent = "No links to review."; setTimeout(()=>msg.textContent="",2500); return; }
+  const done = ()=>{ msg.textContent = "✓ Copied — paste into Claude"; setTimeout(()=>msg.textContent="",2800); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(req).then(done, ()=>fallbackCopy(req,msg));
+  } else { fallbackCopy(req,msg); }
+}
+function fallbackCopy(text,msg){
+  const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); msg.textContent="✓ Copied"; }
+  catch(_){ msg.textContent="Copy failed — select the text manually"; }
+  ta.remove(); setTimeout(()=>msg.textContent="",2800);
+}
+function applyAiResults(){
+  const msg = document.getElementById("ai-applymsg");
+  let txt = document.getElementById("ai-paste").value.trim();
+  if(!txt){ msg.textContent="Paste Claude's JSON first."; setTimeout(()=>msg.textContent="",2500); return; }
+  const s = txt.indexOf("["), e = txt.lastIndexOf("]");
+  if(s>=0 && e>s) txt = txt.slice(s, e+1);
+  let data;
+  try{ data = JSON.parse(txt); if(!Array.isArray(data)) throw 0; }
+  catch(err){ msg.textContent="Could not read JSON — copy Claude's reply exactly."; setTimeout(()=>msg.textContent="",3500); return; }
+  let matched = 0;
+  data.forEach(r=>{
+    if(!r || !r.url) return;
+    const u = String(r.url).trim();
+    state.entries.filter(x=>x.url && x.url.trim()===u).forEach(x=>{
+      x.aiScore = (r.quality!=null) ? Number(r.quality) : null;
+      x.aiVerdict = (String(r.verdict).toLowerCase()==="good") ? "good" : "bad";
+      x.aiNote = r.note ? String(r.note).slice(0,160) : "";
+      x.status = x.aiVerdict==="good" ? "Approved" : "Rejected";
+      cloudUpdate(x);
+      matched++;
+    });
+  });
+  document.getElementById("ai-paste").value = "";
+  msg.textContent = matched ? `✓ Applied to ${matched} link(s)` : "No matching links found.";
+  setTimeout(()=>msg.textContent="",3500);
+  renderAll();
+}
+function renderAi(){
+  const all = aiEntriesWithUrl();
+  const reviewed = all.filter(e=>e.aiVerdict);
+  document.getElementById("ai-total").textContent = all.length;
+  document.getElementById("ai-pending").textContent = all.length - reviewed.length;
+  document.getElementById("ai-done").textContent = reviewed.length;
+  const box = document.getElementById("ai-summary");
+  if(!reviewed.length){ box.innerHTML = ""; return; }
+  const good = reviewed.filter(e=>e.aiVerdict==="good").length;
+  const bad = reviewed.length - good;
+  const ok = bad === 0;
+  const lines = [...reviewed].sort((a,b)=>a.date.localeCompare(b.date)).map(e=>{
+    const col = e.aiVerdict==="good" ? "var(--ok)" : "var(--bad)";
+    const mark = e.aiVerdict==="good" ? "✓" : "✕";
+    const sc = (e.aiScore!=null) ? `${e.aiScore}/10` : "";
+    return `<div class="ai-line"><span class="s" style="color:${col}">${mark} ${sc}</span> — ${esc(e.date)} · ${esc(e.platform)} · <a href="${esc(e.url)}" target="_blank" rel="noopener">link</a>${e.aiNote?` · ${esc(e.aiNote)}`:''}</div>`;
+  }).join("");
+  box.innerHTML = `<div class="ai-verdict ${ok?'ok':'bad'}">
+      <b>${ok?'✅ Everything checks out':'⚠️ Some issues found'}</b><br>
+      ${good} of ${reviewed.length} links verified genuine, live &amp; on-brand${bad?`, ${bad} flagged`:''}.
+    </div>${lines}`;
+}
+
+/* ---------- Supabase shared store (data only) ---------- */
+function rowFromEntry(e){
+  return {
+    id: e.id, operator: e.operator || null, date: e.date,
+    platform: e.platform, activity: e.activity, type: e.type || null,
+    count: e.count, url: e.url || null, views: e.views || 0, likes: e.likes || 0,
+    notes: e.notes || null, status: e.status,
+    ai_score: (e.aiScore != null ? e.aiScore : null),
+    ai_verdict: e.aiVerdict || null, ai_note: e.aiNote || null,
+  };
+}
+function entryFromRow(r){
+  return {
+    id: r.id, operator: r.operator || "", date: r.date,
+    platform: r.platform, activity: r.activity, type: r.type || "",
+    count: r.count || 1, url: r.url || "", views: r.views || 0, likes: r.likes || 0,
+    notes: r.notes || "", status: r.status || "Pending",
+    aiScore: (r.ai_score != null ? r.ai_score : null),
+    aiVerdict: r.ai_verdict || undefined, aiNote: r.ai_note || "",
+  };
+}
+async function cloudLoad(){
+  if(!CLOUD) return;
+  try{
+    const { data, error } = await db.from("submissions").select("*").order("date", { ascending:false });
+    if(error) throw error;
+    state.entries = (data || []).map(entryFromRow);
+    renderAll();
+    cloudStatus("ok");
+  }catch(err){ cloudStatus("error", err.message || String(err)); }
+}
+async function cloudInsert(e){
+  if(!CLOUD) return;
+  try{ const { error } = await db.from("submissions").insert(rowFromEntry(e)); if(error) throw error; }
+  catch(err){ cloudStatus("error", "Save failed: " + (err.message||err)); }
+}
+async function cloudUpdate(e){
+  if(!CLOUD) return;
+  try{ const { error } = await db.from("submissions").update(rowFromEntry(e)).eq("id", e.id); if(error) throw error; }
+  catch(err){ cloudStatus("error", "Update failed: " + (err.message||err)); }
+}
+async function cloudDelete(id){
+  if(!CLOUD) return;
+  try{ const { error } = await db.from("submissions").delete().eq("id", id); if(error) throw error; }
+  catch(err){ cloudStatus("error", "Delete failed: " + (err.message||err)); }
+}
+function cloudSubscribe(){
+  if(!CLOUD) return;
+  try{
+    db.channel("submissions-rt")
+      .on("postgres_changes", { event:"*", schema:"public", table:"submissions" }, () => cloudLoad())
+      .subscribe();
+  }catch(_){}
+}
+function cloudStatus(kind, msg){
+  const banner = document.getElementById("cloudBanner");
+  const text = document.getElementById("cloudBannerText");
+  const refresh = document.getElementById("cloudRefresh");
+  if(!banner) return;
+  banner.style.display = "flex";
+  if(kind === "off"){
+    banner.style.background = "#fff7ed"; banner.style.borderColor = "#fdba74";
+    text.innerHTML = "💾 <b>Offline</b> — saving only in this browser. Paste your Supabase URL + anon key in the file's CONFIG block to share with the owner.";
+    refresh.style.display = "none";
+    return;
+  }
+  if(kind === "error"){
+    banner.style.background = "#fef2f2"; banner.style.borderColor = "#fecaca";
+    text.innerHTML = "⚠️ Supabase error: " + esc(msg||"") + " — check the URL/key and that you ran SUBMISSIONS_SUPABASE.sql.";
+    refresh.style.display = "inline-flex";
+    return;
+  }
+  banner.style.background = "#f0fdf4"; banner.style.borderColor = "#bbf7d0";
+  const who = state.operatorName ? "" : " · ⚠️ set your name in Settings so the owner knows who you are";
+  text.innerHTML = "🟢 <b>Shared via Supabase</b> — everyone sees the same submissions." + who;
+  refresh.style.display = "inline-flex";
+}
+
+/* ---------- Wiring ---------- */
+function switchTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===name));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id==="panel-"+name));
+}
+document.querySelectorAll(".tab").forEach(t=> t.addEventListener("click", ()=>switchTab(t.dataset.tab)));
+
+document.getElementById("addBtn").addEventListener("click", addEntry);
+document.getElementById("subsBody").addEventListener("click", (e)=>{
+  const ed = e.target.getAttribute("data-edit");
+  const c = e.target.getAttribute("data-cycle");
+  const d = e.target.getAttribute("data-del");
+  if(ed) startEdit(ed);
+  if(c) cycleStatus(c);
+  if(d) delEntry(d);
+});
+document.getElementById("cancelEditBtn").addEventListener("click", cancelEdit);
+["flt-operator","flt-platform","flt-type","flt-search"].forEach(id=>
+  document.getElementById(id).addEventListener("input", renderSubs));
+
+document.getElementById("genReport").addEventListener("click", generateReport);
+document.getElementById("printReport").addEventListener("click", ()=>{ generateReport(); window.print(); });
+document.getElementById("expCsv").addEventListener("click", exportCsv);
+document.getElementById("expJson").addEventListener("click", exportJson);
+document.getElementById("impBtn").addEventListener("click", ()=>document.getElementById("impFile").click());
+document.getElementById("impFile").addEventListener("change", (e)=>{ if(e.target.files[0]) importJson(e.target.files[0]); });
+
+document.getElementById("saveSettings").addEventListener("click", saveSettings);
+document.getElementById("clearAll").addEventListener("click", ()=>{
+  if(confirm("Delete ALL data? This cannot be undone. (Export a backup first!)")){
+    state = deepClone(DEFAULT_STATE); renderAll(); loadSettingsForm();
+  }
+});
+
+// checklist
+document.getElementById("chk-date").addEventListener("change", renderChecklist);
+document.getElementById("chk-list").addEventListener("change", (e)=>{
+  const id = e.target.getAttribute("data-chk");
+  if(id) toggleChk(id, e.target.checked);
+});
+// ai review
+document.getElementById("ai-copy").addEventListener("click", copyAudit);
+document.getElementById("ai-apply").addEventListener("click", applyAiResults);
+// shared store
+document.getElementById("cloudRefresh").addEventListener("click", cloudLoad);
+
+/* ---------- Init ---------- */
+document.getElementById("f-date").value = toISODate(new Date());
+document.getElementById("chk-date").value = toISODate(new Date());
+document.getElementById("rep-week").value = thisMonday();
+loadSettingsForm();
+renderAll();
+if(CLOUD){ cloudLoad(); cloudSubscribe(); } else { cloudStatus("off"); }
+</script>
+</body>
+</html>

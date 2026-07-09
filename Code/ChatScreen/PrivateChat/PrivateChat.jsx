@@ -27,13 +27,15 @@ import {
 import { useLocalState } from '../../LocalGlobelStats';
 // RTDB imports still needed for trade/post/ban subtrees, /activeChats, and
 // per-user side data — chat metadata + message bodies are now on Supabase.
-import { get, ref, update, set, onValue } from '@react-native-firebase/database';
+import { get, ref, update, set } from '@react-native-firebase/database';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { showMessage } from 'react-native-flash-message';
+import { validateContent } from '../../Helper/ContentModeration';
 import BannerAdComponent from '../../Ads/bannerAds';
 import InterstitialAdManager from '../../Ads/IntAd';
 import config from '../../Helper/Environment';
+import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
 import {
@@ -58,7 +60,7 @@ const MAX_LIVE = 150;
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
 
-  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB, isRTDBConnected, isUserBlocked, deviceBanInfo } = useGlobalState();
+  const { user, theme, appdatabase, updateLocalStateAndDatabase, firestoreDB, isRTDBConnected, isUserBlocked, deviceBanInfo, isAdmin, strikeInfo } = useGlobalState();
   const [trade, setTrade] = useState(null)
   const [post, setPost] = useState(null)
   const [messages, setMessages] = useState([]);
@@ -86,7 +88,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [startRating, setStartRating] = useState(false)
   // ✅ FIXED: Real-time online status via listener instead of one-shot get()
   const isOnline = useOnlineStatus(selectedUserId);
-  const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
+  // strikeInfo comes from GlobelStats context (app-wide ban listener) —
+  // the per-screen duplicate banned_users_by_email listener was removed.
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   // ✅ Cost opt: write receiverName/receiverAvatar into chat_meta_data only once per session
   const metaIdentityWrittenRef = useRef(new Set());
@@ -104,25 +107,6 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   // ✅ Check if current user is banned — global gate covers email + device
   const isMeBanned = isUserBlocked;
   const myBanDetails = strikeInfo || deviceBanInfo;
-
-  // ✅ Load strike/ban info from Firebase (temporal bans with timeouts)
-  // Uses useFocusEffect to detach listener when navigating away
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.email || !appdatabase) return;
-
-      const encodeEmail = (email) => email.replace(/\./g, '(dot)');
-      const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
-
-      const unsubscribe = onValue(banRef, (snapshot) => {
-        const banData = snapshot.val();
-        setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
-      });
-
-      return () => unsubscribe();
-    }, [user?.email, appdatabase])
-  );
-
 
   // ✅ Detect if item is a trade or a post
   useEffect(() => {
@@ -255,6 +239,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       return;
     }
 
+    // ✅ Ban check — banned users cannot rate/review others (covers email + device ban)
+    if (isMeBanned) {
+      const reason = myBanDetails?.reason || 'Access Denied';
+      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
+
     try {
       setStartRating(true);
 
@@ -362,7 +353,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       showErrorMessage(t('chat.error'), t('chat.rating_submit_error'));
       setStartRating(false);
     }
-  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints, localState?.isPro]);
+  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints, localState?.isPro, isMeBanned, myBanDetails]);
 
 
 
@@ -601,7 +592,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // ✅ Strike/Temporal Ban Check
     if (strikeInfo) {
       const { strikeCount, bannedUntil } = strikeInfo;
-      const now = Date.now();
+      // Server-time estimate — a raw Date.now() here let users roll the
+      // device clock forward to slip past temp bans. (isMeBanned above is
+      // the authoritative server-probed gate; this block is the friendly
+      // time-remaining message.)
+      const now = serverNowMs();
 
       // Permanent ban
       if (bannedUntil === 'permanent') {
@@ -634,6 +629,18 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     if (!myUserId || !selectedUserId || !appdatabase) {
       showErrorMessage(t("home.alert.error"), t('chat.rating_missing_data'));
       return;
+    }
+
+    // ✅ Content filter backstop (kid-safety) — profanity/abuse/NSFW words.
+    // Input box already validates; this guards any other send path. Admins and
+    // full moderators (not baby mods) bypass. Links handled at input layer.
+    if (trimmedText) {
+      const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
+      const validation = validateContent(trimmedText, { skipLinkCheck: true, skipAll: canBypassModeration });
+      if (!validation.isValid) {
+        showErrorMessage(t('chat.content_not_allowed', { defaultValue: 'Content Not Allowed' }), validation.reason || t('chat.inappropriate_content', { defaultValue: 'Inappropriate content detected.' }));
+        return;
+      }
     }
 
     // Connection check — catches WiFi networks that block Firebase WebSocket connections.
@@ -739,7 +746,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB]);
+  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin]);
 
 
 

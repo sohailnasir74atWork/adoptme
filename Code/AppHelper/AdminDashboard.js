@@ -25,12 +25,14 @@ import {
   ScrollView,
   Keyboard,
   Clipboard,
+  Switch,
 } from 'react-native';
 
 import {
   getDatabase,
   ref,
   get,
+  set,
   query,
   orderByChild,
   orderByKey,
@@ -61,8 +63,9 @@ import {
   updateDoc,
 } from '@react-native-firebase/firestore';
 
-import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser } from '../ChatScreen/utils';
+import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser, canStaffBanMute } from '../ChatScreen/utils';
 import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
+import { searchIdentityByName, searchIdentityByEmail, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -165,9 +168,11 @@ const timeAgo = (v) => {
 };
 
 const AdminDashboard = () => {
-  const { theme, user: currentUser, isAdmin, isModerator } = useGlobalState();
+  const { theme, user: currentUser, isAdmin, isModerator, modControlsEnabled } = useGlobalState();
   const isDark = theme === 'dark';
   const db = useMemo(() => getDatabase(), []);
+  // Moderator ban/mute powers can be disabled by an admin. Admins are never blocked.
+  const canBanMute = canStaffBanMute({ isAdmin, isModerator, modControlsEnabled });
   const navigation = useNavigation();
   const isSuperAdmin = isAdmin || currentUser?.id === SUPER_ADMIN_ID;
 
@@ -557,104 +562,55 @@ const AdminDashboard = () => {
           });
         }
 
-        // Also search by email field (in case key is different)
+        // Fallback: Supabase identity lookup by email / decoded email.
+        // (The old RTDB orderByChild('email') query had NO .indexOn
+        // backing it, so the server streamed the ENTIRE /users node and
+        // filtered client-side on every admin email search.)
         if (results.length === 0) {
-          const emailQ = query(
-            ref(db, 'users'),
-            orderByChild('email'),
-            startAt(email),
-            endAt(email + '\uf8ff'),
-            limitToFirst(10)
-          );
-          const emailSnap = await get(emailQ);
-          if (emailSnap.exists()) {
-            emailSnap.forEach((child) => {
-              const u = child.val();
-              if (BAD_KEYS.has(child.key)) return;
-              const id = u.id || child.key;
-              if (seen.has(id)) return;
-              seen.add(id);
-              results.push({
-                isBanned: false, id,
-                displayName: u.displayName || u.userName || 'Unknown',
-                email: u.email, avatar: getAvatarSafe(u),
-                robloxUsername: u.robloxUsername,
-                isAdmin: u.admin || false, isModerator: u.isModerator || false,
-              });
+          const rows = await searchIdentityByEmail(raw, 10);
+          const ids = rows.map(r => r?.uid).filter(id => id && !BAD_KEYS.has(id) && !seen.has(id));
+          const [rolesMap, rbxMap] = await Promise.all([
+            getRolesBatch(ids).catch(() => new Map()),
+            getRobloxBatch(ids).catch(() => new Map()),
+          ]);
+          for (const r of rows) {
+            const id = r?.uid;
+            if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
+            seen.add(id);
+            const roles = rolesMap.get(id);
+            results.push({
+              isBanned: false, id,
+              displayName: r.displayName || 'Unknown',
+              email: r.decodedEmail || r.email, avatar: getAvatarSafe(r),
+              robloxUsername: rbxMap.get(id)?.robloxUsername,
+              isAdmin: roles?.isAdmin || false, isModerator: roles?.isModerator || false,
             });
           }
         }
       } else {
-        // ── NAME SEARCH: multiple case variants + client-side filter ──
-        const lower = raw.toLowerCase();
-        const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-        const allUpper = raw.toUpperCase();
-
-        // Deduplicated list of query variants for broader case coverage
-        const variants = [...new Set([lower, upperFirst, allUpper, raw])];
-        const limitSize = 50;
-
-        for (const v of variants) {
+        // ── NAME SEARCH — Supabase ilike (server-side contains, case-
+        // insensitive, symbols included). Replaces 4 RTDB variant queries
+        // (each downloading up to 50 FULL user objects) + a 500-user
+        // broad-scan fallback (~1 MB per search).
+        const rows = await searchIdentityByName(raw, 50);
+        const ids = rows.map(r => r?.uid).filter(id => id && !BAD_KEYS.has(id) && !seen.has(id));
+        const [rolesMap, rbxMap] = await Promise.all([
+          getRolesBatch(ids).catch(() => new Map()),
+          getRobloxBatch(ids).catch(() => new Map()),
+        ]);
+        for (const r of rows) {
+          const id = r?.uid;
+          if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
           if (seen.size >= 50) break;
-          try {
-            const q = query(
-              ref(db, 'users'),
-              orderByChild('displayName'),
-              startAt(v),
-              endAt(v + '\uf8ff'),
-              limitToFirst(limitSize)
-            );
-            const snapshot = await get(q);
-            if (snapshot.exists()) {
-              snapshot.forEach((child) => {
-                const u = child.val();
-                if (BAD_KEYS.has(child.key)) return;
-                const id = u.id || child.key;
-                if (seen.has(id)) return;
-                seen.add(id);
-                results.push({
-                  isBanned: false, id,
-                  displayName: u.displayName || u.userName || 'Unknown',
-                  email: u.email, avatar: getAvatarSafe(u),
-                  robloxUsername: u.robloxUsername,
-                  isAdmin: u.admin || false, isModerator: u.isModerator || false,
-                });
-              });
-            }
-          } catch (variantErr) {
-            console.warn(`Search variant "${v}" failed:`, variantErr.message);
-          }
-        }
-
-        // ── FALLBACK: client-side contains match ──
-        // Catches names with leading symbols like ★CoolPlayer★ or 🔥DragonKing
-        if (results.length < 10 && lower.length >= 2) {
-          try {
-            const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
-            const broadSnap = await get(broadQ);
-            if (broadSnap.exists()) {
-              broadSnap.forEach((child) => {
-                if (seen.size >= 50) return;
-                const u = child.val();
-                if (BAD_KEYS.has(child.key)) return;
-                const id = u.id || child.key;
-                if (seen.has(id)) return;
-                const name = (u.displayName || u.userName || '').toLowerCase();
-                if (name.includes(lower)) {
-                  seen.add(id);
-                  results.push({
-                    isBanned: false, id,
-                    displayName: u.displayName || u.userName || 'Unknown',
-                    email: u.email, avatar: getAvatarSafe(u),
-                    robloxUsername: u.robloxUsername,
-                    isAdmin: u.admin || false, isModerator: u.isModerator || false,
-                  });
-                }
-              });
-            }
-          } catch (broadErr) {
-            console.warn('Broad search failed:', broadErr.message);
-          }
+          seen.add(id);
+          const roles = rolesMap.get(id);
+          results.push({
+            isBanned: false, id,
+            displayName: r.displayName || 'Unknown',
+            email: r.decodedEmail || r.email, avatar: getAvatarSafe(r),
+            robloxUsername: rbxMap.get(id)?.robloxUsername,
+            isAdmin: roles?.isAdmin || false, isModerator: roles?.isModerator || false,
+          });
         }
       }
 
@@ -720,6 +676,10 @@ const AdminDashboard = () => {
   };
 
   const handleBan = async (userItem) => {
+    if (!canBanMute) {
+      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
+      return;
+    }
     if (!userItem.email) {
       Alert.alert('Error', 'User has no email associated.');
       return;
@@ -757,6 +717,10 @@ const AdminDashboard = () => {
   };
 
   const handleSetStrike = async (userItem, strikeCount) => {
+    if (!canBanMute) {
+      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
+      return;
+    }
     if (!userItem.email) {
       Alert.alert('Error', 'User has no email associated.');
       return;
@@ -794,6 +758,10 @@ const AdminDashboard = () => {
   };
 
   const handleMuteUser = async (userItem, minutes) => {
+    if (!canBanMute) {
+      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
+      return;
+    }
     if (!userItem.email) {
       Alert.alert('Error', 'User has no email associated.');
       return;
@@ -827,6 +795,17 @@ const AdminDashboard = () => {
       }
     }
   };
+
+  // Admin-only: flip the global moderator ban/mute kill switch.
+  // Writes RTDB /mod_controls_enabled; GlobelStats live-subscribes so every
+  // moderator's device picks up the change. Admins are never affected.
+  const handleToggleModControls = useCallback(async (next) => {
+    try {
+      await set(ref(db, 'mod_controls_enabled'), next);
+    } catch (e) {
+      Alert.alert('Error', 'Could not update moderator controls. Check your write permissions.');
+    }
+  }, [db]);
 
   // ─────────────────────────────────────────────
   // ✅ Fallback compute rating summary directly from reviews (Fix rating 0 issue)
@@ -1663,6 +1642,39 @@ const AdminDashboard = () => {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Admin-only: moderator ban/mute kill switch. Hidden from moderators. */}
+      {isAdmin && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            marginHorizontal: 12,
+            marginTop: 8,
+            borderRadius: 12,
+            backgroundColor: isDark ? '#1C1C1E' : '#FFF',
+          }}
+        >
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFF' : '#000' }}>
+              Moderator ban &amp; mute
+            </Text>
+            <Text style={{ fontSize: 12, marginTop: 2, color: isDark ? '#888' : '#666' }}>
+              {modControlsEnabled
+                ? 'ON — moderators can ban & mute users'
+                : 'OFF — moderators cannot ban or mute (admins unaffected)'}
+            </Text>
+          </View>
+          <Switch
+            value={modControlsEnabled}
+            onValueChange={handleToggleModControls}
+            trackColor={{ false: '#767577', true: '#34C759' }}
+            thumbColor="#FFF"
+          />
+        </View>
+      )}
 
       {activeTab === 'search' && (
         <View style={styles.searchContainer}>

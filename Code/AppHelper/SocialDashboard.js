@@ -10,9 +10,9 @@ import {
     TouchableOpacity,
     RefreshControl,
 } from 'react-native';
-import { getDatabase, ref, get, query, orderByChild, startAt, endAt, limitToFirst } from '@react-native-firebase/database';
+import { getDatabase, ref, get } from '@react-native-firebase/database';
 import { warmProfileCache, getCachedProfile } from '../Helper/profileCache';
-import { getRobloxBatch } from '../Supabase/userBackend';
+import { getRobloxBatch, getIdentity, getRoblox, searchIdentityByName } from '../Supabase/userBackend';
 import { collection, getDocs, query as firestoreQuery, where } from '@react-native-firebase/firestore';
 import { useGlobalState } from '../GlobelStats';
 import { useNavigation } from '@react-navigation/native';
@@ -292,91 +292,66 @@ const SocialDashboard = () => {
             const results = [];
 
             if (looksLikeUserId(raw)) {
-                // ── ID SEARCH: direct lookup by Firebase user key ──
-                const userSnap = await get(ref(db, `users/${raw}`));
-                if (!isMounted.current) return;
-                if (userSnap.exists()) {
-                    const u = userSnap.val();
-                    const id = raw;
-                    if (friendIdSet.has(id)) {
+                // ── ID SEARCH — Supabase point reads + profileFrame leaf.
+                // Was a whole-`users/{id}` node download (shop, blocked_users,
+                // counters, …) for 5 display fields. RTDB whole-node read kept
+                // only as fallback for mirror-lag / brand-new users.
+                const id = raw;
+                if (friendIdSet.has(id)) {
+                    const [idn, rbx, frameSnap] = await Promise.all([
+                        getIdentity(id),
+                        getRoblox(id),
+                        get(ref(db, `users/${id}/profileFrame`)).catch(() => null),
+                    ]);
+                    if (!isMounted.current) return;
+                    if (idn) {
                         seen.add(id);
                         results.push({
                             id,
-                            displayName: u.displayName || u.userName || 'Unknown',
-                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                            robloxUsername: u.robloxUsername,
-                            robloxUsernameVerified: u.robloxUsernameVerified,
-                            profileFrame: u.profileFrame || null,
+                            displayName: idn.displayName || 'Unknown',
+                            avatar: idn.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                            robloxUsername: rbx?.robloxUsername,
+                            robloxUsernameVerified: rbx?.robloxUsernameVerified,
+                            profileFrame: frameSnap?.val?.() || null,
                         });
+                    } else {
+                        const userSnap = await get(ref(db, `users/${id}`));
+                        if (!isMounted.current) return;
+                        if (userSnap.exists()) {
+                            const u = userSnap.val();
+                            seen.add(id);
+                            results.push({
+                                id,
+                                displayName: u.displayName || u.userName || 'Unknown',
+                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                robloxUsername: u.robloxUsername,
+                                robloxUsernameVerified: u.robloxUsernameVerified,
+                                profileFrame: u.profileFrame || null,
+                            });
+                        }
                     }
                 }
             } else {
-                // ── NAME SEARCH: multiple case variants + client-side filter ──
-                const lower = raw.toLowerCase();
-                const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-                const allUpper = raw.toUpperCase();
-                const variants = [...new Set([lower, upperFirst, allUpper, raw])];
-
-                for (const v of variants) {
-                    if (seen.size >= 50) break;
-                    try {
-                        const q = query(
-                            ref(db, 'users'),
-                            orderByChild('displayName'),
-                            startAt(v),
-                            endAt(v + "\uf8ff"),
-                            limitToFirst(50)
-                        );
-                        const snapshot = await get(q);
-                        if (!isMounted.current) return;
-                        if (snapshot.exists()) {
-                            snapshot.forEach((child) => {
-                                const id = child.key;
-                                const u = child.val();
-                                if (!friendIdSet.has(id) || seen.has(id)) return;
-                                seen.add(id);
-                                results.push({
-                                    id,
-                                    displayName: u.displayName || u.userName || 'Unknown',
-                                    avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                    robloxUsername: u.robloxUsername,
-                                    robloxUsernameVerified: u.robloxUsernameVerified,
-                                });
-                            });
-                        }
-                    } catch (variantErr) {
-                        console.warn(`Friend search variant "${v}" failed:`, variantErr.message);
-                    }
-                }
-
-                // Fallback: client-side contains match for symbol names
-                if (results.length < 10 && lower.length >= 2) {
-                    try {
-                        const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
-                        const broadSnap = await get(broadQ);
-                        if (!isMounted.current) return;
-                        if (broadSnap.exists()) {
-                            broadSnap.forEach((child) => {
-                                if (seen.size >= 50) return;
-                                const id = child.key;
-                                const u = child.val();
-                                if (!friendIdSet.has(id) || seen.has(id)) return;
-                                const name = (u.displayName || u.userName || '').toLowerCase();
-                                if (name.includes(lower)) {
-                                    seen.add(id);
-                                    results.push({
-                                        id,
-                                        displayName: u.displayName || u.userName || 'Unknown',
-                                        avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                        robloxUsername: u.robloxUsername,
-                                        robloxUsernameVerified: u.robloxUsernameVerified,
-                                    });
-                                }
-                            });
-                        }
-                    } catch (broadErr) {
-                        console.warn('Broad friend search failed:', broadErr.message);
-                    }
+                // ── NAME SEARCH — Supabase ilike (server-side contains, case-
+                // insensitive, symbols included). Replaces 4 RTDB variant
+                // queries (each downloading up to 50 FULL user objects) + a
+                // 500-user broad-scan fallback (~1 MB per search) with one
+                // narrow-row query + one roblox batch lookup.
+                const rows = await searchIdentityByName(raw, 50);
+                if (!isMounted.current) return;
+                const matches = rows.filter(r => r?.uid && friendIdSet.has(r.uid) && !seen.has(r.uid)).slice(0, 50);
+                const rbxMap = await getRobloxBatch(matches.map(r => r.uid)).catch(() => new Map());
+                if (!isMounted.current) return;
+                for (const r of matches) {
+                    seen.add(r.uid);
+                    const rbx = rbxMap.get(r.uid);
+                    results.push({
+                        id: r.uid,
+                        displayName: r.displayName || 'Unknown',
+                        avatar: r.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                        robloxUsername: rbx?.robloxUsername,
+                        robloxUsernameVerified: rbx?.robloxUsernameVerified,
+                    });
                 }
             }
 
@@ -406,92 +381,66 @@ const SocialDashboard = () => {
             const results = [];
 
             if (looksLikeUserId(raw)) {
-                // ── ID SEARCH: direct lookup by Firebase user key ──
-                const userSnap = await get(ref(db, `users/${raw}`));
-                if (!isMounted.current) return;
-                if (userSnap.exists()) {
-                    const u = userSnap.val();
-                    const id = raw;
-                    if (id !== currentUser?.id) {
+                // ── ID SEARCH — Supabase point reads + profileFrame leaf.
+                // Was a whole-`users/{id}` node download (shop, blocked_users,
+                // counters, …) for 5 display fields. RTDB whole-node read kept
+                // only as fallback for mirror-lag / brand-new users.
+                const id = raw;
+                if (id !== currentUser?.id) {
+                    const [idn, rbx, frameSnap] = await Promise.all([
+                        getIdentity(id),
+                        getRoblox(id),
+                        get(ref(db, `users/${id}/profileFrame`)).catch(() => null),
+                    ]);
+                    if (!isMounted.current) return;
+                    if (idn) {
                         seen.add(id);
                         results.push({
                             id,
-                            displayName: u.displayName || u.userName || 'Unknown',
-                            avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                            robloxUsername: u.robloxUsername,
-                            robloxUsernameVerified: u.robloxUsernameVerified,
-                            profileFrame: u.profileFrame || null,
+                            displayName: idn.displayName || 'Unknown',
+                            avatar: idn.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                            robloxUsername: rbx?.robloxUsername,
+                            robloxUsernameVerified: rbx?.robloxUsernameVerified,
+                            profileFrame: frameSnap?.val?.() || null,
                         });
+                    } else {
+                        const userSnap = await get(ref(db, `users/${id}`));
+                        if (!isMounted.current) return;
+                        if (userSnap.exists()) {
+                            const u = userSnap.val();
+                            seen.add(id);
+                            results.push({
+                                id,
+                                displayName: u.displayName || u.userName || 'Unknown',
+                                avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                                robloxUsername: u.robloxUsername,
+                                robloxUsernameVerified: u.robloxUsernameVerified,
+                                profileFrame: u.profileFrame || null,
+                            });
+                        }
                     }
                 }
             } else {
-                // ── NAME SEARCH: multiple case variants + client-side filter ──
-                const lower = raw.toLowerCase();
-                const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-                const allUpper = raw.toUpperCase();
-                const variants = [...new Set([lower, upperFirst, allUpper, raw])];
-                const limitSize = 50;
-
-                for (const v of variants) {
-                    if (seen.size >= 50) break;
-                    try {
-                        const q = query(
-                            ref(db, 'users'),
-                            orderByChild('displayName'),
-                            startAt(v),
-                            endAt(v + "\uf8ff"),
-                            limitToFirst(limitSize)
-                        );
-                        const snapshot = await get(q);
-                        if (!isMounted.current) return;
-                        if (snapshot.exists()) {
-                            snapshot.forEach((child) => {
-                                const id = child.key;
-                                const u = child.val();
-                                if (id === currentUser?.id || seen.has(id)) return;
-                                seen.add(id);
-                                results.push({
-                                    id,
-                                    displayName: u.displayName || u.userName || 'Unknown',
-                                    avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                    robloxUsername: u.robloxUsername,
-                                    robloxUsernameVerified: u.robloxUsernameVerified,
-                                });
-                            });
-                        }
-                    } catch (variantErr) {
-                        console.warn(`Search variant "${v}" failed:`, variantErr.message);
-                    }
-                }
-
-                // Fallback: client-side contains match for symbol names
-                if (results.length < 10 && lower.length >= 2) {
-                    try {
-                        const broadQ = query(ref(db, 'users'), orderByChild('displayName'), limitToFirst(500));
-                        const broadSnap = await get(broadQ);
-                        if (!isMounted.current) return;
-                        if (broadSnap.exists()) {
-                            broadSnap.forEach((child) => {
-                                if (seen.size >= 50) return;
-                                const id = child.key;
-                                const u = child.val();
-                                if (id === currentUser?.id || seen.has(id)) return;
-                                const name = (u.displayName || u.userName || '').toLowerCase();
-                                if (name.includes(lower)) {
-                                    seen.add(id);
-                                    results.push({
-                                        id,
-                                        displayName: u.displayName || u.userName || 'Unknown',
-                                        avatar: u.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-                                        robloxUsername: u.robloxUsername,
-                                        robloxUsernameVerified: u.robloxUsernameVerified,
-                                    });
-                                }
-                            });
-                        }
-                    } catch (broadErr) {
-                        console.warn('Broad search failed:', broadErr.message);
-                    }
+                // ── NAME SEARCH — Supabase ilike (server-side contains, case-
+                // insensitive, symbols included). Replaces 4 RTDB variant
+                // queries (each downloading up to 50 FULL user objects) + a
+                // 500-user broad-scan fallback (~1 MB per search) with one
+                // narrow-row query + one roblox batch lookup.
+                const rows = await searchIdentityByName(raw, 50);
+                if (!isMounted.current) return;
+                const matches = rows.filter(r => r?.uid && r.uid !== currentUser?.id && !seen.has(r.uid)).slice(0, 50);
+                const rbxMap = await getRobloxBatch(matches.map(r => r.uid)).catch(() => new Map());
+                if (!isMounted.current) return;
+                for (const r of matches) {
+                    seen.add(r.uid);
+                    const rbx = rbxMap.get(r.uid);
+                    results.push({
+                        id: r.uid,
+                        displayName: r.displayName || 'Unknown',
+                        avatar: r.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+                        robloxUsername: rbx?.robloxUsername,
+                        robloxUsernameVerified: rbx?.robloxUsernameVerified,
+                    });
                 }
             }
 

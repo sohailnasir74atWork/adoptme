@@ -161,6 +161,10 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         unreadCount: g.unreadCount || 0,
         memberCount: g.memberCount || 0,
         createdBy: g.createdBy || null,
+        // muted rides the same Supabase row — GroupsScreen derives its
+        // mute map from this instead of N one-off RTDB reads per render
+        // of the groups list.
+        muted: !!g.muted,
       });
       recalcAndSetState();
     };

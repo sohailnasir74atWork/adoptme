@@ -17,7 +17,7 @@ const CommunityChatHeader = ({
   triggerHapticFeedback,
   onOnlineUsersPress,
 }) => {
-  const { user, firestoreDB, theme, isAdmin } = useGlobalState();
+  const { user, firestoreDB, theme, isAdmin, worldCupEnabled } = useGlobalState();
   const navigation = useNavigation();
   const { t } = useTranslation();
   const [pendingGroupInvitationsCount, setPendingGroupInvitationsCount] = useState(0);
@@ -132,6 +132,17 @@ const CommunityChatHeader = ({
 
   return (
     <View style={styles.container}>
+      {/* ⚽ World Cup — entry point (hidden by the kill switch) */}
+      {worldCupEnabled && (
+        <Btn
+          emoji="⚽"
+          bg="#16A34A18"
+          color="#16A34A"
+          badge={0}
+          onPress={() => navigation.navigate('More')}
+        />
+      )}
+
       {/* 💬 Inbox */}
       <Btn
         icon="mail"

@@ -44,7 +44,6 @@ import RNFS from 'react-native-fs';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics } from '../Helper/cosmeticsCache';
 import { addXP, getUserXP, getLevelFromXP } from '../Engagement/xpUtils';
-import { getStarBalance } from '../Engagement/starUtils';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
 
@@ -531,15 +530,15 @@ export default function SettingsScreen({ selectedTheme }) {
   const [showGuidesModal, setShowGuidesModal] = useState(false);
   const [realStarBalance, setRealStarBalance] = useState(0);
 
-  // Fetch real star balance from RTDB (not from user object)
+  // Fetch real star balance from RTDB (not from user object).
+  // onValue fires immediately with the current value, so the old
+  // getStarBalance() seed call was a duplicate download of the same leaf.
   useEffect(() => {
     if (!user?.id || !appdatabase) return;
-    getStarBalance(appdatabase, user.id).then(setRealStarBalance);
-    // Real-time listener for star balance changes
     const { ref: dbRef, onValue } = require('@react-native-firebase/database');
     const balRef = dbRef(appdatabase, `users/${user.id}/dailyStars/starBalance`);
     const unsub = onValue(balRef, (snap) => {
-      if (snap.exists()) setRealStarBalance(snap.val() || 0);
+      setRealStarBalance(snap.exists() ? (snap.val() || 0) : 0);
     });
     return () => unsub();
   }, [user?.id, appdatabase]);

@@ -61,7 +61,7 @@ const TradeList = ({ route }) => {
   const SEARCH_PAGE_SIZE = 5; // ✅ Fetch 5 items at a time for search
   // const [isAdVisible, setIsAdVisible] = useState(true);
   const { selectedTheme } = route.params
-  const { user, analytics, updateLocalStateAndDatabase, appdatabase } = useGlobalState()
+  const { user, analytics, updateLocalStateAndDatabase, appdatabase, isUserBlocked } = useGlobalState()
   const [trades, setTrades] = useState([]);
   const [filteredTrades, setFilteredTrades] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1628,6 +1628,16 @@ const TradeList = ({ route }) => {
                 <TouchableOpacity
                   onPress={async () => {
                     if (!user?.id) { setIsSigninDrawerVisible(true); return; }
+                    // Banned users can't accept trades. isUserBlocked is the
+                    // server-time-validated email/device ban gate from
+                    // GlobelStats — immune to device-clock tampering.
+                    if (isUserBlocked) {
+                      showErrorMessage(
+                        t('chat.access_denied', { defaultValue: 'Access Denied' }),
+                        t('trade.banned_cannot_accept', { defaultValue: 'You are banned and cannot accept trades.' })
+                      );
+                      return;
+                    }
                     const tradeId = item.id;
                     if (savedTradeRefs[tradeId]?.type === 'accepted') {
                       triggerHapticFeedback('impactLight');

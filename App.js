@@ -12,7 +12,7 @@ import { navigationRef } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
 import { useLocalState } from './Code/LocalGlobelStats';
-import { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
+import { AdsConsent } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
 import {
   MyDarkTheme,
@@ -217,40 +217,31 @@ function App() {
         await ensureAttRequested(showAttPrimer);
       }
 
-      const consentInfo = await AdsConsent.requestInfoUpdate();
-
-      // Set request config BEFORE initialize() so the first ad request
-      // already respects it. maxAdContentRating='T' opens up Teen-rated
-      // inventory (game installs, teen-friendly brands) that AdMob's
-      // default 'G' ceiling silently locks out — matches our Play Console
-      // 13+ target audience. tagForChildDirectedTreatment=false confirms
-      // this is NOT a kids-app build, which avoids the conservative kids
-      // pricing AdMob applies when treatment is left unspecified.
-      // tagForUnderAgeOfConsent is intentionally NOT set: the EEA consent
-      // flow (AdsConsent above) already handles the under-16 case via the
-      // IAB TCF v2 string, so setting it globally here would suppress
-      // personalized ads for every user, not just under-age-of-consent ones.
-      // Single source of truth for config-before-init: setRequestConfiguration
-      // (maxAdContentRating 'T', child-treatment flag) then initialize(). The
-      // ad managers await this SAME shared promise before they load, so no ad
-      // is ever requested before the config lands — previously the config and
-      // the ad loads ran in two separate idle callbacks and raced, letting the
-      // first (highest-value) impressions serve at AdMob's default 'G' ceiling.
+      // Gather UMP consent AND initialise the SDK through the single shared
+      // choke point in Code/Ads/init.js. That helper runs, in order:
+      //   gatherConsent() (writes the IAB TCF string for EEA/UK/CH users, via
+      //   the UMP consent form when required) → setRequestConfiguration
+      //   (maxAdContentRating 'T', child-treatment flag) → initialize().
+      // Every ad manager awaits this SAME promise before it loads, so no ad is
+      // ever requested before consent is resolved. Doing consent here — before
+      // init — is what fixes AdMob's "Consent requirement: Low coverage": the
+      // TC string now exists before the first (highest-value) EEA impression,
+      // instead of the old order where initialize() and the ad loads raced the
+      // consent form and the earliest requests went out with no TC string.
+      // tagForUnderAgeOfConsent is intentionally NOT set: the UMP flow already
+      // handles the under-16 case via the IAB TCF v2 string, so setting it
+      // globally would suppress personalised ads for every user.
       const { ensureAdsInitialized } = require('./Code/Ads/init');
       await ensureAdsInitialized();
 
-
-      if (
-        consentInfo.status === AdsConsentStatus.OBTAINED ||
-        consentInfo.status === AdsConsentStatus.NOT_REQUIRED
-      ) {
+      // Record the resolved status for our own UI/analytics. getConsentInfo()
+      // reflects the state left by gatherConsent() above (form completed, or
+      // NOT_REQUIRED outside the EEA).
+      try {
+        const consentInfo = await AdsConsent.getConsentInfo();
         saveConsentStatus(consentInfo.status);
-        return;
-      }
-
-      if (consentInfo.isConsentFormAvailable && consentInfo.isRequestLocationInEeaOrUnknown) {
-        const formResult = await AdsConsent.showForm();
-        saveConsentStatus(formResult.status);
+      } catch (_) {
+        // Non-fatal — ads are already initialised regardless of this readback.
       }
     } catch (error) {
       // Silently handle consent errors

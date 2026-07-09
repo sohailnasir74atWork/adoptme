@@ -547,6 +547,16 @@ const mirrorBanToDevice = async (email, userId, banPayload) => {
   }
 };
 
+// Central gate for moderator ban/mute/strike powers.
+// Admins are NEVER affected. Moderators lose ban/mute/strike when the global
+// admin switch (RTDB /mod_controls_enabled) is set to false. Default is ON:
+// only an explicit `false` disables it (matches the worldcup_enabled pattern),
+// so a denied/missing read leaves staff working as before.
+// NOTE: this only gates ban/mute/strike — moderators keep delete-post and
+// delete-review powers regardless of the switch.
+export const canStaffBanMute = ({ isAdmin, isModerator, modControlsEnabled } = {}) =>
+  !!isAdmin || (!!isModerator && modControlsEnabled !== false);
+
 export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null) => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
@@ -808,83 +818,10 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
   }
 };
 
-/**
- * Hook to check if a user is banned based on their email.
- * Listens to `banned_users_by_email` in real-time.
- *
- * Server-time-validated so a user with a tampered device clock can't be
- * shown as un-banned. See GlobelStats for the same pattern on the
- * current-user listener — and `isUserBlocked` there for the canonical
- * gate that ALSO checks device-bans.
- */
-export const useBanStatus = (email) => {
-  const [isBanned, setIsBanned] = useState(false);
-  const [banDetails, setBanDetails] = useState(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!email) {
-        setIsBanned(false);
-        setBanDetails(null);
-        return;
-      }
-
-      const db = getDatabase();
-      const banRef = ref(db, `banned_users_by_email/${encodeEmailForBan(email)}`);
-
-      let currentBan = null;
-      let expiryTimer = null;
-      let cancelled = false;
-
-      const evaluate = async () => {
-        if (cancelled) return;
-        if (expiryTimer) { clearTimeout(expiryTimer); expiryTimer = null; }
-
-        const data = currentBan;
-        if (!data) {
-          setIsBanned(false);
-          setBanDetails(null);
-          return;
-        }
-        if (data.bannedUntil === 'permanent') {
-          setIsBanned(true);
-          setBanDetails(data);
-          return;
-        }
-        if (typeof data.bannedUntil !== 'number') {
-          setIsBanned(false);
-          setBanDetails(null);
-          return;
-        }
-        const probeUid = getAuth()?.currentUser?.uid || encodeEmailForBan(email);
-        const serverNow = (await getServerTime(db, probeUid)).getTime();
-        if (cancelled) return;
-        const remaining = data.bannedUntil - serverNow;
-        if (remaining <= 0) {
-          setIsBanned(false);
-          setBanDetails(null);
-          return;
-        }
-        setIsBanned(true);
-        setBanDetails(data);
-        expiryTimer = setTimeout(evaluate, Math.min(remaining, 24 * 60 * 60 * 1000));
-      };
-
-      const unsubscribe = onValue(banRef, (snapshot) => {
-        currentBan = snapshot.exists() ? snapshot.val() : null;
-        evaluate();
-      });
-
-      return () => {
-        cancelled = true;
-        if (expiryTimer) clearTimeout(expiryTimer);
-        unsubscribe();
-      };
-    }, [email])
-  );
-
-  return { isBanned, banDetails };
-};
+// (useBanStatus was removed: zero callers. The current user's ban state
+// comes from GlobelStats' app-wide banned_users_by_email + banned_devices
+// listeners — consume isUserBlocked / strikeInfo / deviceBanInfo from
+// useGlobalState instead of attaching another RTDB listener per screen.)
 
 /**
  * Check if a user is banned globally.

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AdoptMe Values — Market Research &amp; Strategy Validation (June 2026)</title>
+<style>
+  :root { --accent:#2563eb; --ink:#1a1a1a; --muted:#555; --line:#d8dde6; --soft:#f1f5fb; --shade:#e8eefb; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         color: var(--ink); line-height: 1.55; max-width: 880px; margin: 0 auto; padding: 32px 28px 80px; background:#fff; }
+  h1 { font-size: 28px; line-height:1.2; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 32px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); color:#16315f; }
+  h3 { font-size: 15.5px; margin: 18px 0 6px; color:#16315f; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 9px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--shade); }
+  tr:nth-child(even) td { background: #fafbfe; }
+  blockquote { margin: 12px 0; padding: 10px 16px; background: var(--soft); border-left: 4px solid var(--accent); }
+  code { background:#f3f4f6; padding:1px 5px; border-radius:4px; font-size:90%; }
+  .lead { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .warn { background:#fff7ed; border:1px solid #fdba74; border-radius:8px; padding:10px 14px; margin:12px 0; }
+  .ok { background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:10px 14px; margin:12px 0; }
+  ol.big { counter-reset: item; }
+  hr { border:0; border-top:1px solid var(--line); margin: 24px 0; }
+  .banner { background:#fff7ed; border:1px solid #fdba74; color:#7c2d12; border-radius:8px; padding:10px 14px; font-size:14px; margin-bottom:20px; }
+  @media print {
+    .no-print { display:none !important; }
+    body { padding:0; max-width:none; font-size:10.3pt; }
+    h1 { font-size:20pt; } h2 { font-size:13.5pt; page-break-after:avoid; } h3 { font-size:11pt; page-break-after:avoid; }
+    table, tr, td, th, blockquote { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    a { color: var(--ink); text-decoration: none; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin: 15mm 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="banner no-print">📄 To save as PDF: press <b>Cmd/Ctrl + P</b>, then choose <b>“Save as PDF”</b> as the destination. (This banner won’t appear in the PDF.)</div>
+
+<h1>AdoptMe Values — Market Research &amp; Strategy Validation</h1>
+<p class="lead"><b>Date:</b> 2026-06-19 · Independent deep research to verify and improve the marketing strategy. Sources and confidence levels included.</p>
+<p><b>Method note:</b> Discord/Reddit/Facebook pages are login- or JS-gated, so some counts come from search snippets quoting live listings and are labelled accordingly. App Store / Google Play and Similarweb pages rendered fully. Nothing is fabricated; uncertain figures are flagged.</p>
+
+<h2>Executive summary — what the research changed</h2>
+<p>The existing strategy is directionally <b>correct and well-built</b>. Research confirmed its core bets (Discord first, 90/10 value ratio, warm aged accounts, own-Discord-server, share-card idea, ASO priority). It also surfaced <b>nine corrections/additions</b> to make before handing the plan to a hire:</p>
+<ol>
+  <li><b>“Pet Folio” is your own app, not a competitor.</b> App Store id6745400111 has also been branded “Pet Folio,” and its developer site is adoptmevalues.app — your domain. Remove it from the competitor list. <i>(Confirmed by you: it’s yours.)</i></li>
+  <li><b>The “rivals are mostly websites; we have an app” wedge is half-right.</b> True for amvgg.com, adoptmevalues.gg, adoptmetradingvalues.com (web-only). <b>False for elvebredd.com and Traderie — both ship iOS + Android apps.</b> The sharper wedge is <i>a polished, SAFE, Adopt-Me-focused app with live chat + alerts</i>.</li>
+  <li><b>Your Discord target list is missing the biggest servers.</b> “Adopt Me Trade” (~275k) is larger than AMTC (~238k); cross-trading hubs (~668k) exist. AMTC/AMTV counts are otherwise accurate.</li>
+  <li><b>Don’t overweight adoptmevalues.gg</b> — small (~223k visits/mo) and falling fast (-25% MoM). Real leaders: elvebredd (~13.2M) and amvgg (~4.4M).</li>
+  <li><b>The §8 referral design violates app-store policy as written.</b> “Invite a friend → <i>both</i> unlock a reward” rewards the invitee for downloading, which Apple and Google prohibit. Fix: reward the <b>REFERRER only</b>, non-cash, never tied to reviews.</li>
+  <li><b>TikTok now requires the Commercial Content disclosure toggle on promo videos</b> (Sept 13 2025) — undisclosed promo is ineligible for the For You feed.</li>
+  <li><b>YouTube Shorts links are NON-clickable</b> in descriptions and comments. Route via the channel-profile link + a Short → long-form video path.</li>
+  <li><b>Audience is teens (13+), not under-13 kids — now a hard compliance line.</b> Discord teen-by-default (March 2026), Reddit age-assurance, YouTube “Made for Kids” stripping, and COPPA all apply. Never DM minors; have counsel check COPPA posture.</li>
+  <li><b>ASO “do it first” is strongly validated</b> — ratings/sentiment is the single biggest lever. Competitors (incl. your own app) sit ~4.4★ and bleed stars over ad load, value accuracy, and chat scam/safety. That’s both your opening and your risk.</li>
+</ol>
+
+<h2>1. Where the Adopt Me community lives (verified)</h2>
+<h3>Discord — the dominant venue</h3>
+<table>
+  <thead><tr><th>Server</th><th>Members</th><th>Confidence</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td>Adopt Me + MM2 + Roblox Cross-Trading (multi-game)</td><td>~667,976</td><td>med</td><td>discord.com/invite/cross</td></tr>
+    <tr><td><b>Adopt Me Trade</b></td><td>~275,063</td><td>med-high</td><td>discord.com/invite/adoptmetrade</td></tr>
+    <tr><td><b>Adopt Me Trading + Crosstrading (“AMTC” ~238k)</b></td><td>~238,636</td><td>high</td><td>discord.com/invite/crosstrade</td></tr>
+    <tr><td><b>Adopt Me Trading &amp; Values (AMTV)</b></td><td>~83,702</td><td>high</td><td>discord.com/invite/amtv</td></tr>
+    <tr><td>Adopt Me Association (AMA)</td><td>~16,405</td><td>med</td><td>disboard.org</td></tr>
+  </tbody>
+</table>
+<p><b>Verdict vs. strategy:</b> “AMTC ~238k, AMTV ~83k” both check out. But AMTC is realistically the <b>#2</b> Adopt-Me server, not #1 — add “Adopt Me Trade” (~275k) and cross-trade hubs to the join list. Discord is confirmed the #1 community by a wide margin.</p>
+<h3>Reddit — secondary; counts UNVERIFIED</h3>
+<p>Live counts couldn’t be pulled (Reddit JSON/old.reddit blocked). Best estimates (low confidence): r/adoptme ~150–250k; r/AdoptMeTrading ~10–40k; r/AdoptMeRBX &lt;20k; r/RobloxTrading tens of thousands. Treat Reddit as real but secondary.</p>
+<h3>TikTok / YouTube — high reach</h3>
+<p>TikTok <b>#adoptmetrading ≈ 172.7k posts</b>; <b>#adoptmevalues ≈ 9,199 posts</b> (TikTok no longer shows aggregate view totals). Elvebredd cites <b>70M+ YouTube views</b>; value-list videos commonly land 10k–1M+.</p>
+<h3>Facebook — names confirmed, counts UNVERIFIED (login-gated)</h3>
+<p>Active public groups include “Adopt Me Trading! (ROBLOX),” “Adopt Me (Buy/Sell/Trade)!,” “ADOPT ME (Trading Group).” Keep low priority.</p>
+
+<h2>2. Competitor landscape (verified traffic + platform)</h2>
+<div class="warn"><b>⚠️ “Pet Folio” = your own product.</b> App Store <b>id6745400111</b> has been renamed across “Pet Folio – Adoptme Values” / “Adoptme Values Calculator” / “AdoptMe Values”; its developer website is <b>adoptmevalues.app</b>, and the Google Play app <code>com.adoptmevaluescalc</code> shares your exact feature set. It is your app — not a competitor. Your footprint: iOS 4.4★ / 934 ratings; Google Play 3.8★ / ~925 reviews / <b>100k+ downloads</b>.</div>
+<table>
+  <thead><tr><th>Competitor</th><th>Platform</th><th>Popularity (May 2026)</th><th>Strength</th><th>Weakness</th></tr></thead>
+  <tbody>
+    <tr><td><b>elvebredd.com</b></td><td>Web + iOS + Android</td><td>~13.2M visits/mo (leader); apps weak (iOS 2.8★, Android 3.4★, 10k+ installs)</td><td>Dominant traffic + brand + SEO</td><td>App buggy, “nothing like the website,” <b>hacking/account-theft complaints</b></td></tr>
+    <tr><td><b>Traderie</b></td><td>Web + iOS + Android</td><td>Web ~613k/mo; <b>app 1M+ downloads, 3.83★</b></td><td>Only rival with a proven app at scale</td><td>A marketplace, not a values authority; multi-game; scam-safety questions</td></tr>
+    <tr><td><b>amvgg.com</b></td><td>Web only (+ ext)</td><td>~4.4M visits/mo (#2); very sticky</td><td>Strong daily-updated WFL tool</td><td><b>No app, no chat, no alerts</b>; ad-heavy; -14.7% MoM</td></tr>
+    <tr><td><b>adoptmetradingvalues.com</b></td><td>Web only</td><td>Mid-tier, declining</td><td>“Original” heritage</td><td>No app; dated; losing share</td></tr>
+    <tr><td><b>adoptmevalues.gg</b></td><td>Web only</td><td><b>~223k visits/mo, -25% MoM</b></td><td>Memorable .gg name</td><td>Small &amp; falling; no app; “#1 trusted” not borne out</td></tr>
+  </tbody>
+</table>
+<p><b>New competitors not in the strategy:</b> <b>“Adopt Me Value Tracker: WFL”</b> (iOS, new) directly clones your alerts + charts; <b>Traderie</b> (biggest app rival); adjacent sites <b>rolimons.com</b>, <b>starpets.gg</b>.</p>
+<p><b>Verdict vs. strategy:</b> Keep “out-compete, never attack.” But fix the wedge to <b>“a safe, fast, Adopt-Me-focused app”</b> — elvebredd <i>has</i> apps (bad ones) and Traderie owns mobile marketplace mindshare. Your own reviews show the gap to close is <b>ads + chat scam-safety + value accuracy + moderation tone</b>.</p>
+
+<h2>3. Organic growth — 2025–2026 algorithm realities</h2>
+<h3>The cross-platform reality to add: audience = TEENS (13+), not kids</h3>
+<ul>
+  <li><b>TikTok (Sept 13 2025):</b> undisclosed promo is For-You-ineligible — use the built-in <b>Commercial Content disclosure toggle</b>.</li>
+  <li><b>Discord:</b> teen-by-default settings rolling out globally from <b>early March 2026</b>; don’t depend on DMing teens or Stage events.</li>
+  <li><b>YouTube “Made for Kids”:</b> disables comments, end screens, Community posts, links — aim content at general/teen audience.</li>
+</ul>
+<h3>TikTok (highest discovery ROI — confirmed)</h3>
+<ul>
+  <li>Follower count is not a ranking factor; cold-start test batch surfaces new accounts. Niche consistency in the first 5–10 videos helps.</li>
+  <li><b>Post 3–5×/week</b>; 3–5 spaced/day is safe; 10+ rapid/near-duplicate posts risks shadowban.</li>
+  <li>Hook in first <b>2–3 seconds</b>; captions mandatory (~85% watch muted); TikTok is a search engine — keywords in caption + on-screen text + audio.</li>
+  <li><b>Links:</b> none clickable in captions/comments; clickable bio link needs 1,000 followers on personal accounts (Business: none). Use a link-in-bio landing page.</li>
+</ul>
+<h3>Reddit (confirmed; strict)</h3>
+<ul>
+  <li>Warm new accounts 1–2 weeks (comment only). #1 ban trigger: same link across 5+ subs. Never &gt;2 link-shares/day; no shorteners (use full UTM links).</li>
+  <li>9:1 self-promo rule is de-facto enforced. Native posts + <b>link in a comment</b> beat link posts. Enforcement ~96% automated.</li>
+</ul>
+<h3>YouTube Shorts (correct the link mechanics)</h3>
+<ul>
+  <li>Subscriber count largely irrelevant; first 1–3s + “Viewed vs Swiped Away” decide reach; ~200+ Shorts builds momentum.</li>
+  <li><b>Links in Shorts descriptions/comments are NON-clickable.</b> Use channel-profile links + Short → long-form → clickable link.</li>
+  <li>Recycled/near-duplicate content is now actively penalized (Jul 15 2025 update).</li>
+</ul>
+<h3>Discord growth (confirmed, with gates)</h3>
+<ul>
+  <li>No discovery feed. Server Discovery needs ≥1,000 members, ≥8 weeks, Community server. Partner program paused; Quests are paid. Until then: directory listings + external traffic.</li>
+  <li><b>Your companion bot cannot be a marketing channel</b> — Developer Policy bans using your app/bot to advertise or mass-DM users.</li>
+</ul>
+
+<h2>4. ASO — confirmed as the #1 free lever</h2>
+<ol>
+  <li><b>Ratings &amp; reviews</b> — biggest conversion + ranking lever. 3★→4★ can lift install conversion ~89%; sub-3.5★ apps lose keyword visibility. Use native review APIs (iOS <code>SKStoreReviewController</code> ≤3/yr; Google Play In-App Review) fired <b>after a successful WFL check</b>. Never incentivize or gate. Reply to reviews.</li>
+  <li><b>Icon + first 2–3 screenshots</b> drive the download decision (~7-sec scan). A/B test; build screenshots around the <b>“WIN / FAIR / LOSE” moment</b>.</li>
+  <li><b>Keywords (platform-specific):</b> iOS = Title + Subtitle + hidden 100-char keyword field (no spaces after commas, no repeats, no brand). Google = keyword-rich Title + Short Description (80, weighted) + Long Description (indexed, ~2–3% density).</li>
+</ol>
+<p><b>Also:</b> install <b>velocity + retention</b> now jointly drive ranking (build daily-return reasons). <b>Localize</b> early. New iOS levers: Custom Product Pages appear in organic search, In-App Events, LLM review summaries (18.4+). Add an <b>“unofficial, not affiliated”</b> disclaimer (every competitor does). <b>Verdict:</b> fully confirms §8’s “ASO first.”</p>
+
+<h2>5. Ethical install tactics — validated, with one policy fix</h2>
+<ul>
+  <li><b>Referral loops:</b> double-sided non-cash rewards tied to product value work (Dropbox, Duolingo); healthy k-factor ≈ 0.3–0.7. <b>But: reward the REFERRER only — never the invitee for downloading, never tie rewards to reviews</b> (Apple 3.2.2/5.6.3; Google policy).</li>
+  <li><b>Share mechanics (strongest fit):</b> spoiler-free, status result cards that deep-link back (Wordle, Spotify Wrapped, Strava). For you: a <b>“Win/Fair/Lose” / “my inventory is worth X” card</b>, pre-sized for TikTok/Shorts/Discord, deep-linked to the app.</li>
+  <li><b>Ambassador/creator programs:</b> creator codes that reward the creator’s audience with non-cash perks (Brawl Stars; Epic Support-A-Creator 5%/$100). Avoid cash bounties to minors. This is the clean version of your “item 7.”</li>
+  <li><b>Owned Discord:</b> exclusivity + giveaways with bonus entries for inviting friends = lowest-cost, highest-fit loop.</li>
+</ul>
+<div class="warn"><b>Kid-audience caveats:</b> COPPA likely applies (parental consent, careful data use); the FTC counts “incentives” toward “directed to children.” Use <b>non-cash in-app rewards only</b>, run giveaways with explicit age/parental rules, and have counsel confirm COPPA posture. (Not legal advice.)</div>
+
+<h2>6. Strategy reconciliation — at a glance</h2>
+<div class="ok"><b>Confirmed (keep as-is):</b> Discord #1; 90/10 value ratio; warm aged single identities; own-Discord-server as core asset; TikTok link-in-bio; giveaways; share-card concept; ASO-first; “out-compete, don’t attack”; AMTC ~238k / AMTV ~83k counts.</div>
+<p><b>Correct/fix:</b></p>
+<ul>
+  <li>Remove <b>“Pet Folio”</b> from competitors (it’s your app — confirmed).</li>
+  <li>Reframe the wedge: <b>safe/polished/focused app</b>, not just “we have an app.”</li>
+  <li>Referral: <b>reward referrer only, non-cash, never tied to reviews</b>.</li>
+  <li>YouTube Shorts: description/comment links are <b>non-clickable</b> — use channel-profile link + Short→long-form.</li>
+  <li>Don’t overweight <b>adoptmevalues.gg</b> (small, declining).</li>
+</ul>
+<p><b>Add:</b></p>
+<ul>
+  <li>Audience = <b>teens 13+</b> → youth rules + COPPA/legal check; never DM minors.</li>
+  <li><b>TikTok Commercial Content disclosure toggle</b> on promo videos.</li>
+  <li>Bigger Discord targets (Adopt Me Trade ~275k, cross-trade hubs ~668k) + Server Discovery gate (1k/8wk) + bot-can’t-DM rule.</li>
+  <li>Reddit: links in comments, no shorteners.</li>
+  <li>ASO specifics: native review API timing, Custom Product Pages, retention-drives-ranking, localization, unofficial disclaimer.</li>
+  <li>Watch the <b>“Adopt Me Value Tracker: WFL”</b> clone.</li>
+</ul>
+
+<h2>Key sources</h2>
+<p style="font-size:13px;">
+Discord: discord.com/invite/{adoptmetrade, crosstrade, amtv, cross}; disboard.org; top.gg ·
+Competitors: similarweb.com/website/{elvebredd.com, amvgg.com, adoptmevalues.gg, traderie.com}; apps.apple.com/id6745400111, /id6760745063; play.google.com (com.adoptmevaluescalc, com.traderie) ·
+Social: buffer.com/resources/tiktok-algorithm; sociallyin.com/resources/tiktok-rules; karmaguy.io; support.reddithelp.com (Spam); support.google.com/youtube/answer/13748639; support.discord.com (Server Discovery); support-dev.discord.com (Developer Policy) ·
+ASO: developer.apple.com/app-store/ratings-and-reviews; /review/guidelines; apptweak.com; mobileaction.co; splitmetrics.com ·
+Growth/policy: growsurf.com; communityhub.strava.com; gleam.io; sac.epicgames.com; support.google.com/googleplay/android-developer/answer/9898684; ftc.gov (COPPA)
+</p>
+<p style="font-size:12.5px;color:var(--muted);">Confidence is labelled inline. Traffic figures are Similarweb estimates; Reddit/Facebook member counts are unverified (login-gated). Legal/COPPA items are flagged for counsel, not legal advice.</p>
+
+</body>
+</html>

@@ -224,7 +224,7 @@ const deserializeStatus = (s) => ({
 const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignIn }) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
-  const { isAdmin } = useGlobalState();
+  const { isAdmin, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const isAdminOrMod = isAdmin || !!user?.isModerator;
   const insets = useSafeAreaInsets();
   const [statuses, setStatuses] = useState(() => {
@@ -596,6 +596,15 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
 
   const handlePostStatus = useCallback(async () => {
     if (!user?.id || !firestoreDB) return;
+    // ✅ Ban check — banned users cannot post status (covers email + device ban)
+    if (isUserBlocked) {
+      const reason = (strikeInfo || deviceBanInfo)?.reason || 'Access Denied';
+      Alert.alert(
+        t('chat.access_denied', { defaultValue: 'Access Denied' }),
+        t('chat.banned_message', { defaultValue: `You are banned: ${reason}` })
+      );
+      return;
+    }
     // Validate: need caption, image, or poll options
     const hasContent = caption.trim() || selectedImage;
     const hasValidPoll = isPollMode && pollOptions.filter(o => o.trim()).length >= 2;
@@ -719,7 +728,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
         }, 400);
       });
     }
-  }, [user, firestoreDB, appdatabase, caption, selectedImage, uploadToBunny, localState.isPro]);
+  }, [user, firestoreDB, appdatabase, caption, selectedImage, uploadToBunny, localState.isPro, isUserBlocked, strikeInfo, deviceBanInfo]);
 
   // ── Delete status (local-first, no re-fetch) ──
   const handleDeleteStatus = useCallback(async (statusId) => {
@@ -845,6 +854,12 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       return;
     }
     if (!firestoreDB || !targetUserId || user.id === targetUserId) return;
+    // ✅ Ban check — banned users cannot follow/unfollow
+    if (isUserBlocked) {
+      const reason = (strikeInfo || deviceBanInfo)?.reason || 'Access Denied';
+      Alert.alert(t('chat.access_denied', { defaultValue: 'Access Denied' }), t('chat.banned_message', { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
 
     setFollowLoading(true);
     const isCurrentlyFollowing = followingIds.includes(targetUserId);
@@ -884,7 +899,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       console.warn('[StatusFeed] follow toggle error:', err?.message);
     }
     setFollowLoading(false);
-  }, [user?.id, firestoreDB, followingIds]);
+  }, [user?.id, firestoreDB, followingIds, isUserBlocked, strikeInfo, deviceBanInfo]);
 
   // Colors
   const textColor = isDarkMode ? '#e2e8f0' : '#1e293b';
@@ -899,6 +914,12 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       return;
     }
     if (!firestoreDB) return;
+    // ✅ Ban check — banned users cannot vote on status polls
+    if (isUserBlocked) {
+      const reason = (strikeInfo || deviceBanInfo)?.reason || 'Access Denied';
+      Alert.alert(t('chat.access_denied', { defaultValue: 'Access Denied' }), t('chat.banned_message', { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
     try {
       const statusRef = doc(firestoreDB, 'statuses', statusId);
       // Remove from all options first, then add to chosen one
@@ -929,7 +950,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
     } catch (err) {
       console.warn('[StatusFeed] poll vote error:', err?.message);
     }
-  }, [user?.id, firestoreDB]);
+  }, [user?.id, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo]);
 
   // ── Story auto-play controls ──
   const startStoryTimer = useCallback((index, total) => {

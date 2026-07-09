@@ -24,6 +24,7 @@ import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper
 import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
 import { getIdentity, getIdentityBatch } from '../../Supabase/userBackend';
+import { setGroupMuted } from '../../Supabase/groupMetaBackend';
 import { useLocalState } from '../../LocalGlobelStats';
 import GroupsGuideModal from './GroupsGuideModal';
 import OnlineUsersList from './OnlineUsersList';
@@ -518,30 +519,17 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     }
   }, [setGroups]);
 
-  // ✅ Load mute status for all groups
+  // ✅ Mute status rides the groups prop (Supabase group_meta_data via
+  // ChatNavigator's shared subscription) — was one RTDB read PER GROUP
+  // on every groups-list change.
   useEffect(() => {
-    if (!appdatabase || !user?.id || groups.length === 0) return;
-
-    const loadMuteStatus = async () => {
-      const muteStatusMap = {};
-      const promises = groups.map(async (group) => {
-        if (!group.groupId) return;
-        try {
-          const muteRef = ref(appdatabase, `group_meta_data/${user.id}/${group.groupId}/muted`);
-          const snapshot = await get(muteRef);
-          muteStatusMap[group.groupId] = snapshot.exists() ? snapshot.val() === true : false;
-        } catch (error) {
-          console.error(`Error loading mute status for group ${group.groupId}:`, error);
-          muteStatusMap[group.groupId] = false;
-        }
-      });
-
-      await Promise.all(promises);
-      setMutedGroups(muteStatusMap);
-    };
-
-    loadMuteStatus();
-  }, [appdatabase, user?.id, groups]);
+    if (groups.length === 0) return;
+    const muteStatusMap = {};
+    groups.forEach((group) => {
+      if (group.groupId) muteStatusMap[group.groupId] = !!group.muted;
+    });
+    setMutedGroups(muteStatusMap);
+  }, [groups]);
 
   // Handle show group info
   const handleShowGroupInfo = useCallback(async (groupId) => {
@@ -627,8 +615,15 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     const newMutedStatus = !currentMuted;
 
     try {
+      // Dual write: Supabase group_meta_data.muted is what notifyGroupMessage
+      // (CF) checks before pushing — write it directly instead of relying on
+      // the RTDB→Supabase mirror CF round-trip. RTDB leaf kept for legacy
+      // readers.
       const muteRef = ref(appdatabase, `group_meta_data/${user.id}/${groupId}/muted`);
-      await set(muteRef, newMutedStatus);
+      await Promise.all([
+        set(muteRef, newMutedStatus),
+        setGroupMuted(user.id, groupId, newMutedStatus),
+      ]);
 
       // Update local state
       setMutedGroups(prev => ({

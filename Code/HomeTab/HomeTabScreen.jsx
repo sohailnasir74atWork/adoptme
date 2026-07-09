@@ -4,6 +4,7 @@ import {
   Image, Platform, Dimensions, Linking, Share, StatusBar, Modal, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -66,8 +67,33 @@ const formatPlain = (v) => {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// World Cup promo card — fixed bright palette (theme-independent, like the WC hero)
+// so it always pops in light and dark mode.
+const wcPromoStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 14, paddingVertical: 12, paddingHorizontal: 14,
+    borderRadius: 16, overflow: 'hidden',
+    backgroundColor: '#5B21B6', // fallback if the gradient fails to render
+  },
+  lottieWrap: { width: 46, height: 46, marginRight: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
+  title: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  newPill: {
+    marginLeft: 7, backgroundColor: '#EF4444', borderRadius: 7,
+    paddingHorizontal: 5, paddingVertical: 1,
+  },
+  newPillText: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.3 },
+  sub: { fontSize: 12, color: 'rgba(255,255,255,0.92)', marginTop: 1, fontWeight: '600' },
+  cta: {
+    marginLeft: 10, backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  ctaText: { fontSize: 13, fontWeight: '900', color: '#fff' },
+});
+
 const HomeTabScreen = ({ selectedTheme }) => {
-  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
+  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo, worldCupEnabled } = useGlobalState();
   const { localState } = useLocalState();
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
@@ -236,7 +262,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
     { key: 'following', icon: 'heart', label: t('home_tab.action_friends'), color: '#EC4899', onPress: () => requireSignIn(() => navigation.navigate('SocialDashboardScreen'), t('home_tab.signin_friends')) },
     { key: 'cosmetics', icon: 'wand-magic-sparkles', label: t('home_tab.action_cosmetics'), color: '#A855F7', onPress: () => requireSignIn(() => navigation.navigate('MyCosmeticsScreen'), t('home_tab.signin_cosmetics')) },
     { key: 'mods', icon: 'shield-halved', label: t('home_tab.action_mods', { defaultValue: 'Mods' }), color: '#0EA5E9', onPress: () => navigation.navigate('ModsScreen') },
-  ], [t, i18n.language, navigation, canClaimStar, user?.id]);
+  ], [t, i18n.language, navigation, canClaimStar, user?.id, worldCupEnabled]);
 
   // ── XP computed values ──
   const currentLevel = useMemo(() => getLevelFromXP(userXP.total), [userXP.total]);
@@ -548,6 +574,11 @@ const HomeTabScreen = ({ selectedTheme }) => {
                   {action.hasBadge && (
                     <Animated.View style={[styles.starBadge, { transform: [{ scale: starPulse }] }]} />
                   )}
+                  {action.isNew && (
+                    <View style={styles.newTileBadge}>
+                      <Text style={styles.newTileBadgeText}>NEW</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={[styles.quickActionLabel, { color: isDarkMode ? config.darkColors.textSecondary : '#64748b' }]} numberOfLines={1}>
                   {action.label}
@@ -555,6 +586,48 @@ const HomeTabScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ═══ WORLD CUP PROMO CARD (hidden by the kill switch) ═══ */}
+          {worldCupEnabled && (
+            <TouchableOpacity
+              activeOpacity={0.92}
+              onPress={() => navigation.navigate('More')}
+              style={wcPromoStyles.card}
+            >
+              {/* Gradient background (react-native-svg) */}
+              <Svg style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <SvgGradient id="wcGrad" x1="0" y1="0" x2="1" y2="1">
+                    <Stop offset="0" stopColor="#7C3AED" />
+                    <Stop offset="0.55" stopColor="#5B21B6" />
+                    <Stop offset="1" stopColor="#2563EB" />
+                  </SvgGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="100%" fill="url(#wcGrad)" />
+              </Svg>
+              <View style={wcPromoStyles.lottieWrap}>
+                <SafeLottieView
+                  source={require('../../assets/lottie/footballer.json')}
+                  autoPlay
+                  loop
+                  resizeMode="contain"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={wcPromoStyles.titleRow}>
+                  <Text style={wcPromoStyles.title}>World Cup 2026</Text>
+                  <View style={wcPromoStyles.newPill}>
+                    <Text style={wcPromoStyles.newPillText}>NEW</Text>
+                  </View>
+                </View>
+                <Text style={wcPromoStyles.sub}>Predict winners & climb the leaderboard! ⚽</Text>
+              </View>
+              <View style={wcPromoStyles.cta}>
+                <Text style={wcPromoStyles.ctaText}>Predict →</Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           {/* ═══ STATUS FEED (Stories) ═══ */}
           <StatusFeed
@@ -1055,6 +1128,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     borderWidth: 2,
     borderColor: '#fff',
+  },
+  newTileBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  newTileBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   quickActionLabel: {
     fontSize: 10,

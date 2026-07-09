@@ -212,6 +212,12 @@ const CommentModal = ({ visible, onClose, postId }) => {
   // ── Like a comment ──
   const handleLikeComment = useCallback(async (commentId) => {
     if (!user?.id || !firestoreDB || !postId) return;
+    // Ban check
+    if (isMeBanned) {
+      const reason = myBanDetails?.reason || 'Access Denied';
+      Alert.alert(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      return;
+    }
 
     const commentRef = doc(firestoreDB, 'designPosts', postId, 'comments', commentId);
     const currentComment = comments.find(c => c.id === commentId);
@@ -239,7 +245,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
     } catch (err) {
       console.warn('[Comments] like error:', err?.message);
     }
-  }, [user?.id, firestoreDB, postId, comments]);
+  }, [user?.id, firestoreDB, postId, comments, isMeBanned, myBanDetails]);
 
   // ── Delete own comment ──
   const handleDeleteComment = useCallback(async (commentId, commentUserId) => {

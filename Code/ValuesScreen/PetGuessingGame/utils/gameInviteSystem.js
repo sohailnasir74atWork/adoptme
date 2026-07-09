@@ -1,5 +1,6 @@
 // gameInviteSystem.js
 import { ref, set, update, remove, get, onValue, push, query as dbQuery, orderByKey, limitToFirst, orderByValue, equalTo } from '@react-native-firebase/database';
+import { getIdentityBatch } from '../../../Supabase/userBackend';
 import {
   collection,
   doc,
@@ -29,10 +30,11 @@ export const awardGameWin = async (appdatabase, firestoreDB, userId) => {
 
   try {
     // ✅ Update reward points in RTDB (existing behaviour)
+    // Leaf read — the whole users/{uid} node (shop, blocked_users, …) was
+    // being downloaded just to read one number.
     const userRef = ref(appdatabase, `users/${userId}`);
-    const userSnap = await get(userRef);
-    const existing = userSnap.exists() ? userSnap.val() || {} : {};
-    const currentPoints = existing.rewardPoints ? Number(existing.rewardPoints) : 0;
+    const pointsSnap = await get(ref(appdatabase, `users/${userId}/rewardPoints`));
+    const currentPoints = pointsSnap.exists() ? Number(pointsSnap.val()) || 0 : 0;
 
     const newPoints = currentPoints + 100;
     const now = Date.now();
@@ -692,14 +694,30 @@ export const fetchUserDetailsForInvite = async (appdatabase, userIds) => {
   if (!appdatabase || !userIds || !Array.isArray(userIds) || userIds.length === 0) return {};
 
   try {
-    // ✅ Fetch user data for each ID in parallel (only relevant fields)
+    // displayName/avatar come from Supabase identity in ONE batched query;
+    // isPlaying is live game state (not mirrored), read as an RTDB LEAF.
+    // Was: one whole-users/{uid} node download PER online user (shop,
+    // blocked_users, counters, …) for 3 display fields.
+    const identityMap = await getIdentityBatch(userIds).catch(() => new Map());
+
     const userPromises = userIds.map(async (userId) => {
       try {
-        const userRef = ref(appdatabase, `users/${userId}`);
-        const userSnapshot = await get(userRef);
+        const idn = identityMap.get(userId);
+        if (idn) {
+          const isPlayingSnap = await get(ref(appdatabase, `users/${userId}/isPlaying`)).catch(() => null);
+          return {
+            id: userId,
+            displayName: idn.displayName || 'Anonymous',
+            avatar:
+              idn.avatar ||
+              'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
+            isPlaying: !!(isPlayingSnap?.exists?.() && isPlayingSnap.val()),
+          };
+        }
 
+        // Mirror-lag fallback (brand-new user): whole-node read, as before.
+        const userSnapshot = await get(ref(appdatabase, `users/${userId}`));
         if (!userSnapshot.exists()) return null;
-
         const userData = userSnapshot.val() || {};
         return {
           id: userId,

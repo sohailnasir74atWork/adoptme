@@ -34,6 +34,21 @@ export function fromGroupMetaRow(row) {
   };
 }
 
+// Toggle the muted flag directly in Supabase — sister of setChatMuted in
+// chatMetaBackend.js. Supabase group_meta_data.muted is what
+// notifyGroupMessage (CF) checks before pushing, so this write is the
+// authoritative one; the caller also writes the RTDB leaf for legacy
+// readers instead of relying on the RTDB→Supabase mirror CF round-trip.
+export async function setGroupMuted(userId, groupId, muted) {
+  if (!userId || !groupId) return;
+  await supabase
+    .from('group_meta_data')
+    .update({ muted: !!muted, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('group_id', groupId);
+  // Errors intentionally swallowed — RTDB + mirror CF is the fallback.
+}
+
 // Reset group unread count directly in Supabase — mirrors resetUnreadCount()
 // in chatMetaBackend.js. Called when user opens a group so the badge clears
 // instantly without waiting for the mirror CF.
@@ -52,6 +67,14 @@ export async function resetGroupUnreadCount(userId, groupId) {
 // silent-truncation class as loadChatMeta — see that fn for context.
 const GROUP_META_PAGE = 1000;
 
+// Only the columns fromGroupMetaRow reads — sister of CHAT_META_COLS in
+// chatMetaBackend.js (this table missed that egress-narrowing pass).
+const GROUP_META_COLS =
+  'group_id, group_name, group_avatar, last_message, ' +
+  'last_message_timestamp_ms, last_message_sender_id, ' +
+  'last_message_sender_name, member_count, created_by, unread_count, ' +
+  'muted, joined_at_ms, last_read_at_ms';
+
 export async function loadGroupMeta(userId) {
   if (!userId) return [];
   const out = [];
@@ -59,7 +82,7 @@ export async function loadGroupMeta(userId) {
   while (true) {
     const { data, error } = await supabase
       .from('group_meta_data')
-      .select('*')
+      .select(GROUP_META_COLS)
       .eq('user_id', userId)
       .order('last_message_timestamp_ms', { ascending: false, nullsFirst: false })
       .range(from, from + GROUP_META_PAGE - 1);

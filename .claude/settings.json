@@ -4,7 +4,13 @@
       "Bash(rm -rf ~/.gradle/caches/transforms-* ~/.gradle/caches/journal-* ~/.gradle/caches/build-cache-*)",
       "Bash(rm -rf ~/.gradle/daemon/*/daemon-*.log)",
       "Read(//Users/apple/.gradle/caches/**)",
-      "Bash(du -sh ~/.gradle/caches/*)"
+      "Bash(du -sh ~/.gradle/caches/*)",
+      "Bash(supabase --version)",
+      "Bash(chmod 600 /tmp/sb_tokens)",
+      "Bash(command -v curl)",
+      "Bash(command -v head)",
+      "Bash(node -e \"console.log\\(require\\('@supabase/realtime-js/package.json'\\).version\\)\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

@@ -27,7 +27,10 @@
 
 
 import { ref, get } from '@react-native-firebase/database';
-import { getIdentity, getRoles, getCosmetics, getRoblox } from '../Supabase/userBackend';
+import {
+  getIdentity, getRoles, getCosmetics, getRoblox,
+  getIdentityBatch, getRolesBatch, getCosmeticsBatch, getRobloxBatch,
+} from '../Supabase/userBackend';
 
 let cache;
 try {
@@ -93,17 +96,25 @@ export const getOrFetchProfile = async (db, uid) => {
   //   - RTDB fallback for mirrored fields fires ONLY if the corresponding
   //     Supabase table returned null (mirror lag / not-yet-backfilled user).
   //     Common case: 0 RTDB reads for the mirrored fields.
+  const [identityRow, rolesRow, cosmeticsRow, robloxRow] = await Promise.all([
+    getIdentity(uid),
+    getRoles(uid),
+    getCosmetics(uid),
+    getRoblox(uid),
+  ]);
+  return assembleAndCacheProfile(db, uid, { identityRow, rolesRow, cosmeticsRow, robloxRow });
+};
+
+// Assemble + cache a profile from pre-fetched Supabase rows. Shared by
+// getOrFetchProfile (single, 4 point queries) and warmProfileCache
+// (bulk, 4 batch queries for the whole set) so the two paths can't
+// drift. Does the RTDB game-win leaf reads + per-field RTDB fallback
+// for whichever Supabase rows came back null.
+const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeticsRow, robloxRow }) => {
   try {
     const base = `users/${uid}`;
 
-    const [
-      identityRow, rolesRow, cosmeticsRow, robloxRow,
-      hasRecentGameWinSnap, lastGameWinAtSnap,
-    ] = await Promise.all([
-      getIdentity(uid),
-      getRoles(uid),
-      getCosmetics(uid),
-      getRoblox(uid),
+    const [hasRecentGameWinSnap, lastGameWinAtSnap] = await Promise.all([
       get(ref(db, `${base}/hasRecentGameWin`)),
       get(ref(db, `${base}/lastGameWinAt`)),
     ]);
@@ -219,15 +230,30 @@ export const warmProfileCache = async (db, uids) => {
   const uncached = [...new Set(uids)].filter(uid => !getCachedProfile(uid));
   if (uncached.length === 0) return;
 
-  // Process all uncached uids in waves of 10 — bounded concurrency, no flooding.
-  // Each getOrFetchProfile call now does Supabase identity + RTDB rest in
-  // parallel (see implementation above); concurrency=10 means up to 10
-  // concurrent Supabase reads + 10 concurrent RTDB reads, both well within
-  // each backend's per-conn limits.
+  // 4 batched .in() queries for the WHOLE uncached set (chunked at 200
+  // inside _batchByUid) instead of 4 single-row queries per uid — a
+  // fresh chat page with 15 unknown senders is 4 Supabase round-trips,
+  // not 60. Batch failure degrades to empty maps; assembleAndCacheProfile
+  // then hits its per-field RTDB fallback exactly as a null row would.
+  const [idMap, rolesMap, cosMap, rbxMap] = await Promise.all([
+    getIdentityBatch(uncached).catch(() => new Map()),
+    getRolesBatch(uncached).catch(() => new Map()),
+    getCosmeticsBatch(uncached).catch(() => new Map()),
+    getRobloxBatch(uncached).catch(() => new Map()),
+  ]);
+
+  // Assembly still runs in waves — it does 2 RTDB game-win leaf reads
+  // per uid (plus fallback reads for rows missing above), and 10-wide
+  // keeps that RTDB concurrency bounded.
   const WAVE = 10;
   for (let i = 0; i < uncached.length; i += WAVE) {
     const wave = uncached.slice(i, i + WAVE);
-    await Promise.allSettled(wave.map(uid => getOrFetchProfile(db, uid)));
+    await Promise.allSettled(wave.map(uid => assembleAndCacheProfile(db, uid, {
+      identityRow: idMap.get(uid) ?? null,
+      rolesRow: rolesMap.get(uid) ?? null,
+      cosmeticsRow: cosMap.get(uid) ?? null,
+      robloxRow: rbxMap.get(uid) ?? null,
+    })));
   }
 };
 

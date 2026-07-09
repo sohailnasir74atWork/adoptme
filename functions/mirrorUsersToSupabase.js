@@ -289,6 +289,36 @@ async function mirrorBlocks(uid, before, after, supabase) {
   }
 }
 
+// --------------------------------------------------------------------
+// Mods roster (RTDB mods/{uid}) — absorbed from syncModRoster so the
+// roster rides THIS function's invocation instead of a second CF
+// triggering on every /users/{uid} write. After deploying this, delete
+// the old trigger:  firebase functions:delete syncModRoster
+// (keep seedModRoster — it's the separate scheduled seeder).
+// --------------------------------------------------------------------
+async function mirrorModsRoster(uid, before, after) {
+  const relevantFields = ['isModerator', 'isBabyMod', 'displayName', 'avatar'];
+  if (before && !anyKeyChanged(before, after, relevantFields)) return;
+
+  const isMod = after.isModerator === true;
+  const isJmod = after.isBabyMod === true;
+  const ref = admin.database().ref(`mods/${uid}`);
+  try {
+    if (isMod || isJmod) {
+      await ref.set({
+        displayName: after.displayName || 'Unknown',
+        avatar: after.avatar || '',
+        role: isMod ? 'mod' : 'jmod',
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ref.remove();
+    }
+  } catch (e) {
+    console.error('[mirrorUsers/modsRoster]', uid, e.message);
+  }
+}
+
 // On full /users/{uid} delete, drop rows from all 8 tables.
 // Each delete is independent — if one fails, the others still go.
 async function deleteAllForUser(uid, supabase) {
@@ -325,9 +355,13 @@ exports.mirrorUsersToSupabase = functions
     const { uid } = context.params;
     const supabase = getSupabaseAdmin();
 
-    // Full delete — propagate to every table.
+    // Full delete — propagate to every table + the mods roster.
     if (!change.after.exists()) {
-      return deleteAllForUser(uid, supabase);
+      await Promise.all([
+        deleteAllForUser(uid, supabase),
+        admin.database().ref(`mods/${uid}`).remove().catch(() => {}),
+      ]);
+      return null;
     }
 
     const before = change.before.exists() ? change.before.val() : {};
@@ -345,6 +379,7 @@ exports.mirrorUsersToSupabase = functions
       mirrorSettings(uid, before, after, supabase),
       mirrorBadges(uid, before, after, supabase),
       mirrorBlocks(uid, before, after, supabase),
+      mirrorModsRoster(uid, change.before.exists() ? before : null, after),
     ]);
 
     return null;

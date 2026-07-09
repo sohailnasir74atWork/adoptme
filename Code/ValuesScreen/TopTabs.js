@@ -26,17 +26,26 @@ import { useGlobalState } from "../GlobelStats";
 import NewsFeedbackReport from "./AdminReport";
 import ServerScreen from "./ServerScreen";
 import ScammerDatabaseScreen from "./ScammerDatabaseScreen";
+import WorldCupScreen from "../WorldCup/WorldCupScreen";
 
 
 
 const CustomTopTabs = ({ selectedTheme }) => {
   const indicatorX = useRef(new Animated.Value(0)).current;
   const indicatorWidth = useRef(new Animated.Value(0)).current;
-  const { isAdmin } = useGlobalState();
+  const { isAdmin, worldCupEnabled } = useGlobalState();
 
-  // 🔹 Build tabs list dynamically based on isAdmin
+  // 🔹 Build tabs list dynamically based on isAdmin + the World Cup kill switch
   const tabs = useMemo(() => {
     const base = [
+      // World Cup tab — present only while the RTDB kill switch is on.
+      ...(worldCupEnabled ? [{
+        label: "World Cup",
+        key: "worldcup",
+        icon: "football-outline",
+        iconActive: "football",
+        isNew: true,
+      }] : []),
       {
         label: "HD Wallpaper",
         key: "wallpaper",
@@ -73,7 +82,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
     }
 
     return base;
-  }, [isAdmin]);
+  }, [isAdmin, worldCupEnabled]);
 
   const [activeKey, setActiveKey] = useState(tabs[0].key);
   const [mountedTabs, setMountedTabs] = useState({ [tabs[0].key]: true });
@@ -194,6 +203,11 @@ const CustomTopTabs = ({ selectedTheme }) => {
                   >
                     {tab.label}
                   </Text>
+                  {tab.isNew && (
+                    <View style={styles.newPill}>
+                      <Text style={styles.newPillText}>NEW</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -213,6 +227,17 @@ const CustomTopTabs = ({ selectedTheme }) => {
 
       {/* Screens */}
       <View style={styles.contentContainer}>
+
+        {worldCupEnabled && mountedTabs.worldcup && (
+          <View
+            style={[
+              styles.screen,
+              activeKey !== "worldcup" && styles.hiddenScreen,
+            ]}
+          >
+            <WorldCupScreen selectedTheme={selectedTheme} />
+          </View>
+        )}
 
         {mountedTabs.server && (
           <View
@@ -303,6 +328,19 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 12,
 
+  },
+  newPill: {
+    marginLeft: 5,
+    backgroundColor: "#EF4444",
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  newPillText: {
+    color: "#fff",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.3,
   },
   tabTextActive: {
     fontWeight: 'bold',

@@ -98,25 +98,8 @@ const RewardCenterScreen = ({ selectedTheme }) => {
     useEffect(() => {
         const prizeRef = ref(appdatabase, 'prize');
 
-        const fetchPrize = async () => {
-            try {
-                const snapshot = await get(prizeRef);
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    setPrize(data);
-                    if (data.targetDate) {
-                        setTargetDate(new Date(data.targetDate)); // Ensure proper date conversion
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching prize:", error);
-            }
-        };
-
-        // Fetch data once when the component mounts
-        fetchPrize();
-
-        // Listen for real-time updates
+        // onValue fires immediately with the current value, so the old
+        // mount-time get() was a duplicate download of the same node.
         const unsubscribe = onValue(prizeRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
@@ -266,20 +249,7 @@ const RewardCenterScreen = ({ selectedTheme }) => {
 
         const userRef = ref(appdatabase, `/users/${user.id}/rewardPoints`);
 
-        const syncUserPoints = async () => {
-            try {
-                const snapshot = await get(userRef);
-                if (snapshot.exists()) {
-                    setUserPoints(snapshot.val());
-                }
-            } catch (error) {
-                console.error("Error fetching user points:", error);
-            }
-        };
-
-        syncUserPoints();
-
-        // Listen for real-time changes
+        // onValue fires immediately with the current value — no seed get().
         const unsubscribe = onValue(userRef, (snapshot) => {
             if (snapshot.exists()) {
                 setUserPoints(snapshot.val());

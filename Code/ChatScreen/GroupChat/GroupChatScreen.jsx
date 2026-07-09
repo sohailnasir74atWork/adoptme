@@ -28,7 +28,7 @@ import {
 } from '../../Supabase/groupMessagesBackend';
 // RTDB still needed for /banned_users_by_email, /presence, and the
 // legacy group_meta_data path. Message bodies + reactions are on Supabase.
-import { get, ref, onValue } from '@react-native-firebase/database';
+import { get, ref } from '@react-native-firebase/database';
 import { getIdentity } from '../../Supabase/userBackend';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -37,11 +37,13 @@ import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from '@rea
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
+import { validateContent } from '../../Helper/ContentModeration';
 import { showMessage } from 'react-native-flash-message';
 import ProfileBottomDrawer from './BottomDrawer';
 import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
+import { serverNowMs } from '../../Helper/serverTime';
 import InterstitialAdManager from '../../Ads/IntAd';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
@@ -60,7 +62,7 @@ const GroupChatScreen = () => {
   const navigation = useNavigation();
   const { groupId } = route.params || {};
 
-  const { user, theme, appdatabase, firestoreDB, isAdmin, isRTDBConnected, isUserBlocked, deviceBanInfo } = useGlobalState();
+  const { user, theme, appdatabase, firestoreDB, isAdmin, isRTDBConnected, isUserBlocked, deviceBanInfo, strikeInfo } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +83,8 @@ const GroupChatScreen = () => {
   const [selectedFruits, setSelectedFruits] = useState([]);
   const [replyTo, setReplyTo] = useState(null); // Reply to message state
   const [highlightedMessageId, setHighlightedMessageId] = useState(null); // Highlighted message ID
-  const [strikeInfo, setStrikeInfo] = useState(null); // ✅ Track strike/ban info
+  // strikeInfo comes from GlobelStats context (app-wide ban listener) —
+  // the per-screen duplicate banned_users_by_email listener was removed.
   const flatListRef = useRef(null); // Ref for FlatList in GroupMessageList
   // Supabase composite cursor: { createdAt: ISO, id: uuid } of the oldest
   // message currently in `messages`. null when no older page known yet OR
@@ -102,23 +105,6 @@ const GroupChatScreen = () => {
   // ✅ Check if current user is banned — global gate covers email + device
   const isMeBanned = isUserBlocked;
   const myBanDetails = strikeInfo || deviceBanInfo;
-
-  // ✅ Load strike/ban info from Firebase — paused when screen loses focus to prevent freeze
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.email || !appdatabase) return;
-
-      const encodeEmail = (email) => email.replace(/\./g, '(dot)');
-      const banRef = ref(appdatabase, `banned_users_by_email/${encodeEmail(user.email)}`);
-
-      const unsubscribe = onValue(banRef, (snapshot) => {
-        const banData = snapshot.val();
-        setStrikeInfo(banData && typeof banData === 'object' ? banData : null);
-      });
-
-      return () => unsubscribe();
-    }, [user?.email, appdatabase])
-  );
 
   // ✅ PHASE 0B: Seed current user's profile into cache on mount
   useEffect(() => {
@@ -621,7 +607,11 @@ const GroupChatScreen = () => {
       // ✅ Strike/Temporal Ban Check
       if (strikeInfo) {
         const { strikeCount, bannedUntil } = strikeInfo;
-        const now = Date.now();
+        // Server-time estimate — a raw Date.now() here let users roll the
+        // device clock forward to slip past temp bans. (isMeBanned above is
+        // the authoritative server-probed gate; this block is the friendly
+        // time-remaining message.)
+        const now = serverNowMs();
 
         // Permanent ban
         if (bannedUntil === 'permanent') {
@@ -660,6 +650,18 @@ const GroupChatScreen = () => {
       if (!user?.id || !groupId || !appdatabase || !firestoreDB) {
         showErrorMessage(t('home.alert.error'), 'Missing required data. Please try again.');
         return;
+      }
+
+      // ✅ Content filter backstop (kid-safety) — profanity/abuse/NSFW words.
+      // Input box already validates; this guards any other send path. Admins and
+      // full moderators (not baby mods) bypass. Links handled at input layer.
+      if (trimmedText) {
+        const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
+        const validation = validateContent(trimmedText, { skipLinkCheck: true, skipAll: canBypassModeration });
+        if (!validation.isValid) {
+          showErrorMessage(t('chat.content_not_allowed', { defaultValue: 'Content Not Allowed' }), validation.reason || t('chat.inappropriate_content', { defaultValue: 'Inappropriate content detected.' }));
+          return;
+        }
       }
 
       // Connection check — catches WiFi networks that block Firebase WebSocket connections.
@@ -763,7 +765,7 @@ const GroupChatScreen = () => {
         Alert.alert('Error', 'Could not send your message. Please try again.');
       }
     },
-    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected]
+    [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, isAdmin]
   );
 
   // Soft-delete a single message in Supabase. The realtime UPDATE

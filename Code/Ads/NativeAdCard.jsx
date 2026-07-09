@@ -98,21 +98,16 @@ const NativeAdCard = ({ adKey, isDarkMode = false }) => {
         textSecondary: '#64748b',
       };
 
+  const hasStars = typeof ad.starRating === 'number' && ad.starRating > 0;
+
   return (
     <NativeAdView
       nativeAd={ad}
       style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
     >
-      {/* Top row: Sponsored badge (left) — AdChoices is overlaid by the SDK
-          on the right, so we keep that corner padded/clear. */}
-      <View style={styles.topRow}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Sponsored</Text>
-        </View>
-        <View style={styles.adChoicesSpace} />
-      </View>
-
-      {/* Header: icon + headline + advertiser */}
+      {/* Header: icon + headline + advertiser/Sponsored. The headline is a
+          registered asset, so this whole text block is a large tap target.
+          AdChoices is overlaid by the SDK top-right, so we keep that corner clear. */}
       <View style={styles.header}>
         {ad.icon && ad.icon.url ? (
           <NativeAsset assetType={NativeAssetType.ICON}>
@@ -125,17 +120,27 @@ const NativeAdCard = ({ adKey, isDarkMode = false }) => {
               {ad.headline}
             </Text>
           </NativeAsset>
-          {ad.advertiser ? (
-            <NativeAsset assetType={NativeAssetType.ADVERTISER}>
-              <Text numberOfLines={1} style={[styles.advertiser, { color: C.textSecondary }]}>
-                {ad.advertiser}
-              </Text>
-            </NativeAsset>
-          ) : null}
+          {/* Sponsored attribution (required) shown inline with the advertiser
+              so the card reads like a feed item instead of a boxed-off ad. */}
+          <View style={styles.metaRow}>
+            <Text style={styles.sponsored}>Sponsored</Text>
+            {ad.advertiser ? (
+              <>
+                <Text style={[styles.metaDot, { color: C.textSecondary }]}>·</Text>
+                <NativeAsset assetType={NativeAssetType.ADVERTISER}>
+                  <Text numberOfLines={1} style={[styles.advertiser, { color: C.textSecondary }]}>
+                    {ad.advertiser}
+                  </Text>
+                </NativeAsset>
+              </>
+            ) : null}
+          </View>
         </View>
+        {/* Keep the top-right corner clear for the SDK AdChoices overlay. */}
+        <View style={styles.adChoicesSpace} />
       </View>
 
-      {/* Media (image or video) */}
+      {/* Media (image or video) — a registered asset and the largest tap target. */}
       {ad.mediaContent ? (
         <NativeMediaView style={styles.media} resizeMode="cover" />
       ) : null}
@@ -149,28 +154,32 @@ const NativeAdCard = ({ adKey, isDarkMode = false }) => {
         </NativeAsset>
       ) : null}
 
-      {/* Footer: star rating + CTA */}
-      <View style={styles.footer}>
-        {typeof ad.starRating === 'number' && ad.starRating > 0 ? (
-          <NativeAsset assetType={NativeAssetType.STAR_RATING}>
-            <Text style={styles.stars}>
-              {'★'.repeat(Math.round(ad.starRating))}
-              <Text style={{ color: C.textSecondary }}>
-                {'★'.repeat(Math.max(0, 5 - Math.round(ad.starRating)))}
-              </Text>
+      {hasStars ? (
+        <NativeAsset assetType={NativeAssetType.STAR_RATING}>
+          <Text style={styles.stars}>
+            {'★'.repeat(Math.round(ad.starRating))}
+            <Text style={{ color: C.textSecondary }}>
+              {'★'.repeat(Math.max(0, 5 - Math.round(ad.starRating)))}
             </Text>
-          </NativeAsset>
-        ) : (
-          <View />
-        )}
-        {ad.callToAction ? (
-          <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
-            <View style={[styles.cta, { backgroundColor: config.colors.secondary }]}>
-              <Text style={styles.ctaText}>{ad.callToAction}</Text>
-            </View>
-          </NativeAsset>
-        ) : null}
-      </View>
+          </Text>
+        </NativeAsset>
+      ) : null}
+
+      {/* Full-width CTA — the registered click target. Rendered as a styled
+          LEAF <Text> (like the headline/body assets, which click fine): a
+          wrapper <View> — even with pointerEvents="box-only" — never fired
+          the SDK's native click listener on Android. RN's ViewGroup consumes
+          the touch through its own gesture pipeline without calling the
+          Android click handler the GMA SDK registers on the asset view, so
+          the button rendered but was dead to taps. A leaf Text takes the
+          same native click path as the working headline. */}
+      {ad.callToAction ? (
+        <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
+          <Text style={[styles.cta, { backgroundColor: config.colors.secondary }]}>
+            {ad.callToAction}
+          </Text>
+        </NativeAsset>
+      ) : null}
     </NativeAdView>
   );
 };
@@ -186,24 +195,6 @@ const styles = StyleSheet.create({
   skeleton: {
     height: 220,
     opacity: 0.5,
-  },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  badge: {
-    backgroundColor: 'rgba(120,120,128,0.16)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#9ca3af',
-    letterSpacing: 0.3,
   },
   // Reserve room so the SDK's AdChoices overlay (top-right) never covers content.
   adChoicesSpace: {
@@ -228,15 +219,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  sponsored: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  metaDot: {
+    fontSize: 11,
+    marginHorizontal: 4,
+  },
   advertiser: {
     fontSize: 12,
-    marginTop: 1,
+    flexShrink: 1,
   },
   media: {
     width: '100%',
-    height: 160,
+    height: 180,
     borderRadius: 10,
     marginTop: 10,
+    alignSelf: 'center', // center the media even when its intrinsic aspect is narrower than the card
     backgroundColor: 'rgba(120,120,128,0.08)',
   },
   body: {
@@ -244,25 +250,25 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 8,
   },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
   stars: {
     fontSize: 14,
     color: '#f5a623',
+    marginTop: 8,
   },
+  // Full-width, ~48dp-tall button styled directly on the Text leaf (the
+  // registered asset). overflow:'hidden' clips the background to the radius
+  // on Android.
   cta: {
+    marginTop: 12,
+    alignSelf: 'stretch',
+    textAlign: 'center',
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 9,
-  },
-  ctaText: {
+    borderRadius: 10,
+    overflow: 'hidden',
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 15,
   },
 });
 

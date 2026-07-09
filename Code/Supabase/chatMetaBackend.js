@@ -120,83 +120,11 @@ export async function setChatLastRead(partnerUid) {
   return Number(data) || 0;
 }
 
-// -----------------------------------------------------------------
-// Single-row subscription for the open private-chat screen. Mirrors
-// the granularity of the prior RTDB `onValue` on
-// /private_messages/{chatKey}/lastRead/{partner}: one channel per open
-// chat, fires `onChange(partnerLastReadMs)` on every UPDATE that
-// touches the row.
-//
-// Realtime postgres_changes only supports a single equality filter, so
-// we filter by owner_uid and reject non-matching partner rows in JS.
-// That's cheap — for a logged-in user, the only frequent traffic on
-// chat_meta_data is their own row anyway.
-// -----------------------------------------------------------------
-export function subscribeToChatLastRead(ownerUid, partnerUid, onChange) {
-  if (!ownerUid || !partnerUid) return () => {};
-
-  let cancelled = false;
-  // lastEmitted guards against the seed-read landing AFTER a realtime
-  // UPDATE: partner_last_read_ms is monotonic, so anything less-or-
-  // equal is a stale read we should drop.
-  let lastEmitted = 0;
-  const emit = (ms) => {
-    const v = Number(ms) || 0;
-    if (cancelled || v <= lastEmitted) return;
-    lastEmitted = v;
-    onChange?.(v);
-  };
-
-  const topic = `chat-lastread:${ownerUid}:${partnerUid}:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
-  const channel = supabase
-    .channel(topic)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'chat_meta_data',
-        filter: `owner_uid=eq.${ownerUid}`,
-      },
-      (payload) => {
-        if (payload.new?.partner_uid !== partnerUid) return;
-        emit(payload.new.partner_last_read_ms);
-      },
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_meta_data',
-        filter: `owner_uid=eq.${ownerUid}`,
-      },
-      (payload) => {
-        if (payload.new?.partner_uid !== partnerUid) return;
-        emit(payload.new.partner_last_read_ms);
-      },
-    )
-    .subscribe();
-
-  // Seed with current value so the UI doesn't sit at 0 until the next
-  // partner-side updateLastRead lands.
-  supabase
-    .from('chat_meta_data')
-    .select('partner_last_read_ms')
-    .eq('owner_uid', ownerUid)
-    .eq('partner_uid', partnerUid)
-    .maybeSingle()
-    .then(({ data, error }) => {
-      if (error || !data) return;
-      emit(data.partner_last_read_ms);
-    });
-
-  return () => {
-    cancelled = true;
-    try { supabase.removeChannel(channel); } catch {}
-  };
-}
+// (subscribeToChatLastRead was removed: it opened a dedicated
+// chat-lastread channel per open private chat, but useOtherLastRead in
+// ChatScreen/utils.js reuses the shared chat-meta channel for the same
+// signal, so the extra per-chat channel was dead code + a wasted
+// realtime connection.)
 
 // -----------------------------------------------------------------
 // Toggle mute flag for one side of a chat pair. RLS (007_meta_writable)

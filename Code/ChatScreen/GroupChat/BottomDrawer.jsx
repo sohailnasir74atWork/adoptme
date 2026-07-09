@@ -52,7 +52,7 @@ import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../..
 const BOTTOM_DRAWER_CACHE_ENABLED = true;
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
-import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus } from '../utils';
+import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute } from '../utils';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import CompactPortfolio from './CompactPortfolio';
 import ProfileAdminActions from './ProfileAdminActions';
@@ -229,7 +229,7 @@ const ProfileBottomDrawer = ({
   bannedUsers,
   fromPvtChat,
 }) => {
-  const { theme, firestoreDB, appdatabase, isAdmin, user } = useGlobalState();
+  const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled } = useGlobalState();
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
@@ -464,11 +464,16 @@ const ProfileBottomDrawer = ({
             const flat = {};
             for (const id of badgesMap.keys()) flat[id] = true;
             badgesValue = flat;
+          } else if (rtdbRecord) {
+            // Already on the full-RTDB fallback path — reuse the record.
+            badgesValue = rtdbRecord.badges || null;
           } else {
-            // Supabase had no badges row — fall back to RTDB badges field.
-            // rtdbRecord is already fetched if we took the RTDB fallback path above.
-            if (!rtdbRecord) rtdbRecord = await getOrFetchFullProfile(appdatabase, selectedUserId);
-            badgesValue = rtdbRecord?.badges || null;
+            // Supabase had no badges row. Most users simply have no badges,
+            // so this fired on nearly every drawer open — read just the
+            // badges LEAF instead of the whole users/{uid} record.
+            const badgesSnap = await get(ref(appdatabase, `users/${selectedUserId}/badges`)).catch(() => null);
+            if (!isMounted) return;
+            badgesValue = badgesSnap?.exists?.() ? badgesSnap.val() : null;
           }
         } else {
           // Original 16-get fallback (kill-switch path).
@@ -1124,6 +1129,20 @@ const ProfileBottomDrawer = ({
 
   const confirmAdminAction = async () => {
     if (!reasonActionType) return;
+
+    // Ban/mute/strike can be disabled for moderators by an admin. Admins are
+    // never blocked. Moderators keep delete powers regardless of this switch.
+    const gatedActions = ['ban', 'mute', 'strike'];
+    if (
+      gatedActions.includes(reasonActionType.type) &&
+      !canStaffBanMute({ isAdmin, isModerator: user?.isModerator, modControlsEnabled })
+    ) {
+      setShowReasonModal(false);
+      setReasonActionType(null);
+      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
+      return;
+    }
+
     setShowReasonModal(false);
 
     const currentUser = auth().currentUser;

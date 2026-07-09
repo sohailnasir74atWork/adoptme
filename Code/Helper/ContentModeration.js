@@ -16,12 +16,9 @@ const SPAM_KEYWORDS = [
   'subscribe to channel',
   'check out my channel',
   'visit my channel',
-  'free giveaway',
-  'free give away',
-  'give away',
-  'giveaway',
+  // Note: "free", "give away", "giveaway", "free gems" are normal trading-game
+  // talk and are intentionally NOT blocked. Only real scam phrases stay below.
   'free robux',
-  'free gems',
   'click here',
   'limited time',
   'act now',
@@ -39,8 +36,6 @@ const SPAM_KEYWORDS = [
   'buy account',
   'trade account',
   'account for sale',
-  'guaranteed',
-  '100% free',
 
   'referral code',
   'rose toy',
@@ -114,6 +109,46 @@ const INAPPROPRIATE_PATTERNS = [
   /\bkink(?:y)?\b/i,
   /\bfetish(?:es)?\b/i,
 ];
+
+// ✅ Extra kid-safety blocked words / phrases.
+// This list is meant to be easy to grow — just add entries below.
+// Single words match as whole words (so "abuse" won't flag "abuses"? it will,
+// because variants are listed); phrases allow flexible spacing.
+// Matching is case-insensitive.
+const EXTRA_BLOCKED_WORDS = [
+  // Abuse / harassment
+  'abuse', 'abusive', 'abuser',
+  // Sexual violence
+  'rape', 'raping', 'rapist', 'molest', 'molester',
+  'pedo', 'pedophile', 'paedophile', 'incest', 'bestiality',
+  // Sexual slurs / acts not already covered by patterns
+  'horny', 'slut', 'whore', 'prostitute', 'hooker',
+  'orgy', 'gangbang', 'creampie', 'deepthroat',
+  'dildo', 'vibrator', 'buttplug',
+  // Self-harm
+  'suicide', 'self harm', 'self-harm', 'kys', 'kill yourself',
+  // Predatory / unsafe requests
+  'send nudes', 'send nude', 'send pics', 'send pic',
+];
+
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Pre-compile a whole-word, case-insensitive regex per entry. Spaces inside a
+// phrase become \s+ so "send  nudes" / "send\nnudes" still match.
+const EXTRA_BLOCKED_REGEXES = EXTRA_BLOCKED_WORDS.map((w) => {
+  const body = escapeRegExp(w.trim().toLowerCase()).replace(/\s+/g, '\\s+');
+  return new RegExp(`\\b${body}\\b`, 'i');
+});
+
+/**
+ * Check if text contains an entry from the extra kid-safety blocklist.
+ * @param {string} text - Text to check
+ * @returns {boolean} - True if a blocked word/phrase is found
+ */
+export const containsExtraBlocked = (text) => {
+  if (!text || typeof text !== 'string') return false;
+  return EXTRA_BLOCKED_REGEXES.some((re) => re.test(text));
+};
 
 // ✅ Allowed link domains (YouTube + TikTok)
 const ALLOWED_LINK_PATTERNS = [
@@ -215,8 +250,8 @@ export const validateContent = (text, options = {}) => {
     };
   }
 
-  // Check inappropriate patterns
-  if (containsInappropriateContent(text)) {
+  // Check inappropriate patterns + extra kid-safety blocklist
+  if (containsInappropriateContent(text) || containsExtraBlocked(text)) {
     return {
       isValid: false,
       reason: 'Inappropriate content is not allowed.',
@@ -255,7 +290,7 @@ export const getContentViolations = (text) => {
   if (containsSpam(text)) {
     violations.push('spam');
   }
-  if (containsInappropriateContent(text)) {
+  if (containsInappropriateContent(text) || containsExtraBlocked(text)) {
     violations.push('inappropriate_content');
   }
   if (containsLink(text)) {

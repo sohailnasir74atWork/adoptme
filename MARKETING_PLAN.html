@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AdoptMe Values — Marketing Plan (Hand-Over Version)</title>
+<style>
+  :root{
+    --ink:#1f2430; --muted:#5b6472; --line:#e3e7ee; --bg:#f6f8fb; --card:#ffffff;
+    --brand:#3b6ef0; --brand-soft:#eaf0ff; --good:#1f9d57; --good-soft:#e7f7ee;
+    --bad:#d8483f; --bad-soft:#fdecea; --warn:#9a6b00; --warn-soft:#fff6e0;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:880px; margin:0 auto; padding:32px 20px 80px}
+  header.top{
+    background:linear-gradient(135deg,#3b6ef0,#6a4df0); color:#fff;
+    border-radius:18px; padding:32px 30px; margin-bottom:28px;
+    box-shadow:0 10px 30px rgba(59,110,240,.25);
+  }
+  header.top h1{margin:0 0 8px; font-size:28px; line-height:1.2}
+  header.top .sub{font-size:16px; opacity:.95; margin:0}
+  header.top .pill{
+    display:inline-block; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35);
+    padding:4px 12px; border-radius:999px; font-size:13px; font-weight:600; margin-top:14px; margin-right:8px;
+  }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:22px 26px; margin:0 0 20px; box-shadow:0 1px 2px rgba(20,30,50,.03);
+  }
+  h2{font-size:21px; margin:4px 0 14px; padding-bottom:10px; border-bottom:2px solid var(--line); display:flex; align-items:center; gap:10px}
+  h2 .n{
+    background:var(--brand); color:#fff; font-size:14px; font-weight:700;
+    min-width:28px; height:28px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center;
+  }
+  h3{font-size:16px; margin:20px 0 8px; color:var(--ink)}
+  p{margin:10px 0}
+  a{color:var(--brand); text-decoration:none}
+  a:hover{text-decoration:underline}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:5px 0}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13.5px;
+    background:#eef1f6; padding:2px 6px; border-radius:5px}
+  blockquote{
+    margin:14px 0; padding:14px 18px; background:var(--brand-soft);
+    border-left:4px solid var(--brand); border-radius:0 10px 10px 0; font-weight:600;
+  }
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14.5px}
+  th,td{text-align:left; padding:9px 11px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{background:#f2f5fb; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.02em; color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  .callout{border-radius:10px; padding:14px 18px; margin:14px 0}
+  .callout.good{background:var(--good-soft); border:1px solid #b6e6c8}
+  .callout.bad{background:var(--bad-soft); border:1px solid #f3c2bd}
+  .callout.warn{background:var(--warn-soft); border:1px solid #f0d692}
+  .callout .lead{font-weight:700; display:block; margin-bottom:4px}
+  .do li::marker{content:"✅  "}
+  .dont li::marker{content:"❌  "}
+  .lede{font-size:17px; color:var(--muted)}
+  .toc{columns:2; column-gap:26px; font-size:14.5px}
+  .toc a{display:block; padding:3px 0}
+  @media(max-width:620px){ .toc{columns:1} header.top h1{font-size:23px} .wrap{padding:18px 14px 60px} .card{padding:18px 16px} }
+  .tag{display:inline-block; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px}
+  .tag.star{background:#fff4d6; color:#8a6400}
+  .tag.opt{background:#eee9ff; color:#5a3ec8}
+  hr{border:none; border-top:1px solid var(--line); margin:22px 0}
+  .big-rule{font-size:18px}
+  footer{color:var(--muted); font-size:13px; text-align:center; margin-top:26px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>AdoptMe Values — Marketing Plan</h1>
+  <p class="sub">Hand-over version · for the marketing person who will do the daily work</p>
+  <span class="pill">📝 Posts only — no video</span>
+  <span class="pill">🎯 Market to existing audiences</span>
+  <span class="pill">🛡️ 100% real &amp; ethical</span>
+</header>
+
+<div class="card">
+  <p class="lede"><strong>Read this whole file once before you start.</strong> Then keep it open and follow it every day.</p>
+  <p><strong>The job in one sentence:</strong> Go to the places where Adopt Me traders <em>already are</em> (Discord, Reddit, Facebook), help them for free, and gently bring them to our app and website.</p>
+  <div class="callout warn">
+    <span class="lead">No videos.</span>
+    This plan is <strong>text + image posts only</strong> — no filming, no editing. Everything you post is a message, a written post, or a screenshot from the app.
+  </div>
+  <p><strong>What we promote (already built &amp; live):</strong></p>
+  <ul>
+    <li><strong>Website:</strong> <a href="https://www.adoptmevalues.app/">adoptmevalues.app</a></li>
+    <li><strong>iOS app:</strong> <a href="https://apps.apple.com/lv/app/adoptme-values-calculator/id6745400111">App Store listing</a></li>
+    <li><strong>Android app:</strong> <a href="https://play.google.com/store/apps/details?id=com.adoptmevaluescalc">Google Play listing</a></li>
+  </ul>
+  <div class="callout bad">
+    <span class="lead">The goal: real installs &amp; real visits — real people only.</span>
+    No bots, no fake accounts, no fake reviews, no paying for installs. Fake activity can get our app <strong>deleted from the store</strong>. This is the most important rule in the whole plan.
+  </div>
+  <h3>Contents</h3>
+  <nav class="toc">
+    <a href="#s1">1 · The ONE rule</a>
+    <a href="#s2">2 · The strategy (the funnel)</a>
+    <a href="#s3">3 · Channels in priority order</a>
+    <a href="#s4">4 · Your accounts (keep it small)</a>
+    <a href="#s5">5 · Week 1–2 setup &amp; warm-up</a>
+    <a href="#s6">6 · Content engine (no video)</a>
+    <a href="#s7">7 · Daily routine + scripts</a>
+    <a href="#s8">8 · Links &amp; tracking</a>
+    <a href="#s9">9 · Target list (where to go)</a>
+    <a href="#s10">10 · The big DON'T list</a>
+    <a href="#s11">11 · How work is measured</a>
+    <a href="#s12">12 · Quick cheat sheet</a>
+    <a href="#s13">13 · Ask the manager</a>
+  </nav>
+</div>
+
+<div class="card" id="s1">
+  <h2><span class="n">1</span> The ONE rule that protects everything</h2>
+  <blockquote class="big-rule">Help people first. Promote second.</blockquote>
+  <p>For every <strong>10 things you post: 9 help, 1 promotes</strong> (the <strong>90/10 rule</strong>).</p>
+  <p>If you only drop links, you get banned and the work is wasted. If you help people, they trust you — and <em>then</em> your one promo works. A trusted helper's link survives; a stranger's link gets deleted.</p>
+  <div class="callout good"><span class="lead">The 10% is a ceiling, not a quota</span>Only promote when it genuinely helps the person in front of you. If a day gives no natural moment, post <strong>zero</strong> promos — never force a link in just to "hit the number."</div>
+  <div class="callout bad"><span class="lead">🚨 Escalation rule</span>If you are unsure about any of these — posting a link, mentioning the app, or whether a server/subreddit's rules allow something — <strong>STOP and ask the manager before you post.</strong> When in doubt, don't.</div>
+</div>
+
+<div class="card" id="s2">
+  <h2><span class="n">2</span> The strategy — why we do it this way</h2>
+  <p>There are two ways to get an audience:</p>
+  <ol>
+    <li><strong>Go to where people already are</strong> (big Discord servers, subreddits, Facebook groups). — <strong>This is our main job.</strong> Fast, free, thousands of people already there.</li>
+    <li><strong>Build our own audience from zero</strong> (our own Discord server). — Slow. We do this <em>second</em>, as a "home base" to keep the people we meet.</li>
+  </ol>
+  <p>You spend <strong>~90% of your time on #1</strong>. You go to them — you don't wait for them to come to us.</p>
+  <div class="callout good">
+    <span class="lead">The funnel — how a stranger becomes our user</span>
+    They ask a trade question in a group → <strong>you give a genuinely helpful answer</strong> → over days they see you help again and again → they trust you → you softly mention the app <em>when it actually helps</em> → they install it → some join our own Discord → they refer their trading friends.
+  </div>
+  <p>Every day, your work is just feeding this funnel.</p>
+</div>
+
+<div class="card" id="s3">
+  <h2><span class="n">3</span> Channels — in priority order (all post-based, no video)</h2>
+  <table>
+    <tr><th>#</th><th>Channel</th><th>What you do there</th><th>Effort</th><th>Speed</th></tr>
+    <tr><td><strong>1</strong></td><td><strong>Discord</strong> (big trading servers)</td><td>Help in WFL / "is this a win?" channels. Post value updates where allowed.</td><td>Medium</td><td><strong>Fast</strong></td></tr>
+    <tr><td><strong>2</strong></td><td><strong>Reddit</strong> (trading subs)</td><td>Comment-help + occasional image/text posts (value roundups, screenshots).</td><td>Low–Med</td><td>Medium</td></tr>
+    <tr><td><strong>3</strong></td><td><strong>Facebook groups</strong></td><td>One value/image post a day across rotating groups + helpful comments.</td><td>Low</td><td>Slow–Med</td></tr>
+    <tr><td><span class="tag opt">OPT</span></td><td><strong>TikTok Photo Mode</strong></td><td>Image carousels only ("Top 5 pets that went up 📈") — <strong>NO video</strong>, just photos + caption + a sound. Link in bio.</td><td>Low</td><td>Medium</td></tr>
+  </table>
+  <div class="callout good"><span class="lead">Each channel has a role</span>Discord = your main <strong>trust-builder</strong> (fastest conversion) · Reddit = <strong>authority + Google visibility</strong> (high value, strict) · Facebook = <strong>extra reach</strong> (slower) · TikTok Photo Mode = <strong>optional discovery</strong>.</div>
+  <p><strong>Start with Discord + Reddit (weeks 1–4). Add Facebook in week 3. TikTok Photo Mode is optional</strong> — only if you have spare time after the first three run well. Skip YouTube (it needs video).</p>
+  <div class="callout warn"><span class="lead">Why TikTok Photo Mode is allowed here</span>TikTok lets you post a swipeable set of <em>images</em> with a caption and sound — no filming or editing. It still gets real reach. This is the only "video platform" we touch, and we only use its photo feature.</div>
+</div>
+
+<div class="card" id="s4">
+  <h2><span class="n">4</span> Your accounts — keep it small and real</h2>
+  <p>We do <strong>NOT</strong> run many fake accounts. We run a few <strong>real, trusted</strong> identities. One trusted account beats ten new ones.</p>
+  <table>
+    <tr><th>Platform</th><th>How many</th><th>Notes</th></tr>
+    <tr><td><strong>Discord</strong></td><td>1 account only</td><td>Many accounts = instant ban. One real trader persona.</td></tr>
+    <tr><td><strong>Reddit</strong></td><td>1 account only</td><td>Reddit detects multi-accounts instantly.</td></tr>
+    <tr><td><strong>Facebook</strong></td><td>1 personal (+ a Page if you want)</td><td>—</td></tr>
+    <tr><td><strong>TikTok</strong> (optional)</td><td>1 Business account</td><td>Business account = link allowed in bio.</td></tr>
+  </table>
+  <div class="callout bad">
+    <span class="lead">THE HARD RULE — never break this</span>
+    Your accounts must <strong>NEVER</strong> like, follow, upvote, or reply to each other to look popular. No account asking "is this app good?" and another answering "yes I love it!". That is fake engagement — platforms see the accounts are linked (same phone/internet) and ban them, and the app can be removed from the store.
+  </div>
+  <h3>Setting up each account</h3>
+  <ol>
+    <li>Use a <strong>separate Gmail</strong> for each. Keep a list (email = which account) and share it with the manager.</li>
+    <li>Add a <strong>real, friendly photo and a full bio</strong>. Empty profiles look like bots.</li>
+    <li>If it asks for a <strong>phone number, use a real one.</strong> Never buy fake numbers.</li>
+    <li><strong>Warm each account for 7–14 days before any promotion</strong> (see section 5).</li>
+  </ol>
+</div>
+
+<div class="card" id="s5">
+  <h2><span class="n">5</span> Week 1–2 — Setup &amp; warm-up <span style="font-size:14px;font-weight:400;color:var(--muted)">(NO links yet)</span></h2>
+  <p>New accounts that post links too early get blocked. First, you look like a normal, helpful trader.</p>
+  <h3>Week 1 — Setup</h3>
+  <ul>
+    <li><strong>Day 1:</strong> Read this whole plan. Install both apps + open the website. Practice until you can do a WFL check, read the value list, and set an alert in under 1 minute.</li>
+    <li><strong>Day 2:</strong> Create the accounts (space them out, don't make all at once). Fill every profile fully.</li>
+    <li><strong>Day 3:</strong> Join the servers, subreddits &amp; groups from the <a href="#s9">Target List</a>. <strong>Read each one's rules.</strong> For each, write: <em>"Promo allowed? Yes / No / Only in #self-promo."</em></li>
+    <li><strong>Day 4:</strong> Ask the manager for the <strong>tracked links</strong> (section 8).</li>
+    <li><strong>Day 5:</strong> Using the scripts in section 7, write <strong>20 helpful reply templates</strong> and <strong>15 post ideas</strong> so daily work is fast.</li>
+  </ul>
+  <h3>Week 2 — Warm up <span style="font-size:13px;font-weight:400;color:var(--muted)">(still no links / no app mentions)</span></h3>
+  <ul>
+    <li>~30 min per platform per day: like &amp; comment <strong>kindly and genuinely</strong> on others' posts.</li>
+    <li><strong>Reddit:</strong> helpful comments only. Aim ~<strong>100 comment karma</strong> by end of week.</li>
+    <li><strong>Discord:</strong> chat &amp; help in 2–3 servers until people recognise you.</li>
+    <li><strong>Facebook:</strong> join groups, comment helpfully.</li>
+  </ul>
+  <div class="callout good"><span class="lead">➡️ You start promoting (the 10%) in Week 3.</span></div>
+</div>
+
+<div class="card" id="s6">
+  <h2><span class="n">6</span> The content engine — posts WITHOUT video</h2>
+  <p>Everything you post is one of <strong>5 types</strong>. No filming. Images come from <strong>screenshots of the app</strong> (value list, a WFL result, today's movers).</p>
+  <table>
+    <tr><th>#</th><th>Post type</th><th>What it is</th><th>How often</th><th>Example</th></tr>
+    <tr><td>1</td><td><strong>HELP</strong></td><td>Just answer. No selling.</td><td>~50%</td><td>"That's a Win for you — same demand, and yours is rarer."</td></tr>
+    <tr><td>2</td><td><strong>VALUE / NEWS</strong></td><td>Share values + what went up/down. A screenshot is perfect here.</td><td>~25%</td><td>"📈 Top 5 pets that went UP this week" + screenshot.</td></tr>
+    <tr><td>3</td><td><strong>DEBATE</strong></td><td>A real, honest opinion that makes people reply.</td><td>~15%</td><td>"Hot take: Frost Dragon is overrated 👇 change my mind."</td></tr>
+    <tr><td>4</td><td><strong>PROMO (soft)</strong></td><td>Mention the app — <strong>only when it genuinely helps.</strong></td><td>~10% max</td><td>"I check trades free on AdoptMe Values — link in bio."</td></tr>
+    <tr><td>5</td><td><strong>IMAGE POST</strong> <span class="tag opt">Reddit / TikTok</span></td><td>A clean screenshot + short caption.</td><td>when you have one</td><td>"Is this a WIN or LOSS? 👀" + trade screenshot.</td></tr>
+  </table>
+  <div class="callout good"><span class="lead">Easy weekly mix → per 10 posts</span>5 help · 2 value · 2 debate · 1 promo — and the 1 promo only if a natural moment comes up, otherwise skip it.</div>
+  <div class="callout warn"><span class="lead">⚠️ Rule for Debate posts</span>It must be your <strong>real, honest opinion</strong>. Never invent fake drama or fake claims to make people angry — that gets you banned and damages the brand. A friendly debate is fine; fake drama is not.</div>
+  <h3>Where your images come from (this replaces video)</h3>
+  <ul>
+    <li>Open the app → screenshot the <strong>value list</strong>, a <strong>WFL result</strong>, or <strong>today's movers</strong>.</li>
+    <li>Crop it clean. Add a short caption or arrow/text if you want (free tools: your phone's editor, or Canva free).</li>
+    <li>That screenshot is your "content." That's the whole engine — no editing skills needed.</li>
+  </ul>
+</div>
+
+<div class="card" id="s7">
+  <h2><span class="n">7</span> Daily routine + scripts</h2>
+  <h3>Daily routine (Week 3 onward) — about 3–4 focused hours</h3>
+  <p><strong>Morning (~45 min)</strong></p>
+  <ul>
+    <li>Reply to any overnight comments/messages first (fast replies = more trust + reach).</li>
+    <li>Post the day's <strong>"value movers"</strong> in our own server + any servers that allow it.</li>
+  </ul>
+  <p><strong>Midday (~90 min)</strong></p>
+  <ul>
+    <li><strong>Discord:</strong> <strong>8–15 high-quality</strong> helpful answers across servers. (Soft-mention the app only where it genuinely helps <em>and</em> the server allows it.)</li>
+    <li><strong>Reddit:</strong> <strong>10–15</strong> helpful comments.</li>
+  </ul>
+  <div class="callout warn"><span class="lead">Why not more?</span>High reply counts from a new-ish account look like spam and get you banned. 10 genuinely helpful answers beat 40 lazy ones — every time.</div>
+  <p><strong>Afternoon (~60 min)</strong></p>
+  <ul>
+    <li><strong>Facebook:</strong> 1 value/image post + ~10 helpful comments across rotating groups.</li>
+    <li>(Optional) 1 TikTok Photo Mode image post.</li>
+    <li>Reply again to new comments.</li>
+    <li>(Week 4+) Message 2 small creators (section 9) with the honest outreach offer.</li>
+  </ul>
+  <div class="callout good"><span class="lead">Quality beats quantity</span>15 genuinely helpful answers are worth more than 40 lazy ones. If you're tired, do less — but do it well.</div>
+
+  <h3>Scripts &amp; templates <span style="font-size:13px;font-weight:400;color:var(--muted)">(always reword — never paste the same line twice)</span></h3>
+  <p><strong>Helpful replies (the 90%)</strong></p>
+  <ul>
+    <li><strong>WFL answer:</strong> "That's a Win for you imo — [pet] has higher demand right now. (Double-checked on AdoptMe Values and it agreed 👍)"</li>
+    <li><strong>Newbie help:</strong> "Welcome! Tip: check <em>demand</em>, not just rarity. Lots of 'rare' pets are actually low-demand."</li>
+    <li><strong>Debate reply:</strong> "I disagree — [pet] is holding value because of the event coming up. What's everyone else seeing?"</li>
+  </ul>
+  <p><strong>"Is it legit / what app do you use?" (be honest)</strong></p>
+  <ul>
+    <li>"I use AdoptMe Values — it's free and the WFL is usually spot on. Just double-check big trades."</li>
+    <li><strong>If asked if you're on the team:</strong> "Yeah, I help with it 🙂 happy to answer anything about how the values are made."</li>
+  </ul>
+  <p><strong>Soft promo (the 10%)</strong></p>
+  <ul>
+    <li>"I check every trade free on AdoptMe Values — link in my bio."</li>
+    <li><strong>Value post:</strong> "📈 Today's movers: [pet] up · [pet] steady · [pet] down. Full list + free alerts in the app."</li>
+  </ul>
+  <p><strong>Creator outreach DM (small creators, week 4+)</strong></p>
+  <ul>
+    <li><strong>First message:</strong> "Hi [name]! Love your Adopt Me trading posts 🙌 I help with a free app, AdoptMe Values (WFL + live values + price alerts). Want free premium + a shoutout in our Discord if you mention it once? No pressure — happy to send details."</li>
+    <li>Be honest it's a partnership. Offer free perks (premium, badge, shoutout). <strong>Never pay cash to kids. Never pay for reviews.</strong></li>
+  </ul>
+</div>
+
+<div class="card" id="s8">
+  <h2><span class="n">8</span> Links &amp; tracking (so we know what works)</h2>
+  <ul>
+    <li>Ask the manager for <strong>one tracked link per platform</strong> (a free shortener like Bitly/Dub gives click counts).</li>
+    <li><strong>Where links go:</strong>
+      <ul>
+        <li><strong>Discord:</strong> only in servers that allow it (full link).</li>
+        <li><strong>Reddit:</strong> put the link <strong>in a comment, not the post</strong>; use the <strong>full link</strong> (Reddit auto-removes short links). Max <strong>2–3 posts/week</strong>.</li>
+        <li><strong>Facebook:</strong> in the post is fine, where the group allows it.</li>
+        <li><strong>TikTok:</strong> link goes in your <strong>bio</strong> only (never the caption — TikTok hides those).</li>
+      </ul>
+    </li>
+    <li><strong>Check weekly:</strong> click counts from the shortener + install numbers from the store consoles (ask for "view reports only" access).</li>
+  </ul>
+</div>
+
+<div class="card" id="s9">
+  <h2><span class="n">9</span> Target list — where to go</h2>
+  <div class="callout warn"><span class="lead">⚠️ Two safety notes</span>Find Discord servers by <strong>NAME</strong> on <a href="https://disboard.org">disboard.org</a> or <a href="https://discord.com/servers">discord.com/servers</a> (invite links can expire or be faked). Numbers are approximate; Reddit verified Jun 2026, check Facebook sizes yourself.</div>
+
+  <h3>Discord servers <span class="tag star">#1 — start here</span></h3>
+  <table>
+    <tr><th>Priority</th><th>Server name</th><th>Members</th><th>Notes</th></tr>
+    <tr><td>⭐ Top</td><td><strong>Adopt Me Trade</strong></td><td>~275,000</td><td>Biggest Adopt-Me trading server.</td></tr>
+    <tr><td>⭐ Top</td><td><strong>Adopt Me Trading + Crosstrading (AMTC)</strong></td><td>~238,000</td><td>Huge trading + cross-trading hub.</td></tr>
+    <tr><td>⭐ Top</td><td><strong>Adopt Me Trading &amp; Values (AMTV)</strong></td><td>~84,000</td><td>Values-focused — perfect fit.</td></tr>
+    <tr><td>High</td><td><strong>Adopt Me Association (AMA)</strong></td><td>~16,000</td><td>Active values community.</td></tr>
+    <tr><td>High</td><td><strong>Adopt Me Society | Trading &amp; Values</strong></td><td>~9,000</td><td>Smaller — easier to get noticed.</td></tr>
+    <tr><td>Big reach</td><td><strong>Adopt Me + MM2 + Roblox Cross-Trading</strong></td><td>~668,000</td><td>Biggest, but multi-game.</td></tr>
+    <tr><td>Official</td><td><strong>Adopt Me!</strong> (official)</td><td>very large</td><td>Read rules, no promo, just be present.</td></tr>
+  </table>
+  <p>Find more: disboard.org/servers/tag/adopt-me-trading · discord.com/servers · discadia.com</p>
+
+  <h3>Reddit <span class="tag star">#2 — verified Jun 2026</span></h3>
+  <table>
+    <tr><th>Priority</th><th>Subreddit</th><th>Members</th></tr>
+    <tr><td>⭐ Top</td><td><strong>r/AdoptMeTrading</strong></td><td>~74,000 (purest trading sub)</td></tr>
+    <tr><td>⭐ Top</td><td><strong>r/AdoptMeRBX</strong></td><td>~73,000 (heavy trading)</td></tr>
+    <tr><td>High</td><td><strong>r/AdoptMeTradingRoblox</strong></td><td>~25,000</td></tr>
+    <tr><td>Medium</td><td><strong>r/Cross_Trading_Roblox</strong></td><td>~23,000</td></tr>
+    <tr><td>Medium</td><td><strong>r/RobloxTrading</strong></td><td>~23,000</td></tr>
+  </table>
+
+  <h3>Facebook groups <span style="font-size:13px;color:var(--muted)">(lower priority — verify size yourself)</span></h3>
+  <ul>
+    <li>Adopt Me Trading! (ROBLOX) — facebook.com/groups/AdoptMeTrading/</li>
+    <li>RoBlOx AdOpT Me TrAdEs — facebook.com/groups/487869845199692/</li>
+    <li>ADOPT ME (Trading Group) — facebook.com/groups/2571870722892345/</li>
+    <li>Adopt Me! (Trading Group) — facebook.com/groups/666282723915594/</li>
+  </ul>
+
+  <h3>TikTok hashtags <span style="font-size:13px;color:var(--muted)">(optional, for Photo Mode posts)</span></h3>
+  <p><code>#adoptmetrading #adoptmetrades #adoptmecheck #robloxadoptme #adoptmeroblox #adoptmepets #wfl #adoptme</code></p>
+
+  <h3>Small creators to message later <span style="font-size:13px;color:var(--muted)">(week 4+)</span></h3>
+  <p>@adoptmepettrading4ever (TikTok ~44K) · @freshbrownie_ (TikTok ~56K) · @.vwampirebites (TikTok ~71K) · Khayhl Gaming Roblox (YT ~48K, has business email) · AdoptMeTradingValues (YT ~11K). <strong>Verify each profile before contacting.</strong></p>
+</div>
+
+<div class="card" id="s10">
+  <h2><span class="n">10</span> The big DON'T list (protects the app)</h2>
+  <ul class="dont" style="list-style:none;padding-left:6px">
+    <li>No bots, fake accounts, fake likes, or fake reviews.</li>
+    <li>No paying anyone to install or review the app.</li>
+    <li>No promoting where the rules say "no promotion / no links."</li>
+    <li>No copy-pasting the same message — always reword.</li>
+    <li>No dropping a link as your first message in a thread.</li>
+    <li>No DMing kids/teens to advertise (our users are 13+; keep everything clean &amp; safe).</li>
+    <li>No fake drama or fake claims.</li>
+    <li>No accounts boosting each other.</li>
+    <li>No collecting people's personal info (name, address, phone, school).</li>
+  </ul>
+</div>
+
+<div class="card" id="s11">
+  <h2><span class="n">11</span> How your work is measured</h2>
+  <p>Fill a simple sheet daily (the manager will give you one): posts made, comments made, links shared, and any results.</p>
+  <ul>
+    <li><strong>End of week 4:</strong> accounts trusted &amp; active; ~30+ tracked link-clicks/week; our own Discord server started with 50+ members.</li>
+    <li><strong>End of week 8:</strong> our Discord 300–500 members; 2–3 creators mentioning the app; steady daily installs.</li>
+  </ul>
+  <div class="callout warn"><span class="lead">The decision rule</span>If a channel gives almost no clicks after <strong>3 weeks of real effort</strong>, tell the manager — we stop it and move that time to what works. <em>(Note: many real installs can't be tracked perfectly — someone may see you on Discord then search the app store directly. Treat clicks as a guide, not the whole truth, and look at total installs too.)</em></div>
+</div>
+
+<div class="card" id="s12">
+  <h2><span class="n">12</span> Quick cheat sheet (keep this visible)</h2>
+  <ul>
+    <li><strong>Goal:</strong> real installs + visits. <strong>Help 90%, promote 10%.</strong></li>
+    <li><strong>Main focus:</strong> go to the big existing communities (Discord, Reddit, Facebook) and help. Our own server is second.</li>
+    <li><strong>No video.</strong> Posts + screenshots only. Images = screenshots from the app.</li>
+    <li><strong>Order:</strong> Discord + Reddit first → add Facebook week 3 → TikTok Photo Mode optional.</li>
+    <li><strong>Post mix (per 10):</strong> 5 help, 2 value, 2 debate, 1 promo.</li>
+    <li><strong>Links:</strong> Discord = where allowed · Reddit = in a comment, full link · Facebook = where allowed · TikTok = bio only.</li>
+    <li><strong>Never:</strong> fake anything · paste duplicates · promote where banned · DM kids · accounts boosting each other · collect personal info · pay for installs/reviews.</li>
+    <li><strong>When unsure → ASK THE MANAGER before posting.</strong></li>
+  </ul>
+</div>
+
+<div class="card" id="s13">
+  <h2><span class="n">13</span> Ask the manager before Day 1</h2>
+  <ul>
+    <li>The tracked links for each platform.</li>
+    <li>"View reports only" access for the app install numbers (App Store Connect + Google Play both allow this limited role — not the full owner account).</li>
+    <li>Which Discord servers to join first.</li>
+    <li>Anything you are unsure about — <strong>ask before you post.</strong></li>
+  </ul>
+</div>
+
+<footer>AdoptMe Values — Marketing Plan (hand-over version) · posts-only, existing-audience focus · keep this file with the worker.</footer>
+
+</div>
+</body>
+</html>

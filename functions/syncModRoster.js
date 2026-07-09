@@ -1,19 +1,21 @@
 /**
- * Cloud Functions: Mod/JMod roster sync
+ * Cloud Functions: Mod/JMod roster seed
  *
- * syncModRoster:
- *   RTDB trigger on users/{uid}. Only fires when isModerator, isBabyMod,
- *   displayName, or avatar changes. Lightweight — reads nothing extra.
+ * The syncModRoster onWrite trigger was ABSORBED into
+ * mirrorUsersToSupabase (mirrorModsRoster) — both fired on every
+ * /users/{uid} write, doubling invocations on the hottest RTDB path.
+ * After deploying mirrorUsersToSupabase, remove the old trigger:
+ *   firebase functions:delete syncModRoster
  *
- * seedModRoster:
- *   Separate scheduled function that runs once on deploy, then
- *   auto-disables. Scans users with orderByChild queries (not full dump).
+ * seedModRoster (still here):
+ *   Scheduled function that runs once on deploy, then auto-disables.
+ *   Scans users with orderByChild queries (not full dump).
  *
  * RTDB structure:
  *   mods/{uid}/ { displayName, avatar, role, updatedAt }
  *
  * Deployment:
- * firebase deploy --only functions:syncModRoster,functions:seedModRoster
+ * firebase deploy --only functions:seedModRoster
  */
 
 const admin = require('firebase-admin');
@@ -24,52 +26,6 @@ if (!admin.apps.length) {
 }
 
 const db = admin.database();
-
-function buildModEntry(userData) {
-  if (!userData) return null;
-  const isMod = userData.isModerator === true;
-  const isJmod = userData.isBabyMod === true;
-  if (!isMod && !isJmod) return null;
-  return {
-    displayName: userData.displayName || 'Unknown',
-    avatar: userData.avatar || '',
-    role: isMod ? 'mod' : 'jmod',
-    updatedAt: Date.now(),
-  };
-}
-
-// ─── Listener: fires on write to users/{uid} ───
-// Only processes the single user that changed — no bulk reads
-exports.syncModRoster = functions
-  .runWith({ memory: '128MB', timeoutSeconds: 10 })
-  .database
-  .ref('users/{uid}')
-  .onWrite(async (change, context) => {
-    const uid = context.params.uid;
-    const after = change.after.val();
-    const before = change.before.val();
-
-    // User deleted
-    if (!after) {
-      await db.ref(`mods/${uid}`).remove();
-      return null;
-    }
-
-    // Only react to relevant field changes
-    const relevantFields = ['isModerator', 'isBabyMod', 'displayName', 'avatar'];
-    const changed = !before || relevantFields.some(f => before[f] !== after[f]);
-    if (!changed) return null;
-
-    const entry = buildModEntry(after);
-
-    if (entry) {
-      await db.ref(`mods/${uid}`).set(entry);
-    } else {
-      await db.ref(`mods/${uid}`).remove();
-    }
-
-    return null;
-  });
 
 // ─── One-time seed: finds existing mods via indexed queries ───
 // Uses two targeted queries instead of downloading all users

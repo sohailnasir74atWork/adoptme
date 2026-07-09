@@ -20,10 +20,6 @@ const npaRequiredFor = (status) =>
 const BannerAdComponent = ({
   adType = 'banner',
   visible = true,
-  // 'bottom' for banners anchored at the bottom of the screen (the
-  // default — most of ours sit above the tab bar / input bar), 'top'
-  // for top-anchored placements. Pass null to disable.
-  collapsible = 'bottom',
 }) => {
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
@@ -66,19 +62,14 @@ const BannerAdComponent = ({
   // BannerAd component below doesn't see a new object reference on every
   // render (which would otherwise force a fresh ad request).
   //
-  // networkExtras.collapsible enables Google's Collapsible Banner format:
-  // the first impression renders as a larger expanded ad that the user
-  // can collapse to a small inline strip. Higher eCPM (~2-3× a static
-  // banner) because the larger format earns premium creatives. Google's
-  // SDK only treats the FIRST request as collapsible per session;
-  // auto-refreshes downgrade back to standard banners automatically, so
-  // we don't need to track refresh state ourselves.
+  // Collapsible Banner format (networkExtras.collapsible) was removed by
+  // request 2026-07-09: the expanded first impression covered content and
+  // felt intrusive, so all placements serve plain anchored banners now.
   const requestOptions = useMemo(
     () => ({
       requestNonPersonalizedAdsOnly: npaRequiredFor(localState?.consentStatus),
-      ...(collapsible ? { networkExtras: { collapsible } } : {}),
     }),
-    [localState?.consentStatus, collapsible],
+    [localState?.consentStatus],
   );
 
   if (!visible) return null;

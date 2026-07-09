@@ -152,12 +152,20 @@ function toInsertPayload(roomId, m) {
 // Messages
 // ---------------------------------------------------------------------
 
+// Every column fromRow() actually reads — i.e. everything except the
+// moderation audit columns (deleted_at, deleted_by). Kept explicit so
+// hot-path fetches never silently widen when the table grows a column.
+const MSG_COLS =
+  'id, room_id, client_msg_id, sender_id, sender_name, text, gif_url, ' +
+  'fruits, reply_to, sender_profile, role_flags, contains_link, ' +
+  'report_count, strike_count, country_flag, os, deleted, created_at';
+
 // Paginated fetch. `before` is a cursor: { createdAt, id }.
 // Returns newest-first (descending), same order the UI renders.
 export async function loadMessages(roomId, { limit = 20, before = null } = {}) {
   let q = supabase
     .from('messages')
-    .select('*')
+    .select(MSG_COLS)
     .eq('room_id', roomId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })
@@ -181,10 +189,10 @@ export async function loadMessages(roomId, { limit = 20, before = null } = {}) {
 // Used for gap-fill on reconnect so events missed while the WebSocket
 // was dead/resubscribing are backfilled. Returns newest-first to match
 // the render order used everywhere else.
-export async function loadMessagesSince(roomId, since = null, { limit = 200 } = {}) {
+export async function loadMessagesSince(roomId, since = null, { limit = 60 } = {}) {
   let q = supabase
     .from('messages')
-    .select('*')
+    .select(MSG_COLS)
     .eq('room_id', roomId)
     .eq('deleted', false)
     .order('created_at', { ascending: false })
@@ -321,7 +329,7 @@ export async function sendMessage(roomId, message) {
   const { data, error } = await supabase
     .from('messages')
     .insert(payload)
-    .select()
+    .select(MSG_COLS)
     .single();
 
   if (error) {
@@ -331,7 +339,7 @@ export async function sendMessage(roomId, message) {
     if (error.code === '23505' && payload.client_msg_id) {
       const { data: existing, error: selectErr } = await supabase
         .from('messages')
-        .select('*')
+        .select(MSG_COLS)
         .eq('room_id', roomId)
         .eq('client_msg_id', payload.client_msg_id)
         .maybeSingle();
@@ -415,7 +423,7 @@ export async function toggleReaction(messageId, userId, emoji) {
 export async function getPinnedMessages(roomId) {
   const { data, error } = await supabase
     .from('pinned_messages')
-    .select('id, pinned_by, pinned_at, message:messages(*)')
+    .select(`id, pinned_by, pinned_at, message:messages(${MSG_COLS})`)
     .eq('room_id', roomId)
     .order('pinned_at', { ascending: false });
   if (error) throw error;

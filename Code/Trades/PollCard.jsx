@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { useGlobalState } from '../GlobelStats';
 import {
     collection,
     doc,
@@ -38,6 +39,10 @@ const COMMENTS_PAGE_SIZE = 2;
 const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
     const navigation = useNavigation();
     const { t } = useTranslation();
+    // ✅ Ban gate — banned users cannot vote/comment (covers email + device ban)
+    const { isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
+    const isMeBanned = isUserBlocked;
+    const myBanDetails = strikeInfo || deviceBanInfo;
     const [expanded, setExpanded] = useState(false);
     const [voted, setVoted] = useState(false);
     const [selectedOption, setSelectedOption] = useState(null);
@@ -105,6 +110,12 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
         if (!poll?.id) return;
         // If already voted for the same option, do nothing
         if (voted && selectedOption === index) return;
+        // ✅ Ban check
+        if (isMeBanned) {
+            const reason = myBanDetails?.reason || 'Access Denied';
+            Alert.alert(t('chat.access_denied', { defaultValue: 'Access Denied' }), t('chat.banned_message', { defaultValue: `You are banned: ${reason}` }));
+            return;
+        }
 
         setVoting(true);
         try {
@@ -151,7 +162,7 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
         } finally {
             setVoting(false);
         }
-    }, [voted, voting, user, poll, options, totalVotes, selectedOption, firestoreDB, animateBars, onRequireSignIn]);
+    }, [voted, voting, user, poll, options, totalVotes, selectedOption, firestoreDB, animateBars, onRequireSignIn, isMeBanned, myBanDetails]);
 
     // ─────────── Comments (paginated: 2 at a time) ───────────
     const fetchComments = useCallback(async (afterDoc = null) => {
@@ -207,6 +218,12 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
             return;
         }
         if (!poll?.id) return;
+        // ✅ Ban check
+        if (isMeBanned) {
+            const reason = myBanDetails?.reason || 'Access Denied';
+            Alert.alert(t('chat.access_denied', { defaultValue: 'Access Denied' }), t('chat.banned_message', { defaultValue: `You are banned: ${reason}` }));
+            return;
+        }
 
         setPosting(true);
         Keyboard.dismiss();
@@ -230,7 +247,7 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
         } finally {
             setPosting(false);
         }
-    }, [commentText, user, poll, firestoreDB, replyingTo, posting, onRequireSignIn]);
+    }, [commentText, user, poll, firestoreDB, replyingTo, posting, onRequireSignIn, isMeBanned, myBanDetails]);
 
     // ─────────── Chat with commenter ───────────
     const handleChatWithUser = useCallback((comment) => {
