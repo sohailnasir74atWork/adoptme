@@ -431,6 +431,57 @@ export const FRAMES = {
     borderWidth: 8,
     glowColor: '#FCE7F399',
   },
+
+  // ═══════════════════════════════════════════════════════════
+  //  ADVANCED SERIES (batch 1) — new decoration vocabulary.
+  //  Render configs live in FramedAvatar.jsx FRAME_DEFS. These
+  //  auto-flow into ALL_ITEMS → cosmetics screen + egg drop pools
+  //  (getItemsByRarity), so they're winnable at their rarity tier.
+  // ═══════════════════════════════════════════════════════════
+  seraph_halo: {
+    id: 'seraph_halo',
+    name: '😇 Seraph Halo',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.LEGENDARY,
+    renderType: 'svg',
+    duration: 30,
+    borderColors: ['#FDE68A', '#FFFFFF', '#FCD34D'],
+    borderWidth: 7,
+    glowColor: '#FDE68A80',
+  },
+  laurel_champion: {
+    id: 'laurel_champion',
+    name: '🏆 Laurel Champion',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.LEGENDARY,
+    renderType: 'svg',
+    duration: 30,
+    borderColors: ['#34D399', '#FCD34D', '#10B981'],
+    borderWidth: 7,
+    glowColor: '#34D39980',
+  },
+  cosmic_orbit: {
+    id: 'cosmic_orbit',
+    name: '🪐 Cosmic Orbit',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.EXCLUSIVE,
+    renderType: 'svg',
+    duration: -1,
+    borderColors: ['#818CF8', '#C084FC', '#22D3EE'],
+    borderWidth: 8,
+    glowColor: '#818CF899',
+  },
+  phoenix_ember: {
+    id: 'phoenix_ember',
+    name: '🔥 Phoenix Ember',
+    type: COSMETIC_TYPE.FRAME,
+    rarity: RARITY.EXCLUSIVE,
+    renderType: 'svg',
+    duration: -1,
+    borderColors: ['#FDBA74', '#F97316', '#EF4444', '#FACC15'],
+    borderWidth: 8,
+    glowColor: '#F9731699',
+  },
 };
 
 // ════════════════════════════════════════════════════════════

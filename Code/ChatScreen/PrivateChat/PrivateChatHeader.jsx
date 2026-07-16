@@ -16,7 +16,6 @@ import { getCachedProfile } from '../../Helper/profileCache';
 import { getThemeColors } from '../../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import FramedAvatar from '../GroupChat/FramedAvatar';
-import { getActiveCosmetics } from '../../Engagement/shopUtils';
 
 const Badge = ({ icon, label, color }) => (
   <View style={[styles.badge, { backgroundColor: color }]}>
@@ -37,7 +36,6 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
   // ✅ State for fetched user data (roblox username, etc.)
   const [userData, setUserData] = useState(null);
-  const [activeCosmetics, setActiveCosmetics] = useState(null);
 
   // ✅ Memoize copyToClipboard
   const copyToClipboard = useCallback((code) => {
@@ -116,15 +114,6 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     fetchUserData();
 
-    // ✅ Fetch active cosmetics (full frame object with borderColors etc.)
-    const fetchCosmetics = async () => {
-      try {
-        const cosmetics = await getActiveCosmetics(appdatabase, selectedUserId);
-        if (isMounted) setActiveCosmetics(cosmetics);
-      } catch { /* graceful fallback */ }
-    };
-    fetchCosmetics();
-
     return () => {
       isMounted = false;
     };
@@ -154,15 +143,23 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
   }, [selectedUser, userData]);
 
   // ✅ Memoize avatarUri and userName
-  const avatarUri = useMemo(() =>
-    mergedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
-    [mergedUser?.avatar]
-  );
+  // Prefer the freshest identity from profileCache (user_identity mirror,
+  // warmed by the inbox / group chat) over the name/avatar frozen into the
+  // navigation params — otherwise opening a chat from a stale inbox row would
+  // keep showing the partner's old name/avatar. `userData` is in the deps so
+  // this recomputes once the header's async fetch resolves (cache is warm by
+  // then). Cache normalises a missing name to 'Anonymous', so treat that as
+  // "no real value" and fall back to the passed-in value.
+  const avatarUri = useMemo(() => {
+    const cached = getCachedProfile(selectedUserId);
+    return cached?.avatar || mergedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+  }, [mergedUser?.avatar, selectedUserId]);
 
-  const userName = useMemo(() =>
-    mergedUser?.sender || t('chat.user'),
-    [mergedUser?.sender]
-  );
+  const userName = useMemo(() => {
+    const cached = getCachedProfile(selectedUserId);
+    const cachedName = cached?.displayName && cached.displayName !== 'Anonymous' ? cached.displayName : null;
+    return cachedName || mergedUser?.sender || t('chat.user');
+  }, [mergedUser?.sender, selectedUserId, t]);
 
   const isOnline = useOnlineStatus(selectedUserId);
 
@@ -243,7 +240,13 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       <TouchableOpacity onPress={handleOpenDrawer} activeOpacity={0.7}>
         <FramedAvatar
           avatarUri={avatarUri}
-          frame={activeCosmetics?.profileFrame || null}
+          // Frame reads from the shared profileCache (user_cosmetics mirror),
+          // the same source the inbox and group list use — so a user's frame
+          // renders consistently everywhere instead of only where a live RTDB
+          // read happened. Cache is warmed by the inbox / group chat before
+          // navigation; falls back to the frame in mergedUser if one was
+          // passed through the route.
+          frame={getCachedProfile(selectedUserId)?.profileFrame || mergedUser?.profileFrame || null}
           isDarkMode={isDarkMode}
           avatarSize={32}
           isOnline={isOnline}

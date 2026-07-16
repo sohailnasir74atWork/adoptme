@@ -26,6 +26,16 @@ import Svg, {
   Stop,
   G,
 } from 'react-native-svg';
+
+// ── Level-of-detail threshold ──────────────────────────────
+// Ornate decoration shapes (crowns, gems, halos, orbits…) only render on
+// avatars at/above this size — the "hero" surfaces where users actually
+// admire a frame: profile card (56), egg reveal (64), profile drawer (72),
+// badge showcase (96), cosmetics preview (~180). Every dense list/message/
+// inbox/header avatar is smaller and renders just the ring + glow, keeping
+// each one to a handful of SVG nodes so long scrolling lists stay smooth.
+// Tune this one number if profiling ever shows list jank on low-end devices.
+const FRAME_FULL_DETAIL_MIN = 54;
 // ════════════════════════════════════════════════════════════
 //  DECORATIVE SVG ELEMENT GENERATORS
 //  These create the actual artwork that makes frames look premium
@@ -153,6 +163,16 @@ const scallopedCirclePath = (cx, cy, r, scallops = 16, depth = 0.08) => {
   d += 'Z';
   return d;
 };
+
+/**
+ * Full ellipse as a Path (two arc commands). Used instead of <Ellipse>,
+ * whose ViewManager setter isn't wired on this build's new architecture
+ * (react-native-svg) — Path renders identically and is universally safe.
+ */
+const ellipsePath = (cx, cy, rx, ry) =>
+  `M ${(cx - rx).toFixed(2)} ${cy.toFixed(2)} `
+  + `A ${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(cx + rx).toFixed(2)} ${cy.toFixed(2)} `
+  + `A ${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(cx - rx).toFixed(2)} ${cy.toFixed(2)} Z`;
 
 // ════════════════════════════════════════════════════════════
 //  FRAME DEFINITIONS — decoration configs per frame
@@ -461,6 +481,51 @@ const FRAME_DEFS = {
     tripleBorder: true,
     tripleBorderWidth: 0.85,
   },
+
+  // ═══════════════════════════════════════════════════════════
+  //  ADVANCED SERIES (batch 1) — new decoration vocabulary
+  //  (halo / orbit / laurel). Full art shows on hero avatars only
+  //  (>= FRAME_FULL_DETAIL_MIN); lists render ring + glow.
+  // ═══════════════════════════════════════════════════════════
+  seraph_halo: {
+    borderWidth: 3,
+    gap: 1.8,
+    glowOpacity: 0.75,
+    decorScale: 1.6,
+    decorations: ['halo', 'wings', 'sparkles'],
+    doubleBorder: true,
+    doubleBorderWidth: 1.2,
+  },
+  cosmic_orbit: {
+    borderWidth: 2.6,
+    gap: 1.8,
+    glowOpacity: 0.8,
+    decorScale: 1.6,
+    decorations: ['orbit', 'sparkles'],
+    doubleBorder: true,
+    doubleBorderWidth: 1,
+  },
+  laurel_champion: {
+    borderWidth: 3,
+    gap: 1.8,
+    glowOpacity: 0.6,
+    decorScale: 1.6,
+    decorations: ['laurel', 'gems'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1.2,
+  },
+  phoenix_ember: {
+    borderWidth: 3.4,
+    gap: 2,
+    glowOpacity: 0.9,
+    decorScale: 1.9,
+    decorations: ['crown3', 'wings', 'flames', 'sparkles'],
+    doubleBorder: true,
+    doubleBorderWidth: 1.3,
+    tripleBorder: true,
+    tripleBorderWidth: 0.8,
+  },
 };
 
 const DEFAULT_DEF = {
@@ -711,6 +776,88 @@ const renderDecorations = ({
         );
         break;
       }
+
+      // ── HALO — glowing torus ring floating above the head ──
+      case 'halo': {
+        const haloY = cy - borderR - avatarR * 0.34 * sf;
+        const hrx = avatarR * 0.72 * sf;
+        const hry = avatarR * 0.24 * sf;
+        elements.push(
+          <G key="halo">
+            {/* Soft glow behind the ring */}
+            <Path d={ellipsePath(cx, haloY, hrx * 1.25, hry * 1.5)} fill={primary} opacity={0.22} />
+            {/* Gradient torus */}
+            <Path d={ellipsePath(cx, haloY, hrx, hry)} fill="none"
+              stroke={`url(#${gradId})`} strokeWidth={3 * sf} />
+            {/* White inner highlight */}
+            <Path d={ellipsePath(cx, haloY, hrx, hry)} fill="none"
+              stroke="#ffffff" strokeWidth={0.8 * sf} opacity={0.55} />
+          </G>
+        );
+        break;
+      }
+
+      // ── ORBIT — tilted ring circled by little planets/moons ──
+      case 'orbit': {
+        const orx = borderR + avatarR * 0.42 * sf;
+        const ory = borderR * 0.5;
+        elements.push(
+          <G key="orbit" transform={`rotate(-18 ${cx} ${cy})`}>
+            {/* Orbit path */}
+            <Path d={ellipsePath(cx, cy, orx, ory)} fill="none"
+              stroke={primary} strokeWidth={0.9 * sf} opacity={0.5}
+              strokeDasharray={`${2 * sf},${2.5 * sf}`} />
+            {[0, 2.4, 4.5].map((a, i) => {
+              const px = cx + orx * Math.cos(a);
+              const py = cy + ory * Math.sin(a);
+              const col = colors[i % colors.length];
+              const r = (i === 0 ? 3.2 : 2.2) * sf;
+              return (
+                <G key={`orb-${i}`}>
+                  <SvgCircle cx={px} cy={py} r={r * 1.9} fill={col} opacity={0.3} />
+                  <SvgCircle cx={px} cy={py} r={r} fill={col} stroke="#ffffff" strokeWidth={0.4 * sf} />
+                  <SvgCircle cx={px - r * 0.3} cy={py - r * 0.3} r={r * 0.35} fill="#ffffff" opacity={0.8} />
+                </G>
+              );
+            })}
+          </G>
+        );
+        break;
+      }
+
+      // ── LAUREL — victory wreath branches curving up both sides ──
+      case 'laurel': {
+        const branchColor = colors[2] || primary;
+        elements.push(
+          <G key="laurel">
+            {[-1, 1].map((side) => {
+              const bx = cx + side * borderR * 0.92;
+              const leaves = [];
+              for (let i = 0; i < 5; i++) {
+                const tt = i / 4.5;
+                const ly = cy + borderR * 0.7 - tt * borderR * 1.5;
+                const lx = bx + side * (avatarR * 0.42 * Math.sin(tt * Math.PI));
+                const rot = side * (35 + tt * 25);
+                leaves.push(
+                  <Path key={`lf-${side}-${i}`}
+                    d={ellipsePath(lx, ly, avatarR * 0.19 * sf, avatarR * 0.08 * sf)}
+                    fill={`url(#${gradId})`} stroke={isDark ? '#065f46' : '#047857'}
+                    strokeWidth={0.4 * sf} transform={`rotate(${rot} ${lx} ${ly})`} />
+                );
+              }
+              return (
+                <G key={`br-${side}`}>
+                  <Path
+                    d={`M ${bx} ${cy + borderR * 0.75} Q ${bx + side * avatarR * 0.5} ${cy} ${bx - side * avatarR * 0.05} ${cy - borderR * 0.8}`}
+                    fill="none" stroke={branchColor} strokeWidth={1.6 * sf} strokeLinecap="round" />
+                  {leaves}
+                </G>
+              );
+            })}
+          </G>
+        );
+        break;
+      }
     }
   });
 
@@ -769,6 +916,14 @@ const FramedAvatar = ({
     );
   }
 
+  // ── Level of detail: draw ornate decorations only on large (hero)
+  //    avatars. Below the threshold we render just the ring + glow, which
+  //    also drops the extra padding those decorations would need — so a
+  //    compact framed avatar keeps the same footprint as a plain one and
+  //    lists stay light. See FRAME_FULL_DETAIL_MIN.
+  const showDecor = avatarSize >= FRAME_FULL_DETAIL_MIN;
+  const activeDecor = showDecor ? (def.decorations || []) : [];
+
   // ── Scale factor for decorations (1 = 72px avatar) ──
   const scale = avatarSize / 72;
   const avatarR = avatarSize / 2;
@@ -776,9 +931,9 @@ const FramedAvatar = ({
 
   // Extra room for decorations — scale with decorScale to handle higher tiers
   const ds = def.decorScale || 1;
-  const hasLargeProtrusions = def.decorations?.some(d =>
-    ['crown3', 'crown5', 'wings', 'flames', 'ribbon'].includes(d));
-  const hasSideProtrusions = def.decorations?.some(d =>
+  const hasLargeProtrusions = activeDecor.some(d =>
+    ['crown3', 'crown5', 'wings', 'flames', 'ribbon', 'halo', 'laurel', 'orbit'].includes(d));
+  const hasSideProtrusions = activeDecor.some(d =>
     ['gems', 'sparkles'].includes(d));
   const extraPad = hasLargeProtrusions
     ? avatarR * 0.55 * scale * Math.max(1, ds * 0.75)
@@ -915,9 +1070,9 @@ const FramedAvatar = ({
           strokeWidth={0.5 * scale}
           fill="none" opacity={isDarkMode ? 0.08 : 0.2} />
 
-        {/* ── Layer 8: Decorative elements ── */}
+        {/* ── Layer 8: Decorative elements (hero avatars only) ── */}
         {renderDecorations({
-          decorations: def.decorations,
+          decorations: activeDecor,
           cx, cy,
           avatarR,
           borderR: outerR + 1,

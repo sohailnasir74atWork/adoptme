@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage as showError } from '../../Helper/MessageHelper';
 import { getMyStreaks } from '../../Helper/StreakHelper';
 import FramedAvatar from '../GroupChat/FramedAvatar';
-import { getCachedProfile } from '../../Helper/profileCache';
+import { getCachedProfile, warmProfileCache } from '../../Helper/profileCache';
 import {
   subscribeToChatMetaShared,
   resetUnreadCount,
@@ -47,6 +47,9 @@ const InboxScreen = ({ bannedUsers }) => {
   const debounceTimerRef = useRef(null); // ✅ Debounce updateChatsList
   const [streaks, setStreaks] = useState(new Map());
   const [mutedChats, setMutedChats] = useState({}); // { otherUserId: boolean }
+  // Bumped after warmProfileCache fills the cache so rows re-render with the
+  // partner's frame + freshest name/avatar (see the warm effect below).
+  const [profileCacheVersion, setProfileCacheVersion] = useState(0);
   const hasLoadedOnce = useRef(false); // ✅ Track if initial load is done
   // Realtime channel health — debounced so a quick blip doesn't flash
   // the "Reconnecting…" banner. Only shown if degraded for >1.5s.
@@ -244,6 +247,26 @@ const InboxScreen = ({ bannedUsers }) => {
     return out;
   }, [allChats, bannedUsers]);
 
+  // Warm the profile cache for every visible partner so avatar frames render
+  // and each row can prefer the freshest name/avatar (from the user_identity
+  // mirror) over the denormalized copy baked into the chat_meta_data row —
+  // that copy only refreshes when the partner messages you, so a rename /
+  // avatar change would otherwise never appear here. warmProfileCache only
+  // fetches uids that aren't cached yet, so this is cheap after the first
+  // pass; we bump profileCacheVersion once it lands to re-render the rows.
+  useEffect(() => {
+    if (!appdatabase || filteredChats.length === 0) return;
+    const uncached = filteredChats
+      .map(chat => chat.otherUserId)
+      .filter(id => id && id !== user?.id && !getCachedProfile(id));
+    if (uncached.length === 0) return;
+    let cancelled = false;
+    warmProfileCache(appdatabase, uncached)
+      .then(() => { if (!cancelled) setProfileCacheVersion(v => v + 1); })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, [filteredChats, appdatabase, user?.id]);
+
   // ✅ OPTIMIZED: Only display paginated chats (15 initially, then 10 more on scroll)
   const displayedChats = useMemo(() => {
     return filteredChats.slice(0, displayedChatsCount);
@@ -382,8 +405,17 @@ const InboxScreen = ({ bannedUsers }) => {
 
     const chatId = item.chatId;
     const otherUserId = item.otherUserId;
-    const otherUserName = item.otherUserName || 'Anonymous';
-    const otherUserAvatar = item.otherUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+    // Prefer the freshest identity from profileCache (user_identity mirror)
+    // over the denormalized receiverName/receiverAvatar snapshot in the
+    // chat_meta_data row. The cache normalises a missing name to 'Anonymous',
+    // so treat that as "no real value" and fall back to the meta copy; a
+    // missing avatar is null in cache, so `|| item.otherUserAvatar` is safe.
+    const cachedProfile = getCachedProfile(otherUserId);
+    const cachedName = cachedProfile?.displayName && cachedProfile.displayName !== 'Anonymous'
+      ? cachedProfile.displayName
+      : null;
+    const otherUserName = cachedName || item.otherUserName || 'Anonymous';
+    const otherUserAvatar = cachedProfile?.avatar || item.otherUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
     const userAvatar = user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
     const lastMessage = item.lastMessage || 'No messages yet';
     const unreadCount = item.unreadCount || 0;
@@ -396,19 +428,14 @@ const InboxScreen = ({ bannedUsers }) => {
           style={styles.chatItem}
           onPress={() => handleOpenChat(chatId, otherUserId, otherUserName, otherUserAvatar)}
         >
-          {(() => {
-            const profile = getCachedProfile(otherUserId);
-            return (
-              <View style={{ marginRight: 10 }}>
-                <FramedAvatar
-                  avatarUri={otherUserId !== user?.id ? otherUserAvatar : userAvatar}
-                  frame={profile?.profileFrame || null}
-                  isDarkMode={isDarkMode}
-                  avatarSize={46}
-                />
-              </View>
-            );
-          })()}
+          <View style={{ marginRight: 10 }}>
+            <FramedAvatar
+              avatarUri={otherUserId !== user?.id ? otherUserAvatar : userAvatar}
+              frame={cachedProfile?.profileFrame || null}
+              isDarkMode={isDarkMode}
+              avatarSize={46}
+            />
+          </View>
           <View style={styles.textContainer}>
             <Text style={styles.userName}>
               {otherUserName}
@@ -471,7 +498,9 @@ const InboxScreen = ({ bannedUsers }) => {
         </Menu>
       </View>
     );
-  }, [styles, user, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t]);
+    // profileCacheVersion isn't referenced here; the FlatList `extraData`
+    // prop below carries it and re-renders rows once the cache warms.
+  }, [styles, user, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t, streaks]);
 
   return (
     <View style={styles.container}>
@@ -485,6 +514,7 @@ const InboxScreen = ({ bannedUsers }) => {
       ) : (
         <FlatList
           data={displayedChats}
+          extraData={`${profileCacheVersion}-${displayedChatsCount}`}
           keyExtractor={(item, index) => item?.chatId || `chat-${index}`}
           renderItem={renderChatItem}
           removeClippedSubviews={true}

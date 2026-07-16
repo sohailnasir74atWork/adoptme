@@ -15,6 +15,7 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -32,7 +33,7 @@ import config from '../Helper/Environment';
 import notifee from '@notifee/react-native';
 import SubscriptionScreen from './OfferWall';
 import { ref, remove, get, update, set } from '@react-native-firebase/database';
-import { warmProfileCache, getCachedProfile } from '../Helper/profileCache';
+import { warmProfileCache, getCachedProfile, setCachedProfile } from '../Helper/profileCache';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 // useLanguage removed - using i18n from useTranslation hook
 import { useTranslation } from 'react-i18next';
@@ -42,7 +43,7 @@ import { setAppLanguage, loadLanguage } from '../../i18n';
 import { safeCompressImage } from '../Helper/safeCompressImage';
 import RNFS from 'react-native-fs';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
-import { getMyCosmetics } from '../Helper/cosmeticsCache';
+import { getMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { addXP, getUserXP, getLevelFromXP } from '../Engagement/xpUtils';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
@@ -173,6 +174,7 @@ const EditProfileDrawerContent = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const { height: windowHeight } = useWindowDimensions();
   const PROFILE_EDIT_COOLDOWN_DAYS = 10;
 
   // ✅ Calculate cooldown status - only checks existing cooldown from last save, not unsaved changes
@@ -233,13 +235,23 @@ const EditProfileDrawerContent = ({
       style={[
         styles.drawer,
         {
-          padding: 14,
-          paddingBottom: 18,
           transform: [{ translateY: slideAnim }],
           opacity: fadeAnim,
         },
       ]}
     >
+      <ScrollView
+        // Cap the sheet height so tall content — especially on small screens
+        // or when the keyboard is open — stays on screen and the Save button
+        // is reachable by scrolling instead of being clipped off the bottom
+        // (SwipeableBottomDrawer uses overflow:'hidden', so anything past the
+        // fold was previously unreachable).
+        style={{ maxHeight: windowHeight * 0.75 }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 18 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       {/* Minimalist Header */}
       {/* <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <Text style={{ fontSize: 18, fontWeight: 'bold' , color: c.text }}>
@@ -460,6 +472,7 @@ const EditProfileDrawerContent = ({
             : t('settings.save_changes')}
         </Text>
       </TouchableOpacity>
+      </ScrollView>
     </Animated.View>
   );
 };
@@ -1301,6 +1314,25 @@ export default function SettingsScreen({ selectedTheme }) {
       }
 
       await updateLocalStateAndDatabase(updateData);
+
+      // Refresh local caches immediately so the user's own name/avatar update
+      // across chat surfaces (own p_{uid} profileCache entry + HomeTab's
+      // cached username/avatar) without waiting for seedCurrentUser on the
+      // next chat mount. Spread the existing entry so isPro/frame/badges are
+      // preserved. Other users pick up the change via the user_identity
+      // mirror once their profileCache TTL rolls over.
+      if (user?.id) {
+        const trimmedName = newDisplayName.trim();
+        const trimmedAvatar = (selectedImage || '').trim();
+        const existing = getCachedProfile(user.id) || {};
+        setCachedProfile(user.id, {
+          ...existing,
+          displayName: trimmedName || 'Anonymous',
+          avatar: trimmedAvatar || null,
+        });
+        if (trimmedName) setCachedUsername(trimmedName);
+        if (trimmedAvatar) setCachedAvatar(trimmedAvatar);
+      }
 
       // 📅 2026-03-13: Bio dual-write to user_profiles (new primary) + reviews (backward compat).
       //    🔮 FUTURE CLEANUP: Once all users updated, remove the setDoc to 'reviews' below.
@@ -2458,6 +2490,8 @@ export default function SettingsScreen({ selectedTheme }) {
         // ✅ FIX: Atomic transaction for user_ratings_summary (prevents race conditions)
         const summaryRef = doc(firestoreDB, 'user_ratings_summary', editingReview.toUserId);
 
+        let updatedAverage = 0;
+        let updatedCount = 0;
         await runTransaction(firestoreDB, async (transaction) => {
           const summarySnap = await transaction.get(summaryRef);
           const summaryData = summarySnap.exists() ? summarySnap.data() : null;
@@ -2466,6 +2500,8 @@ export default function SettingsScreen({ selectedTheme }) {
 
           // ✅ Recalculate average: remove old rating, add new rating
           const newAverage = ((oldAverage * oldCount) - oldRating + newRating) / oldCount;
+          updatedAverage = newAverage;
+          updatedCount = oldCount;
 
           transaction.set(
             summaryRef,
@@ -2477,6 +2513,12 @@ export default function SettingsScreen({ selectedTheme }) {
             { merge: true }
           );
         });
+
+        // 🏅 Rating change can push the rated user over 4.5 avg — recheck 5-Star badge
+        if (appdatabase) {
+          const { checkFiveStarBadge } = require('../ChatScreen/GroupChat/badgeUtils');
+          checkFiveStarBadge(appdatabase, editingReview.toUserId, updatedAverage, updatedCount);
+        }
       }
 
       await setDoc(
@@ -2707,7 +2749,10 @@ export default function SettingsScreen({ selectedTheme }) {
       {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.cardContainer}>
           <View style={[styles.optionuserName, styles.option]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* flex:1 + minWidth:0 bounds the avatar+name block to the row's
+                free width so a long username truncates instead of shoving the
+                edit icon off the right edge (RN flexShrink defaults to 0). */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
               {(() => {
                 const avatarUrl = typeof selectedImage === 'string' && selectedImage.trim()
                   ? selectedImage
@@ -2723,9 +2768,12 @@ export default function SettingsScreen({ selectedTheme }) {
                   />
                 );
               })()}
-              <TouchableOpacity onPress={user?.id ? () => { } : () => { setOpenSignin(true) }} disabled={user?.id !== null} style={{ paddingLeft: 10 }}>
+              <TouchableOpacity onPress={user?.id ? () => { } : () => { setOpenSignin(true) }} disabled={user?.id !== null} style={{ paddingLeft: 10, flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Text style={!user?.id ? styles.userNameLogout : styles.userName}>
+                  <Text
+                    style={[!user?.id ? styles.userNameLogout : styles.userName, { flexShrink: 1 }]}
+                    numberOfLines={1}
+                  >
                     {!user?.id ? t("settings.login_register") : displayName}
                   </Text>
                   {/* ✅ Country Flag */}
@@ -2817,7 +2865,11 @@ export default function SettingsScreen({ selectedTheme }) {
                 )}
               </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={handleProfileUpdate}>
+            <TouchableOpacity
+              onPress={handleProfileUpdate}
+              style={{ flexShrink: 0, paddingLeft: 8 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
             </TouchableOpacity>
           </View>
