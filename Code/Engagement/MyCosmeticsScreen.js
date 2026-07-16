@@ -48,6 +48,11 @@ const TYPE_LABELS = {
   chatBubbleBg: { emoji: '💬', label: 'Chat Bubbles' },
 };
 
+// Users allowed to see the test-mode toggle (flask) outside of dev builds —
+// it unlocks all cosmetics locally so they can preview & equip any of them
+// (equipping writes activeItems, so the choice persists). Add UIDs as needed.
+const COSMETIC_TEST_UIDS = ['DNvBQC5ySWP8QiJNGpIvqd9DSWB2'];
+
 const MyCosmeticsScreen = ({ navigation }) => {
   const { theme, user, appdatabase } = useGlobalState();
   const isDark = theme === 'dark';
@@ -111,8 +116,8 @@ const MyCosmeticsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* DEV: Test mode toggle — only in dev builds */}
-        {__DEV__ && ( 
+        {/* Test mode toggle — dev builds, or allowlisted users (COSMETIC_TEST_UIDS) */}
+        {(__DEV__ || COSMETIC_TEST_UIDS.includes(user?.id)) && (
           <TouchableOpacity
             onPress={() => setTestMode(prev => !prev)}
             style={[s.backBtn, testMode && { backgroundColor: '#22c55e' }]}
@@ -120,7 +125,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
           >
             <Icon name={testMode ? 'flask' : 'flask-outline'} size={18} color="#fff" />
           </TouchableOpacity>
-       )} 
+       )}
       </View>
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>

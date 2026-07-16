@@ -174,6 +174,23 @@ const ellipsePath = (cx, cy, rx, ry) =>
   + `A ${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(cx + rx).toFixed(2)} ${cy.toFixed(2)} `
   + `A ${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(cx - rx).toFixed(2)} ${cy.toFixed(2)} Z`;
 
+/** Lightning-bolt fork centred on the origin (translate/rotate into place). */
+const drawBolt = (s) =>
+  `M ${(-0.9 * s).toFixed(2)} ${(-3.2 * s).toFixed(2)} `
+  + `L ${(1.5 * s).toFixed(2)} ${(-0.5 * s).toFixed(2)} `
+  + `L ${(0.2 * s).toFixed(2)} ${(-0.5 * s).toFixed(2)} `
+  + `L ${(1.3 * s).toFixed(2)} ${(2.1 * s).toFixed(2)} `
+  + `L ${(-1.3 * s).toFixed(2)} ${(-0.5 * s).toFixed(2)} `
+  + `L ${(0.1 * s).toFixed(2)} ${(-0.5 * s).toFixed(2)} Z`;
+
+/** Heart shape centred at (cx,cy), half-width ~s. */
+const heartPath = (cx, cy, s) =>
+  `M ${cx.toFixed(2)} ${(cy + s * 0.35).toFixed(2)} `
+  + `C ${cx.toFixed(2)} ${cy.toFixed(2)}, ${(cx - s).toFixed(2)} ${(cy - s * 0.05).toFixed(2)}, ${(cx - s).toFixed(2)} ${(cy - s * 0.45).toFixed(2)} `
+  + `C ${(cx - s).toFixed(2)} ${(cy - s * 0.95).toFixed(2)}, ${(cx - s * 0.35).toFixed(2)} ${(cy - s).toFixed(2)}, ${cx.toFixed(2)} ${(cy - s * 0.55).toFixed(2)} `
+  + `C ${(cx + s * 0.35).toFixed(2)} ${(cy - s).toFixed(2)}, ${(cx + s).toFixed(2)} ${(cy - s * 0.95).toFixed(2)}, ${(cx + s).toFixed(2)} ${(cy - s * 0.45).toFixed(2)} `
+  + `C ${(cx + s).toFixed(2)} ${(cy - s * 0.05).toFixed(2)}, ${cx.toFixed(2)} ${cy.toFixed(2)}, ${cx.toFixed(2)} ${(cy + s * 0.35).toFixed(2)} Z`;
+
 // ════════════════════════════════════════════════════════════
 //  FRAME DEFINITIONS — decoration configs per frame
 // ════════════════════════════════════════════════════════════
@@ -526,6 +543,48 @@ const FRAME_DEFS = {
     tripleBorder: true,
     tripleBorderWidth: 0.8,
   },
+  storm_caller: {
+    borderWidth: 3,
+    gap: 1.8,
+    glowOpacity: 0.8,
+    decorScale: 1.6,
+    decorations: ['bolts', 'sparkles'],
+    doubleBorder: true,
+    doubleBorderWidth: 1.2,
+    tripleBorder: true,
+    tripleBorderWidth: 0.8,
+  },
+  heart_aura: {
+    borderWidth: 2.6,
+    gap: 1.6,
+    glowOpacity: 0.7,
+    decorScale: 1.5,
+    decorations: ['hearts', 'sparkles'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1,
+  },
+  rose_thorn: {
+    borderWidth: 2.6,
+    gap: 1.6,
+    glowOpacity: 0.55,
+    decorScale: 1.4,
+    decorations: ['vines', 'sparkles'],
+    scalloped: true,
+    doubleBorder: true,
+    doubleBorderWidth: 1,
+  },
+  aurora_shimmer: {
+    borderWidth: 4,
+    gap: 1.8,
+    glowOpacity: 0.8,
+    decorScale: 1.5,
+    decorations: ['sparkles'],
+    shimmer: true,
+    doubleBorder: true,
+    tripleBorder: true,
+    tripleBorderWidth: 0.8,
+  },
 };
 
 const DEFAULT_DEF = {
@@ -858,6 +917,80 @@ const renderDecorations = ({
         );
         break;
       }
+
+      // ── BOLTS — lightning forks radiating from the ring ──
+      case 'bolts': {
+        elements.push(
+          <G key="bolts">
+            {[[-2.3, 1.1], [-0.85, 1.25], [0.85, 1.2], [2.3, 1.1]].map(([a, rm], i) => {
+              const bx = cx + borderR * rm * Math.cos(a);
+              const by = cy + borderR * rm * Math.sin(a);
+              const col = colors[i % colors.length];
+              const rot = a * 57.3 + 90;
+              const path = drawBolt(2.6 * sf);
+              return (
+                <G key={`bolt-${i}`} transform={`translate(${bx.toFixed(2)} ${by.toFixed(2)}) rotate(${rot.toFixed(1)})`}>
+                  <Path d={path} fill={col} opacity={0.35} transform="scale(1.7)" />
+                  <Path d={path} fill={col} stroke="#ffffff" strokeWidth={0.35 * sf} />
+                </G>
+              );
+            })}
+          </G>
+        );
+        break;
+      }
+
+      // ── HEARTS — floating hearts orbiting the ring ──
+      case 'hearts': {
+        elements.push(
+          <G key="hearts">
+            {Array.from({ length: 6 }).map((_, i) => {
+              const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+              const hr = borderR + avatarR * 0.16 * sf;
+              const hx = cx + hr * Math.cos(a);
+              const hy = cy + hr * Math.sin(a);
+              const hs = (i % 2 ? 2.4 : 3.4) * sf;
+              const col = colors[i % colors.length];
+              return (
+                <G key={`heart-${i}`}>
+                  <Path d={heartPath(hx, hy, hs * 1.5)} fill={col} opacity={0.25} />
+                  <Path d={heartPath(hx, hy, hs)} fill={col} stroke="#ffffff" strokeWidth={0.35 * sf} />
+                  <SvgCircle cx={hx - hs * 0.35} cy={hy - hs * 0.35} r={hs * 0.22} fill="#ffffff" opacity={0.7} />
+                </G>
+              );
+            })}
+          </G>
+        );
+        break;
+      }
+
+      // ── VINES — thorned ring studded with rose buds ──
+      case 'vines': {
+        elements.push(
+          <G key="vines">
+            <Path d={scallopedCirclePath(cx, cy, borderR, Math.round(18 * scale), 0.05)}
+              fill="none" stroke={colors[2] || '#166534'} strokeWidth={1.4 * sf} opacity={0.85} />
+            {Array.from({ length: 6 }).map((_, i) => {
+              const a = (i / 6) * Math.PI * 2 - 1.2;
+              const rx = cx + borderR * Math.cos(a);
+              const ry = cy + borderR * Math.sin(a);
+              const rs = avatarR * 0.13 * sf;
+              return (
+                <G key={`rose-${i}`}>
+                  <Path d={ellipsePath(rx - rs, ry, rs * 0.7, rs * 0.4)}
+                    fill="#15803d"
+                    transform={`rotate(${(a * 57.3).toFixed(1)} ${rx.toFixed(2)} ${ry.toFixed(2)})`} />
+                  <SvgCircle cx={rx} cy={ry} r={rs * 1.4} fill={primary} opacity={0.25} />
+                  <SvgCircle cx={rx} cy={ry} r={rs} fill={primary} />
+                  <SvgCircle cx={rx} cy={ry} r={rs * 0.55} fill={secondary} />
+                  <SvgCircle cx={rx} cy={ry} r={rs * 0.2} fill="#ffffff" opacity={0.7} />
+                </G>
+              );
+            })}
+          </G>
+        );
+        break;
+      }
     }
   });
 
@@ -932,9 +1065,9 @@ const FramedAvatar = ({
   // Extra room for decorations — scale with decorScale to handle higher tiers
   const ds = def.decorScale || 1;
   const hasLargeProtrusions = activeDecor.some(d =>
-    ['crown3', 'crown5', 'wings', 'flames', 'ribbon', 'halo', 'laurel', 'orbit'].includes(d));
+    ['crown3', 'crown5', 'wings', 'flames', 'ribbon', 'halo', 'laurel', 'orbit', 'bolts', 'hearts'].includes(d));
   const hasSideProtrusions = activeDecor.some(d =>
-    ['gems', 'sparkles'].includes(d));
+    ['gems', 'sparkles', 'vines'].includes(d));
   const extraPad = hasLargeProtrusions
     ? avatarR * 0.55 * scale * Math.max(1, ds * 0.75)
     : hasSideProtrusions
@@ -1063,6 +1196,14 @@ const FramedAvatar = ({
           stroke={isDarkMode ? '#0f172a' : '#1e293b'}
           strokeWidth={0.5 * scale}
           fill="none" opacity={0.15} />
+
+        {/* ── Shimmer sheen — bright arc sweeping the ring (Aurora tier) ── */}
+        {showDecor && def.shimmer && (
+          <Path
+            d={`M ${cx} ${cy - borderR} A ${borderR} ${borderR} 0 0 1 ${(cx + borderR * 0.9).toFixed(2)} ${(cy - borderR * 0.42).toFixed(2)}`}
+            stroke="#ffffff" strokeWidth={def.borderWidth * scale} fill="none"
+            opacity={0.8} strokeLinecap="round" />
+        )}
 
         {/* ── Layer 7: Inner white highlight shimmer ── */}
         <SvgCircle cx={cx} cy={cy} r={innerR + 1.5 * scale}
