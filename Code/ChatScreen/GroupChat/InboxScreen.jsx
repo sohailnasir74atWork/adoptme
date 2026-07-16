@@ -247,16 +247,18 @@ const InboxScreen = ({ bannedUsers }) => {
     return out;
   }, [allChats, bannedUsers]);
 
-  // Warm the profile cache for every visible partner so avatar frames render
-  // and each row can prefer the freshest name/avatar (from the user_identity
-  // mirror) over the denormalized copy baked into the chat_meta_data row —
-  // that copy only refreshes when the partner messages you, so a rename /
-  // avatar change would otherwise never appear here. warmProfileCache only
-  // fetches uids that aren't cached yet, so this is cheap after the first
-  // pass; we bump profileCacheVersion once it lands to re-render the rows.
+  // Warm the profile cache so avatar frames render and each row can prefer
+  // the freshest name/avatar (user_identity mirror) over the denormalized
+  // copy baked into the chat_meta_data row (which only refreshes when the
+  // partner messages you). COST: warm ONLY the on-screen slice, not every
+  // chat — a user with 100 chats would otherwise fetch 100 profiles on open.
+  // As they scroll and load more rows this re-runs and warms the newly
+  // revealed ones. warmProfileCache fetches uncached uids only + 30-min TTL,
+  // so repeat opens are free. Bump profileCacheVersion once it lands.
   useEffect(() => {
     if (!appdatabase || filteredChats.length === 0) return;
     const uncached = filteredChats
+      .slice(0, displayedChatsCount)
       .map(chat => chat.otherUserId)
       .filter(id => id && id !== user?.id && !getCachedProfile(id));
     if (uncached.length === 0) return;
@@ -265,7 +267,7 @@ const InboxScreen = ({ bannedUsers }) => {
       .then(() => { if (!cancelled) setProfileCacheVersion(v => v + 1); })
       .catch(() => { });
     return () => { cancelled = true; };
-  }, [filteredChats, appdatabase, user?.id]);
+  }, [filteredChats, displayedChatsCount, appdatabase, user?.id]);
 
   // ✅ OPTIMIZED: Only display paginated chats (15 initially, then 10 more on scroll)
   const displayedChats = useMemo(() => {
