@@ -441,8 +441,16 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ Ensure useEffect runs only when necessary
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedInUser) => {
-      if (loggedInUser && !loggedInUser.emailVerified) {
-        // ✅ BUG FIX: Was auth().signOut() (old API) — failed silently, letting unverified users slip in
+      // Enforce email verification ONLY for the email/password provider.
+      // onAuthStateChanged fires with the PERSISTED session on every cold
+      // start / token refresh, so signing out every emailVerified=false user
+      // here was logging social-login users out on each launch — Apple (and
+      // some Google) accounts report emailVerified=false. Email/password
+      // verification is already enforced at sign-in (SigninDrawer register +
+      // login both sign the user out until verified), so this is just a
+      // backstop for that one provider; trusted social providers pass through.
+      const isPasswordUser = !!loggedInUser?.providerData?.some(p => p?.providerId === 'password');
+      if (loggedInUser && isPasswordUser && !loggedInUser.emailVerified) {
         await signOut(auth);
         return;
       }
