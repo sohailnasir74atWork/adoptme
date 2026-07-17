@@ -250,6 +250,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           isDarkMode={isDarkMode}
           avatarSize={32}
           isOnline={isOnline}
+          forceDetail
         />
       </TouchableOpacity>
 

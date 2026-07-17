@@ -436,6 +436,7 @@ const MessagesList = ({
                   frame={profile.profileFrame}
                   isDarkMode={isDarkMode}
                   avatarSize={28}
+                  forceDetail
                 />
               </TouchableOpacity>
             )}
@@ -725,6 +726,7 @@ const MessagesList = ({
                   frame={profile.profileFrame}
                   isDarkMode={isDarkMode}
                   avatarSize={28}
+                  forceDetail
                 />
               </TouchableOpacity>
             )}

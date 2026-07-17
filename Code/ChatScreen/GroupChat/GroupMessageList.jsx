@@ -227,6 +227,7 @@ const GroupMessageList = ({
                 frame={profile.profileFrame || null}
                 isDarkMode={isDarkMode}
                 avatarSize={28}
+                forceDetail
               />
             </TouchableOpacity>
           )}
@@ -570,6 +571,7 @@ const GroupMessageList = ({
                 frame={profile.profileFrame || null}
                 isDarkMode={isDarkMode}
                 avatarSize={28}
+                forceDetail
               />
             </TouchableOpacity>
           )}

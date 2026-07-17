@@ -436,6 +436,7 @@ const InboxScreen = ({ bannedUsers }) => {
               frame={cachedProfile?.profileFrame || null}
               isDarkMode={isDarkMode}
               avatarSize={46}
+              forceDetail
             />
           </View>
           <View style={styles.textContainer}>
