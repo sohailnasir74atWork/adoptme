@@ -1006,6 +1006,10 @@ const FramedAvatar = ({
   isDarkMode = false,
   avatarSize = 72,
   isOnline,
+  // Force full ornate detail regardless of size — for prominent single "hero"
+  // avatars below the LOD threshold (e.g. the Home header) where we still want
+  // the crowns/gems to show. Leave false for dense lists to keep them light.
+  forceDetail = false,
 }) => {
   const c = getThemeColors(isDarkMode);
   const instanceId = useMemo(() => `fa-${++_framedAvatarIdCounter}`, []);
@@ -1054,7 +1058,7 @@ const FramedAvatar = ({
   //    also drops the extra padding those decorations would need — so a
   //    compact framed avatar keeps the same footprint as a plain one and
   //    lists stay light. See FRAME_FULL_DETAIL_MIN.
-  const showDecor = avatarSize >= FRAME_FULL_DETAIL_MIN;
+  const showDecor = forceDetail || avatarSize >= FRAME_FULL_DETAIL_MIN;
   const activeDecor = showDecor ? (def.decorations || []) : [];
 
   // ── Scale factor for decorations (1 = 72px avatar) ──

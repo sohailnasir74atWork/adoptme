@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState, useCallback } from 'react';
+import React, { memo, useMemo, useState, useCallback, useEffect } from 'react';
 import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
@@ -25,7 +25,8 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { parseMessageText } from '../ChatHelper';
 import MessageActionDrawer from './MessageActionDrawer';
-import { resolveProfile, seedFromMessage } from '../../Helper/profileCache';
+import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
+import FramedAvatar from './FramedAvatar';
 
 const GroupMessageList = ({
   messages,
@@ -49,7 +50,7 @@ const GroupMessageList = ({
   onReport, // Callback to report a message
   onPinMessage, // Callback to pin a message
 }) => {
-  const { theme, isAdmin } = useGlobalState();
+  const { theme, isAdmin, appdatabase } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
   const isAdminOrMod = isAdmin || !!user?.isModerator;
@@ -138,6 +139,25 @@ const GroupMessageList = ({
   const filteredMessagesRef = React.useRef(filteredMessages);
   filteredMessagesRef.current = filteredMessages;
 
+  // Warm the profile cache for the UNIQUE senders in view so avatar frames
+  // render. Group messages are slim (no frame in the payload), so
+  // resolveProfile has nothing to show unless the cache is populated — this
+  // is why frames weren't appearing in public chat. Unique senders +
+  // uncached-only + 30-min TTL keep it cheap even in the busiest chat; bump
+  // the version once it lands so the (memoised) rows re-render via extraData.
+  const [profileCacheVersion, setProfileCacheVersion] = useState(0);
+  useEffect(() => {
+    if (!appdatabase) return;
+    const senders = [...new Set(filteredMessages.map(m => m?.senderId).filter(Boolean))]
+      .filter(id => id !== userId && !getCachedProfile(id));
+    if (senders.length === 0) return;
+    let cancelled = false;
+    warmProfileCache(appdatabase, senders)
+      .then(() => { if (!cancelled) setProfileCacheVersion(v => v + 1); })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, [filteredMessages, appdatabase, userId]);
+
   // ✅ Date separator helper
   const getDateLabel = useCallback((timestamp) => {
     if (!timestamp) return '';
@@ -202,21 +222,12 @@ const GroupMessageList = ({
               disabled={!onUserPress}
               style={{ marginRight: 6, marginBottom: 2 }}
             >
-              <View style={profile.profileFrame ? {
-                borderWidth: 1.5,
-                borderColor: profile.profileFrame.borderColors?.[0] || '#6366f1',
-                borderRadius: 16,
-                padding: 1,
-                shadowColor: profile.profileFrame.glowColor || 'transparent',
-                shadowOpacity: profile.profileFrame.glowColor ? 0.4 : 0,
-                shadowRadius: 3,
-                elevation: profile.profileFrame.glowColor ? 2 : 0,
-              } : null}>
-                <Image
-                  source={{ uri: senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
-                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e2e8f0' }}
-                />
-              </View>
+              <FramedAvatar
+                avatarUri={senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                frame={profile.profileFrame || null}
+                isDarkMode={isDarkMode}
+                avatarSize={28}
+              />
             </TouchableOpacity>
           )}
 
@@ -554,21 +565,12 @@ const GroupMessageList = ({
               disabled={!onUserPress}
               style={{ marginLeft: 6, marginBottom: 2 }}
             >
-              <View style={profile.profileFrame ? {
-                borderWidth: 1.5,
-                borderColor: profile.profileFrame.borderColors?.[0] || '#6366f1',
-                borderRadius: 16,
-                padding: 1,
-                shadowColor: profile.profileFrame.glowColor || 'transparent',
-                shadowOpacity: profile.profileFrame.glowColor ? 0.4 : 0,
-                shadowRadius: 3,
-                elevation: profile.profileFrame.glowColor ? 2 : 0,
-              } : null}>
-                <Image
-                  source={{ uri: senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
-                  style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e2e8f0' }}
-                />
-              </View>
+              <FramedAvatar
+                avatarUri={senderAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png'}
+                frame={profile.profileFrame || null}
+                isDarkMode={isDarkMode}
+                avatarSize={28}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -633,7 +635,7 @@ const GroupMessageList = ({
         inverted={true} // ✅ Latest messages at bottom
         style={messageListStyles}
         contentContainerStyle={messageListContentStyles}
-        extraData={highlightedMessageId} // Re-render only when highlight changes
+        extraData={`${highlightedMessageId}-${profileCacheVersion}`} // re-render on highlight or cache warm
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" />
         }

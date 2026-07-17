@@ -31,7 +31,7 @@ import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import MessageActionDrawer from './MessageActionDrawer';
-import { resolveProfile, seedFromMessage } from '../../Helper/profileCache';
+import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 
 import FramedAvatar from './FramedAvatar';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
@@ -99,8 +99,27 @@ const MessagesList = ({
   const messagesRef = useRef(dedupedMessages);
   messagesRef.current = dedupedMessages;
 
+  // Warm the profile cache for the UNIQUE senders in view so avatar frames
+  // render in the main public chat. Messages here are slim (Supabase room —
+  // no frame in the payload), so resolveProfile has nothing to show unless
+  // the cache is populated — that's why frames weren't appearing. Unique
+  // senders + uncached-only + 30-min TTL keep it cheap; bump the version so
+  // the memoised rows re-render via extraData once it lands.
+  const [profileCacheVersion, setProfileCacheVersion] = useState(0);
+  useEffect(() => {
+    if (!appdatabase) return;
+    const senders = [...new Set(dedupedMessages.map(m => m?.senderId).filter(Boolean))]
+      .filter(id => id !== user?.id && !getCachedProfile(id));
+    if (senders.length === 0) return;
+    let cancelled = false;
+    warmProfileCache(appdatabase, senders)
+      .then(() => { if (!cancelled) setProfileCacheVersion(v => v + 1); })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, [dedupedMessages, appdatabase, user?.id]);
+
   const { t } = useTranslation();
-  const { isAdmin, api, freeTranslation } = useGlobalState();
+  const { isAdmin, api, freeTranslation, appdatabase } = useGlobalState();
   const isAdminOrMod = isAdmin || !!user?.isModerator;
   const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
@@ -723,7 +742,7 @@ const MessagesList = ({
         renderItem={renderMessage}
         contentContainerStyle={styles.chatList}
         inverted
-        extraData={highlightedMessageId}
+        extraData={`${highlightedMessageId}-${profileCacheVersion}`}
         ref={flatListRef}
         scrollEventThrottle={16}
         onScroll={({ nativeEvent }) => {

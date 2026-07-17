@@ -9,7 +9,7 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
-import { doc, getDoc, collection, query, where, getDocs, limit } from '@react-native-firebase/firestore';
+import { doc, getDoc } from '@react-native-firebase/firestore';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { setAppLanguage, loadLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
@@ -116,7 +116,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
   const [isSigninDrawerVisible, setSigninDrawerVisible] = useState(false);
   const [signinMessage, setSigninMessage] = useState('');
   const [ownedPets, setOwnedPets] = useState([]);
-  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // ✅ Ban status — consumes the global gate so device-bans block too
   const isBanned = isUserBlocked;
@@ -199,6 +198,10 @@ const HomeTabScreen = ({ selectedTheme }) => {
   // Re-fetch owned pets when home screen gains focus (e.g. after editing in My Stuff)
   useFocusEffect(
     useCallback(() => {
+      // Refresh cosmetics from the (instantly-updated) MMKV cache so a frame
+      // just equipped in My Cosmetics shows on the hero avatar without waiting
+      // for a remount. Synchronous read — no DB cost.
+      setMyCosmetics(getMyCosmetics());
       if (!user?.id || !firestoreDB) return;
       (async () => {
         try {
@@ -209,27 +212,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
             setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
           }
         } catch (e) { console.warn('[Home] refresh pets:', e?.message); }
-      })();
-    }, [user?.id, firestoreDB])
-  );
-
-  // 🔔 Check unread notifications count on focus
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.id || !firestoreDB) return;
-      (async () => {
-        try {
-          const q = query(
-            collection(firestoreDB, 'notifications'),
-            where('toUid', '==', user.id),
-            where('read', '==', false),
-            limit(10),
-          );
-          const snap = await getDocs(q);
-          setUnreadNotifCount(snap.docs.length);
-        } catch (e) {
-          // Silently fail
-        }
       })();
     }, [user?.id, firestoreDB])
   );
@@ -348,24 +330,8 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 {user?.displayName || getCachedUsername() || t('home_tab.pet_lover_default')}
               </Text>
             </View>
-            {/* Notification Bell + Language + Avatar */}
+            {/* Language + Avatar */}
             <View style={styles.heroRightGroup}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('NotificationFeedScreen')}
-                activeOpacity={0.7}
-                style={styles.langIcon}
-              >
-                <Ionicons name="notifications-outline" size={20} color="rgba(255,255,255,0.85)" />
-                {unreadNotifCount > 0 && (
-                  <View style={{
-                    position: 'absolute', top: 1, right: 1,
-                    width: 10, height: 10, borderRadius: 5,
-                    backgroundColor: '#FACC15',
-                    borderWidth: 1.5,
-                    borderColor: '#fff',
-                  }} />
-                )}
-              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setShowLangPicker(true)}
                 activeOpacity={0.7}
@@ -383,6 +349,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                     frame={myCosmetics?.profileFrame || null}
                     isDarkMode={isDarkMode}
                     avatarSize={45}
+                    forceDetail
                   />
                 ) : (
                   <View style={{ width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
