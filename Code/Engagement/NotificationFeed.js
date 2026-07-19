@@ -23,6 +23,7 @@ dayjs.extend(relativeTime);
 const NOTIF_ICONS = {
   trade_accepted: { icon: 'checkmark-circle', color: '#10B981', emoji: '🤝' },
   trade_ping: { icon: 'notifications', color: '#3B82F6', emoji: '📢' },
+  trade_closed: { icon: 'close-circle', color: '#EF4444', emoji: '📴' },
 };
 
 const PAGE_SIZE = 20;
@@ -146,11 +147,10 @@ const NotificationFeed = () => {
   }, [hasMore, loading, refreshing, fetchNotifications]);
 
   const handleNotifPress = useCallback((item) => {
-    if (item.type === 'trade_accepted' || item.type === 'trade_ping') {
-      navigation.navigate('MyStuffScreen', {
-        initialTab: 'active',
-        ...(item.type === 'trade_accepted' && item.tradeId ? { highlightTradeId: item.tradeId } : {}),
-      });
+    // Legacy accept-flow notifications — Active Trades tab no longer exists,
+    // just open My Stuff (defaults to My Pets)
+    if (item.type === 'trade_accepted' || item.type === 'trade_ping' || item.type === 'trade_closed') {
+      navigation.navigate('MyStuffScreen');
     }
   }, [navigation]);
 

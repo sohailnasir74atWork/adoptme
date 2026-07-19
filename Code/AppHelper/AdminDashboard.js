@@ -168,11 +168,16 @@ const timeAgo = (v) => {
 };
 
 const AdminDashboard = () => {
-  const { theme, user: currentUser, isAdmin, isModerator, modControlsEnabled } = useGlobalState();
+  const { theme, user: currentUser, isAdmin, modControlsEnabled } = useGlobalState();
   const isDark = theme === 'dark';
   const db = useMemo(() => getDatabase(), []);
+  // Moderator status lives on the user object (GlobelStats context has no isModerator
+  // export) — destructuring it from context left it undefined for every mod, which
+  // disabled ban/mute/strike here even with mod controls switched ON.
+  const isModerator = !!currentUser?.isModerator;
+  const isBabyMod = !!currentUser?.isBabyMod;
   // Moderator ban/mute powers can be disabled by an admin. Admins are never blocked.
-  const canBanMute = canStaffBanMute({ isAdmin, isModerator, modControlsEnabled });
+  const canBanMute = canStaffBanMute({ isAdmin, isModerator, isBabyMod, modControlsEnabled });
   const navigation = useNavigation();
   const isSuperAdmin = isAdmin || currentUser?.id === SUPER_ADMIN_ID;
 

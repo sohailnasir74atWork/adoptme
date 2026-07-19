@@ -30,6 +30,7 @@ import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
+import { useNavigation } from '@react-navigation/native';
 
 
 const VALUE_TYPES = ['D', 'N', 'M'];
@@ -226,6 +227,15 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const isDarkMode = theme === 'dark'
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
   const { localState, toggleAd } = useLocalState()
+  const navigation = useNavigation();
+  // Chat pet picker: default to the user's own inventory ("My Pets"), with a
+  // toggle to the full catalog. Inventory = localState.ownedPets (kept in sync
+  // from Trade Journal / My Stuff → Firestore user_profiles + MMKV via savePets).
+  const [chatPetSource, setChatPetSource] = useState('mine'); // 'mine' | 'all'
+  const myPets = useMemo(
+    () => (Array.isArray(localState?.ownedPets) ? localState.ownedPets : []),
+    [localState?.ownedPets]
+  );
   const [valuesData, setValuesData] = useState([]);
   const [codesData, setCodesData] = useState([]);
   const { t } = useTranslation();
@@ -427,6 +437,37 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     return filtered;
   }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected, getItemValue, CATEGORIES]); // ✅ Added getItemValue and CATEGORIES dependencies
 
+  // Catalog lookup so "My Pets" can re-price each owned pet at the CURRENT value
+  // using its saved variant (D/N/M + F/R), instead of the possibly-stale stored value.
+  const catalogIndex = useMemo(() => {
+    const byId = {}, byName = {};
+    (parsedValuesData || []).forEach(it => {
+      if (it?.id != null) byId[it.id] = it;
+      const k = String(it?.name ?? '').toLowerCase().trim();
+      if (k && !byName[k]) byName[k] = it;
+    });
+    return { byId, byName };
+  }, [parsedValuesData]);
+
+  // Chat "My Pets" mode data: the user's own inventory, each entry keeping its
+  // saved variant badges and re-priced to the current catalog value. Tapping a
+  // row sends THAT exact variant (so the message carries M/F/R + correct value).
+  const myPetsView = useMemo(() => {
+    if (!(fromChat && chatPetSource === 'mine')) return [];
+    const q = searchText.trim().toLowerCase();
+    return (myPets || [])
+      .map((p, i) => {
+        const cat = (p?.id != null && catalogIndex.byId[p.id]) ||
+          catalogIndex.byName[String(p?.name ?? '').toLowerCase().trim()];
+        const vt = String(p?.valueType || 'd').toLowerCase();
+        const value = cat
+          ? Number(getItemValue(cat, vt, !!p.isFly, !!p.isRide))
+          : Number(p?.value || 0);
+        return { ...p, valueType: vt, value, _idx: i };
+      })
+      .filter(p => !q || String(p?.name || '').toLowerCase().includes(q));
+  }, [fromChat, chatPetSource, myPets, searchText, catalogIndex, getItemValue]);
+
 
   // Optimize the handleItemBadgePress function
   const handleItemBadgePress = useCallback((itemId, badge) => {
@@ -555,6 +596,59 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       localState.imgurl,
       t
     ]
+  );
+
+  // Renders one owned pet in chat "My Pets" mode. No interactive badge buttons —
+  // the variant is fixed to what the user owns; tapping sends that exact pet so
+  // the message carries its M/F/R + neon/mega badges and matching value.
+  const renderOwnedItem = useCallback(
+    ({ item }) => {
+      const vt = String(item?.valueType || 'd').toLowerCase();
+      const badges = [];
+      if (item?.isFly) badges.push(<ItemBadge key="fly" type="F" style={styles.itemBadgeFly} styles={styles} />);
+      if (item?.isRide) badges.push(<ItemBadge key="ride" type="R" style={styles.itemBadgeRide} styles={styles} />);
+      if (vt !== 'd') {
+        badges.push(
+          <ItemBadge
+            key="value"
+            type={vt.toUpperCase()}
+            style={vt === 'm' ? styles.itemBadgeMega : styles.itemBadgeNeon}
+            styles={styles}
+          />
+        );
+      }
+
+      const imageUrl = item.imageUrl || getImageUrl(item, localState.imgurl);
+
+      const handlePress = () => {
+        if (!isMountedRef.current || !setSelectedFruits) return;
+        triggerHapticFeedback('impactLight');
+        setSelectedFruits(prev => [...(prev || []), {
+          Name: item.Name ?? item.name,
+          name: item.name,
+          value: Number(item.value) || 0,
+          valueType: vt,
+          isFly: !!item.isFly,
+          isRide: !!item.isRide,
+          imageUrl,
+          category: item.category,
+          id: item.id,
+        }]);
+      };
+
+      return (
+        <TouchableOpacity style={[styles.itemContainer]} onPress={handlePress}>
+          <View style={styles.imageContainer}>
+            <ItemImage uri={imageUrl} badges={badges} styles={styles} />
+            <View style={styles.itemInfo}>
+              <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.value}>{t('value.label')} {Number(item.value || 0).toLocaleString()}</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [styles, setSelectedFruits, triggerHapticFeedback, localState.imgurl, t]
   );
 
 
@@ -781,11 +875,36 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             </TouchableOpacity>}
           </View>
 
-          {filteredData.length > 0 ? (
+          {fromChat && (
+            <View style={styles.chatSourceToggle}>
+              <TouchableOpacity
+                style={[styles.chatSourceBtn, chatPetSource === 'mine' && styles.chatSourceBtnActive]}
+                onPress={() => { triggerHapticFeedback('impactLight'); setChatPetSource('mine'); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.chatSourceText, chatPetSource === 'mine' && styles.chatSourceTextActive]}>
+                  {`My Pets${myPets.length ? ` (${myPets.length})` : ''}`}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chatSourceBtn, chatPetSource === 'all' && styles.chatSourceBtnActive]}
+                onPress={() => { triggerHapticFeedback('impactLight'); setChatPetSource('all'); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.chatSourceText, chatPetSource === 'all' && styles.chatSourceTextActive]}>
+                  All
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {((fromChat && chatPetSource === 'mine') ? myPetsView : filteredData).length > 0 ? (
             <FlatList
-              data={filteredData}
-              keyExtractor={(item) => item.id || item.name}
-              renderItem={renderItem}
+              data={(fromChat && chatPetSource === 'mine') ? myPetsView : filteredData}
+              keyExtractor={(fromChat && chatPetSource === 'mine')
+                ? (item, index) => `mine-${item.id ?? item.name}-${item._idx ?? index}`
+                : (item) => item.id || item.name}
+              renderItem={(fromChat && chatPetSource === 'mine') ? renderOwnedItem : renderItem}
               showsVerticalScrollIndicator={false}
               removeClippedSubviews={true}
               numColumns={2}
@@ -796,6 +915,28 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
               windowSize={5}
               initialNumToRender={10}
             />
+          ) : (fromChat && chatPetSource === 'mine' && myPets.length === 0) ? (
+            <View style={styles.emptyMyPets}>
+              <Icon name="paw-outline" size={40} color={config.colors.hasBlockGreen} />
+              <Text style={styles.emptyMyPetsTitle}>No pets in your inventory yet</Text>
+              <Text style={styles.emptyMyPetsSub}>
+                Add the pets you own so you can send them here instantly — no more searching every time.
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyMyPetsBtn}
+                onPress={() => {
+                  triggerHapticFeedback('impactLight');
+                  onRequestClose?.();
+                  navigation.navigate('MyStuffScreen');
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.emptyMyPetsBtnText}>+ Add my pets</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setChatPetSource('all')} style={{ marginTop: 12 }}>
+                <Text style={styles.emptyMyPetsLink}>Browse all pets instead</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <Text style={[styles.description, { textAlign: 'center', marginTop: 20, color: 'gray' }]}>
               {t("value.no_results")}
@@ -811,6 +952,72 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 export const getStyles = (isDarkMode) => {
   const c = getThemeColors(isDarkMode);
   return StyleSheet.create({
+    // Chat pet picker: My Pets / All toggle
+    chatSourceToggle: {
+      flexDirection: 'row',
+      backgroundColor: c.bgAlt,
+      borderRadius: 10,
+      padding: 3,
+      marginBottom: 8,
+      marginHorizontal: 2,
+    },
+    chatSourceBtn: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chatSourceBtnActive: {
+      backgroundColor: config.colors.hasBlockGreen,
+    },
+    chatSourceText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.textSecondary,
+    },
+    chatSourceTextActive: {
+      color: '#fff',
+    },
+    // Chat pet picker: empty-inventory prompt
+    emptyMyPets: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 30,
+      paddingTop: 30,
+    },
+    emptyMyPetsTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: c.text,
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    emptyMyPetsSub: {
+      fontSize: 13,
+      color: c.textSecondary,
+      marginTop: 6,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    emptyMyPetsBtn: {
+      marginTop: 18,
+      backgroundColor: config.colors.hasBlockGreen,
+      paddingVertical: 11,
+      paddingHorizontal: 22,
+      borderRadius: 10,
+    },
+    emptyMyPetsBtnText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 14,
+    },
+    emptyMyPetsLink: {
+      color: config.colors.hasBlockGreen,
+      fontWeight: '700',
+      fontSize: 13,
+    },
   container: {
     flex: 1,
     backgroundColor: c.bg,

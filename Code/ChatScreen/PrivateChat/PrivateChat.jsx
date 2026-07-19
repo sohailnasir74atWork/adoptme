@@ -38,6 +38,7 @@ import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
+import { incrementAndCheckBadge, checkFiveStarBadge, REVIEW_BADGE_THRESHOLDS } from '../GroupChat/badgeUtils';
 import {
   doc,
   getDoc,
@@ -325,6 +326,17 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         reviewWasUpdated = isUpdate;
       }
 
+      // 🏅 Badge checks (fire-and-forget) — these were never wired up before,
+      // so the promised Reviewer / 5-Star badges were never granted
+      if (appdatabase) {
+        if (!isUpdate) {
+          // Reviewer badge: counts reviews I've left (25+ → 'reviewer')
+          incrementAndCheckBadge(appdatabase, myUserId, 'reviewCount', REVIEW_BADGE_THRESHOLDS);
+        }
+        // 5-Star badge for the rated user (4.5+ avg with 50+ reviews)
+        checkFiveStarBadge(appdatabase, selectedUserId, newAverage, newCount);
+      }
+
       // 🎉 feedback based on whether we actually saved a text review
       showSuccessMessage(
         t('chat.success'),
@@ -353,7 +365,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       showErrorMessage(t('chat.error'), t('chat.rating_submit_error'));
       setStartRating(false);
     }
-  }, [rating, selectedUserId, myUserId, firestoreDB, reviewText, user?.id, user?.displayName, updateUserPoints, localState?.isPro, isMeBanned, myBanDetails]);
+  }, [rating, selectedUserId, myUserId, firestoreDB, appdatabase, reviewText, user?.id, user?.displayName, updateUserPoints, localState?.isPro, isMeBanned, myBanDetails]);
 
 
 

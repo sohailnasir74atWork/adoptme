@@ -1804,15 +1804,6 @@ const HomeScreen = ({ selectedTheme }) => {
                 <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{t('home.create_trade')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.middleTradeButton}
-                onPress={() => setShowTradeCompletion(true)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  <Icon name="book-outline" size={14} color="#fff" />
-                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>Log Trade</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.shareTradeButton}
                 onPress={handleShareTrade}
               >

@@ -548,14 +548,15 @@ const mirrorBanToDevice = async (email, userId, banPayload) => {
 };
 
 // Central gate for moderator ban/mute/strike powers.
-// Admins are NEVER affected. Moderators lose ban/mute/strike when the global
-// admin switch (RTDB /mod_controls_enabled) is set to false. Default is ON:
-// only an explicit `false` disables it (matches the worldcup_enabled pattern),
-// so a denied/missing read leaves staff working as before.
+// Admins are NEVER affected. Moderators AND Junior Mods (isBabyMod) lose
+// ban/mute/strike when the global admin switch (RTDB /mod_controls_enabled) is
+// set to false — one switch governs both roles. Default is ON: only an explicit
+// `false` disables it (matches the worldcup_enabled pattern), so a denied/missing
+// read leaves staff working as before.
 // NOTE: this only gates ban/mute/strike — moderators keep delete-post and
 // delete-review powers regardless of the switch.
-export const canStaffBanMute = ({ isAdmin, isModerator, modControlsEnabled } = {}) =>
-  !!isAdmin || (!!isModerator && modControlsEnabled !== false);
+export const canStaffBanMute = ({ isAdmin, isModerator, isBabyMod, modControlsEnabled } = {}) =>
+  !!isAdmin || ((!!isModerator || !!isBabyMod) && modControlsEnabled !== false);
 
 export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null) => {
   // ✅ Safety check

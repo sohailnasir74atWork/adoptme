@@ -128,6 +128,7 @@ export const purchaseEgg = async (db, uid, eggId) => {
   const existingRef = ref(db, `users/${uid}/shop/activeItems/${reward.type}`);
   const existingSnap = await get(existingRef);
   let finalExpiresAt = expiresAt;
+  let shouldActivate = true;
 
   if (existingSnap.exists()) {
     const existing = existingSnap.val();
@@ -135,6 +136,32 @@ export const purchaseEgg = async (db, uid, eggId) => {
       // Extend: add remaining time + new duration
       const remainingMs = Math.max(0, existing.expiresAt - now);
       finalExpiresAt = now + remainingMs + (reward.duration * 24 * 60 * 60 * 1000);
+    } else if (existing.id !== reward.id) {
+      const existingStillValid = existing.expiresAt === -1 || existing.expiresAt > now;
+
+      // 🛡️ 2026-07-16 FIX: hatching used to overwrite the active slot
+      // unconditionally, so a temporary roll wiped out an equipped PERMANENT
+      // cosmetic ("my perm frame is gone after hatching"). A permanent item
+      // now stays equipped; the temp roll still lands in inventory and can be
+      // equipped manually from My Cosmetics.
+      if (existing.expiresAt === -1 && expiresAt !== -1) {
+        shouldActivate = false;
+      }
+
+      // Items won before ownedItems existed live ONLY in activeItems —
+      // replacing them destroyed them permanently. Preserve any still-valid
+      // item into ownedItems before it loses its active slot.
+      if (existingStillValid) {
+        try {
+          const ownedListSnap = await get(ref(db, `users/${uid}/shop/ownedItems/${reward.type}`));
+          const ownedList = ownedListSnap.exists() ? Object.values(ownedListSnap.val() || {}) : [];
+          if (!ownedList.some(i => i?.id === existing.id)) {
+            await set(push(ref(db, `users/${uid}/shop/ownedItems/${reward.type}`)), { ...existing, type: reward.type });
+          }
+        } catch (e) {
+          console.warn('[Shop] preserve existing cosmetic failed:', e?.message);
+        }
+      }
     }
   }
 
@@ -168,9 +195,11 @@ export const purchaseEgg = async (db, uid, eggId) => {
     activeItemData.darkColor = reward.darkColor;
   }
 
-  await set(existingRef, activeItemData);
-  // ✅ Update MMKV cache instantly after purchase
-  updateMyCosmeticType(reward.type, activeItemData);
+  if (shouldActivate) {
+    await set(existingRef, activeItemData);
+    // ✅ Update MMKV cache instantly after purchase
+    updateMyCosmeticType(reward.type, activeItemData);
+  }
 
   // 6. Save to inventory history
   const inventoryRef = push(ref(db, `users/${uid}/shop/inventory`));
@@ -204,7 +233,7 @@ export const purchaseEgg = async (db, uid, eggId) => {
 
   return {
     success: true,
-    reward: { ...reward, expiresAt: finalExpiresAt },
+    reward: { ...reward, expiresAt: finalExpiresAt, activated: shouldActivate },
     newBalance: spendResult.newBalance,
     eggUsed: egg,
   };

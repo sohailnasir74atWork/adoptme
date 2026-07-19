@@ -113,8 +113,12 @@ export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade
     savedAt: rtdbTimestamp(),
   });
 
-  // Also record this acceptance under the trade itself so the poster can see who accepted
+  // Also record this acceptance under the trade itself so the poster can see who accepted.
+  // Track whether this user had already accepted so re-accepting doesn't re-notify.
+  let alreadyAccepted = false;
   try {
+    const existing = await get(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`));
+    alreadyAccepted = existing.exists();
     await set(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`), {
       name: myName,
       robloxUsername: myExtras.robloxUsername || '',
@@ -128,22 +132,59 @@ export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade
   // Build a short trade summary for the notification
   const tradeSummary = _buildTradeSummary(trade);
 
-  // Write notification to Firestore for in-app feed + cloud function FCM push
-  try {
-    await addDoc(collection(firestoreDB, 'notifications'), {
-      toUid: trade.userId,
-      fromUid: myUid,
-      fromName: myName,
-      type: 'trade_accepted',
-      tradeId: tradeId,
-      message: `${myName} accepted your trade! ${tradeSummary}`,
-      read: false,
-      createdAt: fsTimestamp(),
-    });
-  } catch (e) {
-    console.warn('[tradeHelpers] Failed to write accept notification:', e?.message);
+  // Write notification to Firestore for in-app feed + cloud function FCM push.
+  // Skip when the user had already accepted (prevents duplicate pings on re-accept).
+  if (!alreadyAccepted) {
+    try {
+      await addDoc(collection(firestoreDB, 'notifications'), {
+        toUid: trade.userId,
+        fromUid: myUid,
+        fromName: myName,
+        type: 'trade_accepted',
+        tradeId: tradeId,
+        message: `${myName} accepted your trade! ${tradeSummary}`,
+        read: false,
+        createdAt: fsTimestamp(),
+      });
+    } catch (e) {
+      console.warn('[tradeHelpers] Failed to write accept notification:', e?.message);
+    }
   }
-};
+}
+
+/**
+ * Notify everyone who accepted a trade that it is no longer available — either
+ * the poster completed it (with someone) or removed the listing. Writes one
+ * Firestore notification per acceptor; the notifyTradeAccept CF turns each into
+ * an FCM push (type 'trade_closed'). Call this BEFORE removeAllTradeAcceptors,
+ * while the acceptor list still exists.
+ * @param {'completed'|'removed'} reason
+ */
+export const notifyAcceptorsTradeClosed = async (appdatabase, firestoreDB, tradeId, posterUid, posterName, reason = 'completed') => {
+  if (!appdatabase || !firestoreDB || !tradeId) return;
+  try {
+    const acceptors = await fetchTradeAcceptors(appdatabase, tradeId);
+    const uids = Object.keys(acceptors || {}).filter(u => u && u !== posterUid);
+    if (uids.length === 0) return;
+    const message = reason === 'removed'
+      ? `A trade you accepted was removed by ${posterName || 'the poster'}.`
+      : `A trade you accepted was completed and is no longer available.`;
+    await Promise.all(uids.map(toUid =>
+      addDoc(collection(firestoreDB, 'notifications'), {
+        toUid,
+        fromUid: posterUid || '',
+        fromName: posterName || 'Trader',
+        type: 'trade_closed',
+        tradeId,
+        message,
+        read: false,
+        createdAt: fsTimestamp(),
+      }).catch(() => {})
+    ));
+  } catch (e) {
+    console.warn('[tradeHelpers] notifyAcceptorsTradeClosed failed:', e?.message);
+  }
+};;
 
 /**
  * Save/bookmark a trade — saves lightweight ref to RTDB only (no notification)

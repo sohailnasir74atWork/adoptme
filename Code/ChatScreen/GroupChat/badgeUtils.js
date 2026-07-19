@@ -115,7 +115,7 @@ export const BADGE_DEFINITIONS = {
     color: '#ef4444',
     bgLight: 'rgba(239,68,68,0.1)',
     bgDark: 'rgba(239,68,68,0.15)',
-    description: '7-day login streak!',
+    description: '14-day login streak!',
     hint: 'Log in 14 days in a row',
     tier: 2,
     phase: 3,
@@ -627,7 +627,7 @@ export const checkInfluencerBadge = async (database, firestoreDB, followedUserId
 };
 
 /**
- * Check and award 5-Star badge (4.5+ avg with 20+ reviews)
+ * Check and award 5-Star badge (4.5+ avg with 50+ reviews)
  * Call after a rating is submitted
  * @param {Object} database - Firebase Realtime DB instance
  * @param {string} ratedUserId - the user who received the rating
@@ -643,10 +643,78 @@ export const checkFiveStarBadge = async (database, ratedUserId, newAverage, newC
       const badgeSnap = await get(ref(database, `users/${ratedUserId}/badges/fiveStar`));
       if (!badgeSnap.exists() || !badgeSnap.val()) {
         await set(ref(database, `users/${ratedUserId}/badges/fiveStar`), true);
+        updateTopBadge(database, ratedUserId);
       }
     }
   } catch (e) {
     console.warn('[Badges] 5-Star check failed:', e);
+  }
+};
+
+/**
+ * 📅 2026-07-15: Backfill for review-related badges (reviewer + fiveStar) that
+ * were promised in the UI but never wired into the rating flow.
+ * - Reviewer: seeds RTDB reviewCount from a Firestore count aggregate of reviews
+ *   the user actually left (one-time, MMKV-gated), awarding at 25+.
+ * - 5-Star: self-checks the user's rating summary on every app open until earned
+ *   (cheap single doc read; self-write works regardless of cross-user RTDB rules).
+ * Call fire-and-forget from MainTabs mount.
+ * @param {Object} database - Firebase Realtime DB instance
+ * @param {Object} firestoreDB - Firestore instance
+ * @param {string} userId - user ID
+ */
+export const syncReviewBadges = async (database, firestoreDB, userId) => {
+  if (!database || !firestoreDB || !userId) return;
+  let badgeStore;
+  try {
+    const { createMMKV } = require('react-native-mmkv');
+    badgeStore = createMMKV({ id: 'badge-cache' });
+  } catch (e) {
+    return; // no gate available — skip rather than re-run every app open
+  }
+  try {
+    const { collection, query, where, getCountFromServer, doc, getDoc } = require('@react-native-firebase/firestore');
+    const { ref, get, set } = require('@react-native-firebase/database');
+
+    // ── Reviewer: seed reviewCount from reviews the user actually left (one-time) ──
+    if (!badgeStore.getBoolean(`review_count_seeded_${userId}`) && !badgeStore.getBoolean(`earned_${userId}_reviewer`)) {
+      const countSnap = await getCountFromServer(
+        query(collection(firestoreDB, 'reviews'), where('fromUserId', '==', userId))
+      );
+      const actualCount = countSnap.data().count || 0;
+      const counterRef = ref(database, `users/${userId}/counters/reviewCount`);
+      const counterSnap = await get(counterRef);
+      const existingCount = counterSnap.exists() ? Number(counterSnap.val()) || 0 : 0;
+      if (actualCount > existingCount) {
+        await set(counterRef, actualCount);
+      }
+      if (Math.max(actualCount, existingCount) >= 25) {
+        const badgeSnap = await get(ref(database, `users/${userId}/badges/reviewer`));
+        if (!badgeSnap.exists() || !badgeSnap.val()) {
+          await set(ref(database, `users/${userId}/badges/reviewer`), true);
+          updateTopBadge(database, userId);
+        }
+        badgeStore.set(`earned_${userId}_reviewer`, true);
+      }
+      badgeStore.set(`review_count_seeded_${userId}`, true);
+    }
+
+    // ── 5-Star: self-check current rating summary on every open until earned ──
+    // (self-write, so it works even if RTDB rules block cross-user badge writes)
+    if (!badgeStore.getBoolean(`earned_${userId}_fiveStar`)) {
+      const summarySnap = await getDoc(doc(firestoreDB, 'user_ratings_summary', userId));
+      if (summarySnap.exists()) {
+        const summary = summarySnap.data();
+        const avg = summary?.averageRating || 0;
+        const count = summary?.count || 0;
+        await checkFiveStarBadge(database, userId, avg, count);
+        if (avg >= 4.5 && count >= 50) {
+          badgeStore.set(`earned_${userId}_fiveStar`, true);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Badges] review badge sync failed:', e?.message);
   }
 };
 

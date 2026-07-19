@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useMemo, memo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+  View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
-import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
 import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
 
@@ -60,26 +59,7 @@ const getPrimaryChange = (item) => {
   return null;
 };
 
-const MiniPetRow = memo(({ pet, isDark, isGainer }) => (
-  <View style={[styles.miniRow, { backgroundColor: isDark ? '#1C1C1E' : '#fff' }]}>
-    {pet.imageUrl ? (
-      <Image source={{ uri: pet.imageUrl }} style={styles.miniImage} resizeMode="contain" />
-    ) : (
-      <View style={[styles.miniImage, { backgroundColor: isDark ? '#333' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }]}>
-        <FontAwesome name="paw" size={14} color={isDark ? '#666' : '#aaa'} />
-      </View>
-    )}
-    <Text style={[styles.miniName, { color: isDark ? '#fff' : '#111' }]} numberOfLines={1}>
-      {pet.displayName}
-    </Text>
-    <Text style={[styles.miniPct, { color: isGainer ? '#10B981' : '#EF4444' }]}>
-      {isGainer ? '+' : ''}{pet.pct}%
-    </Text>
-  </View>
-));
-
 const TrendingPets = ({ isDarkMode, navigation }) => {
-  const { localState } = useLocalState();
   const { t } = useTranslation();
   const [gainers, setGainers] = useState([]);
   const [losers, setLosers] = useState([]);
@@ -100,28 +80,6 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
         .catch(() => setLoading(false));
     }
   }, []);
-
-  // Parse all pets from local data for image lookup
-  const petMap = useMemo(() => {
-    try {
-      const rawData = localState.data;
-      if (!rawData) return {};
-      const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-      const items = typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
-      const map = {};
-      items.forEach(item => {
-        if (item?.name) map[(item.name || '').toLowerCase().trim()] = item;
-      });
-      return map;
-    } catch {
-      return {};
-    }
-  }, [localState.data]);
-
-  const getImageUrl = (item) => {
-    if (!item?.image || !localState.imgurl) return '';
-    return `${localState.imgurl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-  };
 
   useEffect(() => {
     // Don't process until CDN fetch completes or cache is confirmed fresh
@@ -146,13 +104,7 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
         const change = getPrimaryChange(item);
         if (!change || change.pct === 0) return;
 
-        const pet = petMap[name];
-        const entry = {
-          id: name,
-          displayName: pet?.name || name.charAt(0).toUpperCase() + name.slice(1),
-          imageUrl: pet ? getImageUrl(pet) : '',
-          pct: change.pct,
-        };
+        const entry = { id: name, pct: change.pct };
 
         if (change.pct > 0) {
           gainersList.push(entry);
@@ -165,82 +117,64 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
       gainersList.sort((a, b) => b.pct - a.pct);
       losersList.sort((a, b) => a.pct - b.pct);
 
-      setGainers(gainersList.slice(0, 3));
-      setLosers(losersList.slice(0, 3));
+      setGainers(gainersList.slice(0, 1));
+      setLosers(losersList.slice(0, 1));
     } catch (err) {
       console.warn('[TrendingPets] Error:', err.message);
     } finally {
       setLoading(false);
     }
-  }, [petMap, fetchGen]);
+  }, [fetchGen]);
 
   if (!loading && gainers.length === 0 && losers.length === 0) return null;
 
   return (
     <View style={styles.section}>
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <FontAwesome name="chart-simple" size={18} color={isDarkMode ? '#fff' : '#111'} solid />
-          <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#111' }]}>
-            {t('trending.market_overview')}
-          </Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Analytics')}
-          activeOpacity={0.7}
-          style={styles.seeAll}
-        >
-          <Text style={styles.seeAllText}>{t('trending.full_analytics')}</Text>
-          <FontAwesome name="chevron-right" size={10} color={config.colors.primary} />
-        </TouchableOpacity>
-      </View>
-
       {loading ? (
-        <View style={styles.listsRow}>
-          {[0, 1].map((col) => (
-            <View key={col} style={[styles.listCard, { backgroundColor: isDarkMode ? '#1a2332' : col === 0 ? '#F0FDF4' : '#FEF2F2' }]}>
-              <View style={styles.listHeader}>
+        <View style={[styles.card, { backgroundColor: isDarkMode ? '#1C1C1E' : '#fff' }]}>
+          <View style={styles.statsRow}>
+            {[0, 1].map((col) => (
+              <View key={col} style={[styles.statPill, { backgroundColor: isDarkMode ? '#26262a' : '#F4F4F5' }]}>
                 <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#ddd' }} />
-                <View style={{ width: 40, height: 12, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#ddd' }} />
+                <View style={{ flex: 1, height: 10, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
+                <View style={{ width: 34, height: 10, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
               </View>
-              {[0, 1, 2].map((row) => (
-                <View key={row} style={[styles.miniRow, { backgroundColor: isDarkMode ? '#1C1C1E' : '#fff' }]}>
-                  <View style={[styles.miniImage, { backgroundColor: isDarkMode ? '#333' : '#f0f0f0' }]} />
-                  <View style={{ flex: 1, height: 10, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
-                  <View style={{ width: 30, height: 10, borderRadius: 3, marginLeft: 4, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
-                </View>
-              ))}
-            </View>
-          ))}
+            ))}
+          </View>
+          <View style={styles.teaserRow}>
+            <View style={{ width: '60%', height: 10, borderRadius: 3, backgroundColor: isDarkMode ? '#333' : '#e5e5e5' }} />
+          </View>
         </View>
       ) : (
-      <View style={styles.listsRow}>
-        {/* 🔥 Hot / Gainers */}
-        {gainers.length > 0 && (
-          <View style={[styles.listCard, { backgroundColor: isDarkMode ? '#1a2332' : '#F0FDF4' }]}>
-            <View style={styles.listHeader}>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('Analytics')}
+        style={[styles.card, { backgroundColor: isDarkMode ? '#1C1C1E' : '#fff' }]}
+      >
+        <View style={styles.statsRow}>
+          {gainers.length > 0 && (
+            <View style={[styles.statPill, { backgroundColor: isDarkMode ? '#12261f' : '#F0FDF4' }]}>
               <FontAwesome name="fire-flame-curved" size={12} color="#10B981" solid />
-              <Text style={[styles.listTitle, { color: '#10B981' }]}>{t('trending.hot')}</Text>
+              <Text style={[styles.statLabel, { color: '#10B981' }]} numberOfLines={1}>{t('trending.hot')}</Text>
+              <FontAwesome name="lock" size={9} color={isDarkMode ? '#777' : '#aaa'} solid />
+              <Text style={[styles.statPct, { color: '#10B981' }]}>+{gainers[0].pct}%</Text>
             </View>
-            {gainers.map((pet) => (
-              <MiniPetRow key={pet.id} pet={pet} isDark={isDarkMode} isGainer />
-            ))}
-          </View>
-        )}
-
-        {/* 📉 Losers */}
-        {losers.length > 0 && (
-          <View style={[styles.listCard, { backgroundColor: isDarkMode ? '#2a1a1a' : '#FEF2F2' }]}>
-            <View style={styles.listHeader}>
+          )}
+          {losers.length > 0 && (
+            <View style={[styles.statPill, { backgroundColor: isDarkMode ? '#2a1a1a' : '#FEF2F2' }]}>
               <FontAwesome name="arrow-trend-down" size={12} color="#EF4444" solid />
-              <Text style={[styles.listTitle, { color: '#EF4444' }]}>{t('trending.dropping')}</Text>
+              <Text style={[styles.statLabel, { color: '#EF4444' }]} numberOfLines={1}>{t('trending.dropping')}</Text>
+              <FontAwesome name="lock" size={9} color={isDarkMode ? '#777' : '#aaa'} solid />
+              <Text style={[styles.statPct, { color: '#EF4444' }]}>{losers[0].pct}%</Text>
             </View>
-            {losers.map((pet) => (
-              <MiniPetRow key={pet.id} pet={pet} isDark={isDarkMode} isGainer={false} />
-            ))}
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+        <View style={styles.teaserRow}>
+          <FontAwesome name="lock" size={10} color={config.colors.primary} solid />
+          <Text style={styles.teaserText}>{t('trending.locked_teaser')}</Text>
+          <FontAwesome name="chevron-right" size={9} color={config.colors.primary} />
+        </View>
+      </TouchableOpacity>
       )}
     </View>
   );
@@ -250,70 +184,47 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 16,
     marginTop: 8,
-    marginBottom: 8,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  seeAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  seeAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: config.colors.primary,
-  },
-  listsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  listCard: {
-    flex: 1,
+  card: {
     borderRadius: 14,
     padding: 10,
   },
-  listHeader: {
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
-  listTitle: {
-    fontSize: 13,
+  statLabel: {
+    fontSize: 12,
     fontWeight: '700',
+    flexShrink: 1,
   },
-  miniRow: {
+  statPct: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 'auto',
+  },
+  teaserRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    marginBottom: 4,
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 8,
   },
-  miniImage: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  miniName: {
-    flex: 1,
+  teaserText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  miniPct: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginLeft: 4,
+    color: config.colors.primary,
+    textAlign: 'center',
+    flexShrink: 1,
   },
 });
 

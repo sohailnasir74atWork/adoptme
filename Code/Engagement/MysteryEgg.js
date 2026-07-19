@@ -304,6 +304,13 @@ const RewardReveal = ({ reward, isDark }) => {
           {reward.duration === -1 ? t('mystery_egg.rewards.permanent') : t(reward.duration > 1 ? 'mystery_egg.rewards.active_for_days_plural' : 'mystery_egg.rewards.active_for_days', { count: reward.duration })}
         </Text>
       </View>
+
+      {/* Not auto-equipped — a permanent item of this type stays equipped */}
+      {reward.activated === false && (
+        <Text style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', textAlign: 'center', marginTop: 8, paddingHorizontal: 24, lineHeight: 16 }}>
+          {t('mystery_egg.rewards.kept_in_inventory', { defaultValue: '🔒 Your permanent item stays equipped — this reward is saved in My Cosmetics.' })}
+        </Text>
+      )}
     </Animated.View>
   );
 };

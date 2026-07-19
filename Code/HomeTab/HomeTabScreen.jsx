@@ -26,6 +26,7 @@ import WordScramble from '../Engagement/WordScramble';
 import StatusFeed from '../Design/StatusFeed';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import TrendingPets from './TrendingPets';
+import HomeTrackerCard from '../PetTracker/HomeTrackerCard';
 import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
@@ -554,48 +555,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
             ))}
           </View>
 
-          {/* ═══ WORLD CUP PROMO CARD (hidden by the kill switch) ═══ */}
-          {worldCupEnabled && (
-            <TouchableOpacity
-              activeOpacity={0.92}
-              onPress={() => navigation.navigate('More')}
-              style={wcPromoStyles.card}
-            >
-              {/* Gradient background (react-native-svg) */}
-              <Svg style={StyleSheet.absoluteFill}>
-                <Defs>
-                  <SvgGradient id="wcGrad" x1="0" y1="0" x2="1" y2="1">
-                    <Stop offset="0" stopColor="#7C3AED" />
-                    <Stop offset="0.55" stopColor="#5B21B6" />
-                    <Stop offset="1" stopColor="#2563EB" />
-                  </SvgGradient>
-                </Defs>
-                <Rect x="0" y="0" width="100%" height="100%" fill="url(#wcGrad)" />
-              </Svg>
-              <View style={wcPromoStyles.lottieWrap}>
-                <SafeLottieView
-                  source={require('../../assets/lottie/footballer.json')}
-                  autoPlay
-                  loop
-                  resizeMode="contain"
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={wcPromoStyles.titleRow}>
-                  <Text style={wcPromoStyles.title}>World Cup 2026</Text>
-                  <View style={wcPromoStyles.newPill}>
-                    <Text style={wcPromoStyles.newPillText}>NEW</Text>
-                  </View>
-                </View>
-                <Text style={wcPromoStyles.sub}>Predict winners & climb the leaderboard! ⚽</Text>
-              </View>
-              <View style={wcPromoStyles.cta}>
-                <Text style={wcPromoStyles.ctaText}>Predict →</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
           {/* ═══ STATUS FEED (Stories) ═══ */}
           <StatusFeed
             user={user}
@@ -607,6 +566,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
           {/* ═══ SECTION: Trending Pets ═══ */}
           <TrendingPets isDarkMode={isDarkMode} navigation={navigation} />
+
+          {/* ═══ Pet Aging & Growing Tracker ═══ */}
+          <HomeTrackerCard isDarkMode={isDarkMode} navigation={navigation} />
 
           {/* ═══ SECTION 3: Mini Games (moved up!) ═══ */}
           <View style={styles.section}>
@@ -757,6 +719,48 @@ const HomeTabScreen = ({ selectedTheme }) => {
               {t('guides.link_text', { defaultValue: 'How It Works — Learn about all features' })}
             </Text>
           </TouchableOpacity>
+
+          {/* ═══ WORLD CUP PROMO CARD (hidden by the kill switch) ═══ */}
+          {worldCupEnabled && (
+            <TouchableOpacity
+              activeOpacity={0.92}
+              onPress={() => navigation.navigate('More')}
+              style={wcPromoStyles.card}
+            >
+              {/* Gradient background (react-native-svg) */}
+              <Svg style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <SvgGradient id="wcGrad" x1="0" y1="0" x2="1" y2="1">
+                    <Stop offset="0" stopColor="#7C3AED" />
+                    <Stop offset="0.55" stopColor="#5B21B6" />
+                    <Stop offset="1" stopColor="#2563EB" />
+                  </SvgGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="100%" fill="url(#wcGrad)" />
+              </Svg>
+              <View style={wcPromoStyles.lottieWrap}>
+                <SafeLottieView
+                  source={require('../../assets/lottie/footballer.json')}
+                  autoPlay
+                  loop
+                  resizeMode="contain"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={wcPromoStyles.titleRow}>
+                  <Text style={wcPromoStyles.title}>World Cup 2026</Text>
+                  <View style={wcPromoStyles.newPill}>
+                    <Text style={wcPromoStyles.newPillText}>NEW</Text>
+                  </View>
+                </View>
+                <Text style={wcPromoStyles.sub}>Predict winners & climb the leaderboard! ⚽</Text>
+              </View>
+              <View style={wcPromoStyles.cta}>
+                <Text style={wcPromoStyles.ctaText}>Predict →</Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           {/* ═══ Runway App Promo Card ═══ */}
           <TouchableOpacity

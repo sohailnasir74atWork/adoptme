@@ -15,6 +15,7 @@ import {
   Animated,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
@@ -1129,13 +1130,14 @@ const ProfileBottomDrawer = ({
 
   const confirmAdminAction = async () => {
     if (!reasonActionType) return;
+    Keyboard.dismiss();
 
     // Ban/mute/strike can be disabled for moderators by an admin. Admins are
     // never blocked. Moderators keep delete powers regardless of this switch.
     const gatedActions = ['ban', 'mute', 'strike'];
     if (
       gatedActions.includes(reasonActionType.type) &&
-      !canStaffBanMute({ isAdmin, isModerator: user?.isModerator, modControlsEnabled })
+      !canStaffBanMute({ isAdmin, isModerator: user?.isModerator, isBabyMod: user?.isBabyMod, modControlsEnabled })
     ) {
       setShowReasonModal(false);
       setReasonActionType(null);
@@ -3370,7 +3372,10 @@ const ProfileBottomDrawer = ({
 
       {/* Admin Reason Modal - standalone modal shown after profile drawer closes */}
       <Modal visible={showReasonModal} transparent animationType="fade" onRequestClose={() => setShowReasonModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        {/* KAV only on iOS: Android already resizes via adjustResize, and KAV
+            behavior="height" on top of it makes the modal flicker when the
+            keyboard closes — taps then miss the Confirm button. */}
+        <KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'} style={{ flex: 1 }}>
           <Pressable onPress={() => setShowReasonModal(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
             <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', backgroundColor: c.bg, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: c.border }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 10 }}>

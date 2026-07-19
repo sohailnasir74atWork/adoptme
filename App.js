@@ -346,6 +346,8 @@ function App() {
           />
 
           <Stack.Screen name="Analytics" options={{ title: 'Market Analytics', ...headerOptions }} getComponent={() => require('./Code/Analytics/AnalyticsScreen').default} />
+          <Stack.Screen name="PetTracker" options={{ headerShown: false }} getComponent={() => require('./Code/PetTracker/PetTrackerScreen').default} />
+          <Stack.Screen name="GrindDetail" options={{ headerShown: false }} getComponent={() => require('./Code/PetTracker/GrindDetailScreen').default} />
           <Stack.Screen name="QuizBattleScreen" options={{ title: 'Quiz Battle', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/QuizBattle').default} />
           <Stack.Screen name="TradeShowdownScreen" options={{ title: 'Trade Showdown', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/TradeShowdown').default} />
           <Stack.Screen name="MysteryEggScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MysteryEgg').default} />

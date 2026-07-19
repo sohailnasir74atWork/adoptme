@@ -10,7 +10,7 @@
  *   users/{uid}/xp/level: 12
  */
 
-import { ref, increment, update, get } from '@react-native-firebase/database';
+import { ref, increment, update, get, push, set } from '@react-native-firebase/database';
 
 // ────────────────────────────────────────────────────────
 //  LEVEL TABLE
@@ -159,6 +159,24 @@ export const addXP = async (db, uid, amount, action = null) => {
           };
           if (item.color) activeItemData.color = item.color;
           if (item.darkColor) activeItemData.darkColor = item.darkColor;
+
+          // 🛡️ 2026-07-16: Preserve any still-valid active cosmetic of this type
+          // into ownedItems before the level unlock takes its slot — legacy items
+          // lived only in activeItems and were destroyed by this overwrite.
+          try {
+            const existingSnap = await get(ref(db, `users/${uid}/shop/activeItems/${item.type}`));
+            if (existingSnap.exists()) {
+              const existing = existingSnap.val();
+              const stillValid = existing?.expiresAt === -1 || existing?.expiresAt > now;
+              if (stillValid && existing.id !== item.id) {
+                const ownedListSnap = await get(ref(db, `users/${uid}/shop/ownedItems/${item.type}`));
+                const ownedList = ownedListSnap.exists() ? Object.values(ownedListSnap.val() || {}) : [];
+                if (!ownedList.some(i => i?.id === existing.id)) {
+                  await set(push(ref(db, `users/${uid}/shop/ownedItems/${item.type}`)), { ...existing, type: item.type });
+                }
+              }
+            }
+          } catch {}
 
           // Record as granted and set active
           await update(ref(db, `users/${uid}`), {

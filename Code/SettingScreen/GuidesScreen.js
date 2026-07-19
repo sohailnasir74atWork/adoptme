@@ -36,7 +36,7 @@ const GUIDES = [
       { key: 'guides.trading_2', default: 'Create your own trade by tapping "+ New Trade" and selecting items you want to give & get.' },
       { key: 'guides.trading_3', default: 'Chat privately with traders to negotiate — you\'ll see typing indicators and read receipts.' },
       { key: 'guides.trading_4', default: 'Use the Trade Calculator to check if a trade is fair before accepting!' },
-      { key: 'guides.trading_5', default: 'Track your completed trades in "My Stuff" to build your trade history.' },
+      { key: 'guides.trading_5', default: 'Use the filter icons at the top of the Trades tab — 👤 My Trades, 👥 Following, 🔖 Saved — to instantly find your own, followed, or saved trades.' },
     ],
   },
   {
@@ -47,9 +47,6 @@ const GUIDES = [
     items: [
       { key: 'guides.mystuff_1', default: '🐾 My Pets — Add your owned pets to see your total portfolio value and demand breakdown.' },
       { key: 'guides.mystuff_2', default: '⭐ Goals — Add dream pets to your wishlist and track progress towards getting them.' },
-      { key: 'guides.mystuff_3', default: '⚡ Active Trades — See your open trades and mark them as complete when done in-game.' },
-      { key: 'guides.mystuff_4', default: '🕐 History — View all your past trades with stats like win rate and net value.' },
-      { key: 'guides.mystuff_5', default: 'Completing a trade auto-updates your pets (adds what you got, removes what you gave) and earns XP!' },
     ],
   },
   {

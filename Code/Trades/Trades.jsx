@@ -27,11 +27,12 @@ import { useHaptic } from '../Helper/HepticFeedBack';
 import { getCachedProfile, warmProfileCache } from '../Helper/profileCache';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
-import { acceptTrade, saveTrade, unsaveTrade, fetchSavedTradeRefs } from './tradeHelpers';
+import { saveTrade, unsaveTrade, fetchSavedTradeRefs } from './tradeHelpers';
 import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
@@ -61,7 +62,7 @@ const TradeList = ({ route }) => {
   const SEARCH_PAGE_SIZE = 5; // ✅ Fetch 5 items at a time for search
   // const [isAdVisible, setIsAdVisible] = useState(true);
   const { selectedTheme } = route.params
-  const { user, analytics, updateLocalStateAndDatabase, appdatabase, isUserBlocked } = useGlobalState()
+  const { user, analytics, updateLocalStateAndDatabase, appdatabase } = useGlobalState()
   const [trades, setTrades] = useState([]);
   const [filteredTrades, setFilteredTrades] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -73,8 +74,8 @@ const TradeList = ({ route }) => {
   const [openShareModel, setOpenShareModel] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [bannedUsers, setBannedUsers] = useState([]);
-  const [savedTradeRefs, setSavedTradeRefs] = useState({});
   const [followingIds, setFollowingIds] = useState([]);
+  const [savedTradeRefs, setSavedTradeRefs] = useState({});
 
 
   const [isAdLoaded, setIsAdLoaded] = useState(false);
@@ -107,92 +108,84 @@ const TradeList = ({ route }) => {
   const [selectedFilters, setSelectedFilters] = useState([]); // ✅ Default: no filters (show all)
   const isMyTradesActive = selectedFilters.includes('myTrades');
   const isFollowingActive = selectedFilters.includes('following');
+  const isSavedActive = selectedFilters.includes('saved');
 
   // ── Add "My Trades" button to the navigation header ──
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: 4 }}>
-          <TouchableOpacity
-            onPress={() => {
-              triggerHapticFeedback('impactLight');
-              if (!user?.id) {
-                setIsSigninDrawerVisible(true);
-                return;
-              }
-              setSelectedFilters(prev =>
-                prev.includes('myTrades')
-                  ? prev.filter(f => f !== 'myTrades')
-                  : [...prev, 'myTrades']
-              );
-            }}
-            activeOpacity={0.75}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 14,
-              backgroundColor: isMyTradesActive ? config.colors.primary : (isDarkMode ? '#1e293b' : '#f1f5f9'),
-              borderWidth: 1.5,
-              borderColor: isMyTradesActive ? config.colors.primary : (isDarkMode ? '#334155' : '#e2e8f0'),
-              gap: 4,
-            }}
-          >
-            <Icon name={isMyTradesActive ? 'person' : 'person-outline'} size={14} color={isMyTradesActive ? '#fff' : (isDarkMode ? '#94a3b8' : '#64748b')} />
-            <Text style={{
-              fontSize: 11,
-              fontWeight: '700',
-              color: isMyTradesActive ? '#fff' : (isDarkMode ? '#94a3b8' : '#64748b'),
-            }}>
-              My Trades
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              triggerHapticFeedback('impactLight');
-              if (!user?.id) {
-                setIsSigninDrawerVisible(true);
-                return;
-              }
-              setSelectedFilters(prev =>
-                prev.includes('following')
-                  ? prev.filter(f => f !== 'following')
-                  : [...prev.filter(f => f !== 'myTrades'), 'following']
-              );
-            }}
-            activeOpacity={0.75}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 14,
-              backgroundColor: isFollowingActive ? '#8B5CF6' : (isDarkMode ? '#1e293b' : '#f1f5f9'),
-              borderWidth: 1.5,
-              borderColor: isFollowingActive ? '#8B5CF6' : (isDarkMode ? '#334155' : '#e2e8f0'),
-              gap: 4,
-            }}
-          >
-            <Icon name={isFollowingActive ? 'people' : 'people-outline'} size={14} color={isFollowingActive ? '#fff' : (isDarkMode ? '#94a3b8' : '#64748b')} />
-            <Text style={{
-              fontSize: 11,
-              fontWeight: '700',
-              color: isFollowingActive ? '#fff' : (isDarkMode ? '#94a3b8' : '#64748b'),
-            }}>
-              Following
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Trade Notifier')}
-            style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Icon name="notifications" size={22} color={config.colors.primary} />
-          </TouchableOpacity>
-        </View>
-      ),
+      // Title reflects the active filter (icon-only buttons carry no labels)
+      title: isMyTradesActive
+        ? t('trade.my_trades_title', { defaultValue: 'My Trades' })
+        : isFollowingActive
+          ? t('trade.following_trades_title', { defaultValue: 'Following Trades' })
+          : isSavedActive
+            ? t('trade.saved_trades_title', { defaultValue: 'Saved Trades' })
+            : t('tabs.trade'),
+      headerRight: () => {
+        // Icon-only filter buttons — self-explanatory, no labels
+        const iconBtnStyle = (active, color) => ({
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? color : (isDarkMode ? '#1e293b' : '#f1f5f9'),
+          borderWidth: 1.5,
+          borderColor: active ? color : (isDarkMode ? '#334155' : '#e2e8f0'),
+        });
+        const iconColor = (active) => active ? '#fff' : (isDarkMode ? '#94a3b8' : '#64748b');
+        // Only one of the three filters can be active at a time
+        const FILTER_KEYS = ['myTrades', 'following', 'saved'];
+        const toggleFilter = (key) => {
+          triggerHapticFeedback('impactLight');
+          if (!user?.id) {
+            setIsSigninDrawerVisible(true);
+            return;
+          }
+          setSelectedFilters(prev =>
+            prev.includes(key)
+              ? prev.filter(f => f !== key)
+              : [...prev.filter(f => !FILTER_KEYS.includes(f)), key]
+          );
+        };
+        return (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 4 }}>
+            {/* My Trades */}
+            <TouchableOpacity
+              onPress={() => toggleFilter('myTrades')}
+              activeOpacity={0.75}
+              style={iconBtnStyle(isMyTradesActive, config.colors.primary)}
+            >
+              <Icon name={isMyTradesActive ? 'person' : 'person-outline'} size={16} color={iconColor(isMyTradesActive)} />
+            </TouchableOpacity>
+            {/* Following */}
+            <TouchableOpacity
+              onPress={() => toggleFilter('following')}
+              activeOpacity={0.75}
+              style={iconBtnStyle(isFollowingActive, '#8B5CF6')}
+            >
+              <Icon name={isFollowingActive ? 'people' : 'people-outline'} size={16} color={iconColor(isFollowingActive)} />
+            </TouchableOpacity>
+            {/* Saved */}
+            <TouchableOpacity
+              onPress={() => toggleFilter('saved')}
+              activeOpacity={0.75}
+              style={iconBtnStyle(isSavedActive, '#F59E0B')}
+            >
+              <Icon name={isSavedActive ? 'bookmark' : 'bookmark-outline'} size={16} color={iconColor(isSavedActive)} />
+            </TouchableOpacity>
+            {/* Trade notifications */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Trade Notifier')}
+              style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Icon name="notifications" size={22} color={config.colors.primary} />
+            </TouchableOpacity>
+          </View>
+        );
+      },
     });
-  }, [navigation, isMyTradesActive, isFollowingActive, isDarkMode, user?.id]);
+  }, [navigation, isMyTradesActive, isFollowingActive, isSavedActive, isDarkMode, user?.id]);
 
   useEffect(() => {
     // console.log(localState.isPro, 'from trade model'); // ✅ Check if isPro is updated
@@ -204,6 +197,8 @@ const TradeList = ({ route }) => {
     const bannedUsersList = Array.isArray(bannedUsers) ? bannedUsers : [];
     const cutoff = Date.now() - TRADE_MAX_AGE_MS;
 
+    const hasSavedFilter = selectedFilters.includes('saved');
+
     setFilteredTrades(
       trades.filter((trade) => {
         // ✅ Filter out trades from blocked users
@@ -212,8 +207,9 @@ const TradeList = ({ route }) => {
         }
 
         // ✅ Filter out trades older than 7 days (client-side safety net)
+        // Saved trades are exempt — they stay viewable as long as the doc exists
         const tradeTime = trade.timestamp?.toMillis ? trade.timestamp.toMillis() : (trade.timestamp?.seconds ? trade.timestamp.seconds * 1000 : 0);
-        if (tradeTime > 0 && tradeTime < cutoff && !trade.isFeatured) {
+        if (tradeTime > 0 && tradeTime < cutoff && !trade.isFeatured && !hasSavedFilter) {
           return false;
         }
 
@@ -247,11 +243,17 @@ const TradeList = ({ route }) => {
           matchesFollowing = followingIds.includes(trade.userId);
         }
 
+        // ✅ Check saved filter match
+        let matchesSaved = true;
+        if (hasSavedFilter) {
+          matchesSaved = !!savedTradeRefs[trade.id];
+        }
+
         // ✅ All selected filters must match (AND logic)
-        return matchesStatus && matchesMyTrades && matchesFollowing;
+        return matchesStatus && matchesMyTrades && matchesFollowing && matchesSaved;
       })
     );
-  }, [trades, selectedFilters, user.id, bannedUsers, followingIds]);
+  }, [trades, selectedFilters, user.id, bannedUsers, followingIds, savedTradeRefs]);
 
   // ✅ Auto-scroll to top when filters change
   useEffect(() => {
@@ -266,7 +268,7 @@ const TradeList = ({ route }) => {
 
   }, [user?.id, localState.bannedUsers]);
 
-  // ✅ Load saved/accepted trade refs on mount
+  // ✅ Load saved trade refs on mount
   useEffect(() => {
     if (!user?.id || !appdatabase) return;
     fetchSavedTradeRefs(appdatabase, user.id).then(refs => {
@@ -687,6 +689,9 @@ const TradeList = ({ route }) => {
       return;
     }
 
+    // ✅ Saved filter is a fixed list — nothing more to load
+    if (selectedFilters.includes('saved')) return;
+
     // ✅ Handle normal pagination
     if (!hasMore || loading) return;
     if (!user?.id) {
@@ -1103,6 +1108,41 @@ const TradeList = ({ route }) => {
     }
   }, [user?.id, firestoreDB]);
 
+  // ── Fetch saved trades (RTDB refs → Firestore trade docs) ──
+  const fetchSavedTrades = useCallback(async () => {
+    if (!user?.id || !appdatabase || !firestoreDB) return;
+    setLoading(true);
+    try {
+      const refs = await fetchSavedTradeRefs(appdatabase, user.id);
+      setSavedTradeRefs(refs || {});
+      const ids = Object.keys(refs || {});
+      if (ids.length === 0) {
+        setTrades([]);
+        setHasMore(false);
+        return;
+      }
+      const results = await Promise.all(ids.map(async (tradeId) => {
+        try {
+          const snap = await getDoc(doc(firestoreDB, 'trades_new', tradeId));
+          return snap.exists() ? { id: tradeId, ...snap.data() } : null; // deleted trades are skipped
+        } catch {
+          return null;
+        }
+      }));
+      const valid = results.filter(Boolean).sort((a, b) => {
+        const ta = a.timestamp?.toMillis ? a.timestamp.toMillis() : (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
+        const tb = b.timestamp?.toMillis ? b.timestamp.toMillis() : (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : 0);
+        return tb - ta;
+      });
+      setTrades(valid);
+      setHasMore(false); // Fixed list — no pagination
+    } catch (e) {
+      console.warn('[Trades] fetchSavedTrades error:', e?.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, appdatabase, firestoreDB]);
+
   // ✅ Refetch when user changes
   useEffect(() => {
     fetchInitialTrades();
@@ -1121,15 +1161,19 @@ const TradeList = ({ route }) => {
 
     // Refetch when status filters change to apply database-level filtering
     if (user?.id) {
-      // If myTrades is active, fetch user's trades; otherwise fetch all
+      // Fetch based on the single active filter (they're mutually exclusive)
       if (selectedFilters.includes('myTrades')) {
         fetchMyTrades();
+      } else if (selectedFilters.includes('saved')) {
+        fetchSavedTrades();
+      } else if (selectedFilters.includes('following')) {
+        // Following has its own fetch effect — nothing to do here
       } else {
         fetchInitialTrades();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFiltersString, isMyTradesActive]); // ✅ Refetch when status or myTrades filter changes
+  }, [statusFiltersString, isMyTradesActive, isSavedActive, isFollowingActive]); // ✅ Refetch when the active filter changes
 
   const closeProfileDrawer = async () => {
     setIsDrawerVisible(false);
@@ -1204,7 +1248,16 @@ const TradeList = ({ route }) => {
       setSearchLastDoc(null);
       setSearchHasMore(true);
     }
-    await fetchInitialTrades();
+    // ✅ Respect active filter mode when refreshing
+    if (selectedFilters.includes('saved')) {
+      await fetchSavedTrades();
+    } else if (selectedFilters.includes('myTrades')) {
+      await fetchMyTrades();
+    } else if (selectedFilters.includes('following')) {
+      await fetchFollowingTrades();
+    } else {
+      await fetchInitialTrades();
+    }
     setRefreshing(false);
   };
 
@@ -1589,99 +1642,39 @@ const TradeList = ({ route }) => {
               <Icon name="share-social-outline" size={16} color={config.colors.primary} />
             </TouchableOpacity>
 
-            {/* Save / Accept — only for other users' trades */}
+            {/* Save — only for other users' trades */}
             {item.userId !== user?.id && (
-              <>
-                <TouchableOpacity
-                  onPress={async () => {
-                    if (!user?.id) { setIsSigninDrawerVisible(true); return; }
-                    triggerHapticFeedback('impactLight');
-                    const tradeId = item.id;
-                    if (savedTradeRefs[tradeId]) {
-                      // Unsave
-                      try {
-                        await unsaveTrade(appdatabase, user.id, tradeId);
-                        setSavedTradeRefs(prev => { const n = { ...prev }; delete n[tradeId]; return n; });
-                        showSuccessMessage(t('trade.removed', { defaultValue: 'Removed' }), t('trade.trade_unsaved', { defaultValue: 'Trade removed from saved' }));
-                      } catch (e) {
-                        showErrorMessage(t('home.alert.error'), e?.message || 'Error');
-                      }
-                    } else {
-                      try {
-                        await saveTrade(appdatabase, user.id, item);
-                        setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'saved' } }));
-                        Alert.alert(
-                          '🔖 ' + t('trade.saved', { defaultValue: 'Trade Saved!' }),
-                          t('trade.saved_guide', { defaultValue: 'This trade has been saved to My Stuff → Active Trades → Saved tab.\n\nFrom there you can:\n• View the trader\'s Roblox username & copy it\n• Chat with the trader\n• Ping the trader when you\'re ready\n• Complete the trade when done' }),
-                          [{ text: t('trade.got_it', { defaultValue: 'Got it!' }) }]
-                        );
-                      } catch (e) {
-                        showErrorMessage(t('home.alert.error'), e?.message || 'Error');
-                      }
-                    }
-                  }}
-                  style={[styles.socialBtn, savedTradeRefs[item.id]?.type === 'saved' && { backgroundColor: '#3B82F620' }]}
-                >
-                  <Icon name={savedTradeRefs[item.id] ? 'bookmark' : 'bookmark-outline'} size={16} color={'#3B82F6'} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={async () => {
-                    if (!user?.id) { setIsSigninDrawerVisible(true); return; }
-                    // Banned users can't accept trades. isUserBlocked is the
-                    // server-time-validated email/device ban gate from
-                    // GlobelStats — immune to device-clock tampering.
-                    if (isUserBlocked) {
-                      showErrorMessage(
-                        t('chat.access_denied', { defaultValue: 'Access Denied' }),
-                        t('trade.banned_cannot_accept', { defaultValue: 'You are banned and cannot accept trades.' })
-                      );
-                      return;
-                    }
-                    const tradeId = item.id;
-                    if (savedTradeRefs[tradeId]?.type === 'accepted') {
-                      triggerHapticFeedback('impactLight');
-                      showSuccessMessage('✅', t('trade.already_accepted', { defaultValue: 'Already accepted!' }));
-                      return;
-                    }
-                    // Confirmation alert before accepting
-                    Alert.alert(
-                      '🤝 ' + t('trade.accept_trade', { defaultValue: 'Accept This Trade?' }),
-                      t('trade.accept_confirm_guide', { defaultValue: 'Are you sure you want to accept this trade?\n\nOnce accepted, the trader will be notified. You can find this trade in My Stuff → Active Trades → Accepted tab.\n\nFrom there you can:\n• See the trader\'s Roblox username to join their game\n• Chat with the trader to coordinate\n• Ping the trader when you\'re ready to trade' }),
-                      [
-                        { text: t('chat.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-                        {
-                          text: t('trade.yes_accept', { defaultValue: 'Yes, Accept' }),
-                          onPress: async () => {
-                    // Optimistic UI — show accepted state immediately
-                    triggerHapticFeedback('impactMedium');
-                    setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'accepted' } }));
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!user?.id) { setIsSigninDrawerVisible(true); return; }
+                  triggerHapticFeedback('impactLight');
+                  const tradeId = item.id;
+                  if (savedTradeRefs[tradeId]) {
+                    // Unsave
                     try {
-                      await acceptTrade(appdatabase, firestoreDB, user.id, user.displayName || 'Someone', item, { avatar: user.avatar || '', robloxUsername: user.robloxUsername || '' });
-                      triggerHapticFeedback('notificationSuccess');
-                      Alert.alert(
-                        '✅ ' + t('trade.accepted', { defaultValue: 'Trade Accepted!' }),
-                        t('trade.accepted_guide', { defaultValue: 'The trader has been notified!\n\nHead to My Stuff → Active Trades → Accepted tab to:\n• Copy the trader\'s Roblox username\n• Chat with them to set up the trade\n• Ping them when you\'re online and ready' }),
-                        [{ text: t('trade.got_it', { defaultValue: 'Got it!' }) }]
-                      );
+                      await unsaveTrade(appdatabase, user.id, tradeId);
+                      setSavedTradeRefs(prev => { const n = { ...prev }; delete n[tradeId]; return n; });
+                      showSuccessMessage(t('trade.removed', { defaultValue: 'Removed' }), t('trade.trade_unsaved', { defaultValue: 'Trade removed from saved' }));
                     } catch (e) {
-                      // Revert optimistic update on failure
-                      setSavedTradeRefs(prev => { const next = { ...prev }; delete next[tradeId]; return next; });
                       showErrorMessage(t('home.alert.error'), e?.message || 'Error');
                     }
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                  style={[styles.acceptBtn, savedTradeRefs[item.id]?.type === 'accepted' && { backgroundColor: '#10B981' }]}
-                >
-                  <Icon name={savedTradeRefs[item.id]?.type === 'accepted' ? 'checkmark-circle' : 'checkmark'} size={13} color={savedTradeRefs[item.id]?.type === 'accepted' ? '#fff' : '#10B981'} />
-                  <Text style={[styles.acceptBtnText, savedTradeRefs[item.id]?.type === 'accepted' && { color: '#fff' }]}>
-                    {savedTradeRefs[item.id]?.type === 'accepted' ? t('trade.accepted_short', { defaultValue: 'Accepted' }) : t('trade.accept', { defaultValue: 'Accept' })}
-                  </Text>
-                </TouchableOpacity>
-              </>
+                  } else {
+                    try {
+                      await saveTrade(appdatabase, user.id, item);
+                      setSavedTradeRefs(prev => ({ ...prev, [tradeId]: { type: 'saved' } }));
+                      showSuccessMessage(
+                        '🔖 ' + t('trade.saved', { defaultValue: 'Trade Saved!' }),
+                        t('trade.saved_guide', { defaultValue: 'Tap the Saved filter at the top to view your saved trades anytime.' })
+                      );
+                    } catch (e) {
+                      showErrorMessage(t('home.alert.error'), e?.message || 'Error');
+                    }
+                  }
+                }}
+                style={[styles.socialBtn, savedTradeRefs[item.id]?.type === 'saved' && { backgroundColor: '#3B82F620' }]}
+              >
+                <Icon name={savedTradeRefs[item.id] ? 'bookmark' : 'bookmark-outline'} size={16} color={'#3B82F6'} />
+              </TouchableOpacity>
             )}
 
             <TouchableOpacity onPress={handleChatNavigation} style={styles.chatBtn}>
@@ -2431,22 +2424,6 @@ const getStyles = (isDarkMode, c) => {
     },
     chatBtnText: {
       color: '#ffffff',
-      fontWeight: '700',
-      fontSize: 9,
-    },
-    acceptBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 999,
-      backgroundColor: '#10B98118',
-      gap: 3,
-      borderWidth: 1,
-      borderColor: '#10B98140',
-    },
-    acceptBtnText: {
-      color: '#10B981',
       fontWeight: '700',
       fontSize: 9,
     },

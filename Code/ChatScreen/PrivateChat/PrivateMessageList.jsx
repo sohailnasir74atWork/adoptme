@@ -514,6 +514,26 @@ const PrivateMessageList = ({
             }}>
               <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
             </MenuOption>
+            {/* Delete — admin-only; normal users cannot delete messages (not even their own) */}
+            {isAdmin && onDeleteMessage && (
+              <MenuOption onSelect={() => {
+                triggerHapticFeedback('impactMedium');
+                Alert.alert(
+                  t('chat.delete', { defaultValue: 'Delete' }),
+                  t('chat.delete_message_confirmation', { defaultValue: 'Delete this message? It will be removed for both of you.' }),
+                  [
+                    { text: t('chat.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+                    {
+                      text: t('chat.delete', { defaultValue: 'Delete' }),
+                      style: 'destructive',
+                      onPress: () => onDeleteMessage(item.id),
+                    },
+                  ]
+                );
+              }}>
+                <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete')}</Text>
+              </MenuOption>
+            )}
             {!isMyMessage && (
               <MenuOption onSelect={() => handleReport(item)}>
                 <Text style={styles.menuOptionText}>{t('chat.report')}</Text>

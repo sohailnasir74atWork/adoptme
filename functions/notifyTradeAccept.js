@@ -29,7 +29,7 @@ exports.notifyTradeAccept = functions
     const { toUid, type, message, fromName } = data;
 
     // Only handle trade-related notifications
-    if (!['trade_accepted', 'trade_ping'].includes(type)) {
+    if (!['trade_accepted', 'trade_ping', 'trade_closed'].includes(type)) {
       return null;
     }
 
@@ -63,11 +63,15 @@ exports.notifyTradeAccept = functions
     // Build notification content
     const title = type === 'trade_accepted'
       ? '🤝 Trade Accepted!'
-      : '📢 Trade Ping!';
+      : type === 'trade_ping'
+        ? '📢 Trade Ping!'
+        : '📴 Trade No Longer Available';
 
     const body = message || (type === 'trade_accepted'
       ? `${fromName || 'Someone'} accepted your trade!`
-      : `${fromName || 'Someone'} wants to trade with you!`);
+      : type === 'trade_ping'
+        ? `${fromName || 'Someone'} wants to trade with you!`
+        : 'A trade you accepted is no longer available.');
 
     const payload = {
       notification: { title, body },

@@ -13,6 +13,7 @@
 // upserts here, so this table is read-only from the client.
 
 import { supabase } from './client';
+import { ensureRealtimeAuth } from './chatBackend';
 
 // -----------------------------------------------------------------
 // Row mapper — DB snake_case → UI camelCase
@@ -77,6 +78,33 @@ export async function loadChatMeta(ownerUid) {
     from += CHAT_META_PAGE;
   }
   return out;
+}
+
+// -----------------------------------------------------------------
+// Incremental forward fetch — rows whose last-message timestamp is
+// strictly newer than `sinceMs`. Used by the reconnect gap-fill (see
+// subscribeToChatMeta) so chat_meta_data INSERT/UPDATE events missed
+// while the realtime socket was down (client.js disconnects it after
+// 20s in background; transient drops do the same) get backfilled with a
+// TINY query — normally 0–few rows — instead of a full inbox reload.
+// This is the cost-conscious counterpart to loadPrivateMessagesSince in
+// privateMessagesBackend. No new index required: the same
+// (owner_uid, timestamp_ms) ordering loadChatMeta relies on serves it.
+// -----------------------------------------------------------------
+export async function loadChatMetaSince(ownerUid, sinceMs = 0) {
+  if (!ownerUid) return [];
+  const { data, error } = await supabase
+    .from('chat_meta_data')
+    .select(CHAT_META_COLS)
+    .eq('owner_uid', ownerUid)
+    .gt('timestamp_ms', sinceMs || 0)
+    .order('timestamp_ms', { ascending: false, nullsFirst: false })
+    .limit(CHAT_META_PAGE);
+  if (error) {
+    console.warn('[chatMetaBackend] loadChatMetaSince error:', error.message);
+    return [];
+  }
+  return (data || []).map(fromChatMetaRow);
 }
 
 // -----------------------------------------------------------------
@@ -213,6 +241,9 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
   let cancelled = false;
   let initialDone = false;
   let subscribedOnce = false;
+  let prevStatus = null;      // last channel status seen (for reconnect detection)
+  let maxKnownTs = 0;         // newest timestamp_ms delivered — the gap-fill cursor
+  let gapFillInFlight = false;
 
   const tryReady = () => {
     if (initialDone && subscribedOnce && !cancelled) {
@@ -220,8 +251,34 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
     }
   };
 
-  // 1. Subscribe FIRST so we don't miss writes that land between the
-  //    initial load and the channel SUBSCRIBED state.
+  // Central delivery so the reconnect gap-fill cursor (maxKnownTs) stays
+  // accurate across BOTH the initial load and every realtime event.
+  const deliver = (row) => {
+    if (!row || cancelled) return;
+    if (row.timestamp && row.timestamp > maxKnownTs) maxKnownTs = row.timestamp;
+    onUpsert?.(row);
+  };
+
+  // Reconnect gap-fill. Supabase realtime does NOT replay events that
+  // fired while the socket was down (client.js tears the socket down
+  // after 20s in background; device sleep / network blips do the same),
+  // so a private message that landed during the gap would otherwise stay
+  // invisible in the inbox + unread badge until an app restart re-ran
+  // loadChatMeta. On every reconnect we fetch ONLY the rows newer than
+  // the newest we've already seen — usually 0–few rows — so this adds
+  // negligible egress and ZERO realtime cost. Mirrors the gap-fill the
+  // public + private chat bodies already do.
+  const runGapFill = () => {
+    if (cancelled || gapFillInFlight) return;
+    gapFillInFlight = true;
+    loadChatMetaSince(ownerUid, maxKnownTs)
+      .then((rows) => { if (!cancelled) rows.forEach(deliver); })
+      .catch((e) => console.warn('[chatMetaBackend] gap-fill failed:', e?.message))
+      .finally(() => { gapFillInFlight = false; });
+  };
+
+  // Attach handlers FIRST so nothing is lost between JOIN and bind; the
+  // initial loadChatMeta covers the pre-subscribe window.
   //
   // Topic is suffixed with a per-call random id because supabase-js
   // returns the *existing* channel if one with the same topic is
@@ -240,7 +297,7 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
         table: 'chat_meta_data',
         filter: `owner_uid=eq.${ownerUid}`,
       },
-      (payload) => { if (!cancelled) onUpsert?.(fromChatMetaRow(payload.new)); },
+      (payload) => deliver(fromChatMetaRow(payload.new)),
     )
     .on(
       'postgres_changes',
@@ -250,7 +307,7 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
         table: 'chat_meta_data',
         filter: `owner_uid=eq.${ownerUid}`,
       },
-      (payload) => { if (!cancelled) onUpsert?.(fromChatMetaRow(payload.new)); },
+      (payload) => deliver(fromChatMetaRow(payload.new)),
     )
     .on(
       'postgres_changes',
@@ -265,20 +322,39 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
         const partnerId = payload.old?.partner_uid;
         if (partnerId) onRemove?.(partnerId);
       },
-    )
-    .subscribe((status, err) => {
-      onStatus?.(status, err);
-      if (status === 'SUBSCRIBED') {
-        subscribedOnce = true;
-        tryReady();
-      }
-    });
+    );
 
-  // 2. Initial load runs in parallel with the subscribe handshake.
+  const onSubscribeStatus = (status, err) => {
+    onStatus?.(status, err);
+    if (status === 'SUBSCRIBED') {
+      // A SUBSCRIBED that follows a non-SUBSCRIBED status is a RECONNECT
+      // (CLOSED/CHANNEL_ERROR/TIMED_OUT → SUBSCRIBED) — backfill whatever
+      // the socket missed while it was down. The very first subscribe is
+      // already covered by the initial loadChatMeta below, so skip it.
+      if (prevStatus && prevStatus !== 'SUBSCRIBED') runGapFill();
+      subscribedOnce = true;
+      tryReady();
+    }
+    prevStatus = status;
+  };
+
+  // Refresh the realtime JWT before joining so a stale token on a
+  // long-lived socket can't silently drop our RLS-filtered
+  // postgres_changes (the public/private chat backends already do this;
+  // the chat-meta channel previously did not, so its events could quietly
+  // stop arriving after the Firebase token aged out). Handlers are bound
+  // above BEFORE subscribe, so deferring the subscribe by one async tick
+  // loses nothing.
+  ensureRealtimeAuth().finally(() => {
+    if (cancelled) return;
+    channel.subscribe(onSubscribeStatus);
+  });
+
+  // Initial load runs in parallel with the auth + subscribe handshake.
   loadChatMeta(ownerUid)
     .then((rows) => {
       if (cancelled) return;
-      rows.forEach((r) => onUpsert?.(r));
+      rows.forEach(deliver);
       initialDone = true;
       tryReady();
     })
@@ -318,6 +394,7 @@ export function subscribeToChatMetaShared(ownerUid, handlers = {}) {
     entry = {
       listeners: new Set(),
       rows: new Map(),     // partnerId -> row (current snapshot)
+      maxTs: 0,            // newest timestamp_ms seen (cursor for manual refresh)
       ready: false,
       lastStatus: null,
       unsubscribe: null,
@@ -327,6 +404,7 @@ export function subscribeToChatMetaShared(ownerUid, handlers = {}) {
     entry.unsubscribe = subscribeToChatMeta(ownerUid, {
       onUpsert: (row) => {
         if (row?.partnerId) entry.rows.set(row.partnerId, row);
+        if (row?.timestamp && row.timestamp > entry.maxTs) entry.maxTs = row.timestamp;
         entry.listeners.forEach((l) => l.onUpsert?.(row));
       },
       onRemove: (partnerId) => {
@@ -360,4 +438,45 @@ export function subscribeToChatMetaShared(ownerUid, handlers = {}) {
       _chatMetaShared.delete(ownerUid);
     }
   };
+}
+
+// -----------------------------------------------------------------
+// Manual full resync — the pull-to-refresh escape hatch.
+//
+// Realtime + the reconnect gap-fill are the steady-state paths; this is
+// the user-initiated recovery for the rare case where the socket stayed
+// up but silently missed an event (e.g. a stale token that never tripped
+// a status change). Because it's rare and only fires on an explicit pull,
+// it does a FULL loadChatMeta so it also reconciles deletions / unread /
+// mute changes an incremental gap-fill wouldn't catch. Results are fanned
+// through the shared entry, so ONE fetch updates both the inbox list and
+// the unread badge. No-op if no consumer is subscribed for this uid.
+// -----------------------------------------------------------------
+export async function refreshChatMetaShared(ownerUid) {
+  if (!ownerUid) return;
+  const entry = _chatMetaShared.get(ownerUid);
+  if (!entry) return;
+
+  const rows = await loadChatMeta(ownerUid);
+  const fresh = new Map();
+  for (const row of rows) {
+    if (!row?.partnerId) continue;
+    fresh.set(row.partnerId, row);
+    if (row.timestamp && row.timestamp > entry.maxTs) entry.maxTs = row.timestamp;
+  }
+
+  // Upsert everything from the fresh snapshot.
+  fresh.forEach((row, partnerId) => {
+    entry.rows.set(partnerId, row);
+    entry.listeners.forEach((l) => l.onUpsert?.(row));
+  });
+
+  // Drop rows that no longer exist server-side (deleted while we were
+  // offline) so the list doesn't keep phantom chats after a refresh.
+  for (const partnerId of Array.from(entry.rows.keys())) {
+    if (!fresh.has(partnerId)) {
+      entry.rows.delete(partnerId);
+      entry.listeners.forEach((l) => l.onRemove?.(partnerId));
+    }
+  }
 }

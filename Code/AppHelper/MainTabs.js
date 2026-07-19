@@ -19,7 +19,7 @@ import CustomTopTabs from '../ValuesScreen/TopTabs';
 import { setAppLanguage, loadLanguage } from '../../i18n';
 import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
-import { checkDailyStreak } from '../ChatScreen/GroupChat/badgeUtils';
+import { checkDailyStreak, syncReviewBadges } from '../ChatScreen/GroupChat/badgeUtils';
 const Tab = createBottomTabNavigator();
 
 const TabIcon = React.memo(({ iconName, color, size, focused }) => (
@@ -50,7 +50,7 @@ const TabBarButton = React.memo(({ onPress, children, isSelected, isDarkMode, ta
 
 const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { t, i18n } = useTranslation();
-  const { isAdmin, user, theme, appdatabase } = useGlobalState();
+  const { isAdmin, user, theme, appdatabase, firestoreDB } = useGlobalState();
 
   // 🔥 Daily login streak check + cosmetics sync (fire-and-forget)
   useEffect(() => {
@@ -59,8 +59,10 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       syncMyCosmetics(appdatabase, user.id, true); // force=true on app start
       if (user.displayName) setCachedUsername(user.displayName);
       if (user.avatar) setCachedAvatar(user.avatar);
+      // 🏅 One-time backfill of Reviewer/5-Star badges (MMKV-gated, fire-and-forget)
+      if (firestoreDB) syncReviewBadges(appdatabase, firestoreDB, user.id);
     }
-  }, [user?.id, appdatabase]);
+  }, [user?.id, appdatabase, firestoreDB]);
 
   // ── Set Android system navigation bar color to match theme ──
   useEffect(() => {

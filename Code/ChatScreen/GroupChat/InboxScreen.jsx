@@ -9,6 +9,8 @@ import {
   Image,
   Alert,
   InteractionManager,
+  RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
@@ -25,6 +27,7 @@ import FramedAvatar from '../GroupChat/FramedAvatar';
 import { getCachedProfile, warmProfileCache } from '../../Helper/profileCache';
 import {
   subscribeToChatMetaShared,
+  refreshChatMetaShared,
   resetUnreadCount,
   setChatMuted,
   deleteChatMeta,
@@ -55,6 +58,9 @@ const InboxScreen = ({ bannedUsers }) => {
   // the "Reconnecting…" banner. Only shown if degraded for >1.5s.
   const [reconnecting, setReconnecting] = useState(false);
   const reconnectTimerRef = useRef(null);
+  // Pull-to-refresh: user-initiated full resync (the escape hatch when
+  // realtime silently missed an event). Costs one loadChatMeta per pull.
+  const [refreshing, setRefreshing] = useState(false);
 
   // Phase 5 clean-cut: this screen is Supabase-only for chat_meta_data
   // — reads via subscribeToChatMeta, writes via setChatMuted / resetUnreadCount
@@ -205,6 +211,21 @@ const InboxScreen = ({ bannedUsers }) => {
       .then(map => setStreaks(map))
       .catch(() => { });
   }, [user?.id, firestoreDB]);
+
+  // ⤵️ Pull-to-refresh — force a full server resync through the shared
+  // subscription so both this list and the unread badge recover any event
+  // realtime silently missed, without needing an app restart.
+  const handleRefresh = useCallback(async () => {
+    if (!user?.id || refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshChatMetaShared(user.id);
+    } catch (error) {
+      console.warn('[Inbox] refresh failed:', error?.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user?.id, refreshing]);
 
   // 🔔 Toggle mute for a private chat
   const handleToggleMute = useCallback(async (otherUserId, otherUserName) => {
@@ -505,21 +526,36 @@ const InboxScreen = ({ bannedUsers }) => {
     // prop below carries it and re-renders rows once the cache warms.
   }, [styles, user, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t, streaks]);
 
+  // Shared pull-to-refresh control — used on both the list and the empty
+  // state so a missing new chat can always be recovered with a pull.
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={handleRefresh}
+      tintColor={isDarkMode ? '#94A3B8' : '#64748B'}
+      colors={['#1E88E5']}
+    />
+  );
+
   return (
     <View style={styles.container}>
       <SyncBanner visible={reconnecting && !displayLoading} isDarkMode={isDarkMode} />
       {displayLoading ? (
         <ChatListSkeleton count={6} isDarkMode={isDarkMode} />
       ) : filteredChats.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={refreshControl}
+        >
           <Text style={styles.emptyText}> {t("chat.no_chats_available")}</Text>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={displayedChats}
           extraData={`${profileCacheVersion}-${displayedChatsCount}`}
           keyExtractor={(item, index) => item?.chatId || `chat-${index}`}
           renderItem={renderChatItem}
+          refreshControl={refreshControl}
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
           windowSize={10}

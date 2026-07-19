@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-19",
+  "enabled": true,
+  "stageTasks": {
+    "common": [3, 6, 11, 16, 20],
+    "uncommon": [5, 9, 15, 20, 31],
+    "rare": [10, 14, 21, 30, 45],
+    "ultra-rare": [10, 15, 25, 41, 69],
+    "legendary": [15, 26, 43, 72, 119]
+  },
+  "potionTasks": 30,
+  "paceOptions": [30, 60, 100],
+  "petPenMultiplier": 1.7,
+  "clock": {
+    "enabled": true,
+    "campingMinutes": [27, 57],
+    "sickMinutes": [0, 30],
+    "dayLengthMin": 10,
+    "rotation": ["bored", "school", "beach_party", "pizza_party", "salon"]
+  }
+}
