@@ -1,39 +1,46 @@
-// InterstitialAdManager.js - Optimized with A/B Testing & High Show Rate
+// InterstitialAdManager.js - single warm instance, Pro-gated, bounded retries
 import {
   InterstitialAd,
   AdEventType,
 } from 'react-native-google-mobile-ads';
-import { Platform } from 'react-native';
 import getAdUnitId from './ads';
-import config from '../Helper/Environment';
 import { ensureAdsInitialized } from './init';
 import { setFullScreenAdVisible } from './adVisibility';
 
-// ✅ Two ad unit IDs for A/B testing
 const interstitialAdUnitId = getAdUnitId('interstitial');
-const gameInterstitialAdUnitId = Platform.OS === 'ios'
-  ? config.gameInterstitialIOS
-  : config.gameInterstitialAndroid;
+
+// isPro read straight from MMKV (same pattern as openApp.js). Every showAd()
+// call site already checks isPro before calling, so a Pro user can never be
+// shown an interstitial — which made the old unconditional preload pure
+// auction waste (fills that could not ever become impressions). AdMob show
+// rate for this unit was ~3%; roughly half of that came from preloading two
+// instances for everyone on every launch.
+let storage = null;
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  storage = createMMKV();
+} catch (_) {}
+const isProUser = () => {
+  try {
+    return storage ? storage.getBoolean('isPro') === true : false;
+  } catch (_) {
+    return false;
+  }
+};
 
 class InterstitialAdManager {
-  // ✅ Two ad instances for A/B testing
-  static adA = InterstitialAd.createForAdRequest(interstitialAdUnitId);
-  static adB = InterstitialAd.createForAdRequest(gameInterstitialAdUnitId);
-
-  static isAdALoaded = false;
-  static isAdBLoaded = false;
-  static isAdALoading = false;
-  static isAdBLoading = false;
+  // Single ad instance. The old A/B dual-instance (primary + game unit)
+  // doubled fills per session while only one could ever be shown — halving
+  // the unit's show rate for zero measured eCPM difference between the units.
+  static ad = null;
+  static isLoaded = false;
+  static isLoading = false;
   static hasInitialized = false;
   static unsubscribeEvents = [];
 
-  static retryCountA = 0;
-  static retryCountB = 0;
+  static retryCount = 0;
   static maxRetries = 5;
-  
-  // ✅ A/B test tracking (50/50 split)
-  static abTestCounter = 0;
-  
+
   // ✅ Wait timeout for ad to load (improves show rate)
   static WAIT_TIMEOUT_MS = 3000;
 
@@ -44,111 +51,93 @@ class InterstitialAdManager {
   // ad-serving-limit risk. When inside the cooldown we skip the ad and run the
   // caller's callback immediately so content is never blocked.
   static lastShownAt = 0;
-  static COOLDOWN_MS = 60000;
+  static COOLDOWN_MS = 30000;
 
   static init() {
     if (this.hasInitialized) return;
-
-    // ============ AD A (Primary Interstitial) ============
-    const onAdALoaded = this.adA.addAdEventListener(
-      AdEventType.LOADED,
-      () => {
-        this.isAdALoaded = true;
-        this.isAdALoading = false;
-        this.retryCountA = 0;
-      }
-    );
-
-    const onAdAError = this.adA.addAdEventListener(
-      AdEventType.ERROR,
-      (error) => {
-        this.isAdALoaded = false;
-        this.isAdALoading = false;
-        this.retryLoadAdA();
-      }
-    );
-
-    // ============ AD B (Game Interstitial) ============
-    const onAdBLoaded = this.adB.addAdEventListener(
-      AdEventType.LOADED,
-      () => {
-        this.isAdBLoaded = true;
-        this.isAdBLoading = false;
-        this.retryCountB = 0;
-      }
-    );
-
-    const onAdBError = this.adB.addAdEventListener(
-      AdEventType.ERROR,
-      (error) => {
-        this.isAdBLoaded = false;
-        this.isAdBLoading = false;
-        this.retryLoadAdB();
-      }
-    );
-
-    this.unsubscribeEvents = [onAdALoaded, onAdAError, onAdBLoaded, onAdBError];
-
-    // ✅ Load both ads once the request config is applied (config-before-load,
-    // so the first impression isn't served at AdMob's default 'G' ceiling).
-    ensureAdsInitialized()
-      .then(() => {
-        this.loadAdA();
-        this.loadAdB();
-      })
-      .catch(() => {});
-
+    // ✅ Mark initialized synchronously so re-entry / show() before the async
+    // init resolves doesn't double-attach listeners or re-load.
     this.hasInitialized = true;
+
+    // Pro users never see interstitials — skip the warm load entirely. If the
+    // user loses Pro later, the first showAd()/prepare() lazily creates the ad.
+    if (isProUser()) return;
+
+    // ✅ Config-before-load: await the shared AdMob init (consent →
+    // setRequestConfiguration → initialize) so the first ad request already
+    // respects maxAdContentRating 'T' and the user's consent choices.
+    ensureAdsInitialized()
+      .then(() => this._createAndLoad())
+      .catch(() => {
+        // If init somehow rejects, still attempt to load so ads aren't dead.
+        this._createAndLoad();
+      });
   }
 
-  // ✅ Safe load methods to prevent duplicate loading
-  static loadAdA() {
-    if (!this.isAdALoaded && !this.isAdALoading) {
-      this.isAdALoading = true;
-      this.adA.load();
+  static _createAndLoad() {
+    if (this.ad) {
+      this._load();
+      return;
+    }
+    this.ad = InterstitialAd.createForAdRequest(interstitialAdUnitId);
+
+    const onLoaded = this.ad.addAdEventListener(AdEventType.LOADED, () => {
+      this.isLoaded = true;
+      this.isLoading = false;
+      this.retryCount = 0;
+    });
+
+    const onError = this.ad.addAdEventListener(AdEventType.ERROR, () => {
+      this.isLoaded = false;
+      this.isLoading = false;
+      this._retryLoad();
+    });
+
+    this.unsubscribeEvents = [onLoaded, onError];
+    this._load();
+  }
+
+  static _load() {
+    if (this.isLoaded || this.isLoading || !this.ad) return;
+    this.isLoading = true;
+    try {
+      this.ad.load();
+    } catch (_) {
+      this.isLoading = false;
+      this._retryLoad();
     }
   }
 
-  static loadAdB() {
-    if (!this.isAdBLoaded && !this.isAdBLoading) {
-      this.isAdBLoading = true;
-      this.adB.load();
-    }
+  // ✅ Bounded retry with backoff (1s, 2s, 4s, 8s, 16s), then STOP. The old
+  // infinite 15s loop burned no-fill requests all session in zero-fill geos,
+  // dragging match rate down and inviting ad-serving limits. Loading resumes
+  // naturally on the next user signal: prepare(), showAd(), or a
+  // show-completion reload.
+  static _retryLoad() {
+    if (this.retryCount >= this.maxRetries) return;
+    const delay = Math.pow(2, this.retryCount) * 1000;
+    setTimeout(() => {
+      this.retryCount += 1;
+      this._load();
+    }, delay);
   }
 
-  // ✅ Retry with shorter delays (1s, 2s, 4s, 8s, 16s) then continue with 15s interval
-  static retryLoadAdA() {
-    if (this.retryCountA < this.maxRetries) {
-      const delay = Math.pow(2, this.retryCountA) * 1000;
-      setTimeout(() => {
-        this.retryCountA += 1;
-        this.loadAdA();
-      }, delay);
-    } else {
-      // ✅ Continue retrying every 15 seconds (faster retry)
-      setTimeout(() => {
-        this.retryCountA = 0;
-        this.loadAdA();
-      }, 15000);
+  // ✅ Proximity preload: call when a show is likely soon. Idempotent and
+  // cheap — no-ops when an ad is already loaded/loading. Also un-sticks a
+  // manager whose bounded retries ran out.
+  static prepare() {
+    if (!this.hasInitialized) {
+      this.init();
+      return;
     }
+    if (isProUser() || this.isLoaded || this.isLoading) return;
+    this.retryCount = 0;
+    if (this.ad) this._load();
+    else this._createAndLoad();
   }
 
-  static retryLoadAdB() {
-    if (this.retryCountB < this.maxRetries) {
-      const delay = Math.pow(2, this.retryCountB) * 1000;
-      setTimeout(() => {
-        this.retryCountB += 1;
-        this.loadAdB();
-      }, delay);
-    } else {
-      setTimeout(() => {
-        this.retryCountB = 0;
-        this.loadAdB();
-      }, 15000);
-    }
-  }
-
-  // ✅ Show ad with A/B testing, fallback, AND wait mechanism for higher show rate
+  // ✅ Show ad. Same contract as before: caller's callback always runs, and
+  // content is never gated on ad availability.
   static showAd(onAdClosedCallback, onAdUnavailableCallback) {
     if (!this.hasInitialized) {
       this.init();
@@ -161,71 +150,36 @@ class InterstitialAdManager {
       return;
     }
 
-    // ✅ Determine which ad to try first (A/B test: 50/50 split)
-    this.abTestCounter += 1;
-    const tryAdAFirst = this.abTestCounter % 2 === 0;
-
-    // ✅ Try to show an ad with fallback to the other
-    if (tryAdAFirst) {
-      if (this.isAdALoaded) {
-        this.showAdA(onAdClosedCallback);
-        return;
-      } else if (this.isAdBLoaded) {
-        this.showAdB(onAdClosedCallback);
-        return;
-      }
-    } else {
-      if (this.isAdBLoaded) {
-        this.showAdB(onAdClosedCallback);
-        return;
-      } else if (this.isAdALoaded) {
-        this.showAdA(onAdClosedCallback);
-        return;
-      }
+    if (this.isLoaded && this.ad) {
+      this._show(onAdClosedCallback);
+      return;
     }
 
-    // ✅ Neither ad is ready - wait for one to load (up to WAIT_TIMEOUT_MS)
-    this.waitForAdAndShow(onAdClosedCallback, onAdUnavailableCallback, tryAdAFirst);
+    // ✅ Ad not ready - wait for one to load (up to WAIT_TIMEOUT_MS). This
+    // converts near-miss triggers into shows instead of instantly giving up.
+    this.waitForAdAndShow(onAdClosedCallback, onAdUnavailableCallback);
   }
 
-  // ✅ NEW: Wait for ad to load before giving up (improves show rate significantly)
-  static waitForAdAndShow(onAdClosedCallback, onAdUnavailableCallback, tryAdAFirst) {
+  // ✅ Wait for the ad to load before giving up (improves show rate)
+  static waitForAdAndShow(onAdClosedCallback, onAdUnavailableCallback) {
     const startTime = Date.now();
-    
-    // ✅ Trigger load if not already loading
-    this.loadAdA();
-    this.loadAdB();
+
+    // ✅ Trigger a load if not already loading (also resets exhausted retries)
+    this.prepare();
 
     const checkInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
 
-      // ✅ Check if any ad is now ready
-      if (tryAdAFirst) {
-        if (this.isAdALoaded) {
-          clearInterval(checkInterval);
-          this.showAdA(onAdClosedCallback);
-          return;
-        } else if (this.isAdBLoaded) {
-          clearInterval(checkInterval);
-          this.showAdB(onAdClosedCallback);
-          return;
-        }
-      } else {
-        if (this.isAdBLoaded) {
-          clearInterval(checkInterval);
-          this.showAdB(onAdClosedCallback);
-          return;
-        } else if (this.isAdALoaded) {
-          clearInterval(checkInterval);
-          this.showAdA(onAdClosedCallback);
-          return;
-        }
+      if (this.isLoaded && this.ad) {
+        clearInterval(checkInterval);
+        this._show(onAdClosedCallback);
+        return;
       }
 
       // ✅ Timeout reached - give up
       if (elapsed >= this.WAIT_TIMEOUT_MS) {
         clearInterval(checkInterval);
-        
+
         if (typeof onAdUnavailableCallback === 'function') {
           onAdUnavailableCallback();
         } else if (typeof onAdClosedCallback === 'function') {
@@ -235,17 +189,19 @@ class InterstitialAdManager {
     }, 100); // Check every 100ms
   }
 
-  static showAdA(onAdClosedCallback) {
+  static _show(onAdClosedCallback) {
     // ✅ Mark as not loaded BEFORE showing to prevent double-show
-    this.isAdALoaded = false;
+    this.isLoaded = false;
     this.lastShownAt = Date.now();
     setFullScreenAdVisible(true);
 
-    const unsubscribeClose = this.adA.addAdEventListener(
+    const unsubscribeClose = this.ad.addAdEventListener(
       AdEventType.CLOSED,
       () => {
         setFullScreenAdVisible(false);
-        this.loadAdA(); // Preload next immediately
+        // Preload the next one: the user just proved they hit ad triggers,
+        // so a warm follow-up is justified (unlike blind preloading).
+        this._load();
 
         if (typeof onAdClosedCallback === 'function') {
           onAdClosedCallback();
@@ -255,69 +211,38 @@ class InterstitialAdManager {
     );
 
     try {
-      this.adA.show();
+      this.ad.show();
     } catch (error) {
       setFullScreenAdVisible(false);
       unsubscribeClose();
-      this.loadAdA();
+      this._load();
       if (typeof onAdClosedCallback === 'function') {
         onAdClosedCallback();
       }
     }
   }
 
-  static showAdB(onAdClosedCallback) {
-    // ✅ Mark as not loaded BEFORE showing to prevent double-show
-    this.isAdBLoaded = false;
-    this.lastShownAt = Date.now();
-    setFullScreenAdVisible(true);
-
-    const unsubscribeClose = this.adB.addAdEventListener(
-      AdEventType.CLOSED,
-      () => {
-        setFullScreenAdVisible(false);
-        this.loadAdB(); // Preload next immediately
-
-        if (typeof onAdClosedCallback === 'function') {
-          onAdClosedCallback();
-        }
-        unsubscribeClose();
-      }
-    );
-
-    try {
-      this.adB.show();
-    } catch (error) {
-      setFullScreenAdVisible(false);
-      unsubscribeClose();
-      this.loadAdB();
-      if (typeof onAdClosedCallback === 'function') {
-        onAdClosedCallback();
-      }
-    }
-  }
-
-  // ✅ Check if any ad is available
+  // ✅ Check if the ad is available
   static isReady() {
-    return this.isAdALoaded || this.isAdBLoaded;
+    return this.isLoaded;
   }
 
-  // ✅ Force reload both ads (useful after network recovery)
+  // ✅ Force reload (useful after network recovery)
   static forceReload() {
-    this.isAdALoading = false;
-    this.isAdBLoading = false;
-    this.loadAdA();
-    this.loadAdB();
+    this.retryCount = 0;
+    if (this.ad) this._load();
+    else if (this.hasInitialized && !isProUser()) this._createAndLoad();
   }
 
   static cleanup() {
-    this.unsubscribeEvents.forEach((unsubscribe) => unsubscribe());
+    this.unsubscribeEvents.forEach((unsubscribe) => {
+      try { unsubscribe(); } catch (_) {}
+    });
     this.unsubscribeEvents = [];
     this.hasInitialized = false;
-    this.isAdALoaded = false;
-    this.isAdBLoaded = false;
-    this.isAdALoading = false;
-    this.isAdBLoading = false;
+    this.isLoaded = false;
+    this.isLoading = false;
+    this.ad = null;
   }
 }
 
