@@ -476,7 +476,7 @@ const LeaderboardScreen = () => {
           </Text>
         )}
 
-        {!localState.isPro && <BannerAdComponent />}
+        {!localState.isPro && <BannerAdComponent collapsible />}
       </View>
 
       <ProfileBottomDrawer

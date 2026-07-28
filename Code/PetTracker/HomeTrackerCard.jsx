@@ -9,8 +9,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
-import { getGrinds, subscribe, todayCount, getDailyGoal } from './trackerStorage';
-import { grindTotals } from './agingMath';
+import { getGrinds, subscribe, todayCount, getDailyGoal, getSessions } from './trackerStorage';
+import { grindTotals, etaDays, measuredPace } from './agingMath';
 import { GOAL_COLORS, ProgressBar } from './trackerShared';
 
 const HomeTrackerCard = ({ isDarkMode, navigation }) => {
@@ -38,10 +38,10 @@ const HomeTrackerCard = ({ isDarkMode, navigation }) => {
         </View>
         <View style={{ flex: 1, marginHorizontal: 12 }}>
           <Text style={[styles.title, { color: textColor }]}>
-            {t('tracker.home_promo_title', { defaultValue: 'Pet Aging & Growing Tracker' })}
+            {t('tracker.home_promo_title', { defaultValue: 'Grow My Pets' })}
           </Text>
           <Text style={[styles.sub, { color: subColor }]} numberOfLines={2}>
-            {t('tracker.home_promo_sub', { defaultValue: 'Plan Neon & Mega grinds — track every pet to Full Grown' })}
+            {t('tracker.home_promo_sub', { defaultValue: 'See how long until your pet is Full Grown, Neon or Mega' })}
           </Text>
         </View>
         <FontAwesome name="chevron-right" size={12} color={config.colors.primary} />
@@ -53,6 +53,7 @@ const HomeTrackerCard = ({ isDarkMode, navigation }) => {
   const goalColor = GOAL_COLORS[grind.goal] || config.colors.primary;
   const today = todayCount();
   const goal = getDailyGoal();
+  const eta = etaDays(totals.remaining, measuredPace(getSessions()) || grind.tasksPerDay);
 
   return (
     <TouchableOpacity
@@ -80,14 +81,18 @@ const HomeTrackerCard = ({ isDarkMode, navigation }) => {
           style={{ marginVertical: 5 }}
         />
         <Text style={[styles.sub, { color: subColor }]} numberOfLines={1}>
-          {t('tracker.tasks_left', { count: totals.remaining, defaultValue: '{{count}} tasks left' })}
+          {totals.remaining === 0
+            ? t('tracker.all_done', { defaultValue: 'All grown up!' })
+            : eta != null
+              ? t('tracker.days_to_go', { count: eta, defaultValue: 'About {{count}} days to go' })
+              : t('tracker.almost_there', { defaultValue: 'Almost there!' })}
           {'  ·  '}
           {t('tracker.today_short', { done: today, goal, defaultValue: 'Today {{done}}/{{goal}}' })}
         </Text>
       </View>
       <View style={{ alignItems: 'center', gap: 2 }}>
         <Text style={[styles.continueText, { color: config.colors.primary }]}>
-          {t('tracker.continue_grind', { defaultValue: 'Continue' })}
+          {t('tracker.continue_grind', { defaultValue: 'Keep going' })}
         </Text>
         <FontAwesome name="chevron-right" size={11} color={config.colors.primary} />
       </View>

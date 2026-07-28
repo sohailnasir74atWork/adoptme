@@ -1,17 +1,20 @@
 /**
  * TradeJournal.js — Pet Portfolio Hub
  *
- * 2-tab hub:
+ * 3-tab hub:
  * 🎒 My Pets — owned pets grid, add new, total value
  * ⭐ Goals  — wishlist with progress bars + goal tracking
+ * 📈 Timeline — logged trade history feed + stats dashboard
  *
- * Active/Done/Saved trades were removed from here — the Trades feed
+ * Active/Saved trades were removed from here — the Trades feed
  * now has My Trades / Saved filters for instant access.
+ * Timeline is fed by the "Log Trade" flow on the Calculator screen
+ * (TradeCompletion.js → RTDB tradeJournal/{uid} + tradeStats/{uid}).
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, Image,
+  View, Text, TouchableOpacity, FlatList, Image,
   StyleSheet, Dimensions, ActivityIndicator, Alert, ScrollView, TextInput,
 } from 'react-native';
 import { useNavigation, useIsFocused, useRoute } from '@react-navigation/native';
@@ -19,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   doc, getDoc, setDoc, serverTimestamp as fsServerTimestamp,
 } from '@react-native-firebase/firestore';
+import { ref, get, set, remove, query as rtdbQuery, orderByChild, limitToLast, endBefore } from '@react-native-firebase/database';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
@@ -31,6 +35,12 @@ import BannerAdComponent from '../Ads/bannerAds';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PET_CARD_SIZE = (SCREEN_WIDTH - 64) / 3;
+
+const RESULT_META = {
+  win:  { emoji: '🏆', label: 'trade_journal.results.i_won',  color: '#10B981' },
+  fair: { emoji: '🤝', label: 'trade_journal.results.even', color: '#F59E0B' },
+  loss: { emoji: '📉', label: 'trade_journal.results.i_lost', color: '#EF4444' },
+};
 
 const formatValue = (v) => {
   if (!v || typeof v !== 'number') return '0';
@@ -50,12 +60,17 @@ const formatPlain = (v) => {
 const TAB_COLORS = {
   pets: '#3B82F6',
   goals: '#F59E0B',
+  timeline: '#8B5CF6',
 };
 
 const TABS = [
   { key: 'pets', icon: 'bag-shopping', label: 'trade_journal.tabs.my_pets' },
   { key: 'goals', icon: 'star', label: 'trade_journal.tabs.goals' },
+  { key: 'timeline', icon: 'clock-rotate-left', label: 'trade_journal.tabs.done_trades' },
 ];
+
+// Trade history pages 5 at a time (server-side, RTDB)
+const PAGE_SIZE = 5;
 
 const TradeJournal = ({
   firestoreDB, db, uid, isDarkMode,
@@ -70,7 +85,10 @@ const TradeJournal = ({
   const { localState, updateLocalState } = useLocalState();
   const [ownedPets, setOwnedPets] = useState(localState.ownedPets || []);
   const [wishlistPets, setWishlistPets] = useState(localState.wishlistPets || []);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [showPetPicker, setShowPetPicker] = useState(false);
   const [petPickerMode, setPetPickerMode] = useState('owned');
   const [petSearch, setPetSearch] = useState('');
@@ -129,23 +147,140 @@ const TradeJournal = ({
     }
   }, [firestoreDB, uid, updateLocalState]);
 
+  // ── Trade stats (lightweight separate node) ──
+  const [tradeStats, setTradeStats] = useState(null);
+  const fetchTradeStats = useCallback(async () => {
+    if (!db || !uid) return;
+    try {
+      const snap = await get(ref(db, `tradeStats/${uid}`));
+      setTradeStats(snap.exists() ? snap.val() : null);
+    } catch (err) {
+      console.warn('[MyStuff] fetch stats error:', err?.message);
+    }
+  }, [db, uid]);
+
+  const updateTradeStats = useCallback(async (rating, gaveValue, gotValue, delta = 1) => {
+    if (!db || !uid) return;
+    try {
+      const snap = await get(ref(db, `tradeStats/${uid}`));
+      const current = snap.exists() ? snap.val() : { total: 0, wins: 0, fairs: 0, losses: 0, totalGave: 0, totalGot: 0 };
+      const updated = {
+        total: (current.total || 0) + delta,
+        wins: (current.wins || 0) + (rating === 'win' ? delta : 0),
+        fairs: (current.fairs || 0) + (rating === 'fair' ? delta : 0),
+        losses: (current.losses || 0) + (rating === 'loss' ? delta : 0),
+        totalGave: (current.totalGave || 0) + (gaveValue * delta),
+        totalGot: (current.totalGot || 0) + (gotValue * delta),
+      };
+      await set(ref(db, `tradeStats/${uid}`), updated);
+      setTradeStats(updated);
+    } catch (err) {
+      console.warn('[MyStuff] update stats error:', err?.message);
+    }
+  }, [db, uid]);
+
+  // ── Fetch trade history (server-side paginated — 5 at a time) ──
+  const historyLastTimestampRef = useRef(null);
+  const fetchHistory = useCallback(async (loadMore = false) => {
+    if (!db || !uid) return;
+    try {
+      let q;
+      const histRef = ref(db, `tradeJournal/${uid}`);
+      if (loadMore && historyLastTimestampRef.current !== null) {
+        q = rtdbQuery(histRef, orderByChild('completedAt'), endBefore(historyLastTimestampRef.current), limitToLast(PAGE_SIZE));
+      } else {
+        q = rtdbQuery(histRef, orderByChild('completedAt'), limitToLast(PAGE_SIZE));
+      }
+      const snap = await get(q);
+      if (!snap.exists()) {
+        if (!loadMore) setHistory([]);
+        setHasMoreHistory(false);
+        return;
+      }
+      const data = snap.val();
+      const arr = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+      arr.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+      setHasMoreHistory(arr.length >= PAGE_SIZE);
+      if (loadMore) {
+        if (arr.length > 0) historyLastTimestampRef.current = arr[arr.length - 1].completedAt || 0;
+        setHistory(prev => [...prev, ...arr]);
+      } else {
+        historyLastTimestampRef.current = arr.length > 0 ? arr[arr.length - 1].completedAt || 0 : null;
+        setHistory(arr);
+      }
+    } catch (err) {
+      console.warn('[MyStuff] fetch history error:', err?.message);
+    }
+  }, [db, uid]);
+
+  // ── Clear trade history ──
+  const clearHistory = useCallback(() => {
+    Alert.alert(
+      t('trade_journal.alerts.clear_history_title'),
+      t('trade_journal.alerts.clear_history_msg'),
+      [
+        { text: t('trade_journal.alerts.cancel'), style: 'cancel' },
+        {
+          text: t('trade_journal.alerts.clear_all'), style: 'destructive',
+          onPress: async () => {
+            try {
+              if (db && uid) {
+                await remove(ref(db, `tradeJournal/${uid}`));
+                await remove(ref(db, `tradeStats/${uid}`));
+              }
+              setHistory([]);
+              setTradeStats(null);
+              historyLastTimestampRef.current = null;
+              setHasMoreHistory(false);
+              Alert.alert(t('trade_journal.alerts.done'), t('trade_journal.alerts.history_cleared'));
+            } catch (err) {
+              Alert.alert(t('trade_journal.alerts.error'), t('trade_journal.alerts.could_not_clear'));
+            }
+          },
+        },
+      ]
+    );
+  }, [db, uid, t]);
+
   const initialLoadDoneRef = useRef(false);
   useEffect(() => {
     if (visible) {
-      // Only fetch pets/goals once — they only change via user actions
+      // Only fetch pets/goals/history once — they only change via user actions
       // which already update state directly.
       if (!initialLoadDoneRef.current) {
         setLoading(true);
-        fetchPets()
+        setHasMoreHistory(true);
+        Promise.all([fetchPets(), fetchHistory(), fetchTradeStats()])
           .finally(() => {
             setLoading(false);
             initialLoadDoneRef.current = true;
             setTimeout(() => { hasFetchedRef.current = true; }, 200);
           });
         fetchAnalyticsData().then(setAnalyticsMaps).catch(() => {});
+      } else {
+        // On re-focus, refresh history/stats only — a trade may have just been
+        // logged from the Calculator screen. One 5-row RTDB get, no listener.
+        historyLastTimestampRef.current = null;
+        setHasMoreHistory(true);
+        Promise.all([fetchHistory(), fetchTradeStats()]);
+
+        // Logging a trade rewrites the inventory (gave items out, got items in)
+        // and mirrors it to MMKV. Pull that in rather than re-reading Firestore.
+        // hasFetchedRef is parked so the auto-save effect doesn't echo the same
+        // list straight back to Firestore.
+        const cachedOwned = localState.ownedPets;
+        if (Array.isArray(cachedOwned) && JSON.stringify(cachedOwned) !== JSON.stringify(ownedPetsRef.current)) {
+          hasFetchedRef.current = false;
+          setOwnedPets(cachedOwned);
+          setTimeout(() => { hasFetchedRef.current = true; }, 200);
+        }
       }
     }
-  }, [visible, fetchPets]);
+    // localState.ownedPets is read, not depended on: adding it would re-run this
+    // effect (and re-fetch history) on every pet add/remove made on this screen.
+    // Focus changes are the only trigger we want.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, fetchPets, fetchHistory, fetchTradeStats]);
 
 
   // ── Save pets to Firestore ──
@@ -330,6 +465,31 @@ const TradeJournal = ({
   const portfolioValue = useMemo(() =>
     ownedPets.reduce((s, p) => s + lookupPetValue(p), 0)
   , [ownedPets, lookupPetValue]);
+
+  // Net value needs real-time calculation from loaded history
+  const netValue = useMemo(() => {
+    if (history.length === 0) return 0;
+    let gaveSum = 0, gotSum = 0;
+    history.forEach(h => {
+      (h.gave || []).forEach(p => { gaveSum += lookupPetValue(p); });
+      (h.got || []).forEach(p => { gotSum += lookupPetValue(p); });
+    });
+    return gotSum - gaveSum;
+  }, [history, lookupPetValue]);
+
+  // Merge stored stats with real-time net value
+  const stats = useMemo(() => {
+    if (!tradeStats) return null;
+    const total = tradeStats.total || 0;
+    return {
+      total,
+      wins: tradeStats.wins || 0,
+      fairs: tradeStats.fairs || 0,
+      losses: tradeStats.losses || 0,
+      winRate: total > 0 ? Math.round(((tradeStats.wins || 0) / total) * 100) : 0,
+      netValue,
+    };
+  }, [tradeStats, netValue]);
 
   // Pets list as user sees it: filtered by search, sorted by chosen mode.
   // Each entry keeps its originalIndex so removePet still operates on the
@@ -859,6 +1019,322 @@ const TradeJournal = ({
     );
   };
 
+  // ════════════════════════════════════════════════
+  // TAB 3: TIMELINE (Logged / completed trades)
+  // ════════════════════════════════════════════════
+  // ── Delete single history item ──
+  const deleteHistoryItem = useCallback((item) => {
+    Alert.alert(t('trade_journal.alerts.delete_trade_title'), t('trade_journal.timeline.delete_msg', { defaultValue: 'This will remove this trade record.' }), [
+      { text: t('trade_journal.alerts.cancel'), style: 'cancel' },
+      {
+        text: t('trade_journal.alerts.delete'), style: 'destructive',
+        onPress: async () => {
+          try {
+            if (db && uid && item.id) {
+              await remove(ref(db, `tradeJournal/${uid}/${item.id}`));
+            }
+            setHistory(prev => prev.filter(h => h.id !== item.id));
+            // Decrement stats
+            const gv = (item.gave || []).reduce((s, p) => s + (Number(p.value) || 0), 0) || Number(item.gaveValue) || 0;
+            const gtv = (item.got || []).reduce((s, p) => s + (Number(p.value) || 0), 0) || Number(item.gotValue) || 0;
+            updateTradeStats(item.result, gv, gtv, -1);
+          } catch {
+            Alert.alert(t('trade_journal.alerts.error'), t('trade_journal.alerts.could_not_delete'));
+          }
+        },
+      },
+    ]);
+  }, [db, uid, updateTradeStats, t]);
+
+  const renderTimelineItem = useCallback(({ item }) => {
+    const meta = RESULT_META[item.result] || RESULT_META.fair;
+    const gaveItems = item.gave || [];
+    const gotItems = item.got || [];
+    const gaveVal = item.gaveValue || gaveItems.reduce((s, p) => s + (Number(p.value) || 0), 0);
+    const gotVal = item.gotValue || gotItems.reduce((s, p) => s + (Number(p.value) || 0), 0);
+    const netVal = gotVal - gaveVal;
+
+    // Format date
+    let dateStr = '';
+    if (item.completedAt) {
+      try {
+        const d = typeof item.completedAt === 'object' && item.completedAt.toDate
+          ? item.completedAt.toDate()
+          : new Date(typeof item.completedAt === 'number' ? item.completedAt : item.completedAt);
+        if (!isNaN(d.getTime())) {
+          const now = new Date();
+          const diffMs = now - d;
+          const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) dateStr = t('trade_journal.timeline.today');
+          else if (diffDays === 1) dateStr = t('trade_journal.timeline.yesterday');
+          else if (diffDays < 7) dateStr = t('trade_journal.timeline.days_ago', { count: diffDays });
+          else dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+      } catch {}
+    }
+
+    return (
+      <View style={[styles.tlCard, { backgroundColor: cardBg }]}>
+        <View style={styles.tlDotWrap}>
+          <View style={[styles.tlDot, { backgroundColor: meta.color }]} />
+          <View style={styles.tlLine} />
+        </View>
+        <View style={styles.tlContent}>
+          {/* Date */}
+          {dateStr ? (
+            <Text style={[styles.tlDate, { color: subtextColor }]}>{dateStr}</Text>
+          ) : null}
+
+          {/* Result badge + net value + scam */}
+          <View style={styles.tlBadgeRow}>
+            <View style={[styles.tlResultBadge, { backgroundColor: meta.color + '20' }]}>
+              <Text style={[styles.tlResultText, { color: meta.color }]}>
+                {meta.emoji} {t(meta.label)}
+              </Text>
+            </View>
+            {netVal !== 0 && (
+              <View style={[styles.tlNetBadge, {
+                backgroundColor: netVal >= 0 ? '#10B98115' : '#EF444415',
+              }]}>
+                <FontAwesome
+                  name={netVal >= 0 ? 'arrow-trend-up' : 'arrow-trend-down'}
+                  size={10}
+                  color={netVal >= 0 ? '#10B981' : '#EF4444'}
+                />
+                <Text style={[styles.tlNetText, { color: netVal >= 0 ? '#10B981' : '#EF4444' }]}>
+                  {netVal >= 0 ? '+' : ''}{formatValue(netVal)}
+                </Text>
+              </View>
+            )}
+            {item.didScam && (
+              <View style={[styles.tlNetBadge, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={{ fontSize: 10, color: '#EF4444', fontWeight: '700' }}>⚠️ {t('trade_journal.timeline.scam')}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Pet images: Gave → Got */}
+          <View style={styles.tlTradeVisual}>
+            <View style={styles.tlSide}>
+              <Text style={[styles.tlSideLabel, { color: '#EF4444' }]}>{t('trade_journal.timeline.i_gave')}</Text>
+              <View style={[styles.tlPetBubbles, { flexWrap: 'wrap', gap: 4 }]}>
+                {gaveItems.map((pet, i) => {
+                  const demand = getDemandScore(pet.name, analyticsMaps.demandMap);
+                  return (
+                    <View key={`g-${i}`} style={{ alignItems: 'center' }}>
+                      <Image
+                        source={{ uri: getImgUrl(pet.image) }}
+                        style={styles.tlPetImg}
+                        resizeMode="contain"
+                      />
+                      {demand && demand.score >= 7 && (
+                        <Text style={{ fontSize: 7, color: '#EF4444' }}>🔥{demand.label}</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              {gaveVal > 0 && <Text style={[styles.tlValText, { color: '#EF4444' }]}>{formatValue(gaveVal)}</Text>}
+            </View>
+
+            <View style={styles.tlArrowWrap}>
+              <FontAwesome name="arrow-right" size={12} color={subtextColor} />
+            </View>
+
+            <View style={[styles.tlSide, { alignItems: 'flex-end' }]}>
+              <Text style={[styles.tlSideLabel, { color: '#10B981' }]}>{t('trade_journal.timeline.i_got')}</Text>
+              <View style={[styles.tlPetBubbles, { justifyContent: 'flex-end', flexWrap: 'wrap', gap: 4 }]}>
+                {gotItems.map((pet, i) => {
+                  const demand = getDemandScore(pet.name, analyticsMaps.demandMap);
+                  return (
+                    <View key={`r-${i}`} style={{ alignItems: 'center' }}>
+                      <Image
+                        source={{ uri: getImgUrl(pet.image) }}
+                        style={styles.tlPetImg}
+                        resizeMode="contain"
+                      />
+                      {demand && demand.score >= 7 && (
+                        <Text style={{ fontSize: 7, color: '#10B981' }}>🔥{demand.label}</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              {gotVal > 0 && <Text style={[styles.tlValText, { color: '#10B981' }]}>{formatValue(gotVal)}</Text>}
+            </View>
+          </View>
+          {/* Demand-aware trade analysis */}
+          {(() => {
+            let maxGaveDemand = 0, maxGotDemand = 0, gaveName = '', gotName = '';
+            gaveItems.forEach(p => { const d = getDemandScore(p.name, analyticsMaps.demandMap); if (d && d.score > maxGaveDemand) { maxGaveDemand = d.score; gaveName = p.name; } });
+            gotItems.forEach(p => { const d = getDemandScore(p.name, analyticsMaps.demandMap); if (d && d.score > maxGotDemand) { maxGotDemand = d.score; gotName = p.name; } });
+            if (maxGotDemand >= 7 && maxGaveDemand < maxGotDemand) return (
+              <View style={{ backgroundColor: '#10B98110', borderRadius: 6, padding: 6, marginTop: 6 }}>
+                <Text style={{ fontSize: 10, color: '#10B981' }}>{t('trade_journal.timeline.smart_trade', { got: gotName, gotD: maxGotDemand })}</Text>
+              </View>
+            );
+            if (maxGaveDemand >= 7 && maxGotDemand < maxGaveDemand) return (
+              <View style={{ backgroundColor: '#F59E0B10', borderRadius: 6, padding: 6, marginTop: 6 }}>
+                <Text style={{ fontSize: 10, color: '#F59E0B' }}>{t('trade_journal.timeline.bad_trade', { gave: gaveName, gaveD: maxGaveDemand })}</Text>
+              </View>
+            );
+            if (maxGaveDemand >= 7 && maxGotDemand >= 7) return (
+              <View style={{ backgroundColor: '#3B82F610', borderRadius: 6, padding: 6, marginTop: 6 }}>
+                <Text style={{ fontSize: 10, color: '#3B82F6' }}>{t('trade_journal.timeline.fair_swap')}</Text>
+              </View>
+            );
+            return null;
+          })()}
+          {/* Delete button */}
+          <TouchableOpacity
+            style={styles.cardDeleteBtn}
+            onPress={() => deleteHistoryItem(item)}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="trash-can" size={11} color="#EF4444" />
+            <Text style={styles.cardDeleteText}>{t('trade_journal.timeline.delete')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }, [isDarkMode, cardBg, textColor, subtextColor, getImgUrl, deleteHistoryItem, analyticsMaps, t]);
+
+  const renderTimeline = () => (
+    <FlatList
+      data={history}
+      keyExtractor={(item, i) => item.id || `t-${i}`}
+      contentContainerStyle={styles.listContent}
+      renderItem={(props) => (
+        <View>
+          {renderTimelineItem(props)}
+        </View>
+      )}
+      ListFooterComponent={
+        hasMoreHistory && history.length > 0 ? (
+          <TouchableOpacity
+            style={[styles.loadMoreBtn, { backgroundColor: cardBg }]}
+            onPress={async () => {
+              setLoadingMore(true);
+              await fetchHistory(true);
+              setLoadingMore(false);
+            }}
+            activeOpacity={0.7}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color={textColor} />
+            ) : (
+              <Text style={[styles.loadMoreText, { color: textColor }]}>{t('trade_journal.timeline.load_more')}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null
+      }
+      ListHeaderComponent={stats ? (
+        <View style={{ marginBottom: 12 }}>
+          {/* ── Bar Chart: Win / Fair / Loss Distribution ── */}
+          <View style={[styles.statsCard, { backgroundColor: cardBg }]}>
+            <Text style={[styles.statsCardTitle, { color: textColor }]}>{t('trade_journal.timeline.trade_results')}</Text>
+            <View style={styles.barChartWrap}>
+              {stats.wins > 0 && (
+                <View style={[styles.barSegment, { flex: stats.wins, backgroundColor: '#10B981', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, borderTopRightRadius: stats.fairs === 0 && stats.losses === 0 ? 8 : 0, borderBottomRightRadius: stats.fairs === 0 && stats.losses === 0 ? 8 : 0 }]}>
+                  <Text style={styles.barSegmentText}>{stats.wins}</Text>
+                </View>
+              )}
+              {stats.fairs > 0 && (
+                <View style={[styles.barSegment, { flex: stats.fairs, backgroundColor: '#F59E0B', borderTopLeftRadius: stats.wins === 0 ? 8 : 0, borderBottomLeftRadius: stats.wins === 0 ? 8 : 0, borderTopRightRadius: stats.losses === 0 ? 8 : 0, borderBottomRightRadius: stats.losses === 0 ? 8 : 0 }]}>
+                  <Text style={styles.barSegmentText}>{stats.fairs}</Text>
+                </View>
+              )}
+              {stats.losses > 0 && (
+                <View style={[styles.barSegment, { flex: stats.losses, backgroundColor: '#EF4444', borderTopRightRadius: 8, borderBottomRightRadius: 8, borderTopLeftRadius: stats.wins === 0 && stats.fairs === 0 ? 8 : 0, borderBottomLeftRadius: stats.wins === 0 && stats.fairs === 0 ? 8 : 0 }]}>
+                  <Text style={styles.barSegmentText}>{stats.losses}</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.barLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                <Text style={[styles.legendText, { color: subtextColor }]}>{t('trade_journal.timeline.win')}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+                <Text style={[styles.legendText, { color: subtextColor }]}>{t('trade_journal.timeline.fair')}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+                <Text style={[styles.legendText, { color: subtextColor }]}>{t('trade_journal.timeline.loss')}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Quick Stats Grid ── */}
+          <View style={styles.statsGridRow}>
+            <View style={[styles.statsGridItem, { backgroundColor: cardBg }]}>
+              <Text style={{ fontSize: 20 }}>📦</Text>
+              <Text style={[styles.statsGridValue, { color: textColor }]}>{stats.total}</Text>
+              <Text style={[styles.statsGridLabel, { color: subtextColor }]}>{t('trade_journal.timeline.total_trades')}</Text>
+            </View>
+            <View style={[styles.statsGridItem, { backgroundColor: cardBg }]}>
+              <Text style={{ fontSize: 20 }}>🏆</Text>
+              <Text style={[styles.statsGridValue, { color: '#10B981' }]}>{stats.winRate}%</Text>
+              <Text style={[styles.statsGridLabel, { color: subtextColor }]}>{t('trade_journal.timeline.win_rate')}</Text>
+            </View>
+            <View style={[styles.statsGridItem, { backgroundColor: cardBg }]}>
+              <Text style={{ fontSize: 20 }}>{stats.netValue >= 0 ? '📈' : '📉'}</Text>
+              <Text style={[styles.statsGridValue, { color: stats.netValue >= 0 ? '#10B981' : '#EF4444' }]}>
+                {stats.netValue >= 0 ? '+' : ''}{formatValue(stats.netValue)}
+              </Text>
+              <Text style={[styles.statsGridLabel, { color: subtextColor }]}>{t('trade_journal.timeline.net_value')}</Text>
+            </View>
+          </View>
+
+          {/* ── Demand Insight ── */}
+          {(() => {
+            let gotHighDemand = 0, gaveHighDemand = 0;
+            history.forEach(h => {
+              (h.got || []).forEach(p => { const d = getDemandScore(p.name, analyticsMaps.demandMap); if (d && d.score >= 7) gotHighDemand++; });
+              (h.gave || []).forEach(p => { const d = getDemandScore(p.name, analyticsMaps.demandMap); if (d && d.score >= 7) gaveHighDemand++; });
+            });
+            if (gotHighDemand > gaveHighDemand && gotHighDemand >= 2) return (
+              <View style={{ paddingHorizontal: 4, marginBottom: 8 }}>
+                <View style={[styles.statsGridItem, { backgroundColor: cardBg }]}>
+                  <Text style={{ fontSize: 12, color: '#10B981', fontWeight: '600', textAlign: 'center' }}>{t('trade_journal.timeline.smart_trader')}</Text>
+                </View>
+              </View>
+            );
+            if (gaveHighDemand > gotHighDemand && gaveHighDemand >= 2) return (
+              <View style={{ paddingHorizontal: 4, marginBottom: 8 }}>
+                <View style={[styles.statsGridItem, { backgroundColor: cardBg }]}>
+                  <Text style={{ fontSize: 12, color: '#F59E0B', fontWeight: '600', textAlign: 'center' }}>{t('trade_journal.timeline.generous_trader')}</Text>
+                </View>
+              </View>
+            );
+            return null;
+          })()}
+
+          {/* ── Clear History ── */}
+          <TouchableOpacity
+            style={styles.clearHistoryBtn}
+            onPress={clearHistory}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="trash-can" size={12} color="#EF4444" />
+            <Text style={styles.clearHistoryText}>{t('trade_journal.timeline.clear_history')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      ListEmptyComponent={
+        <View style={styles.emptyWrap}>
+          <Text style={{ fontSize: 40 }}>📈</Text>
+          <Text style={[styles.emptyTitle, { color: textColor }]}>{t('trade_journal.timeline.empty_title')}</Text>
+          <Text style={[styles.emptySub, { color: subtextColor }]}>
+            {t('trade_journal.timeline.empty_sub')}
+          </Text>
+        </View>
+      }
+    />
+  );
+
   if (!visible) return null;
 
   return (
@@ -906,13 +1382,14 @@ const TradeJournal = ({
           <>
             {tab === 'pets' && renderMyPets()}
             {tab === 'goals' && renderGoals()}
+            {tab === 'timeline' && renderTimeline()}
           </>
         )}
 
         {/* Sticky Banner Ad (outside tab content) — pad bottom for system nav */}
         {!localState?.isPro && (
           <View style={{ paddingBottom: insets.bottom }}>
-            <BannerAdComponent />
+            <BannerAdComponent collapsible />
           </View>
         )}
       </View>

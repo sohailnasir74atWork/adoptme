@@ -448,6 +448,13 @@ const MysteryEggScreen = ({ navigation }) => {
     return () => releaseGameSounds();
   }, []);
 
+  // Warm the rewarded ad on entry — the "Watch Ad for Free Hatch" button
+  // needs it loaded BEFORE the tap (cold loads used to time out as
+  // "unavailable" and burn the user's tap).
+  useEffect(() => {
+    try { RewardedAdManager.prepare(); } catch (_) {}
+  }, []);
+
   const toggleSound = () => {
     const next = !soundOn;
     setSoundOn(next);

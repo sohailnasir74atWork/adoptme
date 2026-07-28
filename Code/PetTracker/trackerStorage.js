@@ -109,12 +109,16 @@ const mutateGrind = (id, mutate) => {
 
 export const updateGrindFields = (id, fields) => mutateGrind(id, (g) => ({ ...g, ...fields }));
 
-/** Log n tasks on one slot; also feeds today's session counter. */
+/** Log n tasks on one slot; today's session counter gets the APPLIED delta
+ *  (a +30 potion on a slot with 5 tasks left must only count 5). */
 export const logTasks = (id, slotIndex, n, cfg) =>
   mutateGrind(id, (g) => {
     const slots = g.slots.slice();
-    slots[slotIndex] = addTasksToSlot(g.rarity, slots[slotIndex], n, cfg);
-    bumpToday(n);
+    const before = slots[slotIndex];
+    const after = addTasksToSlot(g.rarity, before, n, cfg);
+    const delta = slotDone(g.rarity, after, cfg) - slotDone(g.rarity, before, cfg);
+    if (delta > 0) bumpToday(delta);
+    slots[slotIndex] = after;
     return { ...g, slots };
   });
 

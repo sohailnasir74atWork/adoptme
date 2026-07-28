@@ -573,7 +573,7 @@ const InboxScreen = ({ bannedUsers }) => {
           }
         />
       )}
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
     </View>
   );
 };

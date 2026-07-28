@@ -5,8 +5,8 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useSyncExternalStore } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, Modal,
-  TextInput, Image, Alert,
+  View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView,
+  TextInput, Image, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -19,12 +19,16 @@ import { getThemeColors } from '../Helper/themeColors';
 import config from '../Helper/Environment';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
-  getGrinds, createGrind, deleteGrind, subscribe,
+  getGrinds, createGrind, deleteGrind, subscribe, editSlot,
   todayCount, getDailyGoal, setDailyGoal,
 } from './trackerStorage';
-import { grindTotals, etaDays, measuredPace, tasksForRarity, petEquivalents, RARITIES, normalizeRarity } from './agingMath';
+import {
+  grindTotals, etaDays, measuredPace, tasksForRarity, petEquivalents,
+  RARITIES, normalizeRarity, recommendNextSlot, FULL_GROWN_STAGE,
+} from './agingMath';
 import { getSessions } from './trackerStorage';
-import { RARITY_COLORS, GOAL_COLORS, ProgressBar, ProgressRing, getPetImageUrl } from './trackerShared';
+import { RARITY_COLORS, GOAL_COLORS, STAGE_KEYS, ProgressBar, ProgressRing, getPetImageUrl } from './trackerShared';
+import FeatureFeedback from './FeatureFeedback';
 
 const PET_TYPES = ['PETS', 'PET'];
 const isPetType = (type) => PET_TYPES.includes(String(type || '').toUpperCase());
@@ -65,8 +69,8 @@ const PetTrackerScreen = () => {
 
   const confirmDelete = useCallback((grind) => {
     Alert.alert(
-      t('tracker.delete_confirm_title', { defaultValue: 'Delete this grind?' }),
-      t('tracker.delete_confirm_msg', { defaultValue: 'Your progress for this grind will be removed.' }),
+      t('tracker.delete_confirm_title', { defaultValue: 'Stop growing this pet?' }),
+      t('tracker.delete_confirm_msg', { defaultValue: "You'll lose your progress for this pet." }),
       [
         { text: t('tracker.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         { text: t('tracker.delete', { defaultValue: 'Delete' }), style: 'destructive', onPress: () => deleteGrind(grind.id) },
@@ -78,6 +82,16 @@ const PetTrackerScreen = () => {
     const totals = grindTotals(item);
     const eta = etaDays(totals.remaining, pace || item.tasksPerDay);
     const goalColor = GOAL_COLORS[item.goal] || config.colors.primary;
+    const finished = totals.remaining === 0;
+    // Show where the pet actually is ("Teen") rather than an abstract "34%".
+    const rec = recommendNextSlot(item);
+    const activeSlot = item.slots[rec?.index ?? 0];
+    const stageKeys = STAGE_KEYS[activeSlot?.kind] || STAGE_KEYS.pet;
+    const stageLabel = finished
+      ? t('tracker.all_done', { defaultValue: 'All grown up!' })
+      : t(`tracker.stage_${stageKeys[Math.min(activeSlot?.stage ?? 0, FULL_GROWN_STAGE)]}`, {
+          defaultValue: stageKeys[Math.min(activeSlot?.stage ?? 0, FULL_GROWN_STAGE)],
+        });
     return (
       <TouchableOpacity
         style={styles.grindCard}
@@ -107,14 +121,24 @@ const PetTrackerScreen = () => {
             trackColor={c.borderLight}
             style={{ marginTop: 7, marginBottom: 5 }}
           />
-          <Text style={styles.grindMeta}>
-            {t('tracker.tasks_left', { count: totals.remaining, defaultValue: '{{count}} tasks left' })}
-            {eta != null && totals.remaining > 0 ? `  ·  ≈${eta}d` : ''}
+          <Text style={styles.grindMeta} numberOfLines={1}>
+            {finished
+              ? '🎉'
+              : eta != null
+                ? t('tracker.days_to_go', { count: eta, defaultValue: 'About {{count}} days to go' })
+                : t('tracker.almost_there', { defaultValue: 'Almost there!' })}
           </Text>
         </View>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={[styles.grindPct, { color: goalColor }]}>{totals.pct}%</Text>
-          <FontAwesome name="chevron-right" size={11} color={c.textMuted} />
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          <Text style={[styles.grindStage, { color: goalColor }]} numberOfLines={1}>{stageLabel}</Text>
+          {/* Delete was long-press only, with no affordance — a commenter
+              asked for a delete option that already existed. */}
+          <TouchableOpacity
+            onPress={() => confirmDelete(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="trash-outline" size={16} color={c.textMuted} />
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -127,13 +151,16 @@ const PetTrackerScreen = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={22} color={c.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('tracker.title', { defaultValue: 'Pet Tracker' })}</Text>
+          <Text style={styles.headerTitle}>{t('tracker.title', { defaultValue: 'My Pets' })}</Text>
           <TouchableOpacity onPress={() => setShowNew(true)} style={styles.headerBtn}>
             <Ionicons name="add" size={26} color={config.colors.primary} />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
+      {/* KAV iOS-only: Android handles the keyboard via adjustResize (see the
+          reason-modal fix in BottomDrawer — stacking both causes flicker). */}
+      <KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'} style={{ flex: 1 }}>
       {/* Today's grind */}
       <View style={styles.todayCard}>
         <ProgressRing
@@ -146,15 +173,10 @@ const PetTrackerScreen = () => {
           <Text style={styles.todayPct}>{dailyGoal > 0 ? Math.min(999, Math.round((today / dailyGoal) * 100)) : 0}%</Text>
         </ProgressRing>
         <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.todayTitle}>{t('tracker.today_grind', { defaultValue: "Today's Grind" })}</Text>
+          <Text style={styles.todayTitle}>{t('tracker.today_grind', { defaultValue: 'You played today!' })}</Text>
           <Text style={styles.todayCount}>
             {today} / {dailyGoal} {t('tracker.tasks', { defaultValue: 'tasks' })}
           </Text>
-          {pace != null && (
-            <Text style={styles.todayPace}>
-              {t('tracker.your_pace', { count: pace, defaultValue: 'Your pace: {{count}}/day' })}
-            </Text>
-          )}
         </View>
         <TouchableOpacity style={styles.goalEditBtn} onPress={() => setShowGoalEdit(true)}>
           <Ionicons name="options-outline" size={18} color={c.textSecondary} />
@@ -162,26 +184,46 @@ const PetTrackerScreen = () => {
       </View>
 
       {grinds.length === 0 ? (
-        <View style={styles.empty}>
-          <FontAwesome name="dragon" size={42} color={c.textMuted} />
-          <Text style={styles.emptyTitle}>{t('tracker.empty_title', { defaultValue: 'No grinds yet' })}</Text>
-          <Text style={styles.emptySub}>
-            {t('tracker.empty_sub', { defaultValue: 'Pick a pet and a goal — we count every task to Full Grown, Neon or Mega.' })}
-          </Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowNew(true)} activeOpacity={0.85}>
-            <Text style={styles.emptyBtnText}>{t('tracker.start_grind', { defaultValue: 'Start a grind' })}</Text>
-          </TouchableOpacity>
-        </View>
+        // Must scroll: the feedback section below grows as comment pages load,
+        // and in a plain View the extra pages were cropped off-screen with no
+        // way to reach them.
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* flex:1 would fight the growing sibling below inside a scroll
+              container — size to content and let the ScrollView do the work. */}
+          <View style={[styles.empty, { flex: 0, paddingVertical: 44 }]}>
+            <FontAwesome name="dragon" size={42} color={c.textMuted} />
+            <Text style={styles.emptyTitle}>{t('tracker.empty_title', { defaultValue: 'No pets yet!' })}</Text>
+            <Text style={styles.emptySub}>
+              {t('tracker.empty_sub', { defaultValue: "Pick your pet and we'll show you how long until it's all grown up." })}
+            </Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowNew(true)} activeOpacity={0.85}>
+              <Text style={styles.emptyBtnText}>{t('tracker.start_grind', { defaultValue: 'Grow a pet' })}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ paddingHorizontal: 16 }}>
+            <FeatureFeedback c={c} />
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={grinds}
           keyExtractor={(g) => g.id}
           renderItem={renderGrind}
+          keyboardShouldPersistTaps="handled"
+          // Without flex:1 the list isn't height-bounded, so the footer (which
+          // grows with each loaded comment page) overflowed instead of scrolling.
+          style={{ flex: 1 }}
           contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 24 }}
+          ListFooterComponent={<FeatureFeedback c={c} />}
         />
       )}
+      </KeyboardAvoidingView>
 
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: c.bg }} />
 
       <NewGrindModal
@@ -217,9 +259,16 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
   const [pet, setPet] = useState(null);
   const [rarity, setRarity] = useState(null);
   const [goal, setGoal] = useState('fullgrown');
+  const [startStage, setStartStage] = useState(0);
+  // Neon/Mega planning and the rarity override are opt-in. A new user answers
+  // one question — what stage is the pet at — and nothing else.
+  const [plannerOpen, setPlannerOpen] = useState(false);
 
   useEffect(() => {
-    if (!visible) { setSearch(''); setPet(null); setRarity(null); setGoal('fullgrown'); }
+    if (!visible) {
+      setSearch(''); setPet(null); setRarity(null);
+      setGoal('fullgrown'); setStartStage(0); setPlannerOpen(false);
+    }
   }, [visible]);
 
   const filtered = useMemo(() => {
@@ -230,7 +279,12 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
 
   const pickPet = (p) => {
     setPet(p);
-    setRarity(normalizeRarity(p.rarity));
+    const r = normalizeRarity(p.rarity);
+    setRarity(r);
+    // normalizeRarity returns null for event/premium/missing rarities. The
+    // create button needs one, and the picker now lives behind the toggle —
+    // so open it, otherwise those pets are an unexplained dead end.
+    if (!r) setPlannerOpen(true);
   };
 
   const create = () => {
@@ -242,6 +296,9 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
       rarity,
       goal,
     });
+    // Most pets aren't newborns when you start tracking them, so seed the
+    // first slot at the stage the kid told us.
+    if (startStage > 0) editSlot(grind.id, 0, startStage, 0);
     onCreated(grind);
   };
 
@@ -256,7 +313,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
             <Text style={styles.headerTitle}>
               {pet
                 ? pet.name
-                : t('tracker.choose_pet', { defaultValue: 'Choose a pet' })}
+                : t('tracker.choose_pet', { defaultValue: 'Pick your pet' })}
             </Text>
             <View style={styles.headerBtn} />
           </View>
@@ -268,7 +325,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
               <Ionicons name="search" size={16} color={c.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder={t('tracker.search_pets', { defaultValue: 'Search pets…' })}
+                placeholder={t('tracker.search_pets', { defaultValue: 'Find a pet…' })}
                 placeholderTextColor={c.placeholder}
                 value={search}
                 onChangeText={setSearch}
@@ -297,55 +354,98 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
             />
           </>
         ) : (
-          <View style={{ padding: 16, flex: 1, paddingBottom: 16 + insets.bottom }}>
-            {/* Rarity */}
-            <Text style={styles.sectionLabel}>{t('tracker.rarity_label', { defaultValue: 'Rarity' })}</Text>
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* The one question a new user answers. */}
+            <Text style={styles.sectionLabel}>
+              {t('tracker.which_stage', { defaultValue: 'What stage is your pet now?' })}
+            </Text>
             <View style={styles.chipRow}>
-              {RARITIES.map((r) => (
+              {STAGE_KEYS.pet.slice(0, FULL_GROWN_STAGE).map((key, i) => (
                 <TouchableOpacity
-                  key={r}
-                  onPress={() => setRarity(r)}
+                  key={key}
+                  onPress={() => setStartStage(i)}
                   style={[
                     styles.chip,
-                    { borderColor: RARITY_COLORS[r] },
-                    rarity === r && { backgroundColor: RARITY_COLORS[r] },
+                    { borderColor: config.colors.primary },
+                    startStage === i && { backgroundColor: config.colors.primary },
                   ]}
                 >
-                  <Text style={[styles.chipText, { color: rarity === r ? '#fff' : RARITY_COLORS[r] }]}>
-                    {t(`rarities.${r.toUpperCase()}`, { defaultValue: r })}
+                  <Text style={[styles.chipText, { color: startStage === i ? '#fff' : config.colors.primary }]}>
+                    {t(`tracker.stage_${key}`, { defaultValue: key })}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Goal */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('tracker.goal_label', { defaultValue: 'Goal' })}</Text>
-            {GOALS_META.map(({ key, icon }) => {
-              const total = rarity ? tasksForRarity(rarity) * petEquivalents(key) : 0;
-              const active = goal === key;
-              const color = GOAL_COLORS[key];
-              return (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => setGoal(key)}
-                  activeOpacity={0.8}
-                  style={[styles.goalCard, active && { borderColor: color, backgroundColor: `${color}14` }]}
-                >
-                  <FontAwesome name={icon} size={16} color={color} solid />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.goalTitle}>{t(`tracker.goal_${key}`, { defaultValue: key })}</Text>
-                    <Text style={styles.goalDesc}>
-                      {t(`tracker.goal_desc_${key}`, { defaultValue: '' })}
-                    </Text>
-                  </View>
-                  {rarity && (
-                    <Text style={[styles.goalTotal, { color }]}>
-                      {t('tracker.tasks_total', { count: total, defaultValue: '{{count}} tasks' })}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+            {/* Neon / Mega planning + rarity override. Collapsed: the goal
+                picker sent new users straight into a 20-slot Mega grid, which
+                is the most complex thing in the feature. */}
+            <TouchableOpacity
+              style={styles.plannerToggle}
+              activeOpacity={0.7}
+              onPress={() => setPlannerOpen(v => !v)}
+            >
+              <FontAwesome name="sliders" size={12} color={c.textSecondary} solid />
+              <Text style={styles.plannerToggleText}>
+                {t('tracker.planner', { defaultValue: 'Planning a Neon or Mega?' })}
+              </Text>
+              <Ionicons name={plannerOpen ? 'chevron-up' : 'chevron-down'} size={15} color={c.textSecondary} />
+            </TouchableOpacity>
+
+            {plannerOpen && (
+              <>
+                {/* Rarity — auto-filled from the pet, shown only to correct it. */}
+                <Text style={styles.sectionLabel}>{t('tracker.rarity_label', { defaultValue: 'Rarity' })}</Text>
+                <View style={styles.chipRow}>
+                  {RARITIES.map((r) => (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => setRarity(r)}
+                      style={[
+                        styles.chip,
+                        { borderColor: RARITY_COLORS[r] },
+                        rarity === r && { backgroundColor: RARITY_COLORS[r] },
+                      ]}
+                    >
+                      <Text style={[styles.chipText, { color: rarity === r ? '#fff' : RARITY_COLORS[r] }]}>
+                        {t(`rarities.${r.toUpperCase()}`, { defaultValue: r })}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('tracker.goal_label', { defaultValue: 'What are you making?' })}</Text>
+                {GOALS_META.map(({ key, icon }) => {
+                  const total = rarity ? tasksForRarity(rarity) * petEquivalents(key) : 0;
+                  const active = goal === key;
+                  const color = GOAL_COLORS[key];
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setGoal(key)}
+                      activeOpacity={0.8}
+                      style={[styles.goalCard, active && { borderColor: color, backgroundColor: `${color}14` }]}
+                    >
+                      <FontAwesome name={icon} size={16} color={color} solid />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.goalTitle}>{t(`tracker.goal_${key}`, { defaultValue: key })}</Text>
+                        <Text style={styles.goalDesc}>
+                          {t(`tracker.goal_desc_${key}`, { defaultValue: '' })}
+                        </Text>
+                      </View>
+                      {rarity && (
+                        <Text style={[styles.goalTotal, { color }]}>
+                          {t('tracker.tasks_total', { count: total, defaultValue: '{{count}} tasks' })}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            )}
 
             <TouchableOpacity
               style={[styles.createBtn, !rarity && { opacity: 0.4 }]}
@@ -353,9 +453,9 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
               onPress={create}
               activeOpacity={0.85}
             >
-              <Text style={styles.createBtnText}>{t('tracker.create_grind', { defaultValue: 'Start tracking' })}</Text>
+              <Text style={styles.createBtnText}>{t('tracker.create_grind', { defaultValue: "Let's go!" })}</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         )}
       </View>
     </Modal>
@@ -373,7 +473,7 @@ const DailyGoalModal = ({ visible, onClose, c, t, current }) => {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.goalModal}>
-          <Text style={styles.goalModalTitle}>{t('tracker.daily_goal', { defaultValue: 'Daily goal' })}</Text>
+          <Text style={styles.goalModalTitle}>{t('tracker.daily_goal', { defaultValue: 'Tasks per day' })}</Text>
           <View style={styles.stepperRow}>
             <TouchableOpacity style={styles.stepBtn} onPress={() => setValue(v => Math.max(5, v - 5))}>
               <Ionicons name="remove" size={22} color={c.text} />
@@ -422,7 +522,6 @@ const getStyles = (c) => StyleSheet.create({
   todayPct: { fontSize: 13, fontWeight: '800', color: c.text },
   todayTitle: { fontSize: 14, fontWeight: '700', color: c.text },
   todayCount: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
-  todayPace: { fontSize: 11, color: c.textMuted, marginTop: 2 },
   goalEditBtn: { padding: 8 },
 
   grindCard: {
@@ -437,7 +536,7 @@ const getStyles = (c) => StyleSheet.create({
   grindImageFallback: { backgroundColor: c.cardBg, alignItems: 'center', justifyContent: 'center' },
   grindName: { fontSize: 15, fontWeight: '700', color: c.text, flexShrink: 1 },
   grindMeta: { fontSize: 11, color: c.textSecondary },
-  grindPct: { fontSize: 15, fontWeight: '800', marginBottom: 4 },
+  grindStage: { fontSize: 12, fontWeight: '800', textTransform: 'capitalize', maxWidth: 92, textAlign: 'right' },
   goalBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   goalBadgeText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
 
@@ -493,6 +592,18 @@ const getStyles = (c) => StyleSheet.create({
   goalTitle: { fontSize: 14, fontWeight: '700', color: c.text },
   goalDesc: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
   goalTotal: { fontSize: 12, fontWeight: '800' },
+  plannerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 22,
+    marginBottom: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: c.bgAlt,
+  },
+  plannerToggleText: { flex: 1, fontSize: 12, fontWeight: '700', color: c.textSecondary },
 
   createBtn: {
     marginTop: 'auto',

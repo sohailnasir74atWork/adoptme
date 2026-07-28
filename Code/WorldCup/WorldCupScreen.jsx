@@ -90,6 +90,12 @@ const WorldCupScreen = ({ selectedTheme }) => {
   const lastScoreRef = useRef(-1); // last points value written to wc2026_scores
   const shareRef = useRef(null);   // ViewShot for the share card
 
+  // Warm the rewarded ad on entry — the extra-picks "watch ad" flow needs it
+  // loaded BEFORE the tap (cold loads used to time out as "unavailable").
+  useEffect(() => {
+    try { RewardedAdManager.prepare(); } catch (_) {}
+  }, []);
+
   // ── Live feed subscription (single doc) ──
   useEffect(() => {
     if (!firestoreDB) return;
@@ -302,7 +308,7 @@ const WorldCupScreen = ({ selectedTheme }) => {
           ) : null}
         </View>
 
-        <BannerAdComponent adType="banner" />
+        <BannerAdComponent adType="banner" collapsible />
 
         {isEmpty && (
           <View style={styles.emptyBox}>

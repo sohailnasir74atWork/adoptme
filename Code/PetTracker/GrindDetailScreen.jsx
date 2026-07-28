@@ -1,8 +1,11 @@
 /**
- * GrindDetailScreen — slot grid + fast task input for one grind.
+ * GrindDetailScreen — pet grid + task logging for one goal.
  *
- * Fast input rules (see plan): never force hundreds of +1 taps.
- * +1/+5/+10, Age-Up Potion (+30), Finish stage, and a direct slot editor.
+ * Written for ~10-year-olds (see tracker_feedback: most confusion reports).
+ * The hero says where the pet IS ("Teen") and how long is left in days; the
+ * exact counts, potion maths and pace picker live under Advanced. Logging is
+ * one big "I played!" button opening a sheet where each amount is spelled out,
+ * replacing a row of five chips reading "+1 +5 +10 +30 Finish stage".
  */
 
 import React, { useState, useMemo, useEffect, useCallback, useSyncExternalStore } from 'react';
@@ -46,8 +49,11 @@ const GrindDetailScreen = () => {
     useCallback(() => getGrind(grindId), [grindId]),
   );
 
-  const [selected, setSelected] = useState(0);
+  // null = "follow the recommendation" until the kid taps a tile themselves.
+  const [picked, setPicked] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
 
   const stageName = useCallback((kind, stage) => {
     const keys = STAGE_KEYS[kind] || STAGE_KEYS.pet;
@@ -58,7 +64,7 @@ const GrindDetailScreen = () => {
   if (!grind) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: c.textSecondary }}>{t('tracker.not_found', { defaultValue: 'Grind not found' })}</Text>
+        <Text style={{ color: c.textSecondary }}>{t('tracker.not_found', { defaultValue: 'Pet not found' })}</Text>
       </View>
     );
   }
@@ -70,14 +76,24 @@ const GrindDetailScreen = () => {
   const eta = etaDays(totals.remaining, effectivePace);
   const potions = potionEquivalent(totals.remaining);
   const rec = recommendNextSlot(grind);
-  const selSlot = grind.slots[Math.min(selected, grind.slots.length - 1)];
+  // Default to the pet the tracker recommends, so a kid never has to work out
+  // which tile to tap first. If the one they picked is already finished, fall
+  // back to the recommendation — otherwise the big button would sit there
+  // greyed out with nothing explaining why.
+  const pickedIdx = picked != null ? Math.min(picked, grind.slots.length - 1) : null;
+  const pickedFinished = pickedIdx != null
+    && slotRemaining(grind.rarity, grind.slots[pickedIdx]) <= 0;
+  const selected = (pickedIdx == null || pickedFinished) ? (rec?.index ?? 0) : pickedIdx;
+  const setSelected = setPicked;
+  const selSlot = grind.slots[selected];
   const selRemaining = slotRemaining(grind.rarity, selSlot);
   const isMega = grind.goal === 'mega';
+  const allDone = totals.remaining === 0;
 
   const confirmDelete = () => {
     Alert.alert(
-      t('tracker.delete_confirm_title', { defaultValue: 'Delete this grind?' }),
-      t('tracker.delete_confirm_msg', { defaultValue: 'Your progress for this grind will be removed.' }),
+      t('tracker.delete_confirm_title', { defaultValue: 'Stop growing this pet?' }),
+      t('tracker.delete_confirm_msg', { defaultValue: "You'll lose your progress for this pet." }),
       [
         { text: t('tracker.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
@@ -162,60 +178,43 @@ const GrindDetailScreen = () => {
             )}
           </ProgressRing>
           <View style={{ flex: 1, marginLeft: 14 }}>
-            <Text style={[styles.heroBigPct, { color: goalColor }]}>
-              {totals.pct}%
-              <Text style={styles.heroGoal}>  ·  {t(`tracker.goal_${grind.goal}`, { defaultValue: grind.goal })}</Text>
+            {/* Big line = where the pet is right now, in words a kid reads at a
+                glance. The percentage / task counts moved into Advanced. */}
+            <Text style={[styles.heroStage, { color: goalColor }]} numberOfLines={1}>
+              {allDone
+                ? t('tracker.all_done', { defaultValue: 'All grown up!' })
+                : stageName(selSlot.kind, selSlot.stage)}
             </Text>
             <Text style={styles.heroLine}>
-              {t('tracker.tasks_left', { count: totals.remaining, defaultValue: '{{count}} tasks left' })}
+              {allDone
+                ? '🎉'
+                : eta != null
+                  ? t('tracker.days_to_go', { count: eta, defaultValue: 'About {{count}} days to go' })
+                  : t('tracker.almost_there', { defaultValue: 'Almost there!' })}
             </Text>
             <Text style={styles.heroSub}>
-              ≈ {potions} {t('tracker.potions', { defaultValue: 'potions' })}
-              {eta != null && totals.remaining > 0 ? `  ·  ${t('tracker.eta_days', { count: eta, defaultValue: '{{count}} days' })}` : ''}
+              {t(`tracker.goal_${grind.goal}`, { defaultValue: grind.goal })}
             </Text>
           </View>
         </View>
 
-        {/* Pace */}
-        <View style={styles.paceRow}>
-          {pace != null ? (
-            <Text style={styles.paceMeasured}>
-              {t('tracker.your_pace', { count: pace, defaultValue: 'Your pace: {{count}}/day' })}
-            </Text>
-          ) : (
-            <>
-              <Text style={styles.paceLabel}>{t('tracker.pace_label', { defaultValue: 'Pace' })}</Text>
-              {PACE_PRESETS.map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  onPress={() => updateGrindFields(grind.id, { tasksPerDay: p })}
-                  style={[styles.paceChip, grind.tasksPerDay === p && { backgroundColor: goalColor, borderColor: goalColor }]}
-                >
-                  <Text style={[styles.paceChipText, grind.tasksPerDay === p && { color: '#fff' }]}>{p}/d</Text>
-                </TouchableOpacity>
-              ))}
-            </>
-          )}
-        </View>
-
-        {/* Recommendation */}
-        {rec && totals.remaining > 0 && (
+        {/* Which pet we're on — pointless when the goal only has one pet. */}
+        {rec && !allDone && grind.slots.length > 1 && (
           <TouchableOpacity style={styles.recRow} activeOpacity={0.8} onPress={() => setSelected(rec.index)}>
             <FontAwesome name="wand-magic-sparkles" size={12} color={config.colors.primary} solid />
             <Text style={styles.recText} numberOfLines={2}>
               {t('tracker.next_up', {
                 name: slotLabel(grind.slots[rec.index], rec.index),
-                count: rec.remaining,
-                defaultValue: 'Next: {{name}} — {{count}} tasks to go',
+                defaultValue: 'Growing now: {{name}}',
               })}
             </Text>
           </TouchableOpacity>
         )}
 
-        {totals.remaining === 0 && (
+        {allDone && (
           <View style={[styles.recRow, { backgroundColor: '#10B98122' }]}>
             <Text style={[styles.recText, { color: '#10B981', fontWeight: '800' }]}>
-              🎉 {t('tracker.all_done', { defaultValue: 'Grind complete!' })}
+              🎉 {t('tracker.all_done', { defaultValue: 'All grown up!' })}
             </Text>
           </View>
         )}
@@ -233,46 +232,78 @@ const GrindDetailScreen = () => {
             </View>
           </View>
         ))}
+
+        {/* Advanced — the exact numbers and the pace picker. Collapsed by
+            default: the feedback said the dashboard was the confusing part,
+            but the players who do want it shouldn't lose it. */}
+        <TouchableOpacity
+          style={styles.advToggle}
+          activeOpacity={0.7}
+          onPress={() => setAdvOpen(v => !v)}
+        >
+          <Text style={styles.advToggleText}>{t('tracker.advanced', { defaultValue: 'Advanced' })}</Text>
+          <Ionicons name={advOpen ? 'chevron-up' : 'chevron-down'} size={15} color={c.textSecondary} />
+        </TouchableOpacity>
+
+        {advOpen && (
+          <View style={styles.advBody}>
+            <Text style={styles.advLine}>
+              {totals.pct}%  ·  {t('tracker.tasks_left', { count: totals.remaining, defaultValue: '{{count}} tasks left' })}
+              {'  ·  ≈ '}{potions} {t('tracker.potions', { defaultValue: 'potions' })}
+            </Text>
+            <View style={styles.paceRow}>
+              {pace != null ? (
+                <Text style={styles.paceMeasured}>
+                  {t('tracker.your_pace', { count: pace, defaultValue: 'You do about {{count}} tasks a day' })}
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.paceLabel}>{t('tracker.pace_label', { defaultValue: 'Pace' })}</Text>
+                  {PACE_PRESETS.map((p) => (
+                    <TouchableOpacity
+                      key={p}
+                      onPress={() => updateGrindFields(grind.id, { tasksPerDay: p })}
+                      style={[styles.paceChip, grind.tasksPerDay === p && { backgroundColor: goalColor, borderColor: goalColor }]}
+                    >
+                      <Text style={[styles.paceChipText, grind.tasksPerDay === p && { color: '#fff' }]}>{p}/d</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Action bar — paddingBottom includes the system nav inset */}
-      <View style={[styles.actionBar, { borderTopColor: c.border, paddingBottom: 10 + insets.bottom }]}>
-        <Text style={styles.actionTarget} numberOfLines={1}>
-          {slotLabel(selSlot, selected)} · {stageName(selSlot.kind, selSlot.stage)}
-        </Text>
-        <View style={styles.actionRow}>
-          {[1, 5, 10].map((n) => (
-            <TouchableOpacity
-              key={n}
-              style={[styles.actionBtn, { backgroundColor: `${goalColor}1A`, borderColor: goalColor }, selRemaining <= 0 && styles.actionBtnDisabled]}
-              disabled={selRemaining <= 0}
-              onPress={() => logTasks(grind.id, selected, n)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.actionBtnText, { color: goalColor }]}>+{n}</Text>
-            </TouchableOpacity>
-          ))}
+      {/* One big button instead of a row of five. Picking the amount moved
+          into a sheet where every choice is spelled out in words. */}
+      {!allDone && (
+        <View style={[styles.actionBar, { borderTopColor: c.border, paddingBottom: 10 + insets.bottom }]}>
+          <Text style={styles.actionTarget} numberOfLines={1}>
+            {grind.slots.length > 1 ? `${slotLabel(selSlot, selected)} · ` : ''}
+            {stageName(selSlot.kind, selSlot.stage)}
+          </Text>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.potionBtn, selRemaining <= 0 && styles.actionBtnDisabled]}
+            style={[styles.playedBtn, { backgroundColor: goalColor }, selRemaining <= 0 && styles.actionBtnDisabled]}
             disabled={selRemaining <= 0}
-            onPress={() => logTasks(grind.id, selected, DEFAULTS.potionTasks || 30)}
-            activeOpacity={0.7}
+            onPress={() => setLogOpen(true)}
+            activeOpacity={0.85}
           >
-            <FontAwesome name="flask" size={12} color="#9b59b6" solid />
-            <Text style={[styles.actionBtnText, { color: '#9b59b6' }]}>+30</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.finishBtn, selRemaining <= 0 && styles.actionBtnDisabled]}
-            disabled={selRemaining <= 0}
-            onPress={() => logFinishStage(grind.id, selected)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.actionBtnText, { color: '#10B981' }]} numberOfLines={1}>
-              {t('tracker.finish_stage', { defaultValue: 'Finish stage' })}
-            </Text>
+            <FontAwesome name="gamepad" size={16} color="#fff" solid />
+            <Text style={styles.playedBtnText}>{t('tracker.i_played', { defaultValue: 'I played!' })}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      )}
+
+      <LogTasksModal
+        visible={logOpen}
+        onClose={() => setLogOpen(false)}
+        grind={grind}
+        slotIndex={selected}
+        goalColor={goalColor}
+        c={c}
+        t={t}
+      />
 
       <SlotEditorModal
         visible={editorOpen}
@@ -284,6 +315,62 @@ const GrindDetailScreen = () => {
         stageName={stageName}
       />
     </View>
+  );
+};
+
+// ── "I played!" sheet ──────────────────────────────────────────────────
+// Every choice is a full-width row labelled in words. The old UI had these
+// as five cramped chips reading "+1 +5 +10 +30 Finish stage", which assumed
+// you already knew that 30 meant a potion.
+
+const LogTasksModal = ({ visible, onClose, grind, slotIndex, goalColor, c, t }) => {
+  const styles = useMemo(() => getStyles(c), [c]);
+
+  const rows = [
+    ...[1, 5, 10].map((n) => ({
+      key: `n${n}`,
+      icon: 'paw',
+      color: goalColor,
+      label: t('tracker.tasks_total', { count: n, defaultValue: '{{count}} tasks' }),
+      run: () => logTasks(grind.id, slotIndex, n),
+    })),
+    {
+      key: 'potion',
+      icon: 'flask',
+      color: '#9b59b6',
+      label: t('tracker.used_potion', { defaultValue: 'I used an Age-Up Potion' }),
+      run: () => logTasks(grind.id, slotIndex, DEFAULTS.potionTasks || 30),
+    },
+    {
+      key: 'stage',
+      icon: 'circle-check',
+      color: '#10B981',
+      label: t('tracker.finish_stage', { defaultValue: 'This stage is done!' }),
+      run: () => logFinishStage(grind.id, slotIndex),
+    },
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={styles.editorModal}>
+          <Text style={styles.editorTitle}>
+            {t('tracker.how_many', { defaultValue: 'How many tasks did you do?' })}
+          </Text>
+          {rows.map((r) => (
+            <TouchableOpacity
+              key={r.key}
+              style={[styles.logRow, { borderColor: r.color }]}
+              activeOpacity={0.8}
+              onPress={() => { r.run(); onClose(); }}
+            >
+              <FontAwesome name={r.icon} size={15} color={r.color} solid />
+              <Text style={[styles.logRowText, { color: r.color }]} numberOfLines={1}>{r.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 };
 
@@ -307,7 +394,7 @@ const SlotEditorModal = ({ visible, onClose, grind, slotIndex, c, t, stageName }
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.editorModal}>
-          <Text style={styles.editorTitle}>{t('tracker.edit_slot', { defaultValue: 'Edit progress' })}</Text>
+          <Text style={styles.editorTitle}>{t('tracker.edit_slot', { defaultValue: 'Fix my progress' })}</Text>
 
           <Text style={styles.editorLabel}>{t('tracker.stage_label', { defaultValue: 'Stage' })}</Text>
           <View style={styles.stageChipWrap}>
@@ -327,7 +414,7 @@ const SlotEditorModal = ({ visible, onClose, grind, slotIndex, c, t, stageName }
           {stage < FULL_GROWN_STAGE && (
             <>
               <Text style={styles.editorLabel}>
-                {t('tracker.tasks_in_stage', { defaultValue: 'Tasks done in this stage' })} ({tasks}/{stages[stage]})
+                {t('tracker.tasks_in_stage', { defaultValue: 'Tasks finished' })} ({tasks}/{stages[stage]})
               </Text>
               <View style={styles.stepperRow}>
                 <TouchableOpacity style={styles.stepBtn} onPress={() => setTasks(v => Math.max(0, v - 1))}>
@@ -376,12 +463,11 @@ const getStyles = (c) => StyleSheet.create({
     padding: 14,
   },
   heroPct: { fontSize: 16, fontWeight: '800' },
-  heroBigPct: { fontSize: 24, fontWeight: '800' },
-  heroGoal: { fontSize: 13, fontWeight: '700', color: c.textSecondary, textTransform: 'capitalize' },
+  heroStage: { fontSize: 24, fontWeight: '800', textTransform: 'capitalize' },
   heroLine: { fontSize: 14, fontWeight: '600', color: c.text, marginTop: 3 },
-  heroSub: { fontSize: 12, color: c.textSecondary, marginTop: 3 },
+  heroSub: { fontSize: 12, color: c.textSecondary, marginTop: 3, textTransform: 'capitalize' },
 
-  paceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+  paceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   paceLabel: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
   paceMeasured: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
   paceChip: {
@@ -425,21 +511,41 @@ const getStyles = (c) => StyleSheet.create({
     paddingTop: 8,
   },
   actionTarget: { fontSize: 11, fontWeight: '700', color: c.textSecondary, marginBottom: 6, textTransform: 'capitalize' },
-  actionRow: { flexDirection: 'row', gap: 8 },
-  actionBtn: {
+  actionBtnDisabled: { opacity: 0.35 },
+  // One big, obvious target instead of five small ones.
+  playedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    gap: 9,
+    borderRadius: 16,
+    paddingVertical: 15,
   },
-  actionBtnDisabled: { opacity: 0.35 },
-  actionBtnText: { fontSize: 13, fontWeight: '800' },
-  potionBtn: { backgroundColor: '#9b59b61A', borderColor: '#9b59b6' },
-  finishBtn: { flex: 1, backgroundColor: '#10B9811A', borderColor: '#10B981' },
+  playedBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+  },
+  logRowText: { fontSize: 14, fontWeight: '800', flex: 1 },
+
+  advToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 22,
+    paddingVertical: 8,
+  },
+  advToggleText: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
+  advBody: { backgroundColor: c.bgAlt, borderRadius: 12, padding: 12, marginTop: 2 },
+  advLine: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   editorModal: { width: '100%', maxWidth: 340, borderRadius: 18, backgroundColor: c.bgElevated, padding: 18 },

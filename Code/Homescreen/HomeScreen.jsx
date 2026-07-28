@@ -1804,6 +1804,15 @@ const HomeScreen = ({ selectedTheme }) => {
                 <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{t('home.create_trade')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.middleTradeButton}
+                onPress={() => setShowTradeCompletion(true)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <Icon name="book-outline" size={14} color="#fff" />
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>Log Trade</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={styles.shareTradeButton}
                 onPress={handleShareTrade}
               >
@@ -2019,7 +2028,7 @@ const HomeScreen = ({ selectedTheme }) => {
         </View>
         <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}

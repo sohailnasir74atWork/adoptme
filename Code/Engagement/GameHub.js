@@ -4,7 +4,7 @@
  * Solo games open as modals, multiplayer navigates to screens.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import DailyQuiz from './DailyQuiz';
 import MemoryMatch from './MemoryMatch';
 import IceBreaker from './IceBreaker';
 import WordScramble from './WordScramble';
+import RewardedAdManager from '../Ads/RewardedAdManager';
 
 
 const GameHub = ({ navigation }) => {
@@ -29,6 +30,13 @@ const GameHub = ({ navigation }) => {
   const [showMemory, setShowMemory] = useState(false);
   const [showIce, setShowIce] = useState(false);
   const [showScramble, setShowScramble] = useState(false);
+
+  // Warm the rewarded ad when the hub opens — every game reachable from here
+  // has a "watch ad" flow, and a cold load at tap-time used to time out as
+  // "unavailable".
+  useEffect(() => {
+    try { RewardedAdManager.prepare(); } catch (_) {}
+  }, []);
 
   const c = getThemeColors(isDarkMode);
   const bg = c.bg;

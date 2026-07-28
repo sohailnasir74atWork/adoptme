@@ -313,7 +313,7 @@ const ServerScreen = () => {
                         {/* <Icon name="plus" size={24} color="#fff" /> */}
                     </TouchableOpacity></>
             )}
-            {!localState.isPro && <BannerAdComponent />}
+            {!localState.isPro && <BannerAdComponent collapsible />}
 
 
             <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>

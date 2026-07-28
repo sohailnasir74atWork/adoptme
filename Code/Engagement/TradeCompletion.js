@@ -20,6 +20,7 @@ import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { getThemeColors } from '../Helper/themeColors';
+import { useLocalState } from '../LocalGlobelStats';
 import { addXP, XP_ACTIONS } from './xpUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -42,6 +43,7 @@ const TradeCompletion = ({
   partnerName = '',
   firestoreDB,
 }) => {
+  const { updateLocalState } = useLocalState();
   const [selectedRating, setSelectedRating] = useState(tradeResult);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -167,13 +169,18 @@ const TradeCompletion = ({
             // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this line once all users updated
             setDoc(doc(firestoreDB, 'reviews', uid), { ownedPets }, { merge: true }),
           ]);
+
+          // Mirror to MMKV so the screens that read localState.ownedPets — the
+          // calculator's "MY STUFF" picker, the chat pet picker, My Stuff — show
+          // the post-trade inventory immediately instead of after an app restart.
+          updateLocalState('ownedPets', ownedPets);
         } catch (e) {
           console.warn('[TradeCompletion] inventory update error:', e?.message);
         }
       }
 
       // Build success message
-      let msg = '+20 XP earned\n';
+      let msg = `+${XP_ACTIONS.COMPLETE_TRADE} XP earned\n`;
       if (addedNames.length > 0) msg += `✅ Added: ${addedNames.join(', ')}\n`;
       if (removedNames.length > 0) msg += `🔄 Removed: ${removedNames.join(', ')}\n`;
       if (notOwnedNames.length > 0) msg += `⚠️ Not in your list: ${notOwnedNames.join(', ')}`;
@@ -193,7 +200,7 @@ const TradeCompletion = ({
       Alert.alert('Error', 'Could not save trade. Try again.');
     }
     setSaving(false);
-  }, [db, uid, hasItems, wantsItems, selectedRating, notes, partnerName, didScam, firestoreDB]);
+  }, [db, uid, hasItems, wantsItems, selectedRating, notes, partnerName, didScam, firestoreDB, updateLocalState]);
 
   const handleClose = useCallback(() => {
     setSelectedRating(tradeResult);
@@ -240,7 +247,7 @@ const TradeCompletion = ({
               <Text style={{ fontSize: 48 }}>🎉</Text>
               <Text style={[styles.successTitle, { color: textColor }]}>Trade Saved!</Text>
               <Text style={[styles.successSub, { color: subtextColor, textAlign: 'center' }]}>
-                {inventoryMsg || '+20 XP earned • Added to My Stuff'}
+                {inventoryMsg || `+${XP_ACTIONS.COMPLETE_TRADE} XP earned • Added to My Stuff`}
               </Text>
               <TouchableOpacity style={styles.doneBtn} onPress={handleClose}>
                 <Text style={styles.doneBtnText}>Done</Text>

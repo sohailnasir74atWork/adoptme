@@ -20,6 +20,7 @@ const npaRequiredFor = (status) =>
 const BannerAdComponent = ({
   adType = 'banner',
   visible = true,
+  collapsible = false,
 }) => {
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
@@ -68,14 +69,19 @@ const BannerAdComponent = ({
   // BannerAd component below doesn't see a new object reference on every
   // render (which would otherwise force a fresh ad request).
   //
-  // Collapsible Banner format (networkExtras.collapsible) was removed by
-  // request 2026-07-09: the expanded first impression covered content and
-  // felt intrusive, so all placements serve plain anchored banners now.
+  // Collapsible banners: reintroduced 2026-07-20 (owner decision) as an
+  // OPT-IN per screen via the `collapsible` prop. The 2026-07 "accidental
+  // clicks" policy enforcement on MM2 traced to the banner inside the arrow
+  // game (removed there), not to collapsible expansion. Keep the prop OFF on
+  // screens whose interactive content sits directly above the banner (chat
+  // input bars, feed composers) — the expanded first impression overlays that
+  // area, which is why the always-on version was removed on 2026-07-09.
   const requestOptions = useMemo(
     () => ({
       requestNonPersonalizedAdsOnly: npaRequiredFor(localState?.consentStatus),
+      ...(collapsible ? { networkExtras: { collapsible: 'bottom' } } : {}),
     }),
-    [localState?.consentStatus],
+    [localState?.consentStatus, collapsible],
   );
 
   if (!visible) return null;

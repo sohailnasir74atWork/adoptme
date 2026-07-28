@@ -945,7 +945,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
         </View>
         <CodesDrawer isVisible={isDrawerVisible} toggleModal={toggleDrawer} codes={codesData} />
       </GestureHandlerRootView>
-      {!localState.isPro && !fromChat && <BannerAdComponent />}
+      {!localState.isPro && !fromChat && <BannerAdComponent collapsible />}
     </>
   );
 });

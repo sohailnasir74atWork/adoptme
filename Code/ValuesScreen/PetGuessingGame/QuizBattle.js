@@ -148,6 +148,12 @@ const QuizBattle = () => {
   const [adBonusClaimed, setAdBonusClaimed] = useState(false);
   const [adBonusLoading, setAdBonusLoading] = useState(false);
 
+  // Warm the rewarded ad on entry — the ad-bonus button needs it loaded
+  // BEFORE the tap (cold loads used to time out as "unavailable").
+  useEffect(() => {
+    try { RewardedAdManager.prepare(); } catch (_) {}
+  }, []);
+
   // Check if ad bonus already claimed today
   useEffect(() => {
     if (!firestoreDB || !user?.id) return;

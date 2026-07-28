@@ -27,8 +27,10 @@ const shadow = { sm: {} };
 
 // Real ad & pro implementations
 import InterstitialAdManager from '../Ads/IntAd';
-import BannerAdComponent from '../Ads/bannerAds';
-const BannerAdView = () => <BannerAdComponent adType="banner" />;
+// Banner REMOVED from this screen 2026-07-20: the 2026-07 "Encouraging
+// accidental clicks: Layout" policy enforcement traced to the banner sitting
+// inside this fast-tap arrow game. Interstitials between rounds stay; no
+// always-visible banner near the play area.
 const showInterstitial = () => {
   InterstitialAdManager.showAd();
 };
@@ -2141,7 +2143,6 @@ const ArrowGameScreen = () => {
                 </View>
             )}
 
-            <BannerAdView />
             <SafeAreaView edges={['bottom']} style={{ backgroundColor: isDarkMode ? c.bg : c.bgAlt }} />
         </View>
     );
