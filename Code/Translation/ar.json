@@ -202,8 +202,10 @@
             "confirm_change_message": "لن تتمكن من تغيير اسم العرض لمدة {{days}} أيام بعد ذلك. هل أنت متأكد؟",
             "confirm_save": "نعم، احفظ التغييرات"
         },
-        "unavailable_general_chat": "غير متاح للدردشة العامة",
-        "unavailable_trade_chat": "غير متاح لدردشة التبادل"
+        "general_chat_on": "الدردشة العامة مفعّلة",
+        "general_chat_off": "الدردشة العامة موقوفة",
+        "trade_chat_on": "دردشة التبادل مفعّلة",
+        "trade_chat_off": "دردشة التبادل موقوفة"
     },
     "profile": {
         "display_name": "اسم العرض",

@@ -202,8 +202,10 @@
             "confirm_change_message": "Du kannst deinen Anzeigenamen danach {{days}} Tage lang nicht ändern. Bist du sicher?",
             "confirm_save": "Ja, Änderungen speichern"
         },
-        "unavailable_general_chat": "Nicht verfügbar für allgemeinen Chat",
-        "unavailable_trade_chat": "Nicht verfügbar für Handels-Chat"
+        "general_chat_on": "Allgemeiner Chat an",
+        "general_chat_off": "Allgemeiner Chat aus",
+        "trade_chat_on": "Handels-Chat an",
+        "trade_chat_off": "Handels-Chat aus"
     },
     "profile": {
         "display_name": "Anzeigename",

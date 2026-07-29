@@ -202,8 +202,10 @@
             "confirm_change_message": "You won't be able to change your display name for {{days}} days after this. Are you sure?",
             "confirm_save": "Yes, Save Changes"
         },
-        "unavailable_general_chat": "Unavailable for General Chat",
-        "unavailable_trade_chat": "Unavailable for Trade Chat"
+        "general_chat_on": "General Chat On",
+        "general_chat_off": "General Chat Off",
+        "trade_chat_on": "Trade Chat On",
+        "trade_chat_off": "Trade Chat Off"
     },
     "profile": {
         "display_name": "Display Name",

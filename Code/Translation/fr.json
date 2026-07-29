@@ -202,8 +202,10 @@
             "confirm_change_message": "Vous ne pourrez plus changer votre nom pendant {{days}} jours. Êtes-vous sûr ?",
             "confirm_save": "Oui, enregistrer"
         },
-        "unavailable_general_chat": "Indisponible pour le chat général",
-        "unavailable_trade_chat": "Indisponible pour le chat d'échange"
+        "general_chat_on": "Chat général activé",
+        "general_chat_off": "Chat général désactivé",
+        "trade_chat_on": "Chat d’échange activé",
+        "trade_chat_off": "Chat d’échange désactivé"
     },
     "profile": {
         "display_name": "Nom d’affichage",

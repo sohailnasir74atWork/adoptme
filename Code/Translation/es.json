@@ -200,8 +200,10 @@
             "confirm_change_message": "No podrás cambiar nombre por {{days}} días.",
             "confirm_save": "Guardar"
         },
-        "unavailable_general_chat": "No disponible para chat general",
-        "unavailable_trade_chat": "No disponible para chat de intercambio"
+        "general_chat_on": "Chat general activado",
+        "general_chat_off": "Chat general desactivado",
+        "trade_chat_on": "Chat de intercambio activado",
+        "trade_chat_off": "Chat de intercambio desactivado"
     },
     "profile": {
         "display_name": "Nombre",

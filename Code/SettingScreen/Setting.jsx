@@ -3050,14 +3050,17 @@ export default function SettingsScreen({ selectedTheme }) {
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Icon name="chatbubble-ellipses-outline" size={18} color={'white'} style={{ backgroundColor: '#8B5CF6', padding: 5, borderRadius: 5 }} />
                 <Text style={styles.optionText}>
-                  {t('settings.unavailable_general_chat', { defaultValue: 'Unavailable for General Chat' })}
+                  {user?.chatOffGeneral
+                    ? t('settings.general_chat_off', { defaultValue: 'General Chat Off' })
+                    : t('settings.general_chat_on', { defaultValue: 'General Chat On' })}
                 </Text>
               </TouchableOpacity>
               <Switch
-                value={!!user?.chatOffGeneral}
+                value={!user?.chatOffGeneral}
                 onValueChange={(v) => {
                   triggerHapticFeedback('impactLight');
-                  updateLocalStateAndDatabase('chatOffGeneral', v);
+                  // Switch reads "chat on"; storage stays chatOff* (true = blocked).
+                  updateLocalStateAndDatabase('chatOffGeneral', !v);
                 }}
               />
             </View>
@@ -3068,14 +3071,17 @@ export default function SettingsScreen({ selectedTheme }) {
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Icon name="swap-horizontal-outline" size={18} color={'white'} style={{ backgroundColor: '#F59E0B', padding: 5, borderRadius: 5 }} />
                 <Text style={styles.optionText}>
-                  {t('settings.unavailable_trade_chat', { defaultValue: 'Unavailable for Trade Chat' })}
+                  {user?.chatOffTrade
+                    ? t('settings.trade_chat_off', { defaultValue: 'Trade Chat Off' })
+                    : t('settings.trade_chat_on', { defaultValue: 'Trade Chat On' })}
                 </Text>
               </TouchableOpacity>
               <Switch
-                value={!!user?.chatOffTrade}
+                value={!user?.chatOffTrade}
                 onValueChange={(v) => {
                   triggerHapticFeedback('impactLight');
-                  updateLocalStateAndDatabase('chatOffTrade', v);
+                  // Switch reads "chat on"; storage stays chatOff* (true = blocked).
+                  updateLocalStateAndDatabase('chatOffTrade', !v);
                 }}
               />
             </View>
