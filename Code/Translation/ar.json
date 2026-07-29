@@ -201,7 +201,9 @@
             "confirm_change_title": "تأكيد تغيير الملف الشخصي",
             "confirm_change_message": "لن تتمكن من تغيير اسم العرض لمدة {{days}} أيام بعد ذلك. هل أنت متأكد؟",
             "confirm_save": "نعم، احفظ التغييرات"
-        }
+        },
+        "unavailable_general_chat": "غير متاح للدردشة العامة",
+        "unavailable_trade_chat": "غير متاح لدردشة التبادل"
     },
     "profile": {
         "display_name": "اسم العرض",
@@ -384,7 +386,14 @@
         "sort_low": "▼ الأقل",
         "selected_pets": "الحيوانات المختارة",
         "owned_pets": "الحيوانات المملوكة",
-        "wishlist": "قائمة الرغبات"
+        "wishlist": "قائمة الرغبات",
+        "variant_neon": "نيون",
+        "variant_mega": "ميجا",
+        "variant_fly": "طيران",
+        "variant_ride": "ركوب",
+        "range": "القيمة",
+        "range_min": "الأدنى",
+        "range_max": "الأعلى"
     },
     "stock": {
         "description": "تنبيه: قد تتأخر تحديثات المخزون أحيانًا لأن البيانات يتم تحديثها يدويًا. نقدّر صبرك وننصح بالتحقق دوريًا للحصول على أحدث التحديثات.",
@@ -858,7 +867,15 @@
         "no_users_found": "لم يتم العثور على مستخدمين",
         "search_database": "بحث في قاعدة البيانات",
         "search": "بحث",
-        "enter_search_term": "أدخل اسم للبحث"
+        "enter_search_term": "أدخل اسم للبحث",
+        "unavailable_them_general": "هذا المستخدم لا يستقبل الرسائل حالياً.",
+        "unavailable_them_trade": "هذا المستخدم لا يستقبل دردشات التبادل حالياً.",
+        "unavailable_me_general": "لقد أوقفت الدردشة العامة. أعد تفعيلها من الإعدادات.",
+        "unavailable_me_trade": "لقد أوقفت دردشة التبادل. أعد تفعيلها من الإعدادات.",
+        "disabled_banner_them_general": "قام هذا المستخدم بتعطيل الدردشة. لا يمكنك مراسلته الآن.",
+        "disabled_banner_them_trade": "قام هذا المستخدم بتعطيل دردشة التبادل. لا يمكنك مراسلته من صفحة التبادل.",
+        "disabled_banner_me_general": "لقد قمت بتعطيل الدردشة. أعد تفعيلها من الإعدادات لإرسال الرسائل.",
+        "disabled_banner_me_trade": "لقد قمت بتعطيل دردشة التبادل. أعد تفعيلها من الإعدادات."
     },
     "first": {
         "welcome_title": "مرحبًا بك في Fruit Values",

@@ -201,7 +201,9 @@
             "confirm_change_title": "Confirm Profile Change",
             "confirm_change_message": "You won't be able to change your display name for {{days}} days after this. Are you sure?",
             "confirm_save": "Yes, Save Changes"
-        }
+        },
+        "unavailable_general_chat": "Unavailable for General Chat",
+        "unavailable_trade_chat": "Unavailable for Trade Chat"
     },
     "profile": {
         "display_name": "Display Name",
@@ -384,7 +386,14 @@
         "sort_low": "▼ Low",
         "selected_pets": "Selected pets",
         "owned_pets": "Owned pets",
-        "wishlist": "Wishlist"
+        "wishlist": "Wishlist",
+        "variant_neon": "Neon",
+        "variant_mega": "Mega",
+        "variant_fly": "Fly",
+        "variant_ride": "Ride",
+        "range": "Value",
+        "range_min": "Min",
+        "range_max": "Max"
     },
     "stock": {
         "description": "Disclaimer: Stock updates may sometimes be delayed as data is updated manually. We appreciate your patience and recommend checking back periodically for the latest updates.",
@@ -856,7 +865,15 @@
         "invalid_image": "Invalid image",
         "no_images": "No images to display",
         "unblock": "Unblock",
-        "no_user_blocked": "No users blocked"
+        "no_user_blocked": "No users blocked",
+        "unavailable_them_general": "This user isn't accepting messages right now.",
+        "unavailable_them_trade": "This user isn't accepting trade chats right now.",
+        "unavailable_me_general": "You've turned off general chat. Turn it back on in Settings.",
+        "unavailable_me_trade": "You've turned off trade chat. Turn it back on in Settings.",
+        "disabled_banner_them_general": "This user has disabled chat. You cannot message them right now.",
+        "disabled_banner_them_trade": "This user has disabled trade chat. You cannot message them from a trade.",
+        "disabled_banner_me_general": "You have disabled chat. Turn it back on in Settings to send messages.",
+        "disabled_banner_me_trade": "You have disabled trade chat. Turn it back on in Settings to message from trades."
     },
     "first": {
         "welcome_title": "Welcome to Fruit Values",

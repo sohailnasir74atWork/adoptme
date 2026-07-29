@@ -87,6 +87,28 @@ const BadgeButton = React.memo(({ badge, isActive, onPress, styles }) => {
   );
 });
 
+// Global variant toggles for the chat/trade pet picker. One tap re-prices the
+// whole search result as Neon / Mega / Fly / Ride instead of making the user
+// tap badges pet by pet. Colors match the per-item badges below.
+const VARIANT_TOGGLES = [
+  { badge: 'N', color: '#2ecc71', labelKey: 'value.variant_neon', fallback: 'Neon' },
+  { badge: 'M', color: '#9b59b6', labelKey: 'value.variant_mega', fallback: 'Mega' },
+  { badge: 'F', color: '#3498db', labelKey: 'value.variant_fly', fallback: 'Fly' },
+  { badge: 'R', color: '#e74c3c', labelKey: 'value.variant_ride', fallback: 'Ride' },
+];
+
+const VariantToggle = React.memo(({ badge, color, label, isActive, onPress, styles }) => (
+  <TouchableOpacity
+    style={[styles.variantToggleBtn, isActive && { backgroundColor: color, borderColor: color }]}
+    onPress={() => onPress(badge)}
+    activeOpacity={0.8}
+  >
+    <Text style={[styles.variantToggleText, isActive && styles.variantToggleTextActive]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+));
+
 const ItemImage = React.memo(({ uri, badges, styles }) => (
   <View style={styles.imageWrapper}>
     <Image source={{ uri }} style={styles.icon} resizeMode="cover" />
@@ -101,6 +123,24 @@ const getImageUrl = (item, baseImgUrl) => {
   if (!item || !item.name) return '';
   if (!item.image || !baseImgUrl) return '';
   return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
+};
+
+// Rounding for displayed values. Two decimals is right for most of the catalog,
+// but 613 items (toys, stickers, badges) are priced below 0.01 — at 2dp they all
+// collapsed to 0.00, which read as worthless and made them impossible to isolate
+// with the value-range filter. Nothing in the feed needs more than 4dp.
+const roundValue = (n) => {
+  const num = Number(n);
+  if (!Number.isFinite(num) || num === 0) return 0;
+  return parseFloat(num.toFixed(Math.abs(num) < 0.01 ? 4 : 2));
+};
+
+// toLocaleString() defaults to 3 fraction digits, so it renders 0.0002 as "0"
+// even once roundValue has preserved it. Widen it for the sub-cent range only;
+// large values still get their thousands separators.
+const formatValue = (n) => {
+  const num = Number(n) || 0;
+  return num.toLocaleString(undefined, { maximumFractionDigits: Math.abs(num) < 0.01 ? 4 : 2 });
 };
 
 // ✅ PERF FIX: Moved to module level so React.memo actually works.
@@ -150,7 +190,7 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
         />
         <View style={styles.itemInfo}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.value}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
+          <Text style={styles.value}>{t('value.label')} {formatValue(currentValue)}</Text>
           {item.rarity && (
             <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
               <View style={[styles.rarityDot, { backgroundColor: getRarityColor(item.rarity) }]} />
@@ -218,6 +258,13 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
 
 const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSelectedFruits, onRequestClose, fromSetting, ownedPets, setOwnedPets, wishlistPets, setWishlistPets, owned }) => {
   const [searchText, setSearchText] = useState('');
+
+  // Value range filter — "show me everything worth X to Y". Kept as strings so
+  // a half-typed "1." doesn't reset the field; parsed only when filtering.
+  // Values are decimal (694 of 759 pets have them), so no integer coercion.
+  const [minValue, setMinValue] = useState('');
+  const [maxValue, setMaxValue] = useState('');
+  const [showValueRange, setShowValueRange] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedValueType, setSelectedValueType] = useState('d');
   const [isFlySelected, setIsFlySelected] = useState(false);
@@ -392,7 +439,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
     const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts', 'stickers'];
     if (simpleValueCategories.includes(item.type?.toLowerCase())) {
-      return parseFloat(Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0).toFixed(2));
+      return roundValue(Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0));
     }
 
     if (!selectedValueType) return 0;
@@ -404,8 +451,17 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       isFlySelected ? ' - fly' :
         isRideSelected ? ' - ride' : ' - nopotion';
 
-    const value = Number(item[valueKey + modifierSuffix]) || 0;
-    return parseFloat(Number(value).toFixed(2));
+    // A few pets carry only a flat `value` and no variant keys at all
+    // (Dylan / Pistachio / River today). Without the fallback they render as 0
+    // despite being priced in the feed. Keyed on the variant key being ABSENT,
+    // not on it being zero — a pet legitimately worth 0 keeps showing 0.
+    const rawVariant = item[valueKey + modifierSuffix];
+    if (rawVariant === undefined || rawVariant === null) {
+      const flat = Number(item.value);
+      return Number.isFinite(flat) ? roundValue(flat) : 0;
+    }
+
+    return roundValue(Number(rawVariant) || 0);
   }, []);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
@@ -413,8 +469,19 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     const searchLower = searchText.toLowerCase();
     const filterUpper = selectedFilter.toUpperCase();
 
+    const defaultSelection = { valueType: selectedValueType, isFly: isFlySelected, isRide: isRideSelected };
+
+    const minNum = parseFloat(minValue);
+    const maxNum = parseFloat(maxValue);
+    const hasMin = Number.isFinite(minNum);
+    const hasMax = Number.isFinite(maxNum);
+
     let filtered = parsedValuesData.filter((item) => {
       if (!item?.name) return false;
+
+      // Same resolution renderItem uses: the item's own badge state, else the
+      // global variant (which only the chat picker's toggle row can change).
+      const sel = itemSelections[item.id] || defaultSelection;
 
       const matchesSearch = isMatch(item.name, searchText);
       const matchesFilter = filterUpper === 'ALL' ||
@@ -422,20 +489,35 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           item.type?.toUpperCase() === filterUpper :
           item.rarity?.toUpperCase() === filterUpper);
 
-      return matchesSearch && matchesFilter;
+      // Range tests the value the CARD SHOWS. Each card has its own D/N/M and
+      // F/R badges, so a pet the user flipped to Neon displays its neon price —
+      // filtering on the global variant instead would drop that pet from a range
+      // its own card says it belongs in.
+      let matchesRange = true;
+      if (hasMin || hasMax) {
+        const v = parseFloat(getItemValue(item, sel.valueType, sel.isFly, sel.isRide));
+        if (!Number.isFinite(v)) return false;
+        if (hasMin && v < minNum) matchesRange = false;
+        if (hasMax && v > maxNum) matchesRange = false;
+      }
+
+      return matchesSearch && matchesFilter && matchesRange;
     });
 
     // Apply sort
     if (sortOrder !== 'none') {
       filtered.sort((a, b) => {
-        const aValue = parseFloat(getItemValue(a, selectedValueType, isFlySelected, isRideSelected));
-        const bValue = parseFloat(getItemValue(b, selectedValueType, isFlySelected, isRideSelected));
+        // Sort on the displayed value too, so range, sort and card all agree.
+        const aSel = itemSelections[a.id] || defaultSelection;
+        const bSel = itemSelections[b.id] || defaultSelection;
+        const aValue = parseFloat(getItemValue(a, aSel.valueType, aSel.isFly, aSel.isRide));
+        const bValue = parseFloat(getItemValue(b, bSel.valueType, bSel.isFly, bSel.isRide));
         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
       });
     }
 
     return filtered;
-  }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected, getItemValue, CATEGORIES]); // ✅ Added getItemValue and CATEGORIES dependencies
+  }, [parsedValuesData, searchText, selectedFilter, sortOrder, selectedValueType, isFlySelected, isRideSelected, getItemValue, CATEGORIES, minValue, maxValue, itemSelections]); // ✅ Added getItemValue and CATEGORIES dependencies
 
   // Catalog lookup so "My Pets" can re-price each owned pet at the CURRENT value
   // using its saved variant (D/N/M + F/R), instead of the possibly-stale stored value.
@@ -513,12 +595,19 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   );
 
 
+  // Fallback variant for pets the user hasn't tweaked individually — this is what
+  // the global Neon / Mega / Fly / Ride toggles drive. Defaults to normal/no-potion,
+  // so screens without the toggle row (main Values list) behave exactly as before.
+  const globalSelection = useMemo(
+    () => ({ valueType: selectedValueType, isFly: isFlySelected, isRide: isRideSelected }),
+    [selectedValueType, isFlySelected, isRideSelected]
+  );
+
   // Optimize the renderItem function
   const renderItem = useCallback(
     ({ item }) => {
       // current selection for this item
-      const itemSelection =
-        itemSelections[item.id] || { valueType: 'd', isFly: false, isRide: false };
+      const itemSelection = itemSelections[item.id] || globalSelection;
 
       // value based on current badges
       const currentValue = getItemValue(
@@ -586,6 +675,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     },
     [
       itemSelections,
+      globalSelection,
       handleItemBadgePress,
       getItemValue,
       styles,
@@ -642,7 +732,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             <ItemImage uri={imageUrl} badges={badges} styles={styles} />
             <View style={styles.itemInfo}>
               <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.value}>{t('value.label')} {Number(item.value || 0).toLocaleString()}</Text>
+              <Text style={styles.value}>{t('value.label')} {formatValue(item.value || 0)}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -733,14 +823,19 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
 
 
+  // Drives the global variant toggles. Tapping the active value type again
+  // clears it back to normal ("toggle on and off"), and per-pet badge tweaks are
+  // reset so the toggle visibly applies to every pet in the list.
   const handleBadgePress = useCallback((badge) => {
     triggerHapticFeedback('impactLight');
+    setItemSelections({});
     if (badge === 'F') {
       setIsFlySelected(prev => !prev);
     } else if (badge === 'R') {
       setIsRideSelected(prev => !prev);
     } else {
-      setSelectedValueType(badge.toLowerCase());
+      const next = badge.toLowerCase();
+      setSelectedValueType(prev => (prev === next ? 'd' : next));
     }
   }, [triggerHapticFeedback]);
 
@@ -838,6 +933,18 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
             </Menu>
             <TouchableOpacity
+              style={[styles.filterButton, (minValue || maxValue) && styles.filterButtonActive]}
+              onPress={() => {
+                triggerHapticFeedback('impactLight');
+                setShowValueRange(prev => !prev);
+              }}
+            >
+              <Icon name="options-outline" size={16} color="white" />
+              <Text style={[styles.filterText, { marginLeft: 4, marginRight: 0 }]}>
+                {t('value.range', { defaultValue: 'Value' })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.filterButton}
               onPress={() => {
                 setSortOrder(prev =>
@@ -875,6 +982,42 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             </TouchableOpacity>}
           </View>
 
+          {/* Value range — "show me everything worth X to Y". Filters on the same
+              value the list sorts by, so the two can't disagree. Values are
+              decimal, so the pads accept a decimal point. */}
+          {showValueRange && (
+            <View style={styles.valueRangeRow}>
+              <TextInput
+                style={styles.valueRangeInput}
+                placeholder={t('value.range_min', { defaultValue: 'Min' })}
+                placeholderTextColor="#888"
+                keyboardType="decimal-pad"
+                value={minValue}
+                onChangeText={setMinValue}
+              />
+              <Text style={styles.valueRangeDash}>—</Text>
+              <TextInput
+                style={styles.valueRangeInput}
+                placeholder={t('value.range_max', { defaultValue: 'Max' })}
+                placeholderTextColor="#888"
+                keyboardType="decimal-pad"
+                value={maxValue}
+                onChangeText={setMaxValue}
+              />
+              {(minValue || maxValue) ? (
+                <TouchableOpacity
+                  style={styles.valueRangeClear}
+                  onPress={() => {
+                    triggerHapticFeedback('impactLight');
+                    setMinValue(''); setMaxValue('');
+                  }}
+                >
+                  <Icon name="close-circle" size={18} color={config.colors.primary} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+
           {fromChat && (
             <View style={styles.chatSourceToggle}>
               <TouchableOpacity
@@ -895,6 +1038,30 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                   All
                 </Text>
               </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Variant toggles — only in the "All" catalog search. "My Pets" rows keep
+              the variant the user actually owns, so a global override would be wrong there. */}
+          {fromChat && chatPetSource === 'all' && (
+            <View style={styles.variantToggleRow}>
+              {VARIANT_TOGGLES.map(({ badge, color, labelKey, fallback }) => (
+                <VariantToggle
+                  key={badge}
+                  badge={badge}
+                  color={color}
+                  label={t(labelKey, { defaultValue: fallback })}
+                  isActive={
+                    badge === 'F'
+                      ? isFlySelected
+                      : badge === 'R'
+                        ? isRideSelected
+                        : selectedValueType === badge.toLowerCase()
+                  }
+                  onPress={handleBadgePress}
+                  styles={styles}
+                />
+              ))}
             </View>
           )}
 
@@ -977,6 +1144,61 @@ export const getStyles = (isDarkMode) => {
       color: c.textSecondary,
     },
     chatSourceTextActive: {
+      color: '#fff',
+    },
+    // Value range filter row
+    valueRangeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+      marginHorizontal: 2,
+    },
+    valueRangeInput: {
+      flex: 1,
+      height: 38,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.bgAlt,
+      paddingHorizontal: 10,
+      fontSize: 14,
+      color: c.text,
+    },
+    valueRangeDash: {
+      color: c.textSecondary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    valueRangeClear: {
+      paddingHorizontal: 2,
+    },
+    filterButtonActive: {
+      backgroundColor: config.colors.hasBlockGreen,
+    },
+    // Chat pet picker: global Neon / Mega / Fly / Ride variant toggles
+    variantToggleRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 8,
+      marginHorizontal: 2,
+    },
+    variantToggleBtn: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.bgAlt,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    variantToggleText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.textSecondary,
+    },
+    variantToggleTextActive: {
       color: '#fff',
     },
     // Chat pet picker: empty-inventory prompt

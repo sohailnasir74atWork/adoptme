@@ -269,11 +269,12 @@ export const GlobalStateProvider = ({ children }) => {
         'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
         'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
+        'chatOffTrade', 'chatOffGeneral',
       ];
       // Leaves not yet mirrored to Supabase — still authoritative on RTDB.
       // `flage` stays here too: the mirror renames it to `flag`, so reading the
       // original leaf keeps country flags exactly correct.
-      const RTDB_ONLY = ['userName', 'flage', 'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying'];
+      const RTDB_ONLY = ['userName', 'flage', 'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying', 'chatOffTrade', 'chatOffGeneral'];
 
       const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap] = await Promise.all([
         getIdentity(userId).catch(() => null),

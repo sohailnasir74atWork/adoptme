@@ -210,7 +210,7 @@ async function mirrorNotifications(uid, before, after, supabase) {
   if (error) console.error('[mirrorUsers/notifications]', uid, error.message);
 }
 
-const SETTINGS_KEYS = ['isReminderEnabled', 'isSelectedReminderEnabled'];
+const SETTINGS_KEYS = ['isReminderEnabled', 'isSelectedReminderEnabled', 'chatOffTrade', 'chatOffGeneral'];
 async function mirrorSettings(uid, before, after, supabase) {
   if (!anyKeyChanged(before, after, SETTINGS_KEYS)) return;
 
@@ -218,6 +218,10 @@ async function mirrorSettings(uid, before, after, supabase) {
     uid,
     is_reminder_enabled: asBool(after.isReminderEnabled),
     is_selected_reminder_enabled: asBool(after.isSelectedReminderEnabled),
+    // Chat-availability switches — mirrored so the private_messages insert
+    // trigger can reject blocked messages regardless of the sender's app version.
+    chat_off_trade: asBool(after.chatOffTrade),
+    chat_off_general: asBool(after.chatOffGeneral),
     updated_at: nowIso(),
   };
 

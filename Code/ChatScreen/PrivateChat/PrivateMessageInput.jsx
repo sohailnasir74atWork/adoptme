@@ -72,6 +72,8 @@ const PrivateMessageInput = ({
   replyTo,
   onCancelReply,
   isBanned,
+  chatBlockedBy,
+  chatType,
   petModalVisible,
   setPetModalVisible,
   selectedFruits,
@@ -447,7 +449,21 @@ const PrivateMessageInput = ({
 
         <TextInput
           style={[styles.input, { color: isDark ? '#FFF' : '#000' }]}
-          placeholder={t('chat.type_message')}
+          placeholder={
+            chatBlockedBy === 'them'
+              ? t(`chat.unavailable_them_${chatType}`, {
+                defaultValue: chatType === 'trade'
+                  ? "This user isn't accepting trade chats right now."
+                  : "This user isn't accepting messages right now.",
+              })
+              : chatBlockedBy === 'me'
+                ? t(`chat.unavailable_me_${chatType}`, {
+                  defaultValue: chatType === 'trade'
+                    ? "You've turned off trade chat. Turn it back on in Settings."
+                    : "You've turned off general chat. Turn it back on in Settings.",
+                })
+                : t('chat.type_message')
+          }
           placeholderTextColor="#888"
           value={input}
           onChangeText={handleTextChange}

@@ -38,6 +38,7 @@ import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
+import { chatTypeForRoute, fetchChatAvailability, resolveChatBlock } from '../chatAvailability';
 import { incrementAndCheckBadge, checkFiveStarBadge, REVIEW_BADGE_THRESHOLDS } from '../GroupChat/badgeUtils';
 import {
   doc,
@@ -47,6 +48,11 @@ import {
 } from '@react-native-firebase/firestore';
 import ProfileBottomDrawer from '../GroupChat/BottomDrawer';
 import { updateStreak } from '../../Helper/StreakHelper';
+
+// Cap on pets attached to one message. Raised from 9 once the message list
+// gained a compact two-column grid, which keeps 18 pets the same height 9 used
+// to be (see COMPACT_FRUITS_THRESHOLD in the message list components).
+const MAX_FRUITS_PER_MESSAGE = 18;
 
 
 
@@ -167,6 +173,35 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
     return banned.includes(selectedUserId);
   }, [bannedUsers, selectedUserId]);
+
+  // ── Chat availability ────────────────────────────────────────────────────
+  // Which switch applies is decided by the door: the Trades screen pushes
+  // PrivateChatTrade, everything else (inbox, feed, leaderboard, online list,
+  // profiles) is general. The same thread can therefore be trade-type now and
+  // general-type when reopened from the inbox — that's intended.
+  // Some navigators render this screen through a render-prop, so the `route`
+  // prop isn't guaranteed to carry `name` — fall back to the hook.
+  const navRoute = useRoute();
+  const routeName = route?.name || navRoute?.name;
+  const chatType = useMemo(() => chatTypeForRoute(routeName), [routeName]);
+
+  const [theirAvailability, setTheirAvailability] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!appdatabase || !selectedUserId) { setTheirAvailability(null); return undefined; }
+    fetchChatAvailability(appdatabase, selectedUserId).then((a) => {
+      if (!cancelled) setTheirAvailability(a);
+    });
+    return () => { cancelled = true; };
+  }, [appdatabase, selectedUserId]);
+
+  // Blocks in both directions: 'them' = they switched this door off,
+  // 'me' = I did, and I can't message anyone through it either.
+  const chatBlockedBy = useMemo(
+    () => resolveChatBlock(chatType, user, theirAvailability),
+    [chatType, user, theirAvailability]
+  );
+  const isChatUnavailable = !!chatBlockedBy;
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
@@ -577,13 +612,34 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   // ✅ Memoize sendMessage
   const sendMessage = useCallback(async (text, image, fruits, replyToMsg) => {
+    // Server-side guard for the availability switches. The input is already
+    // disabled when this door is off, so this only catches a stale screen —
+    // e.g. they switched it off while this chat was sitting open.
+    if (chatBlockedBy) {
+      showErrorMessage(
+        t('home.alert.error'),
+        chatBlockedBy === 'them'
+          ? t(`chat.unavailable_them_${chatType}`, {
+            defaultValue: chatType === 'trade'
+              ? "This user isn't accepting trade chats right now."
+              : "This user isn't accepting messages right now.",
+          })
+          : t(`chat.unavailable_me_${chatType}`, {
+            defaultValue: chatType === 'trade'
+              ? "You've turned off trade chat. Turn it back on in Settings to send messages."
+              : "You've turned off general chat. Turn it back on in Settings to send messages.",
+          })
+      );
+      return;
+    }
+
     const trimmedText = (text || '').trim(); // safe guard
     // Handle both single image (string) and multiple images (array)
     const hasImage = !!image && (typeof image === 'string' || (Array.isArray(image) && image.length > 0));
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
-    if (hasFruits && fruits.length > 9) {
+    if (hasFruits && fruits.length > MAX_FRUITS_PER_MESSAGE) {
       showErrorMessage(t("home.alert.error"), t('chat.max_pets_allowed'));
       return;
     }
@@ -725,6 +781,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         replyTo: replyToPayload,
         OS: Platform.OS,
         clientMsgId: newClientMsgId(),
+        // Stamp the door so the server can enforce the recipient's chat
+        // availability without trusting this client to have done it.
+        origin: chatType,
       });
 
       // Atomic two-sided chat_meta_data upsert. Replaces the prior
@@ -755,10 +814,28 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // 🔥 Update streak (fire-and-forget, non-blocking)
       updateStreak(firestoreDB, myUserId, selectedUserId).catch(() => { });
     } catch (error) {
+      // The DB trigger rejects sends through a door the recipient has closed.
+      // We only get here if they flipped the switch after this screen loaded —
+      // so refresh their availability and let the banner explain, rather than
+      // showing a generic failure.
+      if (String(error?.message || '').includes('RECIPIENT_CHAT_UNAVAILABLE')) {
+        if (appdatabase && selectedUserId) {
+          fetchChatAvailability(appdatabase, selectedUserId).then(setTheirAvailability);
+        }
+        Alert.alert(
+          t('chat.error'),
+          t(`chat.disabled_banner_them_${chatType}`, {
+            defaultValue: chatType === 'trade'
+              ? 'This user has disabled trade chat. You cannot message them from a trade.'
+              : 'This user has disabled chat. You cannot message them right now.',
+          })
+        );
+        return;
+      }
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin]);
+  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin, chatBlockedBy, chatType, appdatabase]);
 
 
 
@@ -1054,9 +1131,32 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
             {!localState.isPro && <BannerAdComponent />}
 
+            {/* Availability notice — states plainly why the input is dead, so a
+                disabled box never reads as the app being broken. */}
+            {isChatUnavailable && (
+              <View style={styles.chatUnavailableBanner}>
+                <Text style={styles.chatUnavailableIcon}>🚫</Text>
+                <Text style={styles.chatUnavailableText}>
+                  {chatBlockedBy === 'them'
+                    ? t(`chat.disabled_banner_them_${chatType}`, {
+                      defaultValue: chatType === 'trade'
+                        ? 'This user has disabled trade chat. You cannot message them from a trade.'
+                        : 'This user has disabled chat. You cannot message them right now.',
+                    })
+                    : t(`chat.disabled_banner_me_${chatType}`, {
+                      defaultValue: chatType === 'trade'
+                        ? 'You have disabled trade chat. Turn it back on in Settings to message from trades.'
+                        : 'You have disabled chat. Turn it back on in Settings to send messages.',
+                    })}
+                </Text>
+              </View>
+            )}
+
             <PrivateMessageInput
               onSend={sendMessage}
-              isBanned={isBanned}
+              isBanned={isBanned || isChatUnavailable}
+              chatBlockedBy={chatBlockedBy}
+              chatType={chatType}
               bannedUsers={bannedUsers}
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(null)}

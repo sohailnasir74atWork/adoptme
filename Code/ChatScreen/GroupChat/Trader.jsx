@@ -55,6 +55,11 @@ import PetModal from '../PrivateChat/PetsModel';
 import { incrementAndCheckBadge, MESSAGE_BADGE_THRESHOLDS } from './badgeUtils';
 import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
 
+// Cap on pets attached to one message. Raised from 9 once the message list
+// gained a compact two-column grid, which keeps 18 pets the same height 9 used
+// to be (see COMPACT_FRUITS_THRESHOLD in the message list components).
+const MAX_FRUITS_PER_MESSAGE = 18;
+
 let storage;
 try {
   const { createMMKV } = require('react-native-mmkv');
@@ -997,7 +1002,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const trimmedInput = (trimmedInputArg || '').trim();
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
-    if (hasFruits && fruits.length > 9) {
+    if (hasFruits && fruits.length > MAX_FRUITS_PER_MESSAGE) {
       Alert.alert(t('home.alert.error'), t('chat.max_pets_error'));
       return;
     }

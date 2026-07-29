@@ -91,105 +91,6 @@ const _countByType = async (appdatabase, myUid, type) => {
   }
 };
 
-/**
- * Accept a trade — saves lightweight ref to RTDB + creates Firestore notification for poster
- * Max 10 accepted trades at a time.
- */
-export const acceptTrade = async (appdatabase, firestoreDB, myUid, myName, trade, myExtras = {}) => {
-  // ✅ Enforce max limit
-  const count = await _countByType(appdatabase, myUid, 'accepted');
-  if (count >= MAX_ACCEPTED) {
-    throw new Error(`You can only have ${MAX_ACCEPTED} accepted trades at a time. Complete or remove some first.`);
-  }
-
-  const tradeId = trade.id;
-  const tradeRef = ref(appdatabase, `savedTrades/${myUid}/${tradeId}`);
-
-  await set(tradeRef, {
-    type: 'accepted',
-    traderId: trade.userId,
-    traderName: trade.traderName || 'Unknown',
-    traderRobloxUsername: trade.robloxUsername || '',
-    savedAt: rtdbTimestamp(),
-  });
-
-  // Also record this acceptance under the trade itself so the poster can see who accepted.
-  // Track whether this user had already accepted so re-accepting doesn't re-notify.
-  let alreadyAccepted = false;
-  try {
-    const existing = await get(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`));
-    alreadyAccepted = existing.exists();
-    await set(ref(appdatabase, `tradeAcceptors/${tradeId}/${myUid}`), {
-      name: myName,
-      robloxUsername: myExtras.robloxUsername || '',
-      avatar: myExtras.avatar || '',
-      acceptedAt: rtdbTimestamp(),
-    });
-  } catch (e) {
-    console.warn('[tradeHelpers] Failed to write tradeAcceptors:', e?.message);
-  }
-
-  // Build a short trade summary for the notification
-  const tradeSummary = _buildTradeSummary(trade);
-
-  // Write notification to Firestore for in-app feed + cloud function FCM push.
-  // Skip when the user had already accepted (prevents duplicate pings on re-accept).
-  if (!alreadyAccepted) {
-    try {
-      await addDoc(collection(firestoreDB, 'notifications'), {
-        toUid: trade.userId,
-        fromUid: myUid,
-        fromName: myName,
-        type: 'trade_accepted',
-        tradeId: tradeId,
-        message: `${myName} accepted your trade! ${tradeSummary}`,
-        read: false,
-        createdAt: fsTimestamp(),
-      });
-    } catch (e) {
-      console.warn('[tradeHelpers] Failed to write accept notification:', e?.message);
-    }
-  }
-}
-
-/**
- * Notify everyone who accepted a trade that it is no longer available — either
- * the poster completed it (with someone) or removed the listing. Writes one
- * Firestore notification per acceptor; the notifyTradeAccept CF turns each into
- * an FCM push (type 'trade_closed'). Call this BEFORE removeAllTradeAcceptors,
- * while the acceptor list still exists.
- * @param {'completed'|'removed'} reason
- */
-export const notifyAcceptorsTradeClosed = async (appdatabase, firestoreDB, tradeId, posterUid, posterName, reason = 'completed') => {
-  if (!appdatabase || !firestoreDB || !tradeId) return;
-  try {
-    const acceptors = await fetchTradeAcceptors(appdatabase, tradeId);
-    const uids = Object.keys(acceptors || {}).filter(u => u && u !== posterUid);
-    if (uids.length === 0) return;
-    const message = reason === 'removed'
-      ? `A trade you accepted was removed by ${posterName || 'the poster'}.`
-      : `A trade you accepted was completed and is no longer available.`;
-    await Promise.all(uids.map(toUid =>
-      addDoc(collection(firestoreDB, 'notifications'), {
-        toUid,
-        fromUid: posterUid || '',
-        fromName: posterName || 'Trader',
-        type: 'trade_closed',
-        tradeId,
-        message,
-        read: false,
-        createdAt: fsTimestamp(),
-      }).catch(() => {})
-    ));
-  } catch (e) {
-    console.warn('[tradeHelpers] notifyAcceptorsTradeClosed failed:', e?.message);
-  }
-};;
-
-/**
- * Save/bookmark a trade — saves lightweight ref to RTDB only (no notification)
- * Max 10 saved trades at a time.
- */
 export const saveTrade = async (appdatabase, myUid, trade) => {
   // ✅ Enforce max limit
   const count = await _countByType(appdatabase, myUid, 'saved');
@@ -292,33 +193,6 @@ const _buildTradeSummary = (trade) => {
   }
 };
 
-/**
- * Fetch all acceptors for a single trade
- * Returns object: { acceptorUid: { name, robloxUsername, avatar, acceptedAt } }
- */
-export const fetchTradeAcceptors = async (appdatabase, tradeId) => {
-  try {
-    const snap = await get(ref(appdatabase, `tradeAcceptors/${tradeId}`));
-    if (snap.exists()) return snap.val();
-    return {};
-  } catch {
-    return {};
-  }
-};
-
-/**
- * Remove all acceptors for a trade (called when trade is completed/deleted)
- */
-export const removeAllTradeAcceptors = async (appdatabase, tradeId) => {
-  try {
-    await remove(ref(appdatabase, `tradeAcceptors/${tradeId}`));
-  } catch {}
-};
-
-/**
- * Fetch all saved/accepted trade refs from RTDB
- * Returns object: { tradeId: { type, traderId, traderName, ... } }
- */
 export const fetchSavedTradeRefs = async (appdatabase, myUid) => {
   try {
     const snap = await get(ref(appdatabase, `savedTrades/${myUid}`));
@@ -330,4 +204,90 @@ export const fetchSavedTradeRefs = async (appdatabase, myUid) => {
     console.warn('[tradeHelpers] Failed to fetch saved trades:', e?.message);
     return {};
   }
+};
+
+// ── Variant tags (Neon / Mega / Fly / Ride) ──────────────────────────────────
+// Server-side filtering gets one array-contains clause per query, but the query
+// players actually want is "a single pet that is neon AND fly AND ride" (NFR).
+// So each pet contributes every combination of its own tags — a neon fly-ride
+// pet yields n, f, r, nf, nr, fr, nfr — and any subset the chips can ask for
+// becomes one exact token match. The whole token space is 11 values, so a
+// trade's deduped array stays tiny no matter how many pets it holds.
+//
+// Written by the create-trade flow (HomeScreen) and by scripts/backfill-variant-tags.js.
+const VARIANT_TOKEN_ORDER = ['n', 'm', 'f', 'r'];
+const VARIANT_KEY_TO_LETTER = { neon: 'n', mega: 'm', fly: 'f', ride: 'r' };
+
+// Value type first, then f, then r — a fixed order so the writer and the querier
+// can never disagree about how a combination is spelled.
+const toToken = (letters) =>
+  VARIANT_TOKEN_ORDER.filter((l) => letters.includes(l)).join('');
+
+const itemVariantLetters = (item) => {
+  if (!item) return [];
+  const letters = [];
+  const valueType = String(item.valueType || '').toLowerCase();
+  if (valueType === 'n' || valueType === 'm') letters.push(valueType);
+  if (item.isFly) letters.push('f');
+  if (item.isRide) letters.push('r');
+  return letters;
+};
+
+const combinationsOf = (letters) => {
+  const out = [];
+  for (let mask = 1; mask < (1 << letters.length); mask++) {
+    out.push(toToken(letters.filter((_, i) => mask & (1 << i))));
+  }
+  return out;
+};
+
+// Denormalized tag array stored on each trade doc, covering both sides of the trade.
+export const buildVariantTags = (...itemLists) => {
+  const tags = new Set();
+  itemLists.flat().filter(Boolean).forEach((item) => {
+    combinationsOf(itemVariantLetters(item)).forEach((token) => tags.add(token));
+  });
+  return [...tags];
+};
+
+// Turns the selected filter chips into the single token to match server-side.
+// Returns null when no variant chip is active, so callers can skip the clause.
+export const variantFilterToken = (filterKeys = []) => {
+  const letters = filterKeys.map((k) => VARIANT_KEY_TO_LETTER[k]).filter(Boolean);
+  return letters.length ? toToken(letters) : null;
+};
+
+// Client-side equivalent of the array-contains clause, used ONLY in text-search
+// mode: Firestore permits a single array-contains per query and the search
+// already spends it on hasItemNames/wantsItemNames.
+export const tradeMatchesVariants = (trade, filterKeys = []) => {
+  const letters = filterKeys.map((k) => VARIANT_KEY_TO_LETTER[k]).filter(Boolean);
+  if (!letters.length) return true;
+  return [...(trade?.hasItems || []), ...(trade?.wantsItems || [])]
+    .filter(Boolean)
+    .some((item) => {
+      const own = itemVariantLetters(item);
+      return letters.every((l) => own.includes(l));
+    });
+};
+
+// Search and tags applied together: the pet that matched the typed name must ALSO
+// carry every selected tag, and be on the side(s) being searched. Searching
+// "shadow dragon" with Neon on means a neon Shadow Dragon — not a trade holding a
+// Shadow Dragon and, separately, some unrelated neon pet.
+export const tradeMatchesSearchWithVariants = (trade, searchTermLower, filterKeys = [], sides = {}) => {
+  const letters = filterKeys.map((k) => VARIANT_KEY_TO_LETTER[k]).filter(Boolean);
+  const { inHas = true, inWants = true } = sides;
+  const items = [
+    ...(inHas ? (trade?.hasItems || []) : []),
+    ...(inWants ? (trade?.wantsItems || []) : []),
+  ].filter(Boolean);
+
+  return items.some((item) => {
+    const name = String(item.name || item.Name || '').toLowerCase();
+    if (searchTermLower && !name.includes(searchTermLower)) return false;
+    if (!letters.length) return true;
+    const own = itemVariantLetters(item);
+    return letters.every((l) => own.includes(l));
+  });
 };

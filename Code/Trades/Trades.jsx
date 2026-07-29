@@ -27,7 +27,7 @@ import { useHaptic } from '../Helper/HepticFeedBack';
 import { getCachedProfile, warmProfileCache } from '../Helper/profileCache';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
-import { saveTrade, unsaveTrade, fetchSavedTradeRefs } from './tradeHelpers';
+import { saveTrade, unsaveTrade, fetchSavedTradeRefs, variantFilterToken, tradeMatchesVariants, tradeMatchesSearchWithVariants } from './tradeHelpers';
 import {
   collection,
   deleteDoc,
@@ -50,6 +50,28 @@ dayjs.extend(relativeTime);
 // ✅ Only show trades from the last 7 days — keeps feed fresh, prevents stale trades
 const TRADE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const getSevenDaysAgo = () => Timestamp.fromMillis(Date.now() - TRADE_MAX_AGE_MS);
+
+// Featured trades are fetched once per feed load: 3 shown immediately, the rest
+// held back and drip-fed 3 at a time by load-more. 12 covers the initial batch
+// plus three load-mores without a second query, and caps the read count if the
+// number of featured trades grows.
+const FEATURED_FETCH_LIMIT = 12;
+
+// Variant tag filters — narrow the feed to trades containing a Neon / Mega / Fly /
+// Ride pet. Selecting several means ONE pet has to satisfy all of them, so
+// Neon + Fly + Ride is the "NFR" search players actually type. Neon and Mega are
+// mutually exclusive because a pet carries exactly one value type.
+//
+// Filtering happens in Firestore against the denormalized `variantTags` array
+// (see buildVariantTags in tradeHelpers) — one array-contains clause per query.
+const VALUE_TYPE_VARIANTS = ['neon', 'mega'];
+const VARIANT_FILTERS = [
+  { key: 'neon', color: '#2ecc71', labelKey: 'value.variant_neon', fallback: 'Neon' },
+  { key: 'mega', color: '#9b59b6', labelKey: 'value.variant_mega', fallback: 'Mega' },
+  { key: 'fly', color: '#3498db', labelKey: 'value.variant_fly', fallback: 'Fly' },
+  { key: 'ride', color: '#e74c3c', labelKey: 'value.variant_ride', fallback: 'Ride' },
+];
+const VARIANT_FILTER_KEYS = VARIANT_FILTERS.map((v) => v.key);
 
 const TradeList = ({ route }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,6 +114,11 @@ const TradeList = ({ route }) => {
   const isDarkMode = theme === 'dark'
   const c = getThemeColors(isDarkMode);
   const isInitialMountRef = useRef(true); // ✅ Track initial mount to prevent double fetch
+  // Set synchronously the moment a search is requested. isSearchMode only flips
+  // once handleSearchTrades has awaited its queries, so without this the commit
+  // of staged tags re-renders first and the refetch effect would fire
+  // fetchInitialTrades() and clobber the search results mid-flight.
+  const searchRequestedRef = useRef(false);
   const flatListRef = useRef(null);
   const scrollButtonOpacity = useMemo(() => new Animated.Value(0), []);
   const { triggerHapticFeedback } = useHaptic();
@@ -106,6 +133,28 @@ const TradeList = ({ route }) => {
   // console.log(trades, 'trades')
 
   const [selectedFilters, setSelectedFilters] = useState([]); // ✅ Default: no filters (show all)
+
+  // Tag chips are STAGED, not live: tapping one only marks it. Nothing re-queries
+  // until the search icon is pressed, so a tap never costs a read on its own.
+  // `pendingVariants` is what the chips show; the committed copy lives in
+  // selectedFilters and is what actually filters.
+  const [pendingVariants, setPendingVariants] = useState([]);
+
+  // Single token matched against each trade's `variantTags` array in Firestore.
+  // Null when no variant chip is active, in which case the clause is left out.
+  // Declared up here because every fetch callback below closes over it.
+  const activeVariantToken = useMemo(
+    () => variantFilterToken(selectedFilters.filter(f => VARIANT_FILTER_KEYS.includes(f))),
+    [selectedFilters]
+  );
+
+  // Set when Firestore can't serve the variantTags query yet — the composite index
+  // is still building, or missing in this environment. We refetch without the
+  // clause and match tags on the client instead, so the chips keep working rather
+  // than failing the whole feed. Reset whenever the selection changes, so a later
+  // tap re-probes the server once the index is ready.
+  const [variantIndexUnavailable, setVariantIndexUnavailable] = useState(false);
+
   const isMyTradesActive = selectedFilters.includes('myTrades');
   const isFollowingActive = selectedFilters.includes('following');
   const isSavedActive = selectedFilters.includes('saved');
@@ -249,11 +298,61 @@ const TradeList = ({ route }) => {
           matchesSaved = !!savedTradeRefs[trade.id];
         }
 
+        // Variant tags are filtered in Firestore via array-contains, so anything
+        // reaching here already matches — except in the two cases below.
+        let matchesVariants = true;
+        const variantFilters = selectedFilters.filter(f => VARIANT_FILTER_KEYS.includes(f));
+        if (isSearchMode) {
+          // Search mode: the tags refine the search rather than standing alone, so
+          // the pet that matched the typed name must carry them too, on the side
+          // being searched. (Firestore's one array-contains slot is already spent
+          // on hasItemNames/wantsItemNames here.)
+          matchesVariants = tradeMatchesSearchWithVariants(
+            trade,
+            searchQuery.trim().toLowerCase(),
+            variantFilters,
+            { inHas: searchInHas, inWants: searchInWants }
+          );
+        } else if (variantIndexUnavailable) {
+          matchesVariants = tradeMatchesVariants(trade, variantFilters);
+        }
+
         // ✅ All selected filters must match (AND logic)
-        return matchesStatus && matchesMyTrades && matchesFollowing && matchesSaved;
+        return matchesStatus && matchesMyTrades && matchesFollowing && matchesSaved && matchesVariants;
       })
     );
-  }, [trades, selectedFilters, user.id, bannedUsers, followingIds, savedTradeRefs]);
+  }, [trades, selectedFilters, user.id, bannedUsers, followingIds, savedTradeRefs, isSearchMode, variantIndexUnavailable, searchQuery, searchInHas, searchInWants]);
+
+  // Variant tag chips. Neon and Mega can't both be true on one pet, so picking
+  // one clears the other; Fly and Ride stack freely on top.
+  const toggleVariantFilter = useCallback((key) => {
+    triggerHapticFeedback('impactLight');
+    setPendingVariants((prev) => {
+      if (prev.includes(key)) return prev.filter((f) => f !== key);
+      const cleared = VALUE_TYPE_VARIANTS.includes(key)
+        ? prev.filter((f) => !VALUE_TYPE_VARIANTS.includes(f))
+        : prev;
+      return [...cleared, key];
+    });
+  }, [triggerHapticFeedback]);
+
+  // A new tag selection re-probes Firestore — the index may have finished
+  // building since the last failure.
+  useEffect(() => { setVariantIndexUnavailable(false); }, [activeVariantToken]);
+
+  // The tag chips only exist alongside a search, so clear any selection when the
+  // search box empties. Without this a chip stays active but invisible and keeps
+  // silently narrowing the feed with no way to see or undo it.
+  useEffect(() => {
+    if (searchQuery.length > 0) return;
+    searchRequestedRef.current = false;
+    setPendingVariants((prev) => (prev.length ? [] : prev));
+    setSelectedFilters((prev) =>
+      prev.some(f => VARIANT_FILTER_KEYS.includes(f))
+        ? prev.filter(f => !VARIANT_FILTER_KEYS.includes(f))
+        : prev // same reference when there's nothing to drop — avoids a render loop
+    );
+  }, [searchQuery]);
 
   // ✅ Auto-scroll to top when filters change
   useEffect(() => {
@@ -563,27 +662,23 @@ const TradeList = ({ route }) => {
 
       // ✅ Build query for more normal trades (only last 7 days)
       const sevenDaysAgo = getSevenDaysAgo();
-      let normalQuery = query(
+      // Must mirror fetchInitialTrades exactly, or startAfter() paginates a
+      // different result set than the one already on screen.
+      const statusClause = (statusValues && statusValues.length > 0)
+        ? [where('status', 'in', statusValues)] : [];
+      const variantClause = (activeVariantToken && !variantIndexUnavailable)
+        ? [where('variantTags', 'array-contains', activeVariantToken)] : [];
+
+      const normalQuery = query(
         collection(firestoreDB, 'trades_new'),
         where('isFeatured', '==', false),
+        ...statusClause,
+        ...variantClause,
         where('timestamp', '>', sevenDaysAgo),
         orderBy('timestamp', 'desc'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
       );
-
-      // ✅ Add status filter if status filters are selected
-      if (statusValues && statusValues.length > 0) {
-        normalQuery = query(
-          collection(firestoreDB, 'trades_new'),
-          where('isFeatured', '==', false),
-          where('status', 'in', statusValues),
-          where('timestamp', '>', sevenDaysAgo),
-          orderBy('timestamp', 'desc'),
-          startAfter(lastDoc),
-          limit(PAGE_SIZE)
-        );
-      }
 
       const normalTradesQuerySnap = await getDocs(normalQuery);
 
@@ -615,7 +710,7 @@ const TradeList = ({ route }) => {
         console.warn('⚠️ Firestore index required. Please create composite index for: status + timestamp');
       }
     }
-  }, [lastDoc, hasMore, remainingFeaturedTrades, firestoreDB, selectedFilters]);
+  }, [lastDoc, hasMore, remainingFeaturedTrades, firestoreDB, selectedFilters, activeVariantToken, variantIndexUnavailable]);
 
 
 
@@ -856,6 +951,21 @@ const TradeList = ({ route }) => {
     }
   }, [searchQuery, searchInHas, searchInWants, selectedFilters, firestoreDB, searchLastDoc]);
 
+  // The single entry point for running a search: commits the staged tags and
+  // fires one query. Both the search icon and the keyboard's search key use it.
+  const runSearch = useCallback(() => {
+    searchRequestedRef.current = true;
+    setSearchLastDoc(null);
+    setSearchHasMore(true);
+    setSelectedFilters((prev) => [
+      ...prev.filter(f => !VARIANT_FILTER_KEYS.includes(f)),
+      ...pendingVariants,
+    ]);
+    if (searchQuery.trim()) {
+      handleSearchTrades(false);
+    }
+  }, [pendingVariants, searchQuery, handleSearchTrades]);
+
   const fetchInitialTrades = useCallback(async () => {
     setLoading(true);
     try {
@@ -867,25 +977,21 @@ const TradeList = ({ route }) => {
 
       // ✅ Build query for normal trades (only last 7 days)
       const sevenDaysAgo = getSevenDaysAgo();
-      let normalQuery = query(
+      // Optional clauses, spread in below so each combination stays one query.
+      const statusClause = (statusValues && statusValues.length > 0)
+        ? [where('status', 'in', statusValues)] : [];
+      const variantClause = (activeVariantToken && !variantIndexUnavailable)
+        ? [where('variantTags', 'array-contains', activeVariantToken)] : [];
+
+      const normalQuery = query(
         collection(firestoreDB, 'trades_new'),
         where('isFeatured', '==', false),
+        ...statusClause,
+        ...variantClause,
         where('timestamp', '>', sevenDaysAgo),
         orderBy('timestamp', 'desc'),
         limit(PAGE_SIZE)
       );
-
-      // ✅ Add status filter if status filters are selected
-      if (statusValues && statusValues.length > 0) {
-        normalQuery = query(
-          collection(firestoreDB, 'trades_new'),
-          where('isFeatured', '==', false),
-          where('status', 'in', statusValues),
-          where('timestamp', '>', sevenDaysAgo),
-          orderBy('timestamp', 'desc'),
-          limit(PAGE_SIZE)
-        );
-      }
 
       const normalTradesQuerySnap = await getDocs(normalQuery);
 
@@ -895,24 +1001,20 @@ const TradeList = ({ route }) => {
       }));
 
 
-      // ✅ Build query for featured trades
-      let featuredQuery = query(
+      // ✅ Build query for featured trades — same optional clauses, so a variant
+      // filter doesn't leak non-matching featured trades into the results.
+      // Bounded: this runs on every feed load, and the UI shows 3 up front then
+      // 3 per load-more from the reserve. Without a limit the read count grows
+      // with however many trades happen to be featured at the time.
+      const featuredQuery = query(
         collection(firestoreDB, 'trades_new'),
         where('isFeatured', '==', true),
+        ...statusClause,
+        ...variantClause,
         where('featuredUntil', '>', Timestamp.now()),
-        orderBy('featuredUntil', 'desc')
+        orderBy('featuredUntil', 'desc'),
+        limit(FEATURED_FETCH_LIMIT)
       );
-
-      // ✅ Add status filter to featured trades if status filters are selected
-      if (statusValues && statusValues.length > 0) {
-        featuredQuery = query(
-          collection(firestoreDB, 'trades_new'),
-          where('isFeatured', '==', true),
-          where('featuredUntil', '>', Timestamp.now()),
-          where('status', 'in', statusValues),
-          orderBy('featuredUntil', 'desc')
-        );
-      }
 
       const featuredQuerySnapshot = await getDocs(featuredQuery);
 
@@ -947,15 +1049,22 @@ const TradeList = ({ route }) => {
         warmProfileCache(appdatabase, allUserIds);
       }
     } catch (error) {
-      console.error('❌ Error fetching trades:', error);
       // ✅ If error is about missing index, log helpful message
       if (error.code === 'failed-precondition') {
+        // The variantTags index isn't servable yet — retry without it and let the
+        // client match tags, so the tag chips degrade instead of breaking the feed.
+        if (activeVariantToken && !variantIndexUnavailable) {
+          console.warn('⚠️ variantTags index not ready — filtering tags on the client for now');
+          setVariantIndexUnavailable(true);
+          return;
+        }
         console.warn('⚠️ Firestore index required. Please create composite index for: status + timestamp');
       }
+      console.error('❌ Error fetching trades:', error);
     } finally {
       setLoading(false);
     }
-  }, [firestoreDB, selectedFilters]);
+  }, [firestoreDB, selectedFilters, activeVariantToken, variantIndexUnavailable]);
 
 
   // const captureAndSave = async () => {
@@ -1159,6 +1268,10 @@ const TradeList = ({ route }) => {
     // Skip refetch on initial mount (user?.id effect handles that)
     if (isInitialMountRef.current) return;
 
+    // In search mode the tags refine the results already on screen — refetching
+    // the normal feed here would discard the user's search.
+    if (isSearchMode || searchRequestedRef.current) return;
+
     // Refetch when status filters change to apply database-level filtering
     if (user?.id) {
       // Fetch based on the single active filter (they're mutually exclusive)
@@ -1173,7 +1286,7 @@ const TradeList = ({ route }) => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFiltersString, isMyTradesActive, isSavedActive, isFollowingActive]); // ✅ Refetch when the active filter changes
+  }, [statusFiltersString, activeVariantToken, variantIndexUnavailable, isMyTradesActive, isSavedActive, isFollowingActive, isSearchMode]); // ✅ Refetch when the active filter changes
 
   const closeProfileDrawer = async () => {
     setIsDrawerVisible(false);
@@ -1734,13 +1847,7 @@ const TradeList = ({ route }) => {
           placeholderTextColor={isDarkMode ? '#888' : '#666'}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          onSubmitEditing={() => {
-            setSearchLastDoc(null);
-            setSearchHasMore(true);
-            if (searchQuery.trim()) {
-              handleSearchTrades(false);
-            }
-          }}
+          onSubmitEditing={runSearch}
           returnKeyType="search"
         />
         <TouchableOpacity
@@ -1753,13 +1860,7 @@ const TradeList = ({ route }) => {
             justifyContent: 'center',
             alignItems: 'center'
           }}
-          onPress={() => {
-            setSearchLastDoc(null);
-            setSearchHasMore(true);
-            if (searchQuery.trim()) {
-              handleSearchTrades(false);
-            }
-          }}
+          onPress={runSearch}
           disabled={isSearching}
         >
           {isSearching ? (
@@ -1813,11 +1914,15 @@ const TradeList = ({ route }) => {
 
           <TouchableOpacity
             onPress={() => {
+              // State only — no fetch here. Clearing changes isSearchMode and drops
+              // the committed tags in the same batch, and the refetch effect below
+              // reloads the feed once off the fresh state. Fetching inline instead
+              // fired twice: once through this callback's stale closure (still
+              // carrying the tag filter) and again when the tags cleared.
               setSearchQuery('');
               setIsSearchMode(false);
               setSearchLastDoc(null);
               setSearchHasMore(true);
-              fetchInitialTrades();
             }}
             style={{
               flexDirection: 'row',
@@ -1835,6 +1940,30 @@ const TradeList = ({ route }) => {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Variant tags — part of the search flow, so they only appear once something
+          is typed: name -> Me/You -> tags. They narrow the results to the searched
+          pet carrying these tags on the chosen side. */}
+      {(searchQuery.length > 0) && (
+        <View style={styles.variantFilterRow}>
+          {VARIANT_FILTERS.map(({ key, color, labelKey, fallback }) => {
+            const active = pendingVariants.includes(key);
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => toggleVariantFilter(key)}
+                activeOpacity={0.75}
+                style={[styles.variantFilterChip, active && { backgroundColor: color, borderColor: color }]}
+              >
+                <Text style={[styles.variantFilterText, active && styles.variantFilterTextActive]}>
+                  {t(labelKey, { defaultValue: fallback })}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
 
 
       <FlatList
@@ -2029,6 +2158,30 @@ const getStyles = (isDarkMode, c) => {
       backgroundColor: c.bgAlt,
       borderWidth: isDarkMode ? 0 : 1,
       borderColor: c.border,
+    },
+    // Trade feed: Neon / Mega / Fly / Ride tag filters
+    variantFilterRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 10,
+    },
+    variantFilterChip: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.bgAlt,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    variantFilterText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.textSecondary,
+    },
+    variantFilterTextActive: {
+      color: '#fff',
     },
     checkboxUnchecked: {
       opacity: 0.6,

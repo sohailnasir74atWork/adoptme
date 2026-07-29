@@ -31,6 +31,9 @@ const MessageActionDrawer = ({
     isAdminOrMod,
     userId,
     isDarkMode,
+    // Public chat switches this off: regular users must not be able to delete
+    // their own messages there. Admin/mod delete below is unaffected.
+    allowSelfDelete = true,
 }) => {
     const { t } = useTranslation();
 
@@ -214,8 +217,9 @@ const MessageActionDrawer = ({
                             </>
                         )}
 
-                        {/* Delete own message (non-admin) */}
-                        {!isAdminOrMod && message?.senderId === userId && onDelete && (
+                        {/* Delete own message (non-admin) — hidden where the host
+                            screen passes allowSelfDelete={false}. */}
+                        {allowSelfDelete && !isAdminOrMod && message?.senderId === userId && onDelete && (
                             <>
                                 <View style={styles.divider} />
                                 <TouchableOpacity

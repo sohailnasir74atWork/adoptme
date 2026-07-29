@@ -201,7 +201,9 @@
             "confirm_change_title": "Confirmer le changement",
             "confirm_change_message": "Vous ne pourrez plus changer votre nom pendant {{days}} jours. Êtes-vous sûr ?",
             "confirm_save": "Oui, enregistrer"
-        }
+        },
+        "unavailable_general_chat": "Indisponible pour le chat général",
+        "unavailable_trade_chat": "Indisponible pour le chat d'échange"
     },
     "profile": {
         "display_name": "Nom d’affichage",
@@ -384,7 +386,14 @@
         "sort_low": "▼ Bas",
         "selected_pets": "Animaux sélectionnés",
         "owned_pets": "Animaux possédés",
-        "wishlist": "Liste de souhaits"
+        "wishlist": "Liste de souhaits",
+        "variant_neon": "Néon",
+        "variant_mega": "Méga",
+        "variant_fly": "Voler",
+        "variant_ride": "Monter",
+        "range": "Valeur",
+        "range_min": "Min",
+        "range_max": "Max"
     },
     "stock": {
         "description": "Avertissement : les mises à jour du stock peuvent parfois être retardées car les données sont mises à jour manuellement. Merci pour votre patience, et pensez à vérifier régulièrement.",
@@ -856,7 +865,15 @@
         "no_users_found": "Aucun utilisateur trouvé",
         "search_database": "Rechercher dans la base",
         "search": "Rechercher",
-        "enter_search_term": "Entrer un nom"
+        "enter_search_term": "Entrer un nom",
+        "unavailable_them_general": "Cet utilisateur ne reçoit pas de messages actuellement.",
+        "unavailable_them_trade": "Cet utilisateur ne reçoit pas de chats d'échange actuellement.",
+        "unavailable_me_general": "Vous avez désactivé le chat général. Réactivez-le dans les Réglages.",
+        "unavailable_me_trade": "Vous avez désactivé le chat d'échange. Réactivez-le dans les Réglages.",
+        "disabled_banner_them_general": "Cet utilisateur a désactivé le chat. Vous ne pouvez pas lui écrire pour le moment.",
+        "disabled_banner_them_trade": "Cet utilisateur a désactivé le chat d’échange. Vous ne pouvez pas lui écrire depuis un échange.",
+        "disabled_banner_me_general": "Vous avez désactivé le chat. Réactivez-le dans les Réglages pour envoyer des messages.",
+        "disabled_banner_me_trade": "Vous avez désactivé le chat d’échange. Réactivez-le dans les Réglages."
     },
     "first": {
         "welcome_title": "Bienvenue sur Fruit Values",

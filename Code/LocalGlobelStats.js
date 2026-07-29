@@ -85,6 +85,9 @@ export const LocalStateProvider = ({ children }) => {
     showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
     showOnlineStatus: storage.getBoolean('showOnlineStatus') ?? true, // ✅ Default true (show online), user can hide to save Firebase costs
     showReadReceipts: storage.getBoolean('showReadReceipts') ?? true, // ✅ Default true (show read ticks), user can toggle off/on
+    // Device-level opt-out for chat pushes. Turning it on clears users/{uid}/fcmToken,
+    // which is the gate notifyNewMessage actually checks.
+    chatNotificationsOff: storage.getBoolean('chatNotificationsOff') ?? false,
     gameMusicEnabled: storage.getBoolean('gameMusicEnabled') ?? true, // ✅ Default true (music on), user can toggle off/on
 
   }));

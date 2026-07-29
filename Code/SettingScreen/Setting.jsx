@@ -25,7 +25,7 @@ import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRate
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import auth from '@react-native-firebase/auth';
-import { resetUserState } from '../Globelhelper';
+import { resetUserState, registerForNotifications } from '../Globelhelper';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
@@ -1173,11 +1173,14 @@ export default function SettingsScreen({ selectedTheme }) {
   useEffect(() => {
     const checkPermission = async () => {
       const settings = await notifee.getNotificationSettings();
-      setIsPermissionGranted(settings.authorizationStatus === 1); // 1 means granted
+      // The switch reflects OS permission AND the user's own opt-out. Reading
+      // only the OS setting made a manual "off" flip back on next visit.
+      const osGranted = settings.authorizationStatus === 1;
+      setIsPermissionGranted(osGranted && localState?.chatNotificationsOff !== true);
     };
 
     checkPermission();
-  }, []);
+  }, [localState?.chatNotificationsOff]);
 
   // Request permission
   const requestPermission = async () => {
@@ -1212,12 +1215,32 @@ export default function SettingsScreen({ selectedTheme }) {
   // Handle toggle
   const handleToggleNotification = async (value) => {
     if (value) {
-      // If enabling notifications, request permission
+      // Re-request OS permission, then re-register the FCM token we cleared.
       const granted = await requestPermission();
+      if (granted) {
+        updateLocalState('chatNotificationsOff', false);
+        if (user?.id) {
+          try {
+            await registerForNotifications(user.id);
+          } catch (e) {
+            console.warn('[settings] token re-register failed:', e?.message);
+          }
+        }
+      }
       setIsPermissionGranted(granted);
     } else {
-      // If disabling, update the state
+      // Off has to do real work: the OS permission can't be revoked from here,
+      // and notifyNewMessage has no global "notifications off" flag — it only
+      // early-returns when users/{uid}/fcmToken is missing. So clear the token.
+      updateLocalState('chatNotificationsOff', true);
       setIsPermissionGranted(false);
+      if (user?.id && appdatabase) {
+        try {
+          await set(ref(appdatabase, `users/${user.id}/fcmToken`), null);
+        } catch (e) {
+          console.warn('[settings] token clear failed:', e?.message);
+        }
+      }
     }
   };
   const USERNAME_REGEX = /^[A-Za-z0-9_-]+$/;
@@ -3005,6 +3028,59 @@ export default function SettingsScreen({ selectedTheme }) {
             </View>
           </View>)}
 
+          <View style={styles.option}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Icon name="notifications" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>{t('settings.chat_notifications')}</Text>
+              </TouchableOpacity>
+              <Switch
+                value={isPermissionGranted}
+                onValueChange={handleToggleNotification}
+              />
+            </View>
+          </View>
+
+          {/* Chat availability — two independent doors. Trade chat is what
+              opens from the Trades screen; general chat is everywhere else
+              (public chat, feed, leaderboard, inbox, profiles). Each switch
+              blocks both directions for that door. */}
+          <View style={styles.option}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Icon name="chatbubble-ellipses-outline" size={18} color={'white'} style={{ backgroundColor: '#8B5CF6', padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>
+                  {t('settings.unavailable_general_chat', { defaultValue: 'Unavailable for General Chat' })}
+                </Text>
+              </TouchableOpacity>
+              <Switch
+                value={!!user?.chatOffGeneral}
+                onValueChange={(v) => {
+                  triggerHapticFeedback('impactLight');
+                  updateLocalStateAndDatabase('chatOffGeneral', v);
+                }}
+              />
+            </View>
+          </View>
+
+          <View style={styles.option}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Icon name="swap-horizontal-outline" size={18} color={'white'} style={{ backgroundColor: '#F59E0B', padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>
+                  {t('settings.unavailable_trade_chat', { defaultValue: 'Unavailable for Trade Chat' })}
+                </Text>
+              </TouchableOpacity>
+              <Switch
+                value={!!user?.chatOffTrade}
+                onValueChange={(v) => {
+                  triggerHapticFeedback('impactLight');
+                  updateLocalStateAndDatabase('chatOffTrade', v);
+                }}
+              />
+            </View>
+          </View>
+
           {/* ✅ Roblox Username Section */}
           {user?.id && (
             <View style={styles.option}>
@@ -3217,20 +3293,6 @@ export default function SettingsScreen({ selectedTheme }) {
                   <Text style={styles.optionText}>{t('settings.haptic_feedback')}</Text>
                 </TouchableOpacity>
                 <Switch value={localState.isHaptic} onValueChange={handleToggle} />
-              </View>
-
-            </View>
-            <View style={styles.option} onPress={() => {
-              handleShareApp(); triggerHapticFeedback('impactLight');
-            }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Icon name="notifications" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
-                  <Text style={styles.optionText}>{t('settings.chat_notifications')}</Text></TouchableOpacity>
-                <Switch
-                  value={isPermissionGranted}
-                  onValueChange={handleToggleNotification}
-                />
               </View>
 
             </View>

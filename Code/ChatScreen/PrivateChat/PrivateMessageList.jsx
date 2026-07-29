@@ -33,6 +33,9 @@ import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
 import { getCachedProfile } from '../../Helper/profileCache';
 
+// Above this many pets a message switches to the compact two-column grid.
+const COMPACT_FRUITS_THRESHOLD = 9;
+
 
 
 const PrivateMessageList = ({
@@ -267,6 +270,9 @@ const PrivateMessageList = ({
     // fruits helpers
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
     const hasFruits = fruits.length > 0;
+    // Past 9 pets the single-column list grows taller than the screen, so
+    // switch to two columns — 18 pets then occupy the same 9 rows.
+    const isCompactFruits = fruits.length > COMPACT_FRUITS_THRESHOLD;
     const totalFruitValue = hasFruits
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
       : 0;
@@ -382,6 +388,7 @@ const PrivateMessageList = ({
               <View
                 style={[
                   fruitStyles.fruitsWrapper,
+                  isCompactFruits && fruitStyles.fruitsWrapperCompact,
                 ]}
               >
                 {fruits.map((fruit, index) => {
@@ -397,23 +404,23 @@ const PrivateMessageList = ({
                   return (
                     <View
                       key={`${fruit.id || fruit.name}-${index}`}
-                      style={fruitStyles.fruitCard}
+                      style={[fruitStyles.fruitCard, isCompactFruits && fruitStyles.fruitCardCompact]}
                     >
                       <Image
                         source={{ uri: fruit.imageUrl }}
-                        style={fruitStyles.fruitImage}
+                        style={[fruitStyles.fruitImage, isCompactFruits && fruitStyles.fruitImageCompact]}
                       />
 
-                      <View style={fruitStyles.fruitInfo}>
+                      <View style={[fruitStyles.fruitInfo, isCompactFruits && fruitStyles.fruitInfoCompact]}>
                         <Text
-                          style={[fruitStyles.fruitName, { color: nameColor }]}
+                          style={[fruitStyles.fruitName, isCompactFruits && fruitStyles.fruitNameCompact, { color: nameColor }]}
                           numberOfLines={1}
                         >
                           {`${fruit.name || fruit.Name}  `}
                         </Text>
 
                         <Text
-                          style={[fruitStyles.fruitValue, { color: valueColor }]}
+                          style={[fruitStyles.fruitValue, isCompactFruits && fruitStyles.fruitValueCompact, { color: valueColor }]}
                         >
                           {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
                           {/* {fruit.category
@@ -455,6 +462,7 @@ const PrivateMessageList = ({
                   <View
                     style={[
                       fruitStyles.totalRow,
+                      isCompactFruits && fruitStyles.totalRowCompact,
                       { borderTopColor: fruitColors.divider },
                     ]}
                   >
@@ -687,6 +695,39 @@ export const fruitStyles = StyleSheet.create({
   fruitsWrapper: {
     marginTop: 1,
     padding: 2,
+  },
+  // Compact two-column layout, used when a message carries more than 9 pets.
+  // 18 pets in a single column ran ~18 rows tall and swallowed the screen; at
+  // two columns the same 18 occupy 9 rows, so a full list stays the height a
+  // 9-pet list used to be.
+  fruitsWrapperCompact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  fruitCardCompact: {
+    width: '50%',
+    paddingRight: 4,
+  },
+  fruitImageCompact: {
+    width: 15,
+    height: 15,
+  },
+  // fruitInfo is a row of name + value + badges; at half width it needs to be
+  // allowed to shrink or the name pushes the badges out of the card.
+  fruitInfoCompact: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fruitNameCompact: {
+    flexShrink: 1,
+    fontSize: 10,
+  },
+  fruitValueCompact: {
+    fontSize: 9,
+  },
+  // The total must span both columns rather than sitting in one.
+  totalRowCompact: {
+    width: '100%',
   },
   fruitCard: {
     flexDirection: 'row',

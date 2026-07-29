@@ -28,6 +28,9 @@ import MessageActionDrawer from './MessageActionDrawer';
 import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 import FramedAvatar from './FramedAvatar';
 
+// Above this many pets a message switches to the compact two-column grid.
+const COMPACT_FRUITS_THRESHOLD = 9;
+
 const GroupMessageList = ({
   messages,
   userId,
@@ -188,6 +191,9 @@ const GroupMessageList = ({
 
       const fruits = Array.isArray(item.fruits) ? item.fruits : [];
       const hasFruits = fruits.length > 0;
+    // Past 9 pets the single-column list grows taller than the screen, so
+    // switch to two columns — 18 pets then occupy the same 9 rows.
+    const isCompactFruits = fruits.length > COMPACT_FRUITS_THRESHOLD;
       const totalFruitValue = hasFruits
         ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
         : 0;
@@ -381,7 +387,8 @@ const GroupMessageList = ({
                 {hasFruits && (
                   <View
                     style={[
-                      fruitStyles.fruitsWrapper,]}
+                      fruitStyles.fruitsWrapper,
+                      isCompactFruits && fruitStyles.fruitsWrapperCompact,]}
                   >
                     {fruits.map((fruit, index) => {
                       const { name: nameColor, value: valueColor } = fruitColors;
@@ -396,23 +403,23 @@ const GroupMessageList = ({
                       return (
                         <View
                           key={`${fruit.id || fruit.name}-${index}`}
-                          style={fruitStyles.fruitCard}
+                          style={[fruitStyles.fruitCard, isCompactFruits && fruitStyles.fruitCardCompact]}
                         >
                           <Image
                             source={{ uri: fruit.imageUrl }}
-                            style={fruitStyles.fruitImage}
+                            style={[fruitStyles.fruitImage, isCompactFruits && fruitStyles.fruitImageCompact]}
                           />
 
-                          <View style={fruitStyles.fruitInfo}>
+                          <View style={[fruitStyles.fruitInfo, isCompactFruits && fruitStyles.fruitInfoCompact]}>
                             <Text
-                              style={[fruitStyles.fruitName, { color: nameColor }]}
+                              style={[fruitStyles.fruitName, isCompactFruits && fruitStyles.fruitNameCompact, { color: nameColor }]}
                               numberOfLines={1}
                             >
                               {`${fruit.name || fruit.Name}  `}
                             </Text>
 
                             <Text
-                              style={[fruitStyles.fruitValue, { color: valueColor }]}
+                              style={[fruitStyles.fruitValue, isCompactFruits && fruitStyles.fruitValueCompact, { color: valueColor }]}
                             >
                               · Value: {Number(fruit.value || 0).toLocaleString()}
                             </Text>

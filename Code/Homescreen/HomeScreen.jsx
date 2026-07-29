@@ -25,6 +25,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
+import { buildVariantTags } from '../Trades/tradeHelpers';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import TradeCompletion from '../Engagement/TradeCompletion';
 
@@ -1175,6 +1176,12 @@ const HomeScreen = ({ selectedTheme }) => {
         wantsItems: wantsItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
         hasItemNames, // ✅ Indexed array for server-side search (lowercase)
         wantsItemNames, // ✅ Indexed array for server-side search (lowercase)
+        // ✅ Indexed array for server-side Neon/Mega/Fly/Ride filtering — built from
+        // the mapped items so it always describes exactly what got stored above.
+        variantTags: buildVariantTags(
+          hasItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
+          wantsItems.filter(item => item && (item.name || item.Name)).map(mapTradeItem),
+        ),
         hasTotal,
         wantsTotal,
         description: description || "",

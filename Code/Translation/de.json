@@ -201,7 +201,9 @@
             "confirm_change_title": "Profiländerung bestätigen",
             "confirm_change_message": "Du kannst deinen Anzeigenamen danach {{days}} Tage lang nicht ändern. Bist du sicher?",
             "confirm_save": "Ja, Änderungen speichern"
-        }
+        },
+        "unavailable_general_chat": "Nicht verfügbar für allgemeinen Chat",
+        "unavailable_trade_chat": "Nicht verfügbar für Handels-Chat"
     },
     "profile": {
         "display_name": "Anzeigename",
@@ -384,7 +386,14 @@
         "sort_low": "▼ Niedrig",
         "selected_pets": "Ausgewählte Haustiere",
         "owned_pets": "Eigene Haustiere",
-        "wishlist": "Wunschliste"
+        "wishlist": "Wunschliste",
+        "variant_neon": "Neon",
+        "variant_mega": "Mega",
+        "variant_fly": "Fliegen",
+        "variant_ride": "Reiten",
+        "range": "Wert",
+        "range_min": "Min",
+        "range_max": "Max"
     },
     "stock": {
         "description": "Hinweis: Stock-Updates können manchmal verzögert sein, da Daten manuell aktualisiert werden. Danke für deine Geduld – schau bitte regelmäßig vorbei für die neuesten Updates.",
@@ -856,7 +865,15 @@
         "no_users_found": "Keine Benutzer gefunden",
         "search_database": "Datenbank durchsuchen",
         "search": "Suchen",
-        "enter_search_term": "Namen eingeben"
+        "enter_search_term": "Namen eingeben",
+        "unavailable_them_general": "Dieser Nutzer empfängt derzeit keine Nachrichten.",
+        "unavailable_them_trade": "Dieser Nutzer empfängt derzeit keine Handels-Chats.",
+        "unavailable_me_general": "Du hast den allgemeinen Chat deaktiviert. Aktiviere ihn in den Einstellungen.",
+        "unavailable_me_trade": "Du hast den Handels-Chat deaktiviert. Aktiviere ihn in den Einstellungen.",
+        "disabled_banner_them_general": "Dieser Nutzer hat den Chat deaktiviert. Du kannst ihm derzeit nicht schreiben.",
+        "disabled_banner_them_trade": "Dieser Nutzer hat den Handels-Chat deaktiviert. Du kannst ihm nicht aus einem Handel schreiben.",
+        "disabled_banner_me_general": "Du hast den Chat deaktiviert. Aktiviere ihn in den Einstellungen, um zu schreiben.",
+        "disabled_banner_me_trade": "Du hast den Handels-Chat deaktiviert. Aktiviere ihn in den Einstellungen."
     },
     "first": {
         "welcome_title": "Willkommen bei Fruit Values",

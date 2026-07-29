@@ -99,9 +99,19 @@ exports.notifyNewMessage = functions
       // Parallel: RTDB reads (presence + fcmToken) and Supabase lookup
       // (muted + receiver_name in one query).
       const supabase = getSupabaseAdmin();
-      const [activeChatSnap, fcmTokenSnap, chatMetaResult] = await Promise.all([
+      const [activeChatSnap, fcmTokenSnap, chatOffSnap, chatMetaResult] = await Promise.all([
         admin.database().ref(`/activeChats/${recipientId}`).once('value'),
         admin.database().ref(`/users/${recipientId}/fcmToken`).once('value'),
+        // Chat-availability switches. Which one applies depends on the door the
+        // message came through (`origin` on the row). Old app versions don't set
+        // origin — treat those as 'general', the door almost all of them use.
+        admin.database().ref(`/users/${recipientId}/chatOffTrade`).once('value')
+          .then(async (t) => ({
+            trade: t.val() === true,
+            general: (await admin.database()
+              .ref(`/users/${recipientId}/chatOffGeneral`).once('value')).val() === true,
+          }))
+          .catch(() => ({ trade: false, general: false })),
         supabase
           .from('chat_meta_data')
           .select('muted, receiver_name')
@@ -119,6 +129,16 @@ exports.notifyNewMessage = functions
       }
       if (chatMetaResult?.data?.muted === true) {
         res.status(200).send('Skipped: muted');
+        return;
+      }
+
+      // Recipient has switched this door off — don't disturb them. Note this
+      // only suppresses the push; rejecting the message itself happens in the
+      // Supabase insert path (see supabase/chat_availability.sql).
+      const chatOff = chatOffSnap || { trade: false, general: false };
+      const isTradeOrigin = String(record.origin || 'general') === 'trade';
+      if (isTradeOrigin ? chatOff.trade : chatOff.general) {
+        res.status(200).send('Skipped: recipient unavailable for this chat type');
         return;
       }
 

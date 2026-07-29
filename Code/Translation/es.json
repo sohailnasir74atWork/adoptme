@@ -199,7 +199,9 @@
             "confirm_change_title": "Confirmar cambio",
             "confirm_change_message": "No podrás cambiar nombre por {{days}} días.",
             "confirm_save": "Guardar"
-        }
+        },
+        "unavailable_general_chat": "No disponible para chat general",
+        "unavailable_trade_chat": "No disponible para chat de intercambio"
     },
     "profile": {
         "display_name": "Nombre",
@@ -457,7 +459,14 @@
         "sort_low": "▼ Bajo",
         "selected_pets": "Mascotas seleccionadas",
         "owned_pets": "Mascotas propias",
-        "wishlist": "Lista de deseos"
+        "wishlist": "Lista de deseos",
+        "variant_neon": "Neón",
+        "variant_mega": "Mega",
+        "variant_fly": "Volar",
+        "variant_ride": "Montar",
+        "range": "Valor",
+        "range_min": "Mín",
+        "range_max": "Máx"
     },
     "stock": {
         "description": "Aviso: Las actualizaciones pueden tardar un poco. Gracias por tu paciencia.",
@@ -856,7 +865,15 @@
         "invalid_image": "Imagen inválida",
         "no_images": "Sin imágenes",
         "unblock": "Desbloquear",
-        "no_user_blocked": "Nadie bloqueado"
+        "no_user_blocked": "Nadie bloqueado",
+        "unavailable_them_general": "Este usuario no está recibiendo mensajes ahora.",
+        "unavailable_them_trade": "Este usuario no está recibiendo chats de intercambio ahora.",
+        "unavailable_me_general": "Has desactivado el chat general. Actívalo en Ajustes.",
+        "unavailable_me_trade": "Has desactivado el chat de intercambio. Actívalo en Ajustes.",
+        "disabled_banner_them_general": "Este usuario ha desactivado el chat. No puedes enviarle mensajes ahora.",
+        "disabled_banner_them_trade": "Este usuario ha desactivado el chat de intercambio. No puedes escribirle desde un intercambio.",
+        "disabled_banner_me_general": "Has desactivado el chat. Actívalo en Ajustes para enviar mensajes.",
+        "disabled_banner_me_trade": "Has desactivado el chat de intercambio. Actívalo en Ajustes."
     },
     "signin": {
         "title_signin": "Iniciar sesión",
