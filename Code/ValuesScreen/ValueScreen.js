@@ -31,6 +31,8 @@ import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 import { useNavigation } from '@react-navigation/native';
+import ValueHistoryModal from './ValueHistoryModal';
+import { prefetchHistoryIndex } from '../Helper/valueHistoryHelper';
 
 
 const VALUE_TYPES = ['D', 'N', 'M'];
@@ -180,8 +182,23 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
     }
   }
 
+  // Browse mode used to be inert (disabled unless picking for chat/settings).
+  // A tap there now opens the value-history sheet, so the row is always live.
+  const isBrowse = !fromChat && !fromSetting;
+
   return (
-    <TouchableOpacity style={[styles.itemContainer]} onPress={onPress} disabled={!fromChat && !fromSetting}>
+    <TouchableOpacity style={[styles.itemContainer]} onPress={onPress}>
+      {/* Affordance for the history sheet, parked in the card's top-right
+          corner so it never competes with the name or value text. Shown on all
+          browse-mode cards rather than only ones with data: resolving the
+          history key needs the CDN index, and blocking the list render on that
+          would cost more than the occasional empty sheet. Cards without a
+          series say so explicitly when opened. */}
+      {isBrowse && (
+        <View style={styles.historyIconCorner} pointerEvents="none">
+          <Icon name="stats-chart" size={16} color={config.colors.hasBlockGreen} />
+        </View>
+      )}
       <View style={styles.imageContainer}>
         <ItemImage
           uri={getImageUrl(item, imgurl)}
@@ -189,7 +206,11 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
           styles={styles}
         />
         <View style={styles.itemInfo}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+          {/* Reserve the corner icon's width so long names truncate before they
+              run underneath it ("Irish Water Spaniel", "Peppermint Penguin"). */}
+          <Text style={[styles.name, isBrowse && styles.nameWithHistoryIcon]} numberOfLines={1}>
+            {item.name}
+          </Text>
           <Text style={styles.value}>{t('value.label')} {formatValue(currentValue)}</Text>
           {item.rarity && (
             <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
@@ -273,7 +294,11 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const { analytics, appdatabase, isAdmin, reload, theme } = useGlobalState()
   const isDarkMode = theme === 'dark'
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
-  const { localState, toggleAd } = useLocalState()
+  const { localState, toggleAd, updateLocalState } = useLocalState()
+  // Browse mode = the standalone Values list, not the chat/settings pet pickers.
+  // Only browse mode opens the history sheet, so only it shows the hint.
+  const isBrowseMode = !fromChat && !fromSetting;
+  const showHistoryHint = isBrowseMode && !!localState?.showHistoryHint;
   const navigation = useNavigation();
   // Chat pet picker: default to the user's own inventory ("My Pets"), with a
   // toggle to the full catalog. Inventory = localState.ownedPets (kept in sync
@@ -289,6 +314,15 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const [filters, setFilters] = useState(['All']);
   const displayedFilter = selectedFilter === 'PREMIUM' ? t('categories.GAME PASS') : t(`categories.${selectedFilter.toUpperCase()}`, { defaultValue: selectedFilter });
   const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+
+  // Warm the history name->key index in the background so the first tap on a
+  // row doesn't pay for the catalog download. Browse mode only — the chat and
+  // settings pickers never open the sheet.
+  useEffect(() => {
+    if (fromChat || fromSetting) return;
+    const id = requestIdleCallback(() => prefetchHistoryIndex());
+    return () => cancelIdleCallback(id);
+  }, [fromChat, fromSetting]);
 
   // Load analytics data for demand/hot badges
   useEffect(() => {
@@ -310,6 +344,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const { triggerHapticFeedback } = useHaptic();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
+  // Value-history sheet. Holds the row plus its resolved image so the sheet
+  // doesn't have to re-derive the URL from localState.
+  const [historyTarget, setHistoryTarget] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [itemSelections, setItemSelections] = useState({});
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -651,6 +688,18 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             setWishlistPets(prev => [...(prev || []), fruitObj]);
           }
         }
+
+        // 👉 Browse mode: open the value-history sheet.
+        //
+        // Nothing else may set state here. Dismissing the hint used to happen on
+        // this line, and the localState write re-rendered the subtree fast
+        // enough to swallow the sheet — the very first tap after install opened
+        // nothing, which is exactly the user the hint exists for. The dismissal
+        // now runs on sheet close instead.
+        if (!fromChat && !fromSetting) {
+          triggerHapticFeedback('impactLight');
+          setHistoryTarget({ item, imageUrl });
+        }
       };
 
       // const isSelected = selectedFruits ? selectedFruits?.some(f => f.id === item.id): owned ? ownedPets?.some(f => f.id === item.id) : wishlistPets?.some(f => f.id === item.id) ;
@@ -684,6 +733,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       fromChat,
       fromSetting,
       localState.imgurl,
+      triggerHapticFeedback,
       t
     ]
   );
@@ -1065,6 +1115,28 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
             </View>
           )}
 
+          {/* One-time discovery hint. The corner chart icon is easy to read as
+              decoration, so this says it in words once and then gets out of the
+              way — dismissed by the X, or automatically the first time a chart
+              is opened. Browse mode only; the chat/settings pickers don't have
+              the history sheet. */}
+          {showHistoryHint && (
+            <View style={styles.historyHint}>
+              <Icon name="stats-chart" size={14} color={config.colors.hasBlockGreen} />
+              <Text style={styles.historyHintText} numberOfLines={2}>
+                {t('value.history.hint', {
+                  defaultValue: 'Tap any item to see how its value changed over time',
+                })}
+              </Text>
+              <TouchableOpacity
+                onPress={() => updateLocalState('showHistoryHint', false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="close" size={15} color={styles.historyHintText.color} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           {((fromChat && chatPetSource === 'mine') ? myPetsView : filteredData).length > 0 ? (
             <FlatList
               data={(fromChat && chatPetSource === 'mine') ? myPetsView : filteredData}
@@ -1111,6 +1183,20 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           )}
         </View>
         <CodesDrawer isVisible={isDrawerVisible} toggleModal={toggleDrawer} codes={codesData} />
+
+        <ValueHistoryModal
+          visible={!!historyTarget}
+          item={historyTarget?.item}
+          imageUrl={historyTarget?.imageUrl}
+          isDarkMode={isDarkMode}
+          onClose={() => {
+            setHistoryTarget(null);
+            // They opened a chart, so the hint has done its job. Retiring it
+            // here rather than on open keeps the localState write off the same
+            // render pass as the sheet mount — see the comment in handlePress.
+            if (showHistoryHint) updateLocalState('showHistoryHint', false);
+          }}
+        />
       </GestureHandlerRootView>
       {!localState.isPro && !fromChat && <BannerAdComponent collapsible />}
     </>
@@ -1319,6 +1405,42 @@ export const getStyles = (isDarkMode) => {
     color: c.textSecondary,
     marginBottom: 2,
     fontWeight: '500',
+  },
+  // One-time discovery strip above the list. Uses a theme surface rather than a
+  // tinted accent: config.colors.hasBlockGreen is an 'rgb(...)' string, so the
+  // `${color}1A` alpha trick produces an invalid color and Android falls back to
+  // opaque — which is exactly how the first attempt at this shipped a red blob.
+  historyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 8,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.bgAlt,
+  },
+  historyHintText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: c.textSecondary,
+    lineHeight: 16,
+  },
+  // Top-right corner of the card. zIndex keeps it above the image on Android,
+  // where absolute siblings don't stack by document order the way iOS does.
+  historyIconCorner: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 2,
+    padding: 2,
+  },
+  nameWithHistoryIcon: {
+    paddingRight: 18,
   },
   rarityBadge: {
     flexDirection: 'row',

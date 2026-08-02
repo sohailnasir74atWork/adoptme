@@ -89,6 +89,11 @@ export const LocalStateProvider = ({ children }) => {
     // which is the gate notifyNewMessage actually checks.
     chatNotificationsOff: storage.getBoolean('chatNotificationsOff') ?? false,
     gameMusicEnabled: storage.getBoolean('gameMusicEnabled') ?? true, // ✅ Default true (music on), user can toggle off/on
+    // One-time hint on the Values list telling users a pet card opens its value
+    // history. The corner chart icon alone doesn't read as "tap me" — the hint
+    // says it once in words, then never again. Cleared on dismiss, and also as
+    // soon as the user opens their first chart (they've found it; stop nagging).
+    showHistoryHint: storage.getBoolean('showHistoryHint') ?? true,
 
   }));
 
