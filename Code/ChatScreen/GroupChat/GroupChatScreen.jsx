@@ -40,6 +40,7 @@ import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper
 import { validateContent } from '../../Helper/ContentModeration';
 import { showMessage } from 'react-native-flash-message';
 import ProfileBottomDrawer from './BottomDrawer';
+import { useMessageTranslation } from '../../Helper/useMessageTranslation';
 import { useLocalState } from '../../LocalGlobelStats';
 import PetModal from '../PrivateChat/PetsModel';
 import config from '../../Helper/Environment';
@@ -110,6 +111,11 @@ const GroupChatScreen = () => {
   useEffect(() => {
     if (user?.id) seedCurrentUser(user, null, appdatabase);
   }, [user?.id, user?.avatar]);
+
+  // Message translation — same handler and same daily allowance the community
+  // chat uses. GroupMessageList already supported an `onTranslate` prop; group
+  // chat just never passed one, so the option never appeared. (2026-09-02)
+  const { handleTranslate } = useMessageTranslation();
 
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
@@ -1066,6 +1072,27 @@ const GroupChatScreen = () => {
     setIsDrawerVisible(true);
   }, []);
 
+  // Open a DM with the member whose profile drawer is showing.
+  // selectedUserForDrawer is already { senderId, sender, avatar }, which is
+  // exactly the shape PrivateChat reads from route.params.selectedUser
+  // (it keys off selectedUser.senderId).
+  const startPrivateChat = useCallback(() => {
+    if (!selectedUserForDrawer?.senderId) return;
+    // Tapping your own avatar opens the drawer too; a DM with yourself would
+    // just be a broken screen, so close instead of navigating.
+    if (selectedUserForDrawer.senderId === user?.id) {
+      setIsDrawerVisible(false);
+      return;
+    }
+    setIsDrawerVisible(false);
+    if (navigation && typeof navigation.navigate === 'function') {
+      navigation.navigate('PrivateChat', {
+        selectedUser: selectedUserForDrawer,
+        selectedTheme: theme,
+      });
+    }
+  }, [selectedUserForDrawer, navigation, theme, user?.id]);
+
   // Get banned users from local state
   const { localState } = useLocalState();
   const bannedUsers = useMemo(() => {
@@ -1232,6 +1259,7 @@ const GroupChatScreen = () => {
               onDeleteMessage={handleDeleteMessage}
               onDeleteAllMessages={handleDeleteAllMessages}
               onReaction={handleReaction}
+              onTranslate={handleTranslate}
             />
           )}
 
@@ -1388,17 +1416,21 @@ const GroupChatScreen = () => {
       </Modal>
 
       {/* Profile Bottom Drawer */}
+      {/* 2026-09-02: two fixes here.
+          1. `startChat` was a no-op stub ("Navigate to private chat if needed"),
+             so tapping Message in the drawer just closed it. It now navigates to
+             PrivateChat, which lives in this same stack (ChatNavigator).
+          2. `fromPvtChat` was hard-coded true. That flag exists to hide the
+             Chat and Follow buttons when the drawer is opened FROM private chat
+             (where DMing the person you're already DMing is meaningless) —
+             copying it here hid both buttons in group chat as well. */}
       <ProfileBottomDrawer
         isVisible={isDrawerVisible}
         toggleModal={() => setIsDrawerVisible(false)}
-        startChat={() => {
-          setIsDrawerVisible(false);
-          // Navigate to private chat if needed
-        }}
+        startChat={startPrivateChat}
         selectedUser={selectedUserForDrawer}
         isOnline={false}
         bannedUsers={bannedUsers}
-        fromPvtChat={true}
       />
 
       <PetModal
