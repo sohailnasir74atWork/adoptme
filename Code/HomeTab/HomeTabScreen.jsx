@@ -26,7 +26,7 @@ import WordScramble from '../Engagement/WordScramble';
 import StatusFeed from '../Design/StatusFeed';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import TrendingPets from './TrendingPets';
-import HomeTrackerCard from '../PetTracker/HomeTrackerCard';
+// import HomeTrackerCard from '../PetTracker/HomeTrackerCard'; // hidden
 import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
@@ -567,8 +567,8 @@ const HomeTabScreen = ({ selectedTheme }) => {
           {/* ═══ SECTION: Trending Pets ═══ */}
           <TrendingPets isDarkMode={isDarkMode} navigation={navigation} />
 
-          {/* ═══ Pet Aging & Growing Tracker ═══ */}
-          <HomeTrackerCard isDarkMode={isDarkMode} navigation={navigation} />
+          {/* ═══ Pet Aging & Growing Tracker (hidden) ═══ */}
+          {/* <HomeTrackerCard isDarkMode={isDarkMode} navigation={navigation} /> */}
 
           {/* ═══ SECTION 3: Mini Games (moved up!) ═══ */}
           <View style={styles.section}>

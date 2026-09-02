@@ -230,7 +230,7 @@ const ProfileBottomDrawer = ({
   bannedUsers,
   fromPvtChat,
 }) => {
-  const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled } = useGlobalState();
+  const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled, canGrantJmd } = useGlobalState();
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
@@ -1288,10 +1288,13 @@ const ProfileBottomDrawer = ({
   };
 
   // ── Junior Mod handlers ──
-  const OWNER_ID = 'DNvBQC5ySWP8QiJNGpIvqd9DSWB2';
-  const canManageBabyMod = isAdmin || user?.id === OWNER_ID;
+  // Admins always qualify. Everyone else needs an explicit grant the owner
+  // issues from the Admin Dashboard (RTDB /jmd_granters/{uid}), which
+  // GlobelStats resolves into `canGrantJmd`. A granter can only add/remove the
+  // Junior Mod role — no other staff power comes with it.
+  const canManageBabyMod = isAdmin || !!canGrantJmd;
   const canManageBadges = isAdmin || !!user?.isModerator;
-  const canDeleteUser = isAdmin || user?.id === OWNER_ID;
+  const canDeleteUser = isAdmin;
 
   const handleMakeBabyMod = async () => {
     if (!selectedUserId || !appdatabase) return;
@@ -3307,7 +3310,10 @@ const ProfileBottomDrawer = ({
                   </View>
                 </View>
 
-                {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod) && (
+                {/* Granted JMD-only users are not staff, but still need this panel
+                    to reach the Make/Remove Junior Mod chip. `isStaff` below keeps
+                    strike/mute/unban out of their hands. */}
+                {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod || canManageBabyMod) && (
                   <View>
                     <TouchableOpacity
                       onPress={() => setShowModTools(prev => !prev)}
@@ -3342,6 +3348,7 @@ const ProfileBottomDrawer = ({
                         handleDemoteModerator={handleDemoteModerator}
                         isBabyMod={!!user?.isBabyMod}
                         isModerator={!!user?.isModerator}
+                        isStaff={isAdmin || !!user?.isModerator || !!user?.isBabyMod}
                         canManageBabyMod={canManageBabyMod}
                         targetIsBabyMod={!!mergedUser?.isBabyMod}
                         handleMakeBabyMod={handleMakeBabyMod}

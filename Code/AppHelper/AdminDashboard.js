@@ -65,6 +65,7 @@ import {
 
 import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser, canStaffBanMute } from '../ChatScreen/utils';
 import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
+import { adminLoadPrivateMessages, adminDeletePrivateChat } from '../Supabase/privateMessagesBackend';
 import { searchIdentityByName, searchIdentityByEmail, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -103,7 +104,6 @@ const base64ToBytes = (base64) => {
 const decodeEmail = (encoded) => (encoded ? encoded.replace(/\(dot\)/g, '.') : '');
 const BAD_KEYS = new Set(['undefined', 'onloaduser', '', null, undefined]);
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-const SUPER_ADMIN_ID = 'DNvBQC5ySWP8QiJNGpIvqd9DSWB2';
 const USER_CHATS_PAGE_SIZE = 20;
 
 // ✅ Sanitize search query — strip chars invalid in Firebase RTDB queries
@@ -179,7 +179,6 @@ const AdminDashboard = () => {
   // Moderator ban/mute powers can be disabled by an admin. Admins are never blocked.
   const canBanMute = canStaffBanMute({ isAdmin, isModerator, isBabyMod, modControlsEnabled });
   const navigation = useNavigation();
-  const isSuperAdmin = isAdmin || currentUser?.id === SUPER_ADMIN_ID;
 
   // Tabs
   const [activeTab, setActiveTab] = useState('banned');
@@ -512,6 +511,16 @@ const AdminDashboard = () => {
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [uploadingPollImage, setUploadingPollImage] = useState(false);
 
+  // JMD Access (owner/admin only) — delegate the "Make Junior Mod" power.
+  // Source of truth is RTDB /jmd_granters/{uid}; every device live-subscribes to
+  // its own leaf in GlobelStats, so grants and revokes take effect immediately.
+  const [jmdGranters, setJmdGranters] = useState([]);
+  const [jmdGrantersLoading, setJmdGrantersLoading] = useState(false);
+  const [jmdSearchQuery, setJmdSearchQuery] = useState('');
+  const [jmdSearchResults, setJmdSearchResults] = useState([]);
+  const [jmdSearching, setJmdSearching] = useState(false);
+  const [jmdSaving, setJmdSaving] = useState(null); // uid currently being written
+
   // ─────────────────────────────────────────────
   // Search Users (RTDB) — fool-proof: email, special chars, case-insensitive
   const handleSearch = async () => {
@@ -809,6 +818,166 @@ const AdminDashboard = () => {
       await set(ref(db, 'mod_controls_enabled'), next);
     } catch (e) {
       Alert.alert('Error', 'Could not update moderator controls. Check your write permissions.');
+    }
+  }, [db]);
+
+  // ─────────────────────────────────────────────
+  // JMD Access — owner/admin delegates the "Make Junior Mod" power.
+  const fetchJmdGranters = useCallback(async () => {
+    setJmdGrantersLoading(true);
+    try {
+      const snap = await get(ref(db, 'jmd_granters'));
+      const val = snap.exists() ? snap.val() : {};
+      const rows = Object.entries(val || {})
+        .filter(([uid, v]) => uid && !BAD_KEYS.has(uid) && v !== false && v != null)
+        .map(([uid, v]) => ({
+          id: uid,
+          // Legacy/plain `true` values carry no profile — fall back to the UID.
+          displayName: (typeof v === 'object' && v.displayName) || uid,
+          avatar: (typeof v === 'object' && v.avatar) || DEFAULT_AVATAR,
+          grantedAt: (typeof v === 'object' && v.grantedAt) || null,
+          grantedByName: (typeof v === 'object' && v.grantedByName) || null,
+        }))
+        .sort((a, b) => (toMillisSafe(b.grantedAt) || 0) - (toMillisSafe(a.grantedAt) || 0));
+      setJmdGranters(rows);
+    } catch (err) {
+      Alert.alert('Error', 'Could not load JMD access list. Check your read permissions.');
+    } finally {
+      setJmdGrantersLoading(false);
+    }
+  }, [db]);
+
+  // Name-prefix search (same indexed query the chat viewer uses) plus a direct
+  // UID lookup, so the owner can paste a user ID copied from a profile.
+  const searchJmdUser = useCallback(async (text) => {
+    const raw = (text || '').trim();
+    if (!raw) { setJmdSearchResults([]); return; }
+    Keyboard.dismiss();
+    setJmdSearching(true);
+    try {
+      const seen = new Set();
+      const results = [];
+
+      if (looksLikeUserId(raw)) {
+        const snap = await get(ref(db, `users/${raw}`));
+        if (snap.exists()) {
+          const u = snap.val();
+          const id = u.id || raw;
+          seen.add(id);
+          results.push({
+            id,
+            displayName: u.displayName || u.userName || 'Unknown',
+            avatar: getAvatarSafe(u),
+            email: u.email,
+            isModerator: !!u.isModerator,
+            isAdmin: !!u.admin,
+          });
+        }
+      }
+
+      const lower = sanitizeSearchQuery(raw.toLowerCase());
+      if (lower) {
+        const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+        const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
+        for (const v of variants) {
+          const q = query(
+            ref(db, 'users'),
+            orderByChild('displayName'),
+            startAt(v),
+            endAt(v + '\uf8ff'),
+            limitToFirst(10)
+          );
+          const snapshot = await get(q);
+          if (!snapshot.exists()) continue;
+          for (const u of Object.values(snapshot.val() || {})) {
+            const id = u?.id;
+            if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
+            seen.add(id);
+            results.push({
+              id,
+              displayName: u.displayName || u.userName || 'Unknown',
+              avatar: getAvatarSafe(u),
+              email: u.email,
+              isModerator: !!u.isModerator,
+              isAdmin: !!u.admin,
+            });
+          }
+        }
+      }
+
+      setJmdSearchResults(results.slice(0, 10));
+    } catch (err) {
+      Alert.alert('Error', 'Search failed. Try a user ID instead.');
+    } finally {
+      setJmdSearching(false);
+    }
+  }, [db]);
+
+  const handleGrantJmdAccess = useCallback(async (userItem) => {
+    if (!userItem?.id) return;
+    if (jmdGranters.some((g) => g.id === userItem.id)) {
+      Alert.alert('Already granted', `${userItem.displayName} can already make Junior Mods.`);
+      return;
+    }
+    const confirmed = await new Promise((resolve) => {
+      Alert.alert(
+        'Grant JMD Access',
+        `Allow ${userItem.displayName} to make and remove Junior Mods?\n\nThis gives them no other staff power.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Grant', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirmed) return;
+
+    setJmdSaving(userItem.id);
+    try {
+      await set(ref(db, `jmd_granters/${userItem.id}`), {
+        displayName: userItem.displayName || 'Unknown',
+        avatar: userItem.avatar || DEFAULT_AVATAR,
+        grantedAt: Date.now(),
+        grantedBy: currentUser?.id || null,
+        grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+      });
+      setJmdGranters((prev) => [
+        {
+          id: userItem.id,
+          displayName: userItem.displayName || 'Unknown',
+          avatar: userItem.avatar || DEFAULT_AVATAR,
+          grantedAt: Date.now(),
+          grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+        },
+        ...prev,
+      ]);
+      setJmdSearchResults([]);
+      setJmdSearchQuery('');
+      Alert.alert('Granted', `${userItem.displayName} can now make Junior Mods.`);
+    } catch (err) {
+      Alert.alert('Error', 'Could not grant access. Check your write permissions.');
+    } finally {
+      setJmdSaving(null);
+    }
+  }, [db, jmdGranters, currentUser]);
+
+  const handleRevokeJmdAccess = useCallback(async (granter) => {
+    if (!granter?.id) return;
+    const confirmed = await new Promise((resolve) => {
+      Alert.alert('Revoke JMD Access', `Remove ${granter.displayName}'s permission to make Junior Mods?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Revoke', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+    if (!confirmed) return;
+
+    setJmdSaving(granter.id);
+    try {
+      await set(ref(db, `jmd_granters/${granter.id}`), null);
+      setJmdGranters((prev) => prev.filter((g) => g.id !== granter.id));
+    } catch (err) {
+      Alert.alert('Error', 'Could not revoke access. Check your write permissions.');
+    } finally {
+      setJmdSaving(null);
     }
   }, [db]);
 
@@ -1151,25 +1320,55 @@ const AdminDashboard = () => {
       const id1 = chatPerson1.id;
       const id2 = chatPerson2.id;
       const chatKey = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
-      const messagesRef = ref(db, `private_messages/${chatKey}/messages`);
-      const q = query(messagesRef, orderByChild('timestamp'));
-      const snapshot = await get(q);
 
-      if (!snapshot.exists()) {
-        setChatMessages([]);
-        setLoadingChat(false);
-        return;
+      // Two stores, because the Phase 5 cut split this conversation in half:
+      //   - Supabase public.private_messages — every message sent by a
+      //     post-cut build. Authoritative from the cut onward. Read through
+      //     the admin RPC (024) because the table's RLS is participant-only,
+      //     so a direct query from an admin returns zero rows.
+      //   - RTDB /private_messages/{chatKey}/messages — pre-cut history, plus
+      //     the bridge window. Frozen: nothing writes here any more.
+      // Reading only RTDB is what broke this screen — chats that started
+      // after the cut have no RTDB subtree at all and rendered as empty.
+      const [supaMsgs, rtdbSnap] = await Promise.all([
+        adminLoadPrivateMessages(chatKey, { limit: 300 }).catch((err) => {
+          // Surfaced below rather than swallowed — a 42501 here means the
+          // caller isn't recognised as an admin server-side, which is a
+          // config problem, not an empty chat.
+          console.error('Supabase admin chat load failed:', err?.message);
+          throw err;
+        }),
+        get(query(ref(db, `private_messages/${chatKey}/messages`), orderByChild('timestamp')))
+          .catch(() => null),
+      ]);
+
+      // Backfilled rows carry the original push key in rtdb_key, so the
+      // same message present in both stores collapses to one bubble.
+      const seenRtdbKeys = new Set(
+        (supaMsgs || []).map((m) => m.rtdbKey).filter(Boolean),
+      );
+
+      const legacy = [];
+      if (rtdbSnap?.exists()) {
+        for (const [key, value] of Object.entries(rtdbSnap.val() || {})) {
+          if (seenRtdbKeys.has(key)) continue;
+          legacy.push({ id: key, ...value, legacy: true });
+        }
       }
 
-      const data = snapshot.val();
-      const msgs = Object.entries(data)
-        .map(([key, value]) => ({ id: key, ...value }))
+      const msgs = [...(supaMsgs || []), ...legacy]
         .sort((a, b) => (a?.timestamp || 0) - (b?.timestamp || 0));
 
       setChatMessages(msgs);
     } catch (err) {
       console.error('Chat load error:', err);
-      Alert.alert('Error', 'Could not load chat. Check selections and try again.');
+      const denied = err?.code === '42501' || /not authorized|unauthenticated/i.test(err?.message || '');
+      Alert.alert(
+        'Error',
+        denied
+          ? 'Your account is not recognised as an admin by the database. Apply supabase/024_admin_private_messages.sql.'
+          : 'Could not load chat. Check selections and try again.',
+      );
     } finally {
       setLoadingChat(false);
     }
@@ -1178,16 +1377,18 @@ const AdminDashboard = () => {
   // Delete the entire private conversation between the two selected users.
   //
   // Two-store delete:
-  //   - RTDB: drops /private_messages/{chatKey} (still authoritative for
-  //     message bodies) and any legacy /chat_meta_data inbox rows from
-  //     old-app users. Done in one atomic multi-path update.
-  //   - Supabase: drops both chat_meta_data rows via the
-  //     admin_delete_chat_pair RPC (013_admin_chat_meta.sql). Required
-  //     because new-app builds only write the inbox to Supabase — the
-  //     RTDB delete won't reach them via the mirror CF since their
-  //     RTDB rows never existed.
+  //   - RTDB: drops /private_messages/{chatKey} (pre-cut history and the
+  //     trade/post attachments) and any legacy /chat_meta_data inbox rows
+  //     from old-app users. Done in one atomic multi-path update.
+  //   - Supabase: drops both chat_meta_data rows via admin_delete_chat_pair
+  //     (013) AND every message row via admin_delete_private_chat (024).
+  //     The message delete was missing: post-cut bodies live only in
+  //     Supabase, so clearing the inbox rows hid the conversation from
+  //     both users' chat lists while leaving the messages in place and
+  //     still readable — PrivateChat loads by chat_id, not via the inbox.
+  //     The dialog promises permanent deletion, so it has to be permanent.
   //
-  // Gated to admin + SUPER_ADMIN_ID at the UI.
+  // Gated to admins at the UI.
   const deletePrivateChat = useCallback(async () => {
     if (!chatPerson1?.id || !chatPerson2?.id) {
       Alert.alert('Error', 'Please select both users first.');
@@ -1226,10 +1427,14 @@ const AdminDashboard = () => {
 
       // Supabase side — required for new-app users whose inbox rows
       // never existed in RTDB and so won't be cleaned by the mirror CF.
+      // Messages first: if the inbox delete fails we'd rather be left with
+      // an orphaned inbox row pointing at nothing than with hidden-but-live
+      // message bodies the admin believes are gone.
+      const removed = await adminDeletePrivateChat(chatKey);
       await adminDeleteChatPair(id1, id2);
 
       setChatMessages([]);
-      Alert.alert('Deleted', 'Conversation removed.');
+      Alert.alert('Deleted', `Conversation removed. ${removed} message(s) deleted.`);
     } catch (err) {
       console.error('Chat delete error:', err);
       Alert.alert('Error', 'Could not delete chat. Try again.');
@@ -1296,6 +1501,17 @@ const AdminDashboard = () => {
       });
     } catch (err) {
       console.warn('[AdminDashboard] fetchUserChats error:', err?.message);
+      // A 42501 from _require_admin() is a config problem, not an empty
+      // inbox. Swallowing it here is what made this tab look like the
+      // user simply had no chats.
+      const denied = err?.code === '42501' || /not authorized|unauthenticated/i.test(err?.message || '');
+      if (denied) {
+        setUserChatsHasMore(false);
+        Alert.alert(
+          'Not authorized',
+          'The database does not recognise this account as an admin. Apply supabase/024_admin_private_messages.sql.',
+        );
+      }
     } finally {
       setUserChatsLoading(false);
       setUserChatsLoadingMore(false);
@@ -1383,6 +1599,10 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (activeTab === 'polls') fetchPolls();
   }, [activeTab, fetchPolls]);
+
+  useEffect(() => {
+    if (activeTab === 'jmdAccess' && isAdmin) fetchJmdGranters();
+  }, [activeTab, isAdmin, fetchJmdGranters]);
 
   const handleCreatePoll = useCallback(async () => {
     const q = pollQuestion.trim();
@@ -1618,7 +1838,7 @@ const AdminDashboard = () => {
           </Text>
         </TouchableOpacity>
 
-        {isSuperAdmin && (
+        {isAdmin && (
           <TouchableOpacity
             style={[styles.tab, activeTab === 'userChats' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
             onPress={() => setActiveTab('userChats')}
@@ -1646,6 +1866,18 @@ const AdminDashboard = () => {
             Statuses
           </Text>
         </TouchableOpacity>
+
+        {/* Owner/admin only — delegate the "Make Junior Mod" power. */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'jmdAccess' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
+            onPress={() => setActiveTab('jmdAccess')}
+          >
+            <Text style={[styles.tabText, activeTab === 'jmdAccess' && styles.activeTabText, { color: activeTab === 'jmdAccess' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
+              JMD Access
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Admin-only: moderator ban/mute kill switch. Hidden from moderators. */}
@@ -1936,7 +2168,7 @@ const AdminDashboard = () => {
             )}
 
             {/* Delete Conversation — admin + owner UID only */}
-            {chatPerson1 && chatPerson2 && isSuperAdmin && (
+            {chatPerson1 && chatPerson2 && isAdmin && (
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: '#dc262618', borderWidth: 1, borderColor: '#dc262640', height: 42, borderRadius: 12, marginTop: 8, marginBottom: 0 }]}
                 onPress={deletePrivateChat}
@@ -1976,6 +2208,8 @@ const AdminDashboard = () => {
                   }]}>
                     <Text style={{ color: isPerson1 ? '#5DADE2' : '#AF52DE', fontSize: 11, fontWeight: '700', marginBottom: 3 }}>
                       {senderName || item.senderId || 'Unknown'}
+                      {item.deleted ? <Text style={{ color: '#dc2626', fontWeight: '700' }}>  · deleted by user</Text> : null}
+                      {item.legacy ? <Text style={{ color: isDark ? '#666' : '#999', fontWeight: '600' }}>  · legacy</Text> : null}
                     </Text>
                     {item.text ? (
                       <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
@@ -2004,7 +2238,7 @@ const AdminDashboard = () => {
             />
           )}
         </View>
-      ) : activeTab === 'userChats' && isSuperAdmin ? (
+      ) : activeTab === 'userChats' && isAdmin ? (
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
             <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Target User ID</Text>
@@ -2359,6 +2593,127 @@ const AdminDashboard = () => {
                   </View>
                 );
               }}
+            />
+          )}
+        </View>
+      ) : activeTab === 'jmdAccess' && isAdmin ? (
+        <View style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 }}>
+            <Text style={{ fontSize: 12, color: isDark ? '#888' : '#666', lineHeight: 17 }}>
+              Anyone listed here can make and remove Junior Mods from a user's profile.
+              It grants no other staff power, and you can revoke it at any time.
+            </Text>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <TextInput
+              value={jmdSearchQuery}
+              onChangeText={setJmdSearchQuery}
+              placeholder="Search by display name or paste a user ID..."
+              placeholderTextColor={isDark ? '#666' : '#999'}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+              returnKeyType="search"
+              onSubmitEditing={() => searchJmdUser(jmdSearchQuery)}
+            />
+            <TouchableOpacity onPress={() => searchJmdUser(jmdSearchQuery)} style={styles.searchBtn}>
+              <Ionicons name="search" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+
+          {jmdSearching && <ActivityIndicator size="small" color="#007AFF" style={{ marginBottom: 8 }} />}
+
+          {jmdSearchResults.length > 0 && (
+            <View style={{ paddingHorizontal: 12, marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+                Search results
+              </Text>
+              {jmdSearchResults.map((u) => {
+                const alreadyGranted = jmdGranters.some((g) => g.id === u.id);
+                return (
+                  <View
+                    key={u.id}
+                    style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                  >
+                    <Image source={{ uri: getAvatarSafe(u) }} style={styles.avatar} />
+                    <View style={styles.cardContent}>
+                      <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                        {u.displayName}
+                      </Text>
+                      <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                        {u.isAdmin ? 'Admin' : u.isModerator ? 'Moderator' : 'Member'} · {u.id}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      disabled={alreadyGranted || jmdSaving === u.id}
+                      onPress={() => handleGrantJmdAccess(u)}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
+                        backgroundColor: alreadyGranted ? (isDark ? '#2C2C2E' : '#E5E5EA') : '#007AFF',
+                        opacity: jmdSaving === u.id ? 0.5 : 1,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: alreadyGranted ? (isDark ? '#888' : '#666') : '#FFF' }}>
+                        {alreadyGranted ? 'Granted' : 'Grant'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              Allowed to make Junior Mods · {jmdGranters.length}
+            </Text>
+          </View>
+
+          {jmdGrantersLoading && jmdGranters.length === 0 ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 24 }} />
+          ) : (
+            <FlatList
+              data={jmdGranters}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={jmdGrantersLoading}
+                  onRefresh={fetchJmdGranters}
+                  tintColor={isDark ? '#FFF' : '#000'}
+                />
+              }
+              ListEmptyComponent={
+                <Text style={{ color: isDark ? '#888' : '#666', textAlign: 'center', marginTop: 32, fontSize: 13 }}>
+                  Nobody has this permission yet.{'\n'}Search a user above to grant it.
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <View style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}>
+                  <Image source={{ uri: getAvatarSafe(item) }} style={styles.avatar} />
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      {item.displayName}
+                    </Text>
+                    <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                      {item.grantedAt ? `Granted ${timeAgo(item.grantedAt)}` : 'Granted'}
+                      {item.grantedByName ? ` by ${item.grantedByName}` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    disabled={jmdSaving === item.id}
+                    onPress={() => handleRevokeJmdAccess(item)}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
+                      backgroundColor: '#FF3B3015', borderWidth: 1, borderColor: '#FF3B3040',
+                      opacity: jmdSaving === item.id ? 0.5 : 1,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF3B30' }}>Revoke</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             />
           )}
         </View>

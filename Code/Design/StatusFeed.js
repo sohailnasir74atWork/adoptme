@@ -9,6 +9,7 @@
  * - Background themes for text statuses
  * - Polls with live voting
  * - Instant chat/DM button
+ * - Threaded comments per status (shared CommentModal, statuses/{id}/comments)
  * - Delete own statuses
  * - 24h auto-expiry via Firestore expiresAt
  *
@@ -43,6 +44,7 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useLocalState } from '../LocalGlobelStats';
 import { useGlobalState } from '../GlobelStats';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import CommentModal from './componenets/CommentsModal';
 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -270,6 +272,8 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   const [pollOptions, setPollOptions] = useState(['', '']);
   // ── New: Stories viewer state ──
   const [storyIndex, setStoryIndex] = useState(0);
+  // ── Comments sheet (opens over the paused story) ──
+  const [showComments, setShowComments] = useState(false);
   const storyTimerRef = useRef(null);
   const pressTimestampRef = useRef(0);
   const storyProgressAnim = useRef(new Animated.Value(0)).current;
@@ -706,6 +710,9 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
           // now), but older app versions still query on it — dropping it here
           // would hide new posts from them. Safe to remove once those age out.
           randomSeed: Math.random(),
+          // Seeded so the comment badge reads 0 instead of blank before the
+          // first increment lands; `increment` itself is fine on a missing field.
+          commentCount: 0,
           ...(user.avatar ? { userAvatar: user.avatar } : {}),
           // Theme data
           ...(hasTheme ? { themeId: selectedThemeId } : {}),
@@ -792,6 +799,15 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
         text: t('status_feed.delete'), style: 'destructive',
         onPress: async () => {
           try {
+            // Firestore does not cascade into subcollections, so clear the
+            // comments first — otherwise deleting a status strands them where
+            // nothing (app or cleanup CF) can ever reach them again.
+            try {
+              const cSnap = await getDocs(collection(firestoreDB, 'statuses', statusId, 'comments'));
+              await Promise.all(cSnap.docs.map(c => deleteDoc(c.ref)));
+            } catch (e) {
+              console.warn('[StatusFeed] comment cleanup failed:', e?.message);
+            }
             await deleteDoc(doc(firestoreDB, 'statuses', statusId));
             setViewingStatus(null);
 
@@ -1035,6 +1051,64 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
     }
     return () => { if (storyTimerRef.current) clearTimeout(storyTimerRef.current); };
   }, [storyIndex, viewingStatus?.userId]);
+
+  // ── Comments ──
+  // The story stays mounted and paused underneath, so closing the sheet drops
+  // the viewer back exactly where it was — the same way replying to a story works.
+  const handleOpenComments = useCallback(() => {
+    if (!user?.id) {
+      stopStoryTimer();
+      setViewingStatus(null);
+      setTimeout(() => onRequireSignIn?.(), 2300);
+      return;
+    }
+    stopStoryTimer();
+    setShowComments(true);
+  }, [user?.id, onRequireSignIn, stopStoryTimer]);
+
+  const handleCloseComments = useCallback(() => {
+    setShowComments(false);
+    // The sheet only renders inside the viewer, so the story is still mounted
+    // behind it — pick the timer back up where it was paused.
+    const total = viewingStatus?.statuses?.length;
+    if (total) startStoryTimer(storyIndex, total);
+  }, [viewingStatus, storyIndex, startStoryTimer]);
+
+  // Tapping a commenter opens a DM. StatusFeed lives in the Home tab, whose
+  // navigator has no 'PrivateChatDesign' route, so route through the root stack
+  // exactly like handleStartChatFromDrawer does.
+  const handleChatFromComment = useCallback((comment) => {
+    if (!comment?.userId) return;
+    setShowComments(false);
+    stopStoryTimer();
+    setViewingStatus(null);
+    setTimeout(() => {
+      try {
+        const rootNav = navigation.getParent() || navigation;
+        rootNav.navigate('PrivateChatRoot', {
+          selectedUser: {
+            senderId: comment.userId,
+            sender: comment.displayName,
+            avatar: comment.avatar,
+          },
+        });
+      } catch (e) {
+        console.warn('[StatusFeed] comment chat navigation failed:', e?.message);
+      }
+    }, 300);
+  }, [navigation, stopStoryTimer]);
+
+  // Keep the local count in step with the sheet's own optimistic add/delete, in
+  // both the open viewer and the cached bubble list, so the badge never lies.
+  const handleCommentCountChange = useCallback((statusId, delta) => {
+    const bump = (sList) => sList.map(st =>
+      st.id === statusId
+        ? { ...st, commentCount: Math.max(0, (st.commentCount || 0) + delta) }
+        : st
+    );
+    setViewingStatus(prev => (prev ? { ...prev, statuses: bump(prev.statuses) } : prev));
+    setStatuses(prev => prev.map(g => ({ ...g, statuses: bump(g.statuses) })));
+  }, []);
 
   // ── Open profile drawer from status (same BottomDrawer pattern used everywhere) ──
   const handleChatFromStatus = useCallback(() => {
@@ -1408,6 +1482,11 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                       {Object.keys(reactionCounts).map(e => `${e}${reactionCounts[e] > 1 ? reactionCounts[e] : ''}`).join(' ')}
                     </Text>
                   )}
+                  {currentStatus.commentCount > 0 && (
+                    <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                      💬 {currentStatus.commentCount}
+                    </Text>
+                  )}
                 </View>
                 {/* Page indicator */}
                 {totalStatuses > 1 && (
@@ -1420,8 +1499,9 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
               {/* Reaction bar + Chat button row */}
               {!isMyStatus && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {/* Reactions */}
-                  <View style={{ flexDirection: 'row', flex: 1, gap: 4 }}>
+                  {/* Reactions — wrap, so the row degrades on narrow screens
+                      instead of pushing Comment/Chat off the edge */}
+                  <View style={{ flexDirection: 'row', flex: 1, gap: 4, flexWrap: 'wrap' }}>
                     {REACTION_EMOJIS.map(emoji => (
                       <TouchableOpacity
                         key={emoji}
@@ -1437,6 +1517,24 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {/* Comment button — icon only until there are comments to count */}
+                  <TouchableOpacity
+                    onPress={handleOpenComments}
+                    activeOpacity={0.8}
+                    accessibilityLabel={t('status_feed.comment', { defaultValue: 'Comment' })}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 5,
+                      backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 10,
+                      borderRadius: 24,
+                    }}
+                  >
+                    <FontAwesome name="comment" size={14} color="#fff" solid />
+                    {currentStatus.commentCount > 0 && (
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>
+                        {currentStatus.commentCount}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                   {/* Chat / DM button */}
                   <TouchableOpacity
                     onPress={() => { stopStoryTimer(); handleChatFromStatus(); }}
@@ -1462,6 +1560,18 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                     </Text>
                   )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                    {/* Own status: read and reply to the comments left on it */}
+                    <TouchableOpacity
+                      onPress={handleOpenComments}
+                      style={[styles.deleteBtn, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
+                    >
+                      <FontAwesome name="comment" size={12} color="#fff" solid />
+                      <Text style={[styles.deleteText, { color: '#fff' }]}>
+                        {currentStatus.commentCount > 0
+                          ? currentStatus.commentCount
+                          : t('status_feed.comments', { defaultValue: 'Comments' })}
+                      </Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => { stopStoryTimer(); setViewingStatus(null); setShowCreator(true); }}
                       style={[styles.deleteBtn, { backgroundColor: 'rgba(59,130,246,0.2)' }]}
@@ -1494,6 +1604,19 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                 </View>
               )}
             </View>
+
+            {/* Comments sheet — nested so the story stays mounted (and paused)
+                underneath instead of being torn down like the chat drawer is. */}
+            {showComments && (
+              <CommentModal
+                visible={showComments}
+                onClose={handleCloseComments}
+                postId={currentStatus.id}
+                collectionName="statuses"
+                onCountChange={(delta) => handleCommentCountChange(currentStatus.id, delta)}
+                onOpenChat={handleChatFromComment}
+              />
+            )}
           </View>
         </Modal>
         );

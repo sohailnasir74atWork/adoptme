@@ -1,73 +1,92 @@
-// OfferWall.jsx — Full-Screen, Kid-Friendly, Convincing Pro Paywall
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+// OfferWall.jsx — Adopt Me Values PRO paywall
+// Goals: premium look, one obvious choice, kid-readable copy, honest pricing.
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, Modal, TouchableOpacity,
   StyleSheet, StatusBar, Platform, ActivityIndicator,
   Dimensions, Linking, Animated, Easing, ScrollView,
 } from 'react-native';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import SafeLottieView from '../Helper/SafeLottieView';
 import { useLocalState } from '../LocalGlobelStats';
+import { useHaptic } from '../Helper/HepticFeedBack';
 import { mixpanel } from '../AppHelper/MixPenel';
 import { useGlobalState } from '../GlobelStats';
-import { getThemeColors } from '../Helper/themeColors';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
+const SMALL_SCREEN = height < 700;
 
-// ── Compelling Benefits — app-specific value props ──
-const BENEFITS = [
-  {
-    icon: 'rocket',
-    label: 'Featured Trades',
-    desc: 'Your trades appear at the TOP for everyone!',
-    color: '#FF6B6B',
-    tag: 'HOT',
-  },
-  {
-    icon: 'ban-outline',
-    label: 'No Ads Ever',
-    desc: 'Zero ads, zero interruptions. Clean experience',
-    color: '#4ECDC4',
-    tag: 'NEW',
-  },
-  {
-    icon: 'stats-chart',
-    label: 'Full Analytics',
-    desc: 'Top movers, losers, most wanted & offered pets',
-    color: '#7C6FFF',
-  },
-  {
-    icon: 'star',
-    label: 'Exclusive PRO Badge',
-    desc: 'Stand out with a PRO badge on your profile',
-    color: '#FFD93D',
-  },
-  {
-    icon: 'language',
-    label: 'Unlimited Translations',
-    desc: 'Chat with anyone in any language, no limits',
-    color: '#F472B6',
-  },
-  {
-    icon: 'color-palette',
-    label: 'Exclusive Cosmetics',
-    desc: 'Unlock extra cosmetic slots & exclusive items',
-    color: '#A78BFA',
-  },
-  {
-    icon: 'shield-checkmark',
-    label: 'Scam Protection',
-    desc: 'Get alerts when trading with flagged users',
-    color: '#34D399',
-  },
+// ── Brand ──
+const BRAND = '#7C6FFF';
+const HERO_GRADIENT = ['#8B7BFF', '#6C4DE0', '#4B2FB5'];
+
+// ── The three benefits that actually sell PRO ──
+const HERO_BENEFITS = [
+  { icon: 'rocket', color: '#FF6B6B', titleKey: 'featured_title', descKey: 'featured_desc' },
+  { icon: 'ban', color: '#4ECDC4', titleKey: 'noads_title', descKey: 'noads_desc' },
+  { icon: 'star', color: '#FFB703', titleKey: 'badge_title', descKey: 'badge_desc' },
 ];
 
-const CLOSE_TIMER_SECONDS = 7;
+// ── Secondary perks, shown as compact chips ──
+const PERK_CHIPS = [
+  { icon: 'stats-chart', color: '#7C6FFF', labelKey: 'chip_analytics' },
+  { icon: 'language', color: '#F472B6', labelKey: 'chip_translate' },
+  { icon: 'color-palette', color: '#A78BFA', labelKey: 'chip_cosmetics' },
+  { icon: 'shield-checkmark', color: '#34D399', labelKey: 'chip_safety' },
+];
+
+const CLOSE_TIMER_SECONDS = 5;
+
+// Ordering: longest plan first, so the best value is the first thing read.
+const PLAN_ORDER = {
+  LIFETIME: 0, ANNUAL: 1, SIX_MONTH: 2, THREE_MONTH: 3, TWO_MONTH: 4, MONTHLY: 5, WEEKLY: 6,
+};
+// Average weeks per billing period — used to compare plans on a common scale.
+const WEEKS_IN_PERIOD = {
+  WEEKLY: 1, MONTHLY: 4.345, TWO_MONTH: 8.69, THREE_MONTH: 13.043, SIX_MONTH: 26.086, ANNUAL: 52.143,
+};
+const PLAN_KEY = {
+  WEEKLY: 'plan_weekly', MONTHLY: 'plan_monthly', TWO_MONTH: 'plan_two_month',
+  THREE_MONTH: 'plan_three_month', SIX_MONTH: 'plan_six_month', ANNUAL: 'plan_annual',
+  LIFETIME: 'plan_lifetime',
+};
+const PERIOD_KEY = {
+  WEEKLY: 'period_week', MONTHLY: 'period_month', TWO_MONTH: 'period_2months',
+  THREE_MONTH: 'period_3months', SIX_MONTH: 'period_6months', ANNUAL: 'period_year',
+};
+const PLAN_EMOJI = {
+  WEEKLY: '⚡', MONTHLY: '🌟', TWO_MONTH: '🔥', THREE_MONTH: '💎',
+  SIX_MONTH: '🔥', ANNUAL: '👑', LIFETIME: '🏆',
+};
+
+// Rebuild a price string at a different amount, keeping the store's currency
+// symbol and its position (prefix "$4.99" vs suffix "4,99 €").
+const formatMoney = (pkg, amount) => {
+  const currency = pkg?.product?.currencyCode;
+  if (currency) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
+    } catch (e) {
+      // Fall through to the manual formatter below
+    }
+  }
+  const priceString = pkg?.product?.priceString || '';
+  const symbol = priceString.replace(/[\d\s.,]/g, '').trim();
+  const value = amount.toFixed(2);
+  if (!symbol) return value;
+  const firstDigit = priceString.search(/\d/);
+  const symbolIndex = priceString.indexOf(symbol[0]);
+  return (firstDigit !== -1 && symbolIndex > firstDigit) ? `${value} ${symbol}` : `${symbol}${value}`;
+};
 
 const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, inline }) => {
   const { packages, purchaseProduct, restorePurchases, localState } = useLocalState();
   const { theme } = useGlobalState();
+  const { triggerHapticFeedback } = useHaptic();
+  const { t } = useTranslation();
 
   const [selectedPkg, setSelectedPkg] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -76,117 +95,142 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
   const canClose = closeTimer <= 0;
   const isDark = theme === 'dark';
 
-  // Theme colors
+  // Theme colors — the hero is always dark-on-gradient, so only the body flips.
   const c = {
-    bg: isDark ? '#0B0420' : '#F8F7FF',
-    bgAlt: isDark ? '#130830' : '#EEEAFF',
-    text: isDark ? '#fff' : '#1a1a2e',
-    textSub: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)',
-    textMuted: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
-    cardBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-    cardBorder: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
-    closeBtn: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-    closeIcon: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)',
-    timerBorder: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-    timerColor: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)',
-    benefitLabel: isDark ? '#F1F0FF' : '#1a1a2e',
-    pkgBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)',
-    pkgBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(124,111,255,0.04)',
-    pkgLabel: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    pkgPrice: isDark ? '#F1F0FF' : '#1a1a2e',
-    fixedBg: isDark ? '#0B0420' : '#F8F7FF',
-    fixedBorder: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
-    footerLink: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-    footerMuted: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-    footerDot: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-    statusBar: isDark ? 'light-content' : 'dark-content',
+    bg: isDark ? '#0B0420' : '#F7F6FF',
+    text: isDark ? '#F1F0FF' : '#171630',
+    textSub: isDark ? 'rgba(255,255,255,0.62)' : 'rgba(23,22,48,0.58)',
+    textMuted: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(23,22,48,0.45)',
+    cardBg: isDark ? 'rgba(255,255,255,0.055)' : '#FFFFFF',
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(23,22,48,0.07)',
+    chipBg: isDark ? 'rgba(255,255,255,0.045)' : 'rgba(124,111,255,0.07)',
+    closeBtn: 'rgba(0,0,0,0.32)',
+    planBg: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+    planBorder: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(23,22,48,0.1)',
+    planBgActive: isDark ? 'rgba(124,111,255,0.16)' : 'rgba(124,111,255,0.09)',
+    bottomBg: isDark ? '#0B0420' : '#FFFFFF',
+    bottomBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(23,22,48,0.07)',
+    footerLink: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(23,22,48,0.42)',
+    footerMuted: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(23,22,48,0.28)',
   };
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(60)).current;
+  const slideAnim = useRef(new Animated.Value(40)).current;
   const closeFade = useRef(new Animated.Value(0)).current;
-  const benefitAnims = useRef(BENEFITS.map(() => new Animated.Value(0))).current;
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const benefitAnims = useRef(HERO_BENEFITS.map(() => new Animated.Value(0))).current;
+
+  // ── Plan comparison: per-week rate, honest savings vs the priciest plan ──
+  const plans = useMemo(() => {
+    const list = (packages || []).slice().sort(
+      (a, b) => (PLAN_ORDER[a.packageType] ?? 9) - (PLAN_ORDER[b.packageType] ?? 9)
+    );
+    const weeklyRate = (p) => {
+      const weeks = WEEKS_IN_PERIOD[p.packageType];
+      const price = p.product?.price;
+      return weeks && price > 0 ? price / weeks : null;
+    };
+    const rates = list.map(weeklyRate).filter(r => r != null);
+    const maxRate = rates.length ? Math.max(...rates) : null;
+    return list.map(pkg => {
+      const rate = weeklyRate(pkg);
+      const raw = (maxRate && rate && rate < maxRate)
+        ? Math.round((1 - rate / maxRate) * 100)
+        : 0;
+      return { pkg, rate, savings: raw >= 5 ? raw : 0 };
+    });
+  }, [packages]);
+
+  // Best value = biggest real saving; ties go to the longest plan (list is sorted).
+  const recommended = useMemo(() => {
+    if (!plans.length) return null;
+    return plans.reduce((best, p) => (p.savings > best.savings ? p : best), plans[0]).pkg;
+  }, [plans]);
+
+  // ── Free trial, if the store offers one on the selected plan ──
+  const getTrial = (pkg) => {
+    const product = pkg?.product;
+    const intro = product?.introPrice;
+    if (intro && intro.price === 0 && intro.periodNumberOfUnits > 0) {
+      return { count: intro.periodNumberOfUnits, unit: String(intro.periodUnit || '').toUpperCase() };
+    }
+    const freePhase = product?.defaultOption?.freePhase?.billingPeriod;
+    if (freePhase && freePhase.value > 0) {
+      return { count: freePhase.value, unit: String(freePhase.unit || '').toUpperCase() };
+    }
+    return null;
+  };
+
+  const trialLabel = (trial) => {
+    if (!trial) return null;
+    const key = { DAY: 'trial_days', WEEK: 'trial_weeks', MONTH: 'trial_months' }[trial.unit];
+    return key ? t(`paywall.${key}`, { count: trial.count }) : null;
+  };
+
+  const trial = trialLabel(getTrial(selectedPkg));
 
   // ── Close button countdown ──
   useEffect(() => {
     if (!visible) return;
     setCloseTimer(CLOSE_TIMER_SECONDS);
+    closeFade.setValue(0);
     const interval = setInterval(() => {
       setCloseTimer(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          Animated.timing(closeFade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+          Animated.timing(closeFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [visible]);
+  }, [visible, closeFade]);
 
   // ── Set system nav bar on Android ──
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    if (visible) {
-      const owBg = isDark ? '#0B0420' : '#F8F7FF';
-      SystemNavigationBar.setNavigationColor(owBg, isDark ? 'light' : 'dark');
-    } else {
-      const bg = isDark ? '#0f172a' : '#ffffff';
-      SystemNavigationBar.setNavigationColor(bg, isDark ? 'light' : 'dark');
-    }
+    const paywallBg = isDark ? '#0B0420' : '#FFFFFF';
+    const appBg = isDark ? '#0f172a' : '#ffffff';
+    SystemNavigationBar.setNavigationColor(visible ? paywallBg : appBg, isDark ? 'light' : 'dark');
   }, [visible, isDark]);
 
   // ── Entrance animation ──
   useEffect(() => {
-    if (visible) {
-      fadeAnim.setValue(0);
-      slideAnim.setValue(60);
-      benefitAnims.forEach(a => a.setValue(0));
+    if (!visible) return;
+    fadeAnim.setValue(0);
+    slideAnim.setValue(40);
+    benefitAnims.forEach(a => a.setValue(0));
 
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 600, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
-      ]).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 550, easing: Easing.out(Easing.back(1.1)), useNativeDriver: true }),
+    ]).start();
 
-      // Stagger benefits
-      Animated.stagger(80,
-        benefitAnims.map(anim =>
-          Animated.spring(anim, { toValue: 1, tension: 60, friction: 8, useNativeDriver: true })
-        )
-      ).start();
-    }
-  }, [visible]);
+    Animated.stagger(90,
+      benefitAnims.map(anim =>
+        Animated.spring(anim, { toValue: 1, tension: 60, friction: 9, useNativeDriver: true })
+      )
+    ).start();
+  }, [visible, fadeAnim, slideAnim, benefitAnims]);
 
   // ── CTA pulse ──
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.04, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.03, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     pulse.start();
     return () => pulse.stop();
-  }, []);
+  }, [pulseAnim]);
 
-  // ── Shimmer for "BEST VALUE" tag ──
+  // Preselect the best-value plan
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
-    ).start();
-  }, []);
-
-  // Auto-select best package
-  useEffect(() => {
-    if (visible && packages?.length > 0 && !selectedPkg) {
-      const annual = packages.find(p => p.packageType === 'ANNUAL');
-      const monthly = packages.find(p => p.packageType === 'MONTHLY');
-      setSelectedPkg(annual || monthly || packages[0]);
-    }
-  }, [visible, packages]);
+    if (visible && recommended && !selectedPkg) setSelectedPkg(recommended);
+  }, [visible, recommended, selectedPkg]);
 
   // Reset on close
   useEffect(() => {
@@ -201,10 +245,20 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
     if (visible) {
       mixpanel.track('custom_paywall_presented', { source: track || 'unknown' });
     }
-  }, [visible]);
+  }, [visible, track]);
+
+  const handleSelect = useCallback((pkg) => {
+    triggerHapticFeedback('impactLight');
+    setSelectedPkg(pkg);
+    mixpanel.track('custom_paywall_plan_select', {
+      source: track || 'unknown',
+      package: pkg.identifier,
+    });
+  }, [triggerHapticFeedback, track]);
 
   const handlePurchase = useCallback(async () => {
     if (!selectedPkg || loading) return;
+    triggerHapticFeedback('impactMedium');
     mixpanel.track('custom_paywall_purchase_tap', {
       source: track || 'unknown',
       package: selectedPkg.identifier,
@@ -220,7 +274,7 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
         onClose?.();
       }
     }, 500);
-  }, [selectedPkg, loading, purchaseProduct, track, localState?.isPro, onClose]);
+  }, [selectedPkg, loading, purchaseProduct, track, localState?.isPro, onClose, triggerHapticFeedback]);
 
   const handleRestore = useCallback(async () => {
     if (restoring) return;
@@ -230,263 +284,252 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
     }, 500);
   }, [restoring, restorePurchases, localState?.isPro, onClose]);
 
-  const getPkgMeta = (pkg) => {
-    const t = pkg.packageType;
-    if (t === 'WEEKLY') return { label: 'Weekly', emoji: '⚡', color: '#4ECDC4', accent: '#2AB5AB' };
-    if (t === 'MONTHLY') return { label: 'Monthly', emoji: '🌟', color: '#A78BFA', accent: '#8B6FE8' };
-    if (t === 'ANNUAL') return { label: 'Yearly', emoji: '👑', color: '#FFD93D', accent: '#F5C518' };
-    if (t === 'SIX_MONTH') return { label: '6 Months', emoji: '🔥', color: '#FF6B6B', accent: '#E85555' };
-    if (t === 'THREE_MONTH') return { label: '3 Months', emoji: '💎', color: '#F472B6', accent: '#E25DA0' };
-    return { label: pkg.identifier || 'Plan', emoji: '✨', color: '#7C6FFF', accent: '#6A5FE0' };
-  };
-
-  const getLabel = (pkg) => getPkgMeta(pkg).label;
-
-  const isBest = (pkg) => pkg.packageType === 'ANNUAL';
-
-  const getSavings = (pkg) => {
-    if (pkg.packageType !== 'ANNUAL' || packages.length < 2) return null;
-    const monthly = packages.find(p => p.packageType === 'MONTHLY');
-    if (!monthly) return null;
-    const yearlyTotal = pkg.product?.price || 0;
-    const monthlyTotal = (monthly.product?.price || 0) * 12;
-    if (monthlyTotal <= 0 || yearlyTotal >= monthlyTotal) return null;
-    const saved = Math.round(((monthlyTotal - yearlyTotal) / monthlyTotal) * 100);
-    return saved > 0 ? saved : null;
-  };
-
-  // Generate "double value" strikethrough price (2× actual)
-  const getStrikethroughPrice = (pkg) => {
-    const price = pkg.product?.price;
+  // ── CTA copy: says exactly what will be charged ──
+  const ctaSubtitle = (() => {
+    if (!selectedPkg) return null;
+    const price = selectedPkg.product?.priceString;
     if (!price) return null;
-    const doublePrice = price * 2;
-    const currencyCode = pkg.product?.currencyCode || '';
-    // Format with same currency symbol
-    const priceStr = pkg.product?.priceString || '';
-    // Extract currency symbol from priceString
-    const symbol = priceStr.replace(/[\d.,\s]/g, '').trim();
-    if (Number.isInteger(doublePrice)) {
-      return `${symbol}${doublePrice}`;
+    if (selectedPkg.packageType === 'LIFETIME') {
+      return t('paywall.cta_sub_lifetime', { price });
     }
-    return `${symbol}${doublePrice.toFixed(2)}`;
-  };
+    const periodKey = PERIOD_KEY[selectedPkg.packageType];
+    const period = periodKey ? t(`paywall.${periodKey}`) : '';
+    if (trial) return t('paywall.cta_sub_trial', { trial, price, period });
+    return t('paywall.cta_sub', { price, period });
+  })();
 
   const content = (
-      <View style={[s.container, { backgroundColor: c.bg }]}>
-        <StatusBar barStyle={c.statusBar} backgroundColor={c.bg} />
+    <View style={[s.container, { backgroundColor: c.bg }]}>
+      <StatusBar barStyle="light-content" backgroundColor={HERO_GRADIENT[0]} />
 
-        {/* ── Background gradient ── */}
-        <View style={s.bgGradient}>
-          <View style={[s.bgTop, { backgroundColor: c.bg }]} />
-          <View style={[s.bgBottom, { backgroundColor: c.bgAlt }]} />
-        </View>
+      {/* ══ SCROLLABLE BODY ══ */}
+      <ScrollView
+        style={s.scrollBody}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces
+      >
+        {/* ── Hero ── */}
+        <View style={s.hero}>
+          <Svg style={StyleSheet.absoluteFill}>
+            <Defs>
+              <SvgGradient id="heroGrad" x1="0" y1="0" x2="0.7" y2="1">
+                <Stop offset="0" stopColor={HERO_GRADIENT[0]} />
+                <Stop offset="0.55" stopColor={HERO_GRADIENT[1]} />
+                <Stop offset="1" stopColor={HERO_GRADIENT[2]} />
+              </SvgGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroGrad)" />
+          </Svg>
 
-        {/* ── Sparkle overlay ── */}
-        <SafeLottieView
-          source={require('../../assets/lottie/sparkle.json')}
-          autoPlay
-          loop
-          resizeMode="cover"
-          style={s.sparkleOverlay}
-          imageAssetsFolder=""
-          renderMode={Platform.OS === 'android' ? 'SOFTWARE' : 'HARDWARE'}
-          cacheComposition={false}
-        />
+          <SafeLottieView
+            source={require('../../assets/lottie/sparkle.json')}
+            autoPlay
+            loop
+            resizeMode="cover"
+            style={s.sparkleOverlay}
+            imageAssetsFolder=""
+            renderMode={Platform.OS === 'android' ? 'SOFTWARE' : 'HARDWARE'}
+            cacheComposition={false}
+          />
 
-        {/* ── Close / Timer ── */}
-        <View style={s.headerRow}>
-          <View style={{ flex: 1 }} />
-          {canClose ? (
-            <Animated.View style={{ opacity: closeFade }}>
-              <TouchableOpacity onPress={onClose} style={[s.closeBtn, { backgroundColor: c.closeBtn }]} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Icon name="close" size={18} color={c.closeIcon} />
-              </TouchableOpacity>
-            </Animated.View>
-          ) : (
-            <View style={[s.timerBadge, { borderColor: c.timerBorder }]}>
-              <Text style={[s.timerText, { color: c.timerColor }]}>{closeTimer}</Text>
+          <Animated.View style={[s.heroInner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <SafeLottieView
+              source={require('../../assets/Dance cat.json')}
+              autoPlay
+              loop
+              resizeMode="contain"
+              style={s.dancingCat}
+              renderMode={Platform.OS === 'android' ? 'SOFTWARE' : 'HARDWARE'}
+              cacheComposition={false}
+            />
+            <View style={s.proPill}>
+              <Icon name="diamond" size={11} color="#3A1F8F" />
+              <Text style={s.proPillText}>PRO</Text>
             </View>
-          )}
-        </View>
-
-        {/* ── SCROLLABLE BODY ── */}
-        <ScrollView
-          style={s.scrollBody}
-          contentContainerStyle={s.scrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={true}
-        >
-          {/* ── Hero: Dancing Cat + Title ── */}
-          <Animated.View style={[s.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <View style={s.catContainer}>
-              <SafeLottieView
-                source={require('../../assets/Dance cat.json')}
-                autoPlay
-                loop
-                resizeMode="contain"
-                style={s.dancingCat}
-                renderMode={Platform.OS === 'android' ? 'SOFTWARE' : 'HARDWARE'}
-                cacheComposition={false}
-              />
-            </View>
-            <Text style={[s.heroTitle, { color: c.text }]}>Go PRO! ✨</Text>
-            <Text style={[s.heroSub, { color: c.textSub }]}>Get the BEST trades & coolest perks!</Text>
-
-            {/* Limited time badge */}
-            <View style={[s.limitedBadge, { backgroundColor: isDark ? 'rgba(255,217,61,0.12)' : 'rgba(200,150,0,0.12)', borderColor: isDark ? 'rgba(255,217,61,0.3)' : 'rgba(200,150,0,0.3)' }]}>
-              <Icon name="time-outline" size={13} color={isDark ? '#FFD93D' : '#B8860B'} />
-              <Text style={[s.limitedText, { color: isDark ? '#FFD93D' : '#8B6914' }]}>🔥 50% OFF — Limited Time!</Text>
-            </View>
+            <Text style={s.heroTitle}>{t('paywall.title')}</Text>
+            <Text style={s.heroSub}>{t('paywall.subtitle')}</Text>
           </Animated.View>
+        </View>
 
-          {/* ── Benefits List ── */}
-          <View style={s.benefitsList}>
-            {BENEFITS.map((b, i) => (
-              <Animated.View
-                key={i}
-                style={[
-                  s.benefitRow,
-                  { backgroundColor: c.cardBg, borderColor: c.cardBorder },
-                  {
-                    opacity: benefitAnims[i],
-                    transform: [{
-                      translateX: benefitAnims[i].interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-30, 0],
-                      })
-                    }],
-                  }
-                ]}
-              >
-                <View style={[s.benefitIconCircle, { backgroundColor: b.color + '25' }]}>
-                  <Icon name={b.icon} size={16} color={b.color} />
-                </View>
-                <View style={s.benefitTextWrap}>
-                  <View style={s.benefitLabelRow}>
-                    <Text style={[s.benefitLabel, { color: c.benefitLabel }]}>{b.label}</Text>
-                    {b.tag && (
-                      <View style={[s.benefitTag, { backgroundColor: b.tag === 'HOT' ? '#FF6B6B' : '#4ECDC4' }]}>
-                        <Text style={s.benefitTagText}>{b.tag}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={[s.benefitDesc, { color: c.textMuted }]}>{b.desc}</Text>
-                </View>
-                <View style={s.checkCircle}>
-                  <Icon name="checkmark" size={12} color="#fff" />
-                </View>
-              </Animated.View>
-            ))}
-          </View>
-        </ScrollView>
-
-        {/* ── FIXED BOTTOM: Packages + CTA + Footer ── */}
-        <View style={[s.fixedBottom, { backgroundColor: c.fixedBg, borderTopColor: c.fixedBorder }]}>
-          {/* Package Cards */}
-          {packages?.length > 0 ? (
-            <View style={s.pkgRow}>
-              {packages.map((pkg, i) => {
-                const isSelected = selectedPkg?.identifier === pkg.identifier;
-                const best = isBest(pkg);
-                const savings = getSavings(pkg);
-                const strikePrice = getStrikethroughPrice(pkg);
-                const meta = getPkgMeta(pkg);
-                return (
-                  <TouchableOpacity
-                    key={pkg.identifier || i}
-                    style={[
-                      s.pkgCard,
-                      { borderColor: isSelected ? meta.color : c.pkgBorder, backgroundColor: isSelected ? meta.color + '18' : c.pkgBg },
-                      isSelected && { shadowColor: meta.color, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
-                    ]}
-                    onPress={() => setSelectedPkg(pkg)}
-                    activeOpacity={0.8}
-                  >
-                    {best && (
-                      <View style={[s.bestTag, { backgroundColor: meta.color }]}> 
-                        <Text style={s.bestTagText}>👑 BEST VALUE</Text>
-                      </View>
-                    )}
-                    <Text style={s.pkgEmoji}>{meta.emoji}</Text>
-                    <Text style={[s.pkgLabel, { color: isSelected ? meta.color : c.pkgLabel }]}>{meta.label}</Text>
-                    <View style={s.pkgPriceRow}>
-                      {strikePrice && (
-                        <Text style={s.strikePrice}>{strikePrice}</Text>
-                      )}
-                    </View>
-                    <Text style={[s.pkgPrice, isSelected && { color: '#fff' }, { color: c.pkgPrice }]}>
-                      {pkg.product?.priceString || '...'}
-                    </Text>
-                    {savings ? (
-                      <View style={[s.savingsBadge, { backgroundColor: meta.color + '25' }]}>
-                        <Text style={[s.savingsText, { color: meta.color }]}>🎉 {savings}% OFF</Text>
-                      </View>
-                    ) : (
-                      <View style={s.pkgSpacer} />
-                    )}
-                    {isSelected && (
-                      <View style={[s.pkgCheck, { backgroundColor: meta.color }]}>
-                        <Icon name="checkmark" size={10} color="#fff" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={s.loadingWrap}>
-              <ActivityIndicator size="small" color="#A78BFA" />
-              <Text style={s.loadingText}>Loading plans...</Text>
-            </View>
-          )}
-
-          {/* CTA Button */}
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity
-              style={[s.ctaBtn, loading && { opacity: 0.7 }]}
-              onPress={handlePurchase}
-              disabled={loading || !selectedPkg}
-              activeOpacity={0.85}
+        {/* ── Top 3 benefits ── */}
+        <View style={s.benefitsList}>
+          {HERO_BENEFITS.map((b, i) => (
+            <Animated.View
+              key={b.titleKey}
+              style={[
+                s.benefitRow,
+                { backgroundColor: c.cardBg, borderColor: c.cardBorder },
+                {
+                  opacity: benefitAnims[i],
+                  transform: [{
+                    translateY: benefitAnims[i].interpolate({ inputRange: [0, 1], outputRange: [16, 0] }),
+                  }],
+                },
+              ]}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <View style={s.ctaInner}>
-                  <Icon name="sparkles" size={20} color="#FFD93D" style={{ marginRight: 8 }} />
-                  <Text style={s.ctaText}>Be a Pro Now!</Text>
-                </View>
-              )}
+              <View style={[s.benefitIconCircle, { backgroundColor: b.color + '22' }]}>
+                <Icon name={b.icon} size={19} color={b.color} />
+              </View>
+              <View style={s.benefitTextWrap}>
+                <Text style={[s.benefitTitle, { color: c.text }]}>{t(`paywall.${b.titleKey}`)}</Text>
+                <Text style={[s.benefitDesc, { color: c.textSub }]}>{t(`paywall.${b.descKey}`)}</Text>
+              </View>
+              <Icon name="checkmark-circle" size={20} color="#34D399" />
+            </Animated.View>
+          ))}
+        </View>
+
+        {/* ── Secondary perks ── */}
+        <Text style={[s.plusLabel, { color: c.textMuted }]}>{t('paywall.plus')}</Text>
+        <View style={s.chipGrid}>
+          {PERK_CHIPS.map(chip => (
+            <View key={chip.labelKey} style={[s.chip, { backgroundColor: c.chipBg }]}>
+              <Icon name={chip.icon} size={13} color={chip.color} />
+              <Text style={[s.chipText, { color: c.textSub }]} numberOfLines={1}>
+                {t(`paywall.${chip.labelKey}`)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* ── Close / countdown — always reachable, never scrolls away ── */}
+      <View style={s.headerRow} pointerEvents="box-none">
+        {canClose ? (
+          <Animated.View style={{ opacity: closeFade }}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[s.closeBtn, { backgroundColor: c.closeBtn }]}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            >
+              <Icon name="close" size={18} color="#fff" />
             </TouchableOpacity>
           </Animated.View>
-
-          {/* Compact footer — single line */}
-          <View style={s.footerRow}>
-            <TouchableOpacity onPress={handleRestore} disabled={restoring}>
-              {restoring ? (
-                <ActivityIndicator size="small" color="#A78BFA" />
-              ) : (
-                <Text style={[s.footerLink, { color: c.footerLink }]}>Restore</Text>
-              )}
-            </TouchableOpacity>
-            <Text style={[s.footerDot, { color: c.footerDot }]}>·</Text>
-            <Text style={[s.footerMuted, { color: c.footerMuted }]}>Auto-renews</Text>
-            <Text style={[s.footerDot, { color: c.footerDot }]}>·</Text>
-            <TouchableOpacity onPress={() => Linking.openURL('https://adoptmevalues.app/privacy')}>
-              <Text style={[s.footerLink, { color: c.footerLink }]}>Privacy</Text>
-            </TouchableOpacity>
-            <Text style={[s.footerDot, { color: c.footerDot }]}>·</Text>
-            <TouchableOpacity onPress={() => Linking.openURL('https://adoptmevalues.app/terms')}>
-              <Text style={[s.footerLink, { color: c.footerLink }]}>Terms</Text>
-            </TouchableOpacity>
+        ) : (
+          <View style={s.timerBadge}>
+            <Text style={s.timerText}>{closeTimer}</Text>
           </View>
+        )}
+      </View>
+
+      {/* ══ FIXED BOTTOM: plans + CTA + footer ══ */}
+      <View style={[s.fixedBottom, { backgroundColor: c.bottomBg, borderTopColor: c.bottomBorder }]}>
+        {plans.length > 0 ? (
+          <ScrollView
+            style={s.planScroll}
+            contentContainerStyle={s.planScrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {plans.map(({ pkg, rate, savings }, i) => {
+              const isSelected = selectedPkg?.identifier === pkg.identifier;
+              const isRecommended = recommended?.identifier === pkg.identifier;
+              const planKey = PLAN_KEY[pkg.packageType];
+              return (
+                <TouchableOpacity
+                  key={pkg.identifier || i}
+                  onPress={() => handleSelect(pkg)}
+                  activeOpacity={0.85}
+                  style={[
+                    s.planRow,
+                    { backgroundColor: isSelected ? c.planBgActive : c.planBg, borderColor: isSelected ? BRAND : c.planBorder },
+                  ]}
+                >
+                  {isRecommended && (
+                    <View style={s.ribbon}>
+                      <Text style={s.ribbonText}>
+                        {savings ? t('paywall.save', { percent: savings }) : t('paywall.popular')}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={[s.radio, { borderColor: isSelected ? BRAND : c.planBorder }]}>
+                    {isSelected && <View style={s.radioDot} />}
+                  </View>
+
+                  <View style={s.planTextWrap}>
+                    <Text style={[s.planLabel, { color: c.text }]}>
+                      {PLAN_EMOJI[pkg.packageType] || '✨'}{'  '}
+                      {planKey ? t(`paywall.${planKey}`) : (pkg.identifier || t('paywall.plan_default'))}
+                    </Text>
+                    {rate ? (
+                      <Text style={[s.planPerWeek, { color: c.textMuted }]}>
+                        {t('paywall.per_week', { price: formatMoney(pkg, rate) })}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <Text style={[s.planPrice, { color: isSelected ? BRAND : c.text }]}>
+                    {pkg.product?.priceString || '—'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={s.loadingWrap}>
+            <ActivityIndicator size="small" color={BRAND} />
+            <Text style={[s.loadingText, { color: c.textMuted }]}>{t('paywall.loading')}</Text>
+          </View>
+        )}
+
+        {/* CTA */}
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <TouchableOpacity
+            style={[s.ctaBtn, (loading || !selectedPkg) && s.ctaBtnDisabled]}
+            onPress={handlePurchase}
+            disabled={loading || !selectedPkg}
+            activeOpacity={0.9}
+          >
+            <Svg style={StyleSheet.absoluteFill}>
+              <Defs>
+                <SvgGradient id="ctaGrad" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor="#8B7BFF" />
+                  <Stop offset="1" stopColor="#5A3FD6" />
+                </SvgGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#ctaGrad)" />
+            </Svg>
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <View style={s.ctaInner}>
+                <Text style={s.ctaText}>{trial ? t('paywall.cta_trial') : t('paywall.cta')}</Text>
+                <Icon name="arrow-forward" size={18} color="#fff" style={s.ctaArrow} />
+              </View>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+
+        {!!ctaSubtitle && (
+          <Text style={[s.ctaSub, { color: c.textMuted }]} numberOfLines={2}>{ctaSubtitle}</Text>
+        )}
+
+        {/* Footer */}
+        <View style={s.footerRow}>
+          <TouchableOpacity onPress={handleRestore} disabled={restoring}>
+            {restoring ? (
+              <ActivityIndicator size="small" color={BRAND} />
+            ) : (
+              <Text style={[s.footerLink, { color: c.footerLink }]}>{t('paywall.restore')}</Text>
+            )}
+          </TouchableOpacity>
+          <Text style={[s.footerDot, { color: c.footerMuted }]}>·</Text>
+          <TouchableOpacity onPress={() => Linking.openURL('https://adoptmevalues.app/terms')}>
+            <Text style={[s.footerLink, { color: c.footerLink }]}>{t('paywall.terms')}</Text>
+          </TouchableOpacity>
+          <Text style={[s.footerDot, { color: c.footerMuted }]}>·</Text>
+          <TouchableOpacity onPress={() => Linking.openURL('https://adoptmevalues.app/privacy')}>
+            <Text style={[s.footerLink, { color: c.footerLink }]}>{t('paywall.privacy')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
+    </View>
   );
 
   // ── Inline mode: render as plain view (no modal) ──
-  if (inline) {
-    return content;
-  }
+  if (inline) return content;
 
   // ── Default: render inside a Modal ──
   return (
@@ -497,54 +540,39 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
 };
 
 // ── Styles ──
-const BOTTOM_SAFE = Platform.OS === 'ios' ? 28 : 12;
+const BOTTOM_SAFE = Platform.OS === 'ios' ? 28 : 14;
+const STATUS_TOP = Platform.OS === 'ios' ? 52 : (StatusBar.currentHeight || 24) + 8;
 
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0420',
-  },
+  container: { flex: 1 },
 
-  // Background
-  bgGradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  bgTop: {
-    flex: 1,
-    backgroundColor: '#0B0420',
-  },
-  bgBottom: {
-    flex: 1,
-    backgroundColor: '#130830',
-  },
+  scrollBody: { flex: 1 },
+  scrollContent: { paddingBottom: 14 },
 
-  // Sparkle overlay
-  sparkleOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.45,
-    opacity: 0.25,
-  },
-
-  // Header
-  headerRow: {
-    flexDirection: 'row',
+  // ── Hero ──
+  hero: {
+    paddingTop: STATUS_TOP,
+    paddingBottom: SMALL_SCREEN ? 18 : 24,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 48 : (StatusBar.currentHeight || 24) + 4,
+  },
+  sparkleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.3,
+  },
+  headerRow: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: STATUS_TOP,
+    right: 16,
     zIndex: 10,
+    elevation: 10, // Android: keep the tap target above the ScrollView
   },
   closeBtn: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -553,302 +581,261 @@ const s = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.32)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   timerText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 13,
     fontWeight: '800',
   },
-
-  // Scrollable body
-  scrollBody: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 24) + 30,
-    paddingBottom: 6,
-  },
-
-  // Hero
-  heroSection: {
+  heroInner: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 4,
-  },
-  catContainer: {
-    width: 120,
-    height: 120,
-    marginBottom: 2,
+    paddingHorizontal: 24,
   },
   dancingCat: {
-    width: '100%',
-    height: '100%',
+    width: SMALL_SCREEN ? 96 : 118,
+    height: SMALL_SCREEN ? 96 : 118,
+  },
+  proPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFD93D',
+    paddingHorizontal: 11,
+    paddingVertical: 3,
+    borderRadius: 999,
+    marginBottom: 8,
+  },
+  proPillText: {
+    color: '#3A1F8F',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.2,
   },
   heroTitle: {
-    fontSize: 26,
+    fontSize: SMALL_SCREEN ? 25 : 29,
     fontWeight: '900',
     color: '#fff',
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
     textAlign: 'center',
   },
   heroSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-    fontWeight: '500',
-    marginTop: 2,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.82)',
+    fontWeight: '600',
+    marginTop: 5,
     textAlign: 'center',
-  },
-  limitedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,217,61,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,217,61,0.3)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    marginTop: 8,
-    gap: 4,
-  },
-  limitedText: {
-    color: '#FFD93D',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    lineHeight: 18,
   },
 
-  // Benefits
+  // ── Benefits ──
   benefitsList: {
     paddingHorizontal: 16,
-    marginTop: 8,
-    gap: 4,
+    marginTop: 16,
+    gap: 8,
   },
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
+    borderRadius: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
   },
   benefitIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
-  benefitTextWrap: {
-    flex: 1,
-  },
-  benefitLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  benefitLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#F1F0FF',
-  },
-  benefitTag: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 5,
-  },
-  benefitTagText: {
-    color: '#fff',
-    fontSize: 8,
+  benefitTextWrap: { flex: 1, marginRight: 8 },
+  benefitTitle: {
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: -0.1,
   },
   benefitDesc: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11.5,
     fontWeight: '500',
-    marginTop: 1,
-  },
-  checkCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#34D399',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 6,
+    marginTop: 2,
+    lineHeight: 15,
   },
 
-  // Fixed bottom
+  // ── Perk chips ──
+  plusLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    paddingHorizontal: 18,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 7,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // ── Fixed bottom ──
   fixedBottom: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 14,
     paddingBottom: BOTTOM_SAFE,
-    backgroundColor: '#0B0420',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  planScroll: {
+    maxHeight: height * 0.32,
+  },
+  planScrollContent: {
+    paddingTop: 12, // headroom for the ribbon on the first row
+    paddingBottom: 4,
+    gap: 10,
   },
 
-  // Packages — Kid-Friendly Vibrant Design
-  pkgRow: {
+  // ── Plan rows ──
+  planRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  pkgCard: {
-    flex: 1,
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    position: 'relative',
-    overflow: 'visible',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
   },
-  bestTag: {
+  ribbon: {
     position: 'absolute',
-    top: -10,
-    backgroundColor: '#FFD93D',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    zIndex: 1,
-    shadowColor: '#FFD93D',
-    shadowOpacity: 0.5,
+    top: -9,
+    right: 12,
+    backgroundColor: '#FF6B6B',
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+    shadowColor: '#FF6B6B',
+    shadowOpacity: 0.45,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
-  bestTagText: {
-    color: '#1a0a00',
+  ribbonText: {
+    color: '#fff',
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
-  pkgEmoji: {
-    fontSize: 24,
-    marginBottom: 2,
-  },
-  pkgLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  pkgPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  strikePrice: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255,100,100,0.6)',
-    textDecorationLine: 'line-through',
-    textDecorationStyle: 'solid',
-  },
-  pkgPrice: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#F1F0FF',
-    marginTop: 2,
-  },
-  savingsBadge: {
-    backgroundColor: 'rgba(52,211,153,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    marginTop: 6,
-  },
-  savingsText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  pkgSpacer: {
-    height: 20,
-  },
-  pkgCheck: {
-    position: 'absolute',
-    bottom: -7,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+  radio: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
+    marginRight: 11,
+  },
+  radioDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: BRAND,
+  },
+  planTextWrap: { flex: 1 },
+  planLabel: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  planPerWeek: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  planPrice: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginLeft: 8,
   },
 
-  // Loading
+  // ── Loading ──
   loadingWrap: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 22,
   },
   loadingText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    marginTop: 6,
+    marginTop: 8,
+    fontWeight: '600',
   },
 
-  // CTA
+  // ── CTA ──
   ctaBtn: {
-    backgroundColor: '#7C6FFF',
-    paddingVertical: 14,
-    borderRadius: 16,
+    height: 54,
+    borderRadius: 18,
     alignItems: 'center',
-    shadowColor: '#7C6FFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginTop: 14,
+    shadowColor: BRAND,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
     shadowRadius: 12,
     elevation: 8,
+  },
+  ctaBtnDisabled: {
+    opacity: 0.65,
   },
   ctaInner: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  ctaArrow: {
+    marginLeft: 7,
+  },
   ctaText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+  },
+  ctaSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
   },
 
-  // Footer — compact single line
+  // ── Footer ──
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
-    gap: 4,
+    gap: 6,
     flexWrap: 'wrap',
   },
   footerLink: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.35)',
     textDecorationLine: 'underline',
   },
-  footerMuted: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.2)',
-  },
   footerDot: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.15)',
+    fontSize: 10.5,
   },
 });
 

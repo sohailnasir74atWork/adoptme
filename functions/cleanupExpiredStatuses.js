@@ -9,7 +9,12 @@ if (!admin.apps.length) {
 /**
  * Cloud Function: Cleanup Expired Statuses
  * Runs every hour to delete statuses where 'expiresAt' is in the past.
- * 
+ *
+ * Statuses carry a `comments` subcollection, and deleting a Firestore document
+ * does NOT delete its subcollections — a plain batch delete would leave every
+ * status comment orphaned and billed forever, unreachable from the app. So the
+ * expired docs go through recursiveDelete instead of batch.delete().
+ *
  * Deployment:
  * firebase deploy --only functions:cleanupExpiredStatuses
  */
@@ -21,8 +26,6 @@ exports.cleanupExpiredStatuses = functions
       const now = admin.firestore.Timestamp.now();
       const firestore = admin.firestore();
       let deletedCount = 0;
-      let batch = firestore.batch();
-      let batchCount = 0;
 
       // Fetch statuses where expiresAt < now
       const snapshot = await firestore.collection('statuses')
@@ -37,23 +40,23 @@ exports.cleanupExpiredStatuses = functions
 
       console.log(`🗑️ Found ${snapshot.size} expired statuses to delete...`);
 
-      for (const doc of snapshot.docs) {
-        batch.delete(doc.ref);
-        batchCount++;
-        deletedCount++;
-
-        // Firestore batch limits to 500 writes
-        if (batchCount === 500) {
-          await batch.commit();
-          console.log(`🔥 Deleted 500 statuses...`);
-          batch = firestore.batch(); // Start a new batch
-          batchCount = 0;
-        }
-      }
-
-      // Commit any remaining docs
-      if (batchCount > 0) {
-        await batch.commit();
+      // Bounded concurrency: recursiveDelete streams its own writes, so firing
+      // all 500 at once would swamp the function's memory and the write budget.
+      const CONCURRENCY = 10;
+      for (let i = 0; i < snapshot.docs.length; i += CONCURRENCY) {
+        const slice = snapshot.docs.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(
+          slice.map((doc) => firestore.recursiveDelete(doc.ref))
+        );
+        results.forEach((r, idx) => {
+          if (r.status === 'fulfilled') {
+            deletedCount++;
+          } else {
+            // Leave it for the next run rather than failing the whole sweep.
+            console.error(`⚠️ Failed to delete status ${slice[idx].id}:`, r.reason?.message);
+          }
+        });
+        console.log(`🔥 Deleted ${deletedCount}/${snapshot.size} statuses...`);
       }
 
       console.log(`✅ Successfully cleaned up ${deletedCount} expired statuses.`);

@@ -1535,6 +1535,8 @@
         "delete_error": "Could not delete status.",
         "views_count": "{{count}} views",
         "reactions_count": "{{count}} reactions",
+        "comment": "Comment",
+        "comments": "Comments",
         "new_status": "📝 New Status",
         "add_photo": "Add Photo",
         "placeholder": "What's on your mind?",

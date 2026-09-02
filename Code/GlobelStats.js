@@ -47,6 +47,10 @@ export const GlobalStateProvider = ({ children }) => {
   // flip RTDB /mod_controls_enabled = false in the Admin Dashboard to strip
   // ban/mute/strike from moderators. Admins are never affected.
   const [modControlsEnabled, setModControlsEnabled] = useState(true);
+  // JMD-grant delegation. The owner can hand the "Make Junior Mod" power to any
+  // user from the Admin Dashboard; the grant lives at RTDB /jmd_granters/{uid}.
+  // Admins and the hardcoded owner UID never depend on this flag.
+  const [canGrantJmd, setCanGrantJmd] = useState(false);
   const [tradingServerLink, setTradingServerLink] = useState(null); // Trading server link from admin servers
 
 
@@ -236,6 +240,7 @@ export const GlobalStateProvider = ({ children }) => {
       isPro: false,
       createdAt: null
     });
+    setIsAdmin(false);
   }, []); // No dependencies, so it never re-creates
 
   // ✅ Memoize handleUserLogin
@@ -350,8 +355,15 @@ export const GlobalStateProvider = ({ children }) => {
       const exists = existing !== null;
       let userData;
 
+      // Admin identity comes from the real, already-mirrored role flag
+      // (RTDB users/{uid}/admin → Supabase user_roles.is_admin) — the same
+      // field every badge and profile read already trusts. To make someone an
+      // owner, set that flag; there is no UID hardcoded anywhere any more.
+      // The founder emails stay ONLY as a bootstrap so the first admin can
+      // always sign in and set the flag on others (and can never be locked out
+      // by a bad write). Always assign, so a revoked flag actually clears.
       const makeadmin = loggedInUser.email === 'thesolanalabs@gmail.com' || loggedInUser.email === 'sohailnasir74business@gmail.com' || loggedInUser.email === 'sohailnasir74@gmail.com';
-      if (makeadmin) { setIsAdmin(makeadmin) }
+      setIsAdmin(makeadmin || existing?.admin === true);
       setCurrentuserEmail(loggedInUser.email)
 
       if (exists) {
@@ -561,6 +573,20 @@ export const GlobalStateProvider = ({ children }) => {
     );
     return () => { try { unsub(); } catch (e) { /* noop */ } };
   }, [appdatabase]);
+
+  // Delegated JMD-grant permission for the signed-in user. Single leaf listener
+  // on /jmd_granters/{uid} — negligible RTDB cost, and a revoke propagates to
+  // the device immediately. Denied/offline reads leave the flag OFF (fail closed).
+  useEffect(() => {
+    if (!appdatabase || !user?.id) { setCanGrantJmd(false); return; }
+    const r = ref(appdatabase, `jmd_granters/${user.id}`);
+    const unsub = onValue(
+      r,
+      (snap) => setCanGrantJmd(snap.exists() && snap.val() !== false),
+      () => setCanGrantJmd(false),
+    );
+    return () => { try { unsub(); } catch (e) { /* noop */ } };
+  }, [appdatabase, user?.id]);
 
   // Fetch trading server link with 3 hour caching
   // ✅ FIXED: Run once on mount only — deps no longer include values this effect updates
@@ -1088,8 +1114,9 @@ export const GlobalStateProvider = ({ children }) => {
       isUserBlocked, // canonical gate: email-ban OR device-ban
       worldCupEnabled, // World Cup feature kill switch (RTDB /worldcup_enabled)
       modControlsEnabled, // moderator ban/mute kill switch (RTDB /mod_controls_enabled)
+      canGrantJmd, // delegated "can make Junior Mods" grant (RTDB /jmd_granters/{uid})
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled]
+    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, canGrantJmd]
   );
 
   return (

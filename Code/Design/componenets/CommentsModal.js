@@ -42,7 +42,13 @@ dayjs.extend(relativeTime);
 
 const PAGE_SIZE = 15;
 
-const CommentModal = ({ visible, onClose, postId }) => {
+// `collectionName` is the PARENT collection holding the commented document —
+// 'designPosts' for the design feed, 'statuses' for story comments. Comments
+// always live in a `comments` subcollection under that doc, so both feeds share
+// this one component (and the same threading, moderation and ban rules).
+// `onCountChange(delta)` lets the caller keep its own commentCount in sync
+// without re-reading the parent doc.
+const CommentModal = ({ visible, onClose, postId, collectionName = 'designPosts', onCountChange, onOpenChat }) => {
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +72,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
     if (!postId || !firestoreDB) return;
     setLoading(true);
     try {
-      const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
+      const commentsRef = collection(firestoreDB, collectionName, postId, 'comments');
       const q = query(commentsRef, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
       const snapshot = await getDocs(q);
 
@@ -79,14 +85,14 @@ const CommentModal = ({ visible, onClose, postId }) => {
     } finally {
       setLoading(false);
     }
-  }, [postId, firestoreDB]);
+  }, [postId, firestoreDB, collectionName]);
 
   // ── Load more comments ──
   const loadMore = useCallback(async () => {
     if (!postId || !firestoreDB || !hasMore || !lastDoc || loadingMore) return;
     setLoadingMore(true);
     try {
-      const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
+      const commentsRef = collection(firestoreDB, collectionName, postId, 'comments');
       const q = query(commentsRef, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
       const snapshot = await getDocs(q);
 
@@ -99,7 +105,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [postId, firestoreDB, hasMore, lastDoc, loadingMore]);
+  }, [postId, firestoreDB, collectionName, hasMore, lastDoc, loadingMore]);
 
   useEffect(() => {
     if (visible && postId) {
@@ -107,7 +113,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
       setReplyingTo(null);
       setCommentText('');
     }
-  }, [visible, postId]);
+  }, [visible, postId, collectionName]);
 
   // ── Group comments into threads ──
   const threadedComments = useMemo(() => {
@@ -144,6 +150,13 @@ const CommentModal = ({ visible, onClose, postId }) => {
       Alert.alert(t('chat.sign_in_required_title'), t('feed.signin_message'));
       return;
     }
+    // 'PrivateChatDesign' is registered only inside the Design stack, so a
+    // caller mounted elsewhere (e.g. the Home-tab status viewer) must hand us
+    // its own way to open a DM — otherwise this navigate goes nowhere.
+    if (onOpenChat) {
+      onOpenChat(comment);
+      return;
+    }
     navigation.navigate('PrivateChatDesign', {
       selectedUser: {
         senderId: comment.userId,
@@ -151,7 +164,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
         avatar: comment.avatar,
       },
     });
-  }, [user?.id, navigation]);
+  }, [user?.id, navigation, onOpenChat, t]);
 
   // ── Add comment or reply ──
   const handleAddComment = useCallback(async () => {
@@ -187,11 +200,16 @@ const CommentModal = ({ visible, onClose, postId }) => {
     };
 
     try {
-      const commentsRef = collection(firestoreDB, 'designPosts', postId, 'comments');
-      const postRef = doc(firestoreDB, 'designPosts', postId);
+      const commentsRef = collection(firestoreDB, collectionName, postId, 'comments');
+      const postRef = doc(firestoreDB, collectionName, postId);
 
       const newDoc = await addDoc(commentsRef, comment);
-      await updateDoc(postRef, { commentCount: increment(1) });
+      // commentCount is a denormalised convenience on the PARENT doc, which the
+      // commenter does not own. Never fail a comment that already landed just
+      // because the count bump was rejected — that would show "failed to post"
+      // over a comment that is actually live.
+      updateDoc(postRef, { commentCount: increment(1) })
+        .catch(e => console.warn('[Comments] count bump failed:', e?.message));
 
       // Optimistic local update
       const localComment = {
@@ -200,6 +218,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
         createdAt: { seconds: Math.floor(Date.now() / 1000) },
       };
       setComments(prev => [localComment, ...prev]);
+      onCountChange?.(1);
       setCommentText('');
       setReplyingTo(null);
       inputRef.current?.focus();
@@ -207,7 +226,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
       console.error('Add Comment Error:', error);
       Alert.alert(t('chat.error'), t('feed.failed_post_comment'));
     }
-  }, [commentText, user, postId, firestoreDB, replyingTo, isMeBanned]);
+  }, [commentText, user, postId, firestoreDB, collectionName, onCountChange, replyingTo, isMeBanned]);
 
   // ── Like a comment ──
   const handleLikeComment = useCallback(async (commentId) => {
@@ -219,7 +238,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
       return;
     }
 
-    const commentRef = doc(firestoreDB, 'designPosts', postId, 'comments', commentId);
+    const commentRef = doc(firestoreDB, collectionName, postId, 'comments', commentId);
     const currentComment = comments.find(c => c.id === commentId);
     const isLiked = currentComment?.likes?.[user.id];
 
@@ -245,7 +264,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
     } catch (err) {
       console.warn('[Comments] like error:', err?.message);
     }
-  }, [user?.id, firestoreDB, postId, comments, isMeBanned, myBanDetails]);
+  }, [user?.id, firestoreDB, postId, collectionName, comments, isMeBanned, myBanDetails]);
 
   // ── Delete own comment ──
   const handleDeleteComment = useCallback(async (commentId, commentUserId) => {
@@ -261,9 +280,11 @@ const CommentModal = ({ visible, onClose, postId }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(firestoreDB, 'designPosts', postId, 'comments', commentId));
-              await updateDoc(doc(firestoreDB, 'designPosts', postId), { commentCount: increment(-1) });
+              await deleteDoc(doc(firestoreDB, collectionName, postId, 'comments', commentId));
+              updateDoc(doc(firestoreDB, collectionName, postId), { commentCount: increment(-1) })
+                .catch(e => console.warn('[Comments] count bump failed:', e?.message));
               setComments(prev => prev.filter(c => c.id !== commentId));
+              onCountChange?.(-1);
             } catch (err) {
               console.warn('[Comments] delete error:', err?.message);
             }
@@ -271,7 +292,7 @@ const CommentModal = ({ visible, onClose, postId }) => {
         },
       ]
     );
-  }, [user?.id, firestoreDB, postId, t]);
+  }, [user?.id, firestoreDB, postId, collectionName, onCountChange, t]);
 
   // ── Start reply ──
   const startReply = useCallback((comment) => {

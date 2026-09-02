@@ -48,6 +48,10 @@ export function fromPrivateMessageRow(row) {
   return {
     id: row.id,                                  // uuid — React key + cursor
     clientMsgId: row.client_msg_id ?? null,
+    // Only present on rows the RPCs return (PRIVATE_MSG_COLS omits it on
+    // the hot path). The admin viewer uses it to dedupe a backfilled
+    // message against its original RTDB copy.
+    rtdbKey: row.rtdb_key ?? null,
     chatId: row.chat_id,
     senderId: row.sender_id,
     recipientId: row.recipient_id,
@@ -366,4 +370,41 @@ export async function softDeleteAllInChat(chatId, deletedBy = null) {
     .in('id', ids);
   if (updateErr) throw updateErr;
   return { count: ids.length };
+}
+
+// =====================================================================
+// Admin / moderation reads
+// =====================================================================
+// SECURITY DEFINER RPCs from 024_admin_private_messages.sql. The table's
+// own RLS is participant-only, so an admin querying private_messages
+// directly gets 0 rows back — these are the only cross-user path.
+// A non-admin calling them gets a 42501 from Postgres.
+
+// Full-conversation read for the AdminDashboard chat viewer. Newest-first,
+// same composite cursor as loadPrivateMessages. Unlike the participant
+// read this does NOT filter deleted=false — soft-deleted messages are
+// exactly what a moderator needs to see, and carry `deleted: true` so the
+// UI can tag them.
+export async function adminLoadPrivateMessages(chatId, { limit = 200, before = null } = {}) {
+  if (!chatId) return [];
+  const { data, error } = await supabase.rpc('admin_list_private_messages', {
+    p_chat_id: chatId,
+    p_cursor_created: before?.createdAt ?? null,
+    p_cursor_id: before?.id ?? null,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return (data || []).map(fromPrivateMessageRow);
+}
+
+// Hard-deletes every message row in a conversation. Pairs with
+// adminDeleteChatPair (chatMetaBackend), which clears the inbox rows.
+// Returns the number of rows removed.
+export async function adminDeletePrivateChat(chatId) {
+  if (!chatId) throw new Error('adminDeletePrivateChat: chatId required');
+  const { data, error } = await supabase.rpc('admin_delete_private_chat', {
+    p_chat_id: chatId,
+  });
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
 }

@@ -6,7 +6,7 @@ const ProfileAdminActions = ({
   isAdmin, isDarkMode, isBanned, mergedUser,
   handleApplyStrike, handleMuteUser, handleUnbanUser,
   handlePromoteModerator, handleDemoteModerator,
-  isBabyMod = false, isModerator = false,
+  isBabyMod = false, isModerator = false, isStaff = true,
   canManageBabyMod = false, targetIsBabyMod = false,
   handleMakeBabyMod, handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
@@ -16,6 +16,9 @@ const ProfileAdminActions = ({
 }) => {
   const c = getThemeColors(isDarkMode);
   const isBabyModOnly = isBabyMod && !isAdmin && !isModerator;
+  // A user who only holds the delegated "can grant Junior Mod" permission is not
+  // staff — they get the Junior Mod chip and nothing else.
+  const grantOnly = !isStaff;
 
   const bg = c.bg;
   const border = c.border;
@@ -35,10 +38,10 @@ const ProfileAdminActions = ({
 
       <Text style={{ fontSize: 10, fontWeight: '700', color: dim,
         textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : 'Junior Mod'}
+        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : grantOnly ? 'Junior Mod Access' : 'Junior Mod'}
       </Text>
 
-      {!isBabyModOnly && (
+      {!isBabyModOnly && !grantOnly && (
         <View style={{ marginBottom: 10 }}>
           <Text style={{ fontSize: 10, color: dim, fontWeight: '600', marginBottom: 6 }}>Strikes</Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -49,6 +52,7 @@ const ProfileAdminActions = ({
         </View>
       )}
 
+      {!grantOnly && (
       <View style={{ marginBottom: 10 }}>
         <Text style={{ fontSize: 10, color: dim, fontWeight: '600', marginBottom: 6 }}>
           Mute{isBabyModOnly ? ' (max 2h)' : ''}
@@ -62,11 +66,12 @@ const ProfileAdminActions = ({
           ))}
         </View>
       </View>
+      )}
 
-      <View style={{ height: 1, backgroundColor: border, marginBottom: 10 }} />
+      {!grantOnly && <View style={{ height: 1, backgroundColor: border, marginBottom: 10 }} />}
 
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-        {!isBabyModOnly && isBanned && (
+        {!isBabyModOnly && !grantOnly && isBanned && (
           <Chip label="Unban" color="#10b981" onPress={handleUnbanUser} />
         )}
         {isAdmin && (
