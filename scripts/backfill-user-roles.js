@@ -97,21 +97,56 @@ function shallowKeys(dbUrl, nodePath) {
   });
 }
 
-/** Read only the six role leaves for one uid — never the whole record. */
-async function readRoles(uid) {
-  const snaps = await Promise.all(
-    ROLE_FIELDS.map((f) => db.ref(`users/${uid}/${f}`).once('value').catch(() => null)),
-  );
-  const v = {};
-  ROLE_FIELDS.forEach((f, i) => { v[f] = snaps[i] && snaps[i].exists() ? snaps[i].val() : null; });
+/**
+ * Collect the (small) set of uids holding each role.
+ *
+ * The original version of this script read six leaves per user -- 161,881 x 6
+ * = ~971,000 RTDB reads, which is absurd for a cost-reduction script and in
+ * practice never finished. Production reality: only ~93 users hold ANY role.
+ * So we ask RTDB for the role-holders directly and treat everyone else as
+ * all-false, which is also exactly what the mirror semantics imply -- a user
+ * with no user_roles row is a user who never had a role change.
+ *
+ * isModerator/isBabyMod/isTrusted/isCMSR are covered by the existing .indexOn.
+ * `admin` and `isHelper` are NOT indexed by default: without them in .indexOn
+ * RTDB downloads the whole ~900MB /users node and filters client-side (measured
+ * at 240s and 298s). Add both to .indexOn at /users before running this.
+ */
+const ROLE_QUERIES = [
+  ['admin', 'is_admin'],
+  ['isModerator', 'is_moderator'],
+  ['isBabyMod', 'is_baby_mod'],
+  ['isTrusted', 'is_trusted'],
+  ['isCMSR', 'is_cmsr'],
+  ['isHelper', 'is_helper'],
+];
+
+async function collectRoleHolders() {
+  const holders = {};
+  for (const [field, column] of ROLE_QUERIES) {
+    const t = Date.now();
+    const snap = await db.ref('users').orderByChild(field).equalTo(true).once('value');
+    const uids = Object.keys(snap.val() || {});
+    holders[column] = new Set(uids);
+    const secs = ((Date.now() - t) / 1000).toFixed(1);
+    console.log(`  ${field}: ${uids.length} holders (${secs}s)`);
+    if (Number(secs) > 30) {
+      console.log(`    ^ slow => "${field}" is missing from .indexOn at /users;`);
+      console.log('      RTDB downloaded the whole node to filter. Add it to the rules.');
+    }
+  }
+  return holders;
+}
+
+function buildRow(uid, holders) {
   return {
     uid,
-    is_admin: v.admin === true,
-    is_moderator: v.isModerator === true,
-    is_baby_mod: v.isBabyMod === true,
-    is_trusted: v.isTrusted === true,
-    is_cmsr: v.isCMSR === true,
-    is_helper: v.isHelper === true,
+    is_admin: holders.is_admin.has(uid),
+    is_moderator: holders.is_moderator.has(uid),
+    is_baby_mod: holders.is_baby_mod.has(uid),
+    is_trusted: holders.is_trusted.has(uid),
+    is_cmsr: holders.is_cmsr.has(uid),
+    is_helper: holders.is_helper.has(uid),
     updated_at: new Date().toISOString(),
   };
 }
@@ -133,9 +168,14 @@ async function mapLimit(items, limit, fn) {
   const started = Date.now();
   const dbUrl = admin.app().options.databaseURL;
 
-  console.log(`▸ Listing /users keys (shallow)…`);
+  console.log('▸ Listing /users keys (shallow)…');
   const allUids = await shallowKeys(dbUrl, 'users');
   console.log(`▸ ${allUids.length.toLocaleString()} users found.`);
+
+  console.log('▸ Collecting role holders (6 indexed queries, not 6 reads per user)…');
+  const holders = await collectRoleHolders();
+  const staffUids = new Set(Object.values(holders).flatMap((s) => [...s]));
+  console.log(`▸ ${staffUids.size} distinct users hold at least one role.`);
 
   let startIndex = 0;
   if (RESUME && fs.existsSync(CURSOR_FILE)) {
@@ -149,10 +189,9 @@ async function mapLimit(items, limit, fn) {
 
   for (let off = 0; off < uids.length; off += BATCH_SIZE) {
     const chunk = uids.slice(off, off + BATCH_SIZE);
-    const rows = await mapLimit(chunk, READ_CONCURRENCY, readRoles);
+    const rows = chunk.map((uid) => buildRow(uid, holders));
 
-    staff += rows.filter((r) => r.is_admin || r.is_moderator || r.is_baby_mod
-      || r.is_trusted || r.is_cmsr || r.is_helper).length;
+    staff += chunk.filter((uid) => staffUids.has(uid)).length;
 
     if (DRY_RUN) {
       if (off === 0) {

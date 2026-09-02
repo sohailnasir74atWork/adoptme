@@ -28,6 +28,7 @@ import axios from 'axios';
 import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
+import { useMessageTranslation } from '../../Helper/useMessageTranslation';
 import ScamSafetyBox from './Scamwarning';
 import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
@@ -78,14 +79,7 @@ const PrivateMessageList = ({
   const { t } = useTranslation();
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
 
-  // ✅ Pre-compile regex patterns for FRUIT_KEYWORDS
-  const fruitRegexPatterns = useMemo(() => {
-    return FRUIT_KEYWORDS.map((word, index) => ({
-      regex: new RegExp(`\\b${word}\\b`, 'gi'),
-      placeholder: `__FRUIT_${index}__`,
-      word,
-    }));
-  }, []);
+  // (fruit-name masking moved into useMessageTranslation)
 
 
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -163,82 +157,10 @@ const PrivateMessageList = ({
 
 
 
-  // ✅ Memoize translateText
-  const translateText = useCallback(async (text, targetLang = deviceLanguage) => {
-    if (!text || typeof text !== 'string') return null;
-
-    const placeholders = {};
-    let maskedText = text;
-
-    // Step 1: Replace fruit names with placeholders using pre-compiled regex
-    fruitRegexPatterns.forEach(({ regex, placeholder, word }) => {
-      maskedText = maskedText.replace(regex, placeholder);
-      placeholders[placeholder] = word;
-    });
-
-    try {
-      // Step 2: Send masked text for translation
-      const response = await axios.post(
-        `https://translation.googleapis.com/language/translate/v2`,
-        {},
-        {
-          params: {
-            q: maskedText,
-            target: targetLang,
-            key: api,
-          },
-        }
-      );
-
-      let translated = response.data.data.translations[0].translatedText;
-
-      // Step 3: Replace placeholders back with original fruit names
-      Object.entries(placeholders).forEach(([placeholder, word]) => {
-        translated = translated.replace(new RegExp(placeholder, 'g'), word);
-      });
-      mixpanel.track("Translation", { lang: targetLang });
-
-      return translated;
-    } catch (err) {
-      console.error('Translation Error:', err);
-      return null;
-    }
-  }, [fruitRegexPatterns, deviceLanguage, api]);
-
-  // ✅ Memoize handleTranslate
-  const handleTranslate = useCallback(async (item) => {
-    if (!item || !item.text) {
-      Alert.alert(t('chat.error'), t('chat.invalid_translation'));
-      return;
-    }
-
-    const isUnlimited = freeTranslation || localState?.isPro;
-
-    if (!isUnlimited && canTranslate && typeof canTranslate === 'function' && !canTranslate()) {
-      Alert.alert(t('chat.translation_limit_title'), t('chat.translation_limit_message'));
-      return;
-    }
-
-    const translated = await translateText(item.text, deviceLanguage);
-
-    if (translated) {
-      if (!isUnlimited && incrementTranslationCount && typeof incrementTranslationCount === 'function') {
-        incrementTranslationCount();
-      }
-
-      const remaining = isUnlimited ? t('chat.unlimited') : `${getRemainingTranslationTries ? getRemainingTranslationTries() : 0} remaining`;
-
-      Alert.alert(
-        t('chat.translated_message_title'),
-        `${translated}\n\n${t('chat.daily_limit_label', { remaining })}${isUnlimited
-          ? ''
-          : t('chat.upgrade_pro_translation')
-        }`
-      );
-    } else {
-      Alert.alert(t('chat.error'), t('chat.translation_failed'));
-    }
-  }, [freeTranslation, localState?.isPro, canTranslate, incrementTranslationCount, getRemainingTranslationTries, translateText, deviceLanguage]);
+  // Translation lives in Helper/useMessageTranslation.js (2026-09-02) — one
+  // implementation shared by community, group and private chat, all drawing on
+  // the same daily allowance from useLocalState. Behaviour here is unchanged.
+  const { handleTranslate } = useMessageTranslation();
 
   // ✅ Date separator helper
   const getDateLabel = useCallback((timestamp) => {

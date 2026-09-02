@@ -203,13 +203,32 @@ Each run also downloads the 31 MB shallow key list and burns the full
 
 ---
 
-### F4 — `user_roles` mirror rows are never created for ordinary users, so every profile open falls back to 6 RTDB reads
-**Severity: high · Effort: one-off backfill · Risk: none**
+### F4 — `mirrorRoles` never writes on account creation, so users registered since May fall back to 6 RTDB reads per profile open
+**Severity: medium · Effort: one-off backfill · Risk: none · DONE 2026-09-02**
+
+> **Corrected 2026-09-02.** This was first written as "no `user_roles` row is
+> ever created for ordinary users." That was wrong. Checking the table directly
+> found **128,985 rows already present, every one stamped
+> `2026-05-14T16:39:15.197Z`** — a bulk backfill someone ran in May, covering
+> ~80% of users. The true finding is narrower: the mirror doesn't write on
+> *account creation*, so the ~33,000 users who registered after that backfill
+> had no row and did hit the fallback.
+>
+> The supporting inference was also unsound. I argued from role flags being read
+> ~7× more often than `isPro` in the profiler, but those are two different code
+> paths (drawer fallback vs. login fallback) fired at different rates, so the
+> ratio doesn't isolate this. Treat the impact as "~20% of users on the drawer
+> path", not "~100%".
+>
+> **Resolved.** `mirrorRoles` now writes on create, and
+> `scripts/backfill-user-roles.js` was run on 2026-09-02: **161,915 rows
+> written in 5.6 min, 71 users hold at least one role.** Coverage is now 100%,
+> so the fallback should stop firing entirely.
 
 `mirrorRoles` (`mirrorUsersToSupabase.js:139-140`) returns early unless one of
 `admin / isModerator / isBabyMod / isTrusted / isCMSR / isHelper`
-**changes**. An ordinary user never has any of those keys set, so
-`anyKeyChanged` is always false and **no `user_roles` row is ever written**.
+**changes**. On account creation `before` is `{}` and a new user has none of
+those keys, so `anyKeyChanged` is false and **no row is written for them**.
 
 `getRoles()` therefore returns `null` for essentially every user, and
 `BottomDrawer.jsx:418-425` takes its per-row RTDB fallback — 6 leaf reads per
