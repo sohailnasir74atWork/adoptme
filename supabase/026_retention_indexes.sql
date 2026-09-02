@@ -42,29 +42,45 @@
 -- ---------------------------------------------------------------------
 -- HOW TO RUN
 -- ---------------------------------------------------------------------
--- CREATE INDEX CONCURRENTLY cannot run inside a transaction block, and the
--- Supabase SQL editor wraps a multi-statement script in one. So run these
--- **ONE AT A TIME**, each on its own, waiting for each to finish.
+-- The Supabase SQL editor wraps EVERY statement in a transaction block, so
+-- CREATE INDEX CONCURRENTLY cannot be used there at all -- not even alone:
 --
--- CONCURRENTLY is used deliberately: a plain CREATE INDEX takes an ACCESS
--- EXCLUSIVE lock and would block all chat writes for the duration. On 1.4M
--- rows expect a minute or two.
+--     ERROR: 25001: CREATE INDEX CONCURRENTLY cannot run inside a transaction block
+--
+-- So the statements below are plain CREATE INDEX. That takes an ACCESS
+-- EXCLUSIVE lock on the table for the duration of the build, which BLOCKS
+-- chat reads and writes while it runs. On a single-column btree over 1.4M
+-- rows expect roughly 5-30 seconds. Run it at a quiet moment; chat clients
+-- will retry.
+--
+-- Paste them ONE AT A TIME and let each finish.
+--
+-- If you would rather not lock the table at all, CONCURRENTLY works fine over
+-- a direct psql connection (Dashboard -> Project Settings -> Database ->
+-- Connection string), because psql does not wrap statements in a transaction:
+--
+--     psql "postgresql://postgres:[PASSWORD]@db.kvtbtzhtcaanhjblyick.supabase.co:5432/postgres" \
+--       -c "create index concurrently if not exists idx_private_messages_created_at
+--             on public.private_messages (created_at);"
+--
+-- Same for the other two. CONCURRENTLY is slower but never blocks writes.
 -- =====================================================================
 
 
--- 1) The one that actually matters — run this first.
-create index concurrently if not exists idx_private_messages_created_at
+-- 1) The one that actually matters — run this first. ~1.4M rows.
+create index if not exists idx_private_messages_created_at
   on public.private_messages (created_at);
 
 
--- 2) Same predicate, smaller table, but the seq scan grows with it.
-create index concurrently if not exists idx_group_messages_created_at
+-- 2) Same predicate, smaller table (~214k), but the seq scan grows with it.
+create index if not exists idx_group_messages_created_at
   on public.group_messages (created_at);
 
 
--- 3) Small today (26k), cheap to cover.
-create index concurrently if not exists idx_messages_created_at
+-- 3) Small today (~26k), near-instant.
+create index if not exists idx_messages_created_at
   on public.messages (created_at);
+
 
 
 -- =====================================================================
