@@ -1,15 +1,25 @@
 // NewsFeedbackReport.js
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
+  Platform,
 } from "react-native";
 import { ref, onValue } from "@react-native-firebase/database";
+import Clipboard from "@react-native-clipboard/clipboard";
 import { useGlobalState } from "../GlobelStats";
 import config from "../Helper/Environment";
+import { showSuccessMessage } from "../Helper/MessageHelper";
+
+// How many rows each "Load more" press reveals. The whole node is already in
+// memory (one onValue on /news_feedback), so this is purely a render cap —
+// pressing Load more costs nothing extra in reads.
+const CUSTOM_PAGE = 20;
+const QUICK_PAGE = 15;
 
 const NewsFeedbackReport = () => {
   const { appdatabase, theme } = useGlobalState();
@@ -40,7 +50,18 @@ const NewsFeedbackReport = () => {
   const [loading, setLoading] = useState(true);
   const [pollStats, setPollStats] = useState([]);        // [{pollId, question, totalVotes, options[], winners[]}]
   const [quickTop, setQuickTop] = useState([]);          // [{text, count}]
-  const [customLatest, setCustomLatest] = useState([]);  // [{text, userName, createdAt}]
+  const [customLatest, setCustomLatest] = useState([]);  // [{text, userName, userId, userEmail, createdAt}]
+
+  // Render caps — both lists were hard-sliced (20 and 15) with no way to see
+  // the rest. There are 343 detailed reports in production against a cap of 20.
+  const [customVisible, setCustomVisible] = useState(CUSTOM_PAGE);
+  const [quickVisible, setQuickVisible] = useState(QUICK_PAGE);
+
+  const copyValue = useCallback((value, label) => {
+    if (!value) return;
+    Clipboard.setString(String(value));
+    showSuccessMessage(`${label} copied`, String(value));
+  }, []);
 
   useEffect(() => {
     if (!appdatabase) return;
@@ -249,10 +270,13 @@ const NewsFeedbackReport = () => {
               { color: palette.textPrimary },
             ]}
           >
-            Top quick suggestions
+            Top quick suggestions{" "}
+            <Text style={[styles.sectionCount, { color: palette.textSecondary }]}>
+              ({Math.min(quickVisible, quickTop.length)} of {quickTop.length})
+            </Text>
           </Text>
 
-          {quickTop.slice(0, 15).map((item) => (
+          {quickTop.slice(0, quickVisible).map((item) => (
             <View key={item.text} style={styles.quickRow}>
               <View
                 style={[
@@ -282,6 +306,18 @@ const NewsFeedbackReport = () => {
               </Text>
             </View>
           ))}
+
+          {quickVisible < quickTop.length && (
+            <TouchableOpacity
+              style={[styles.loadMoreBtn, { borderColor: palette.border }]}
+              onPress={() => setQuickVisible((n) => n + QUICK_PAGE)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.loadMoreText, { color: config.colors.hasBlockGreen }]}>
+                Load more ({quickTop.length - quickVisible} left)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -299,10 +335,13 @@ const NewsFeedbackReport = () => {
               { color: palette.textPrimary },
             ]}
           >
-            Latest detailed feedback
+            Latest detailed feedback{" "}
+            <Text style={[styles.sectionCount, { color: palette.textSecondary }]}>
+              ({Math.min(customVisible, customLatest.length)} of {customLatest.length})
+            </Text>
           </Text>
 
-          {customLatest.slice(0, 20).map((item) => (
+          {customLatest.slice(0, customVisible).map((item) => (
             <View key={item.id} style={styles.customRow}>
               <Text
                 style={[
@@ -312,6 +351,46 @@ const NewsFeedbackReport = () => {
               >
                 {item.userName || "anonymous"} • {formatShortDate(item.createdAt)}
               </Text>
+
+              {/* Contact handles — tap to copy. userId is only present on
+                  entries written after the 2026-09-02 writer fix; older ones
+                  fall back to the email, which was always stored. */}
+              {(item.userId || item.userEmail) && (
+                <View style={styles.contactRow}>
+                  {item.userId ? (
+                    <TouchableOpacity
+                      style={[styles.copyChip, { backgroundColor: palette.chipBg, borderColor: palette.border }]}
+                      onPress={() => copyValue(item.userId, "User ID")}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={[styles.copyChipLabel, { color: palette.textSecondary }]}>ID</Text>
+                      <Text
+                        style={[styles.copyChipValue, { color: palette.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {item.userId}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {item.userEmail ? (
+                    <TouchableOpacity
+                      style={[styles.copyChip, { backgroundColor: palette.chipBg, borderColor: palette.border }]}
+                      onPress={() => copyValue(item.userEmail, "Email")}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={[styles.copyChipLabel, { color: palette.textSecondary }]}>EMAIL</Text>
+                      <Text
+                        style={[styles.copyChipValue, { color: palette.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {item.userEmail}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              )}
+
               <Text
                 style={[
                   styles.customText,
@@ -322,6 +401,18 @@ const NewsFeedbackReport = () => {
               </Text>
             </View>
           ))}
+
+          {customVisible < customLatest.length && (
+            <TouchableOpacity
+              style={[styles.loadMoreBtn, { borderColor: palette.border }]}
+              onPress={() => setCustomVisible((n) => n + CUSTOM_PAGE)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.loadMoreText, { color: config.colors.hasBlockGreen }]}>
+                Load more ({customLatest.length - customVisible} left)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </ScrollView>
@@ -383,6 +474,13 @@ function buildSummary(feedbackRaw, pollsRaw) {
         id,
         text,
         userName: entry.userName || null,
+        // Carried through so an admin can actually reach the reporter.
+        // Historical caveat: every entry written before 2026-09-02 stored the
+        // literal "anonymous" here because the writer read `user?.uid` on a
+        // user object that only has `id` (fixed in News.js). Email was stored
+        // correctly throughout, so the UI falls back to it.
+        userId: entry.userId && entry.userId !== "anonymous" ? entry.userId : null,
+        userEmail: entry.userEmail || null,
         createdAt: entry.createdAt || 0,
       });
     }
@@ -548,6 +646,53 @@ const styles = StyleSheet.create({
   customText: {
     fontSize: 13,
 
+  },
+
+  // Section header count, e.g. "(20 of 343)"
+  sectionCount: {
+    fontSize: 12,
+    fontWeight: 'normal',
+  },
+
+  // Tap-to-copy contact handles on each feedback row
+  contactRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  copyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
+  copyChipLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  copyChipValue: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    flexShrink: 1,
+  },
+
+  loadMoreBtn: {
+    marginTop: 10,
+    paddingVertical: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

@@ -160,8 +160,17 @@ const NewsScreen = () => {
                 await push(nodeRef, {
                     ...payload,
                     // 👇 who sent it
-                    userId: user?.uid || "anonymous",
-                    userName: user?.displayName || user?.username || null,
+                    //
+                    // 2026-09-02 FIX: this read `user?.uid`, but the global user
+                    // object has no `uid` key — it uses `id` (this was the only
+                    // `user?.uid` in the codebase). Every one of the 2,594
+                    // entries written so far therefore stored the literal
+                    // "anonymous", so the admin report had no way to identify a
+                    // reporter. Same for `user?.username`, which doesn't exist
+                    // either — `userName` is the real key, and displayName
+                    // already covered it as the first fallback.
+                    userId: user?.id || "anonymous",
+                    userName: user?.displayName || user?.userName || null,
                     userEmail: user?.email || null,
                     createdAt: Date.now(),
                 });
