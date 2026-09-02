@@ -7,6 +7,7 @@ import { useGlobalState } from '../GlobelStats';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../Helper/UserBadgePill';
+import { getFollowingIds } from '../Helper/followingCache';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -376,21 +377,13 @@ const TradeList = ({ route }) => {
   }, [user?.id, appdatabase]);
 
   // ✅ Fetch who I follow (for Following filter)
+  // Shared 1h MMKV cache with StatusFeed and DesignMainScreen — this used to
+  // requery Firestore on every mount. See Code/Helper/followingCache.js.
   useEffect(() => {
     if (!user?.id || !firestoreDB) return;
     (async () => {
-      try {
-        const q = query(
-          collection(firestoreDB, 'following'),
-          where('followerId', '==', user.id),
-          limit(200),
-        );
-        const snap = await getDocs(q);
-        const ids = snap.docs.map(d => d.data().followingId).filter(Boolean);
-        setFollowingIds(ids);
-      } catch (err) {
-        console.warn('[Trades] Error fetching following list:', err?.message);
-      }
+      const ids = await getFollowingIds(firestoreDB, user.id);
+      setFollowingIds(ids);
     })();
   }, [user?.id, firestoreDB]);
 

@@ -418,22 +418,21 @@ export const seedCurrentUser = async (user, localState, db) => {
         }
       }
 
-      const snap = await get(ref(db, `users/${user.id}/shop/activeItems`));
-      if (snap.exists()) {
-        const items = snap.val();
-        const now = Date.now();
-        if (items.chatTextColor && (items.chatTextColor.expiresAt === -1 || items.chatTextColor.expiresAt > now)) {
-          profile.chatTextColor = items.chatTextColor.color || null;
-        }
-        if (items.profileFrame && (items.profileFrame.expiresAt === -1 || items.profileFrame.expiresAt > now)) {
-          profile.profileFrame = items.profileFrame;
-        }
-        if (items.tradeCardBg && (items.tradeCardBg.expiresAt === -1 || items.tradeCardBg.expiresAt > now)) {
-          profile.tradeCardBg = items.tradeCardBg;
-        }
-        if (items.chatBubbleBg && (items.chatBubbleBg.expiresAt === -1 || items.chatBubbleBg.expiresAt > now)) {
-          profile.chatBubbleBg = items.chatBubbleBg;
-        }
+      // 2026-09-02 (cost): this used to `get(users/{uid}/shop/activeItems)`
+      // directly on every chat-screen mount — the #2 hottest RTDB path in the
+      // profiler (6,892 events / 10 min). cosmeticsCache reads the exact same
+      // node behind a 10-minute MMKV TTL and applies the identical expiresAt
+      // filtering, and MainTabs already force-syncs it on app start — so on the
+      // common path this is now zero RTDB reads instead of one per mount.
+      // syncMyCosmetics returns the cached value when fresh, fetches when not.
+      const { syncMyCosmetics } = require('./cosmeticsCache');
+      const cos = await syncMyCosmetics(db, user.id);
+      if (cos) {
+        // Items are already expiry-filtered by syncMyCosmetics.
+        if (cos.chatTextColor) profile.chatTextColor = cos.chatTextColor.color || null;
+        if (cos.profileFrame)  profile.profileFrame  = cos.profileFrame;
+        if (cos.tradeCardBg)   profile.tradeCardBg   = cos.tradeCardBg;
+        if (cos.chatBubbleBg)  profile.chatBubbleBg  = cos.chatBubbleBg;
         // Re-seed with cosmetics
         setCachedProfile(user.id, profile);
       }

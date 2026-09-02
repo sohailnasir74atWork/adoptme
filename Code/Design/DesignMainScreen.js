@@ -44,6 +44,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import PostsHeader from './componenets/PostsHeader';
 import PollCard from '../Trades/PollCard';
 import { awardBadge, incrementAndCheckBadge, REACTION_BADGE_THRESHOLDS } from '../ChatScreen/GroupChat/badgeUtils';
+import { getFollowingIds } from '../Helper/followingCache';
 
 
 
@@ -159,22 +160,14 @@ const DesignFeedScreen = ({ route }) => {
     }
   };
 
-  // ── Fetch who I follow (same pattern as StatusFeed) ──
+  // ── Fetch who I follow ──
+  // Shared 1h MMKV cache with StatusFeed and Trades — this used to requery
+  // Firestore on every mount. See Code/Helper/followingCache.js.
   useEffect(() => {
     if (!user?.id || !firestoreDB) return;
     (async () => {
-      try {
-        const q = query(
-          collection(firestoreDB, 'following'),
-          where('followerId', '==', user.id),
-          limit(200),
-        );
-        const snap = await getDocs(q);
-        const ids = snap.docs.map(d => d.data().followingId).filter(Boolean);
-        setFollowingIds(ids);
-      } catch (err) {
-        console.warn('[Posts] Error fetching following list:', err?.message);
-      }
+      const ids = await getFollowingIds(firestoreDB, user.id);
+      setFollowingIds(ids);
     })();
   }, [user?.id, firestoreDB]);
 

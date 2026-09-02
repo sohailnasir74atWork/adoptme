@@ -1,5 +1,32 @@
 {
+  "_comment_users": [
+    "SECURITY 2026-09-02: the '.read': true below is LIVE IN PRODUCTION and lets",
+    "anyone read every user record unauthenticated — email, dateOfBirth, deviceId,",
+    "fcmToken for 161,881 users — and download the whole ~900MB node at $1/GB with",
+    "no rate limit. Verified with an unauthenticated curl. The '$userId.write': true",
+    "was NOT tested against prod (it would modify live data) but the '.read' in the",
+    "same block matched prod exactly, so assume it is live too.",
+    "REPLACE the users block with _users_HARDENED below, IN THE CONSOLE (rules are",
+    "console-only; this file is a local snapshot). Check first: moderator tooling",
+    "writes OTHER users' role flags from BottomDrawer.jsx:1309-1450, so those paths",
+    "need the role condition below or a move to an Admin-SDK callable.",
+    "See COST_OPTIMIZATION_2026-09.md F2."
+  ],
+  "_users_HARDENED": {
+    ".read": false,
+    "$userId": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.uid === $userId || root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isModerator').val() === true)"
+    }
+  },
   "rules": {
+    "_serverTime": {
+      "_comment": "Server-time probe (Code/Helper/serverTime.js). Moved off users/{uid}/_st on 2026-09-02 — writes there fired mirrorUsersToSupabase ~165k times/day for nothing. 'anon' is the shared bucket for logged-out clients. See COST_OPTIMIZATION_2026-09.md F1.",
+      "$uid": {
+        ".read": true,
+        ".write": true
+      }
+    },
     "users": {
       ".indexOn": ["displayName", "isSelectedReminderEnabled", "isReminderEnabled", "fcmToken", "isModerator", "isBabyMod", "isTrusted", "isCMSR"],
       ".read": true,
@@ -7,6 +34,10 @@
         ".read": true,
         ".write": true
       }
+    },
+    "jmd_granters": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('admin').val() === true"
     },
     "xlsData": {
       ".read": false,

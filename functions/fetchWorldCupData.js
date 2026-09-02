@@ -278,6 +278,17 @@ exports.fetchWorldCupDataScheduled = functions.pubsub
   .schedule("every 30 minutes")
   .onRun(async () => {
     try {
+      // 2026-09-02 (cost): this never checked the feature flag. RTDB
+      // worldcup_enabled has been false since the event ended, yet this kept
+      // pulling the source JSON and rewriting RTDB 48x/day for a screen nobody
+      // can open. The on-demand HTTPS export below is deliberately NOT gated,
+      // so you can still seed/refresh manually before flipping the flag back on.
+      // See COST_OPTIMIZATION_2026-09.md F9.
+      const enabledSnap = await admin.database().ref("worldcup_enabled").once("value");
+      if (enabledSnap.val() !== true) {
+        console.log("⏭️ worldcup_enabled is not true — skipping sync.");
+        return null;
+      }
       await runSync();
     } catch (err) {
       console.error("❌ fetchWorldCupDataScheduled error:", err.message);
@@ -338,6 +349,12 @@ exports.updateWorldCupLeaderboard = functions.pubsub
   .schedule("every 60 minutes")
   .onRun(async () => {
     try {
+      // Same flag gate as fetchWorldCupDataScheduled — see the note there.
+      const enabledSnap = await admin.database().ref("worldcup_enabled").once("value");
+      if (enabledSnap.val() !== true) {
+        console.log("⏭️ worldcup_enabled is not true — skipping leaderboard build.");
+        return null;
+      }
       await buildLeaderboard();
     } catch (err) {
       console.error("❌ updateWorldCupLeaderboard error:", err.message);

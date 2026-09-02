@@ -20,7 +20,7 @@ let _lastProbeAt = 0;
  * Always returns real server time regardless of device clock.
  *
  * @param {object} db  - Firebase RTDB instance
- * @param {string} uid - User ID (writes to users/{uid}/_st)
+ * @param {string} uid - User ID (writes to _serverTime/{uid})
  * @param {boolean} [forceProbe=false] - Skip the 30-second cache
  * @returns {Promise<Date>}
  */
@@ -34,9 +34,20 @@ export const getServerTime = async (db, uid, forceProbe = false) => {
   }
 
   // Probe: write serverTimestamp(), read back the server-generated value
+  //
+  // 2026-09-02 (cost): this used to write users/{uid}/_st. Every such write
+  // fired the mirrorUsersToSupabase onWrite trigger on the whole /users/{uid}
+  // row — ~165k invocations/day, 92% of ALL Cloud Function invocations, every
+  // one a no-op because _st is not a mirrored field. The probe has nothing to
+  // do with user data, so it now lives on its own node. Nothing else ever read
+  // _st (checked app, functions and the web project).
+  //
+  // Requires the /_serverTime rule in the RTDB console — without it the write
+  // is denied and we fall through to the .info/serverTimeOffset path below,
+  // which still works but is spoofable by a device clock change.
   if (uid) {
     try {
-      const probeRef = ref(db, `users/${uid}/_st`);
+      const probeRef = ref(db, `_serverTime/${uid}`);
       await set(probeRef, serverTimestamp());
       const snap = await get(probeRef);
       const ts = snap.val();

@@ -136,8 +136,17 @@ async function mirrorRoblox(uid, before, after, supabase) {
 }
 
 const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper'];
-async function mirrorRoles(uid, before, after, supabase) {
-  if (!anyKeyChanged(before, after, ROLES_KEYS)) return;
+// `isCreate` (2026-09-02, cost): an ordinary user never has ANY role key set,
+// so anyKeyChanged() was always false and NO user_roles row was ever written
+// for them. getRoles() then returned null on every client, and BottomDrawer's
+// `!rolesRow` fallback fired six RTDB leaf reads on every profile-drawer open
+// — ~172k reads/day, and the six role paths were the top read paths in the
+// profiler by a factor of ~7 over isPro. Writing an all-false row at account
+// creation makes the row exist, so the fallback stops being the common path.
+// Existing users need the one-off backfill: scripts/backfill-user-roles.js.
+// See COST_OPTIMIZATION_2026-09.md F4.
+async function mirrorRoles(uid, before, after, supabase, isCreate = false) {
+  if (!isCreate && !anyKeyChanged(before, after, ROLES_KEYS)) return;
 
   const row = {
     uid,
@@ -306,6 +315,11 @@ async function mirrorModsRoster(uid, before, after) {
 
   const isMod = after.isModerator === true;
   const isJmod = after.isBabyMod === true;
+  // On account creation `before` is null, which skips the guard above — so a
+  // brand-new ordinary user used to fall through to the ref.remove() below and
+  // issue a pointless RTDB delete against a node that never existed. Nothing to
+  // do here unless they actually hold a role. (2026-09-02)
+  if (!before && !isMod && !isJmod) return;
   const ref = admin.database().ref(`mods/${uid}`);
   try {
     if (isMod || isJmod) {
@@ -368,6 +382,7 @@ exports.mirrorUsersToSupabase = functions
       return null;
     }
 
+    const isCreate = !change.before.exists();
     const before = change.before.exists() ? change.before.val() : {};
     const after = change.after.val() || {};
 
@@ -377,7 +392,7 @@ exports.mirrorUsersToSupabase = functions
     await Promise.all([
       mirrorIdentity(uid, before, after, supabase),
       mirrorRoblox(uid, before, after, supabase),
-      mirrorRoles(uid, before, after, supabase),
+      mirrorRoles(uid, before, after, supabase, isCreate),
       mirrorCosmetics(uid, before, after, supabase),
       mirrorNotifications(uid, before, after, supabase),
       mirrorSettings(uid, before, after, supabase),
