@@ -263,7 +263,30 @@ off; right now they mostly miss.
 ---
 
 ### F5 — Supabase chat tables have no retention at all, while RTDB does
-**Severity: medium, compounding · Effort: one migration · Risk: policy call**
+**Severity: medium, compounding · Effort: one migration · Risk: policy call · APPLIED 2026-09-02**
+
+> **Update 2026-09-02.** `025_chat_retention.sql` is applied and all three
+> `pg_cron` jobs are active. Two things surfaced afterwards:
+>
+> **1. The backlog is far larger than estimated.** Measured after applying:
+> `private_messages` **1,416,187 rows**, `group_messages` **213,864** (oldest
+> 2026-05-15), `messages` **26,042** (oldest 2026-04-26, 10,073 past the 3-day
+> rule). My "~10k rows/day, 3.6M/year" projection understated what had already
+> accumulated.
+>
+> **2. 025 as written cannot run efficiently — see `026_retention_indexes.sql`.**
+> Every index on these tables is composite with a different leading column
+> (`chat_id`, `room_id`, `group_id`), so nothing serves the bare
+> `created_at < cutoff` predicate the retention functions use, and each batch
+> sequentially scans the whole table. Merely *counting* the old rows in
+> `private_messages` returned `57014 canceling statement due to statement
+> timeout`. **026 must be applied before the cron jobs are relied on**, and the
+> first backlog drain should be done by hand in chunks.
+>
+> Also note a pre-existing `cleanup-old-messages` cron job (03:00 daily) that
+> predates this work. It is not pruning these three tables — `messages` still
+> held rows from April — so its purpose is something else; worth checking what
+> it does before assuming any overlap.
 
 RTDB retention is enforced by three scheduled functions — public chat 3 days
 (`cleanupOldPublicChats.js:41`), private 20 days
