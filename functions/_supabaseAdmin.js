@@ -34,8 +34,16 @@ function getSupabaseAdmin() {
     );
   }
 
+  // supabase-js v2 builds a RealtimeClient inside createClient() even when the
+  // caller never uses Realtime, and since ~2.9x that constructor THROWS on any
+  // runtime without a native WebSocket. These functions run on Node 20, which
+  // has none — so every mirror/notify function was dying at 2 ms with
+  // "Node.js 20 detected without native WebSocket support" before it ever
+  // reached a query. Handing it `ws` satisfies the constructor; we still never
+  // open a socket, because nothing here subscribes to Realtime.
   _client = createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: require('ws') },
   });
   return _client;
 }
