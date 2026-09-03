@@ -37,7 +37,6 @@ const LEVELS = [
 // ────────────────────────────────────────────────────────
 export const XP_ACTIONS = {
   DAILY_LOGIN:       50,
-  COMPLETE_TRADE:    25,
   CREATE_POST:       20,
   LEAVE_REVIEW:      30,
   CORRECT_QUIZ:      10,

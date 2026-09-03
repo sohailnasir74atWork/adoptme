@@ -46,7 +46,7 @@ import {
   writeBatch,
 } from '@react-native-firebase/firestore';
 import { ref, get, set, remove } from '@react-native-firebase/database';
-import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile } from '../../Helper/profileCache';
+import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
 import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 
 // Kill-switch: set to false to revert to the original 16-get fetch path.
@@ -393,6 +393,8 @@ const ProfileBottomDrawer = ({
           // RTDB read per drawer open. Falls back to getOrFetchFullProfile
           // (full RTDB read) when all Supabase rows are missing.
           const cached = getCachedProfile(selectedUserId);
+          // Roles we wrote moments ago; beats the Supabase mirror until it catches up.
+          const roleOv = getRoleOverride(selectedUserId);
           const [identityRow, rolesRow, cosmeticsRow, robloxRow, badgesMap] = await Promise.all([
             getIdentity(selectedUserId).catch(() => null),
             getRoles(selectedUserId).catch(() => null),
@@ -442,8 +444,8 @@ const ProfileBottomDrawer = ({
               isPro:                   cosmeticsRow?.isPro               ?? false,
               topBadge:                cosmeticsRow?.topBadge            ?? null,
               isAdmin:                 rolesRow?.isAdmin                 ?? roleFb?.isAdmin     ?? null,
-              isModerator:             rolesRow?.isModerator             ?? roleFb?.isModerator ?? null,
-              isBabyMod:               rolesRow?.isBabyMod               ?? roleFb?.isBabyMod   ?? null,
+              isModerator:             roleOv?.isModerator               ?? rolesRow?.isModerator ?? roleFb?.isModerator ?? null,
+              isBabyMod:               roleOv?.isBabyMod                 ?? rolesRow?.isBabyMod ?? roleFb?.isBabyMod   ?? null,
               isTrusted:               rolesRow?.isTrusted               ?? roleFb?.isTrusted   ?? null,
               isCMSR:                  rolesRow?.isCMSR                  ?? roleFb?.isCMSR      ?? null,
               isHelper:                rolesRow?.isHelper                ?? roleFb?.isHelper    ?? null,
@@ -1254,6 +1256,7 @@ const ProfileBottomDrawer = ({
     const success = await makeModerator(selectedUserId);
     if (success) {
       invalidateFullProfile(selectedUserId);
+      setRoleOverride(selectedUserId, { isModerator: true });
       setUserData(prev => ({ ...prev, isModerator: true }));
     }
   };
@@ -1275,6 +1278,7 @@ const ProfileBottomDrawer = ({
     const success = await removeModerator(selectedUserId);
     if (success) {
       invalidateFullProfile(selectedUserId);
+      setRoleOverride(selectedUserId, { isModerator: false });
       setUserData(prev => ({ ...prev, isModerator: false }));
     }
   };
@@ -1308,6 +1312,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), true);
       invalidateFullProfile(selectedUserId);
+      setRoleOverride(selectedUserId, { isBabyMod: true });
       setUserData(prev => ({ ...prev, isBabyMod: true }));
       Alert.alert('Success', `${userName} is now a Junior Mod`);
     } catch (err) {
@@ -1327,6 +1332,7 @@ const ProfileBottomDrawer = ({
     try {
       await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), null);
       invalidateFullProfile(selectedUserId);
+      setRoleOverride(selectedUserId, { isBabyMod: false });
       setUserData(prev => ({ ...prev, isBabyMod: false }));
       Alert.alert('Success', `${userName} is no longer a Junior Mod`);
     } catch (err) {

@@ -142,7 +142,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
     // RTDB leaf for admin is `admin` (not `isAdmin`); Supabase exposes it
     // as `isAdmin` via fromRolesRow. Use the correct RTDB name here so the
     // fallback works when the mirror row is missing.
-    if (!rolesRow)     missingFields.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isHelper');
+    if (!rolesRow)     missingFields.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper');
     if (!cosmeticsRow) missingFields.push('isPro', 'topBadge');
     if (!robloxRow)    missingFields.push('robloxUsernameVerified');
     if (missingFields.length > 0) {
@@ -161,6 +161,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
     const topBadge                = cosmeticsRow?.topBadge            ?? fb?.topBadge;
     const isAdmin                 = rolesRow?.isAdmin                 ?? fb?.admin;
     const isModerator             = rolesRow?.isModerator             ?? fb?.isModerator;
+    const isBabyMod               = rolesRow?.isBabyMod               ?? fb?.isBabyMod;
     const isTrusted               = rolesRow?.isTrusted               ?? fb?.isTrusted;
     const isCMSR                  = rolesRow?.isCMSR                  ?? fb?.isCMSR;
     const isHelper                = rolesRow?.isHelper                ?? fb?.isHelper;
@@ -203,6 +204,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
       lastGameWinAt: lastGameWinAt || null,
       isAdmin: !!isAdmin,
       isModerator: !!isModerator,
+      isBabyMod: !!isBabyMod,
       isTrusted: !!isTrusted,
       isCMSR: !!isCMSR,
       isHelper: !!isHelper,
@@ -280,6 +282,7 @@ export const seedFromMessage = (msg) => {
     lastGameWinAt: msg.lastGameWinAt || null,
     isAdmin: !!msg.isAdmin,
     isModerator: !!msg.isModerator,
+    isBabyMod: !!msg.isBabyMod,
     isTrusted: !!msg.isTrusted,
     isCMSR: !!msg.isCMSR,
     isHelper: !!msg.isHelper,
@@ -295,7 +298,7 @@ export const seedFromMessage = (msg) => {
 //  This is the key "backwards compatible" resolver
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
-  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, hasRecentGameWin: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isTrusted: false, isCMSR: false, isHelper: false };
+  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, hasRecentGameWin: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isHelper: false };
 
   const cached = getCachedProfile(msg.senderId);
 
@@ -310,6 +313,7 @@ export const resolveProfile = (msg) => {
     ),
     isAdmin: msg.isAdmin ?? cached?.isAdmin ?? false,
     isModerator: msg.isModerator ?? cached?.isModerator ?? false,
+    isBabyMod: msg.isBabyMod ?? cached?.isBabyMod ?? false,
     isTrusted: msg.isTrusted ?? cached?.isTrusted ?? false,
     isCMSR: msg.isCMSR ?? cached?.isCMSR ?? false,
     isHelper: msg.isHelper ?? cached?.isHelper ?? false,
@@ -352,6 +356,39 @@ export const setCachedFullProfile = (uid, record) => {
   } catch {
     // ignore — cache is optional
   }
+};
+
+// ────────────────────────────────────────────────────────
+//  RECENT ROLE WRITES — mirror-lag shield
+//  Role writes land in RTDB, but readers (BottomDrawer) resolve roles from the
+//  Supabase mirror, which trails the write by a second or more. Worse, every
+//  user now HAS a user_roles row (backfill-user-roles.js), so the reader's
+//  "no row -> fall back to RTDB" path never triggers and the stale mirrored
+//  value wins outright.
+//
+//  Net effect before this: grant someone Junior Mod, reopen their profile, and
+//  they read as NOT a Junior Mod -- so the chip flips back to "Make Junior
+//  Mod" and clicking it again REMOVES the role that was just granted.
+//
+//  These overrides record what we just wrote and win over the mirror until it
+//  catches up. Short TTL: purely a lag shield, never a source of truth.
+// ────────────────────────────────────────────────────────
+const ROLE_OVERRIDE_TTL = 5 * 60 * 1000;
+const roleOverrides = new Map(); // uid -> { flags, t }
+
+export const setRoleOverride = (uid, flags) => {
+  if (!uid || !flags) return;
+  const prev = roleOverrides.get(uid);
+  const fresh = prev && Date.now() - prev.t < ROLE_OVERRIDE_TTL ? prev.flags : {};
+  roleOverrides.set(uid, { flags: { ...fresh, ...flags }, t: Date.now() });
+};
+
+export const getRoleOverride = (uid) => {
+  if (!uid) return null;
+  const entry = roleOverrides.get(uid);
+  if (!entry) return null;
+  if (Date.now() - entry.t > ROLE_OVERRIDE_TTL) { roleOverrides.delete(uid); return null; }
+  return entry.flags;
 };
 
 export const invalidateFullProfile = (uid) => {

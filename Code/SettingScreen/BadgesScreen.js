@@ -198,7 +198,6 @@ const XPActionsSection = ({ isDark }) => {
   const { t } = useTranslation();
   const actionLabels = {
     DAILY_LOGIN: t('badges_screen.actions.daily_login'),
-    COMPLETE_TRADE: t('badges_screen.actions.complete_trade'),
     CREATE_POST: t('badges_screen.actions.create_post'),
     LEAVE_REVIEW: t('badges_screen.actions.leave_review'),
     CORRECT_QUIZ: t('badges_screen.actions.quiz_answer'),

@@ -176,6 +176,7 @@ const OnlineUsersList = ({
           OS: identity.OS ?? null,
           isPlaying: playingMap ? playingMap.get(userId) : false,
           isModerator: roles?.isModerator ?? false,
+          isBabyMod: roles?.isBabyMod ?? false,
           isTrusted: roles?.isTrusted ?? false,
           isCMSR: roles?.isCMSR ?? false,
           isHelper: roles?.isHelper ?? false,
@@ -344,6 +345,10 @@ const OnlineUsersList = ({
           robloxUsernameVerified: roblox?.robloxUsernameVerified ?? false,
           isAdmin: roles?.isAdmin ?? false,
           isModerator: roles?.isModerator ?? false,
+          isBabyMod: roles?.isBabyMod ?? false,
+          isTrusted: roles?.isTrusted ?? false,
+          isCMSR: roles?.isCMSR ?? false,
+          isHelper: roles?.isHelper ?? false,
           isOnline: allOnlineUserIds.includes(ident.uid),
         };
       });
@@ -643,7 +648,7 @@ const OnlineUsersList = ({
               )}
 
             {(() => {
-              const firstBadge = getFirstBadgeType(item, ['admin', 'mod', 'trusted', 'cmsr', 'helper']);
+              const firstBadge = getFirstBadgeType(item, ['admin', 'mod', 'jmd', 'trusted', 'cmsr', 'helper']);
               return (
                 <>
                   {item?.isAdmin && (
@@ -654,6 +659,11 @@ const OnlineUsersList = ({
                   {!item?.isAdmin && item?.isModerator && (
                     <View style={{ marginLeft: 6 }}>
                       <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
+                    </View>
+                  )}
+                  {!item?.isAdmin && !item?.isModerator && item?.isBabyMod && (
+                    <View style={{ marginLeft: 6 }}>
+                      <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
                     </View>
                   )}
                   {item?.isTrusted && (

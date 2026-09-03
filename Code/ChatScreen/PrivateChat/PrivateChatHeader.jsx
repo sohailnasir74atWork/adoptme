@@ -101,6 +101,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           lastGameWinAt:          cached?.lastGameWinAt ?? null,
           isAdmin:                !!(rolesRow?.isAdmin              ?? fb?.admin),
           isModerator:            !!(rolesRow?.isModerator          ?? fb?.isModerator),
+          isBabyMod:              !!(rolesRow?.isBabyMod            ?? fb?.isBabyMod),
           isTrusted:              !!(rolesRow?.isTrusted            ?? fb?.isTrusted),
           isCMSR:                 !!(rolesRow?.isCMSR               ?? fb?.isCMSR),
           isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
@@ -288,7 +289,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           </Text>
 
           {(() => {
-            const firstBadge = getFirstBadgeType(mergedUser, ['admin', 'mod', 'trusted', 'cmsr', 'helper']);
+            const firstBadge = getFirstBadgeType(mergedUser, ['admin', 'mod', 'jmd', 'trusted', 'cmsr', 'helper']);
             return (
               <>
                 {mergedUser?.isAdmin && (
@@ -296,6 +297,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
                 )}
                 {!mergedUser?.isAdmin && mergedUser?.isModerator && (
                   <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
+                )}
+                {!mergedUser?.isAdmin && !mergedUser?.isModerator && mergedUser?.isBabyMod && (
+                  <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
                 )}
                 {mergedUser?.isTrusted && (
                   <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />

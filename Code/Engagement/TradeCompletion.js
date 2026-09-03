@@ -21,7 +21,6 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { getThemeColors } from '../Helper/themeColors';
 import { useLocalState } from '../LocalGlobelStats';
-import { addXP, XP_ACTIONS } from './xpUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -75,9 +74,6 @@ const TradeCompletion = ({
         didScam,
         completedAt: serverTimestamp(),
       });
-
-      // Award XP
-      addXP(db, uid, XP_ACTIONS.COMPLETE_TRADE);
 
       // Update running trade stats
       try {
@@ -180,7 +176,7 @@ const TradeCompletion = ({
       }
 
       // Build success message
-      let msg = `+${XP_ACTIONS.COMPLETE_TRADE} XP earned\n`;
+      let msg = '';
       if (addedNames.length > 0) msg += `✅ Added: ${addedNames.join(', ')}\n`;
       if (removedNames.length > 0) msg += `🔄 Removed: ${removedNames.join(', ')}\n`;
       if (notOwnedNames.length > 0) msg += `⚠️ Not in your list: ${notOwnedNames.join(', ')}`;
@@ -247,7 +243,7 @@ const TradeCompletion = ({
               <Text style={{ fontSize: 48 }}>🎉</Text>
               <Text style={[styles.successTitle, { color: textColor }]}>Trade Saved!</Text>
               <Text style={[styles.successSub, { color: subtextColor, textAlign: 'center' }]}>
-                {inventoryMsg || `+${XP_ACTIONS.COMPLETE_TRADE} XP earned • Added to My Stuff`}
+                {inventoryMsg || 'Added to My Stuff'}
               </Text>
               <TouchableOpacity style={styles.doneBtn} onPress={handleClose}>
                 <Text style={styles.doneBtnText}>Done</Text>
