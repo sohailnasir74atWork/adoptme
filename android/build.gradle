@@ -6,6 +6,16 @@ buildscript {
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.1.20"
+        // 2026-09-04: pin the Firebase BoM that React Native Firebase resolves
+        // to 34.18.0 (firebase-auth 24.2.0). The default for RNFB 23.8.8 is
+        // 34.10.0 → firebase-auth 24.0.1, whose encrypted-persistence bug on
+        // Android silently signs users out on cold start and loses the session
+        // again after they sign back in (firebase-android-sdk #7111/#7651/#8064).
+        set('react-native', [
+            versions: [
+                firebase: [ bom: '34.18.0' ],
+            ],
+        ])
     }
     repositories {
         google()

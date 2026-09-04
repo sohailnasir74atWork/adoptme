@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { ensureGoogleSignInConfigured } from './googleSignInConfig';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentication';
 import { useHaptic } from '../Helper/HepticFeedBack';
@@ -88,10 +89,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   }, [robloxUsernamelocal, robloxUsernameRef]);
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: '541413670501-aj1f61kv0k9f3v515tsu3768ef9hpfjt.apps.googleusercontent.com',
-      offlineAccess: true,
-    });
+    // Shared, idempotent config (GlobelStats also needs it for silent re-login).
+    ensureGoogleSignInConfigured();
   }, []);
 
   useEffect(() => {
@@ -269,8 +268,15 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     try {
       setIsLoading(true);
+      ensureGoogleSignInConfigured();
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      // 2026-09-04: drop any cached Google account first. After a silent native
+      // sign-out (token revoked / auth store lost) the library kept returning
+      // the same expired idToken, so signInWithCredential failed with
+      // "invalid credentials" until the user cleared app data.
+      await GoogleSignin.signOut().catch(() => {});
       const signInResult = await GoogleSignin.signIn();
+      if (signInResult?.type === 'cancelled') return; // user dismissed the sheet
       const idToken = signInResult?.idToken || signInResult?.data?.idToken;
       if (!idToken) throw new Error(t('signin.error_signin_message'));
 

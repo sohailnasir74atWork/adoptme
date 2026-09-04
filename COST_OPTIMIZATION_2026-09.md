@@ -705,3 +705,44 @@ role flags at next login (two leaf listeners on own `isModerator`/`isBabyMod`
 would fix it); `handleMakeTrusted/CMSR` still lack `setRoleOverride`; the same
 mirror-staleness pattern exists in Blox Fruit — port the stamp + reconcile job
 there too.
+
+---
+
+## 7. Bug fix — "logged out for no reason, can't log back in until reinstall" (2026-09-04)
+
+**Findings (app only, Android is where the reinstall "fix" is real):**
+1. **Firebase Android Auth encrypted-persistence regression.** The app resolved
+   `firebase-auth 24.0.1` (RNFB 23.8.8 → BoM 34.10.0); that line silently loses
+   the persisted session on cold start and loses it again after re-login
+   (firebase-android-sdk #7111 / #7651 / #8064). Clearing app data resets the
+   undecryptable store — hence "reinstall fixes it".
+2. **Google-side token revocations** (~105 users/day, measured read-only via
+   `listUsers`: 3,349 in 30 days, 96% Google-only accounts) make the native SDK
+   drop the user with no message. Nothing in this codebase revokes tokens.
+3. **Stale cached Google account**: the app never called `GoogleSignin.signOut()`,
+   so the next "Sign in with Google" reused an expired idToken →
+   `auth/invalid-credential` until app data was cleared.
+4. `handleUserLogin` could hang on RTDB reads (no timeout) or, if every read
+   failed, treat an existing user as NEW and `set()` over the profile.
+   Ruled out: bans (fingerprint survives reinstall on both platforms; ban UI is
+   explicit), email-verification loop (explicit alert), version gates, MMKV flags.
+
+**Fixes (ship with 1.15.26 / 152):**
+- Firebase BoM pinned to **34.18.0 → firebase-auth 24.2.0** via the RNFB override
+  in `android/build.gradle` (+ matching pin in `android/app/build.gradle`).
+- **Silent Google re-login** once per launch in `onAuthStateChanged` when the
+  native user is null and Google has a previous sign-in
+  (`GoogleSignin.signInSilently` → `signInWithCredential`); shared idempotent
+  config in `Code/Firebase/googleSignInConfig.js`.
+- `GoogleSignin.signOut()` before every Google sign-in and on logout;
+  `cancelled` sign-in result handled without an error toast.
+- `handleUserLogin`: 10 s timeout on every RTDB read; if nothing could be read
+  the user stays signed in with a minimal profile and NOTHING is written; the
+  new-user branch uses `update()` (never wipes an existing node).
+- **Diagnostics**: every automatic sign-out is logged to Crashlytics with a
+  reason (`native-null`, `password-unverified`), plus silent-relogin outcomes
+  and `auth_login_reads_unreachable` — the next report can be attributed.
+- Also: live `isModerator`/`isBabyMod` listeners for the signed-in user (§6).
+
+**Security side-finding (not changed):** `banned_devices` and
+`banned_users_by_email` are still world-writable (see §6 for the role lock).

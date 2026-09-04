@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
-import { getAuth, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
+import { getAuth, onAuthStateChanged, signOut, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
@@ -10,7 +10,28 @@ import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
-import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute } from '@react-native-firebase/crashlytics';
+import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute, log as crashlyticsLog, recordError as crashlyticsRecordError } from '@react-native-firebase/crashlytics';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { ensureGoogleSignInConfigured } from './Firebase/googleSignInConfig';
+
+// ── Auth diagnostics + silent re-login state (2026-09-04) ───────────────
+// Users reported "logged out for no reason, can't log back in until I clear
+// app data". Causes found: the Android Firebase Auth encrypted-persistence
+// regression (firebase-auth 24.0.1), Google-side token revocations turning
+// into a silent native sign-out, and a stale cached Google account breaking
+// the next sign-in. These helpers (a) attribute every automatic sign-out in
+// Crashlytics and (b) try one silent Google re-login per launch before the
+// app shows the logged-out UI.
+const _launchedAt = Date.now();
+let _silentReloginTried = false;
+let _lastAuthUid = null;
+const logAuthEvent = (message, record = false) => {
+  try {
+    const c = getCrashlytics();
+    crashlyticsLog(c, message);
+    if (record) crashlyticsRecordError(c, new Error(message));
+  } catch (_) {}
+};
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
 import { getServerTime, warmServerTime } from './Helper/serverTime';
 
@@ -258,6 +279,18 @@ export const GlobalStateProvider = ({ children }) => {
       const userId = loggedInUser.uid;
       const userRef = ref(appdatabase, `users/${userId}`);
 
+      // 2026-09-04: a read that FAILS (offline, denied, hung socket) must never
+      // look like "this user has no record" — that path used to run the
+      // new-user branch and could overwrite a real profile, or hang forever
+      // leaving Firebase signed in while the UI stayed logged out. Every RTDB
+      // read below is capped at 10 s and failures are tagged READ_FAILED.
+      const READ_FAILED = Symbol('read-failed');
+      let readsUnreachable = false;
+      const withTimeout = (p, ms = 10000) => Promise.race([
+        p,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('rtdb-timeout')), ms)),
+      ]);
+
       // ── RTDB-read reduction (login is the #1 RTDB read source) ─────────
       // This used to fan out into ~21 individual RTDB leaf reads
       // (users/{uid}/email, /displayName, /admin, …) on every login. Most of
@@ -291,8 +324,8 @@ export const GlobalStateProvider = ({ children }) => {
         getRoles(userId).catch(() => null),
         getCosmetics(userId).catch(() => null),
         getRoblox(userId).catch(() => null),
-        Promise.all(RTDB_ONLY.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)).catch(() => null))),
-        get(ref(appdatabase, `users/${userId}/xp`)).catch(() => null),
+        Promise.all(RTDB_ONLY.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => null))),
+        withTimeout(get(ref(appdatabase, `users/${userId}/xp`))).catch(() => null),
       ]);
 
       const xpVal = xpSnap && xpSnap.exists() ? xpSnap.val() : undefined;
@@ -345,16 +378,36 @@ export const GlobalStateProvider = ({ children }) => {
         // original path). Disambiguates brand-new vs mirror-lag so we never
         // clobber an existing RTDB user by treating them as new.
         const fieldSnaps = await Promise.all(
-          PROJECTION.map((f) => get(ref(appdatabase, `users/${userId}/${f}`)).catch(() => null))
+          PROJECTION.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => READ_FAILED))
         );
-        const anyExists = fieldSnaps.some((s) => s && s.exists()) || xpVal !== undefined;
+        const anyExists = fieldSnaps.some((s) => s && s !== READ_FAILED && s.exists()) || xpVal !== undefined;
         if (anyExists) {
           existing = {};
           PROJECTION.forEach((f, i) => {
-            if (fieldSnaps[i] && fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
+            if (fieldSnaps[i] && fieldSnaps[i] !== READ_FAILED && fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
           });
           if (xpVal !== undefined) existing.xp = xpVal;
+        } else if (fieldSnaps.every((s) => s === READ_FAILED)) {
+          // Nothing could be read at all → we cannot tell new from existing.
+          readsUnreachable = true;
         }
+      }
+
+      if (existing === null && readsUnreachable) {
+        // Backend unreachable: keep the user SIGNED IN with a minimal profile
+        // (no RTDB writes — never treat an existing user as new here). The next
+        // launch / reconnect re-runs this handler and loads the full record.
+        logAuthEvent(`auth_login_reads_unreachable uid=${userId}`, true);
+        const minimal = {
+          id: userId,
+          email: loggedInUser.email || null,
+          displayName: loggedInUser.displayName || 'Anonymous',
+          avatar: loggedInUser.photoURL || null,
+          createdAt: Date.now(),
+        };
+        setCurrentuserEmail(loggedInUser.email);
+        setUser(minimal);
+        return;
       }
 
       const exists = existing !== null;
@@ -413,7 +466,10 @@ export const GlobalStateProvider = ({ children }) => {
           createdAt: Date.now()
         };
 
-        await set(userRef, userData);
+        // update() instead of set(): identical for a genuinely new node, but if
+        // this branch is ever reached for an existing user it merges instead
+        // of wiping fields the projection does not carry (roles, coins, shop…).
+        await update(userRef, userData);
       }
 
       // Merge Supabase roblox fields. Supabase wins; fall back to whatever
@@ -475,6 +531,37 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ Ensure useEffect runs only when necessary
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedInUser) => {
+      // ── Silent sign-out attribution + one silent Google re-login per launch ──
+      if (!loggedInUser) {
+        const prevUid = _lastAuthUid;
+        _lastAuthUid = null;
+        if (!_silentReloginTried) {
+          _silentReloginTried = true;
+          try {
+            ensureGoogleSignInConfigured();
+            const hasPrev = typeof GoogleSignin.hasPreviousSignIn === 'function'
+              ? GoogleSignin.hasPreviousSignIn()
+              : false;
+            if (hasPrev) {
+              const res = await GoogleSignin.signInSilently();
+              const idToken = res?.idToken || res?.data?.idToken;
+              if (idToken) {
+                await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+                logAuthEvent(`auth_silent_relogin_ok hadPrevUid=${prevUid ? 1 : 0} msSinceLaunch=${Date.now() - _launchedAt}`);
+                return; // this listener fires again with the restored user
+              }
+            }
+          } catch (e) {
+            logAuthEvent(`auth_silent_relogin_failed code=${e?.code || ''} msg=${String(e?.message || '').slice(0, 80)}`);
+          }
+        }
+        if (prevUid) {
+          logAuthEvent(`auth_signed_out reason=native-null prevUid=${prevUid} msSinceLaunch=${Date.now() - _launchedAt}`, true);
+        }
+      } else {
+        _lastAuthUid = loggedInUser.uid;
+      }
+
       // Enforce email verification ONLY for the email/password provider.
       // onAuthStateChanged fires with the PERSISTED session on every cold
       // start / token refresh, so signing out every emailVerified=false user
@@ -485,6 +572,7 @@ export const GlobalStateProvider = ({ children }) => {
       // backstop for that one provider; trusted social providers pass through.
       const isPasswordUser = !!loggedInUser?.providerData?.some(p => p?.providerId === 'password');
       if (loggedInUser && isPasswordUser && !loggedInUser.emailVerified) {
+        logAuthEvent(`auth_signed_out reason=password-unverified uid=${loggedInUser.uid}`);
         await signOut(auth);
         return;
       }
@@ -608,6 +696,26 @@ export const GlobalStateProvider = ({ children }) => {
     );
     return () => { try { unsub(); } catch (e) { /* noop */ } };
   }, [appdatabase, user?.id]);
+
+  // Live role flags for the signed-in user (2026-09-04): a demoted moderator /
+  // junior mod loses the powers immediately instead of at next login. Two leaf
+  // listeners for the whole session — negligible RTDB cost. Denied/offline
+  // reads keep the current value.
+  useEffect(() => {
+    if (!appdatabase || !user?.id) return;
+    const uid = user.id;
+    const unsubs = ['isModerator', 'isBabyMod'].map((flag) => onValue(
+      ref(appdatabase, `users/${uid}/${flag}`),
+      (snap) => {
+        const v = !!(snap && snap.exists() && snap.val() === true);
+        setUser((prev) => (prev && prev.id === uid && prev[flag] !== v ? { ...prev, [flag]: v } : prev));
+      },
+      () => { /* denied / offline → keep current value */ },
+    ));
+    return () => unsubs.forEach((u) => { try { u(); } catch (e) { /* noop */ } });
+    // appdatabase is a module-level constant, not a reactive dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Fetch trading server link with 3 hour caching
   // ✅ FIXED: Run once on mount only — deps no longer include values this effect updates

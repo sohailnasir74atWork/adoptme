@@ -5,6 +5,7 @@ import {
   deleteUser as fbDeleteUser,
 } from '@react-native-firebase/auth';
 import { clearMyCosmetics } from '../Helper/cosmeticsCache';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 /**
  * Log out the current user and reset local user state.
@@ -15,6 +16,11 @@ export const logoutUser = async (setUser) => {
     const auth = getAuth(app);         // get Auth instance for that app
 
     await signOut(auth);               // modular signOut
+
+    // 2026-09-04: also clear the cached Google account, otherwise the next
+    // "Sign in with Google" reuses a stale/expired token and fails until the
+    // user clears app data. Best-effort.
+    try { await GoogleSignin.signOut(); } catch (_) {}
 
     // Clear all MMKV caches (cosmetics, avatar, username, egg data)
     clearMyCosmetics();
