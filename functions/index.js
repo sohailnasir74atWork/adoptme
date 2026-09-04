@@ -57,6 +57,9 @@ exports.updateLeaderboardCache = require('./updateLeaderboardCache').updateLeade
 exports.updateTrustedTraders = require('./updateTrustedTraders').updateTrustedTraders; // v2
 exports.valueAlertsPoll = require('./valueAlertsPoll').valueAlertsPoll;                // v2
 
+// ── Roles mirror safety net (6-hourly RTDB ⇄ Supabase user_roles diff) ─
+exports.reconcileRolesMirror = require('./reconcileRolesMirror').reconcileRolesMirror;
+
 // ── Mod / badge rosters ───────────────────────────────────────────────
 const modRoles = require('./syncModRole_Moderator');
 exports.syncModRole_Moderator = modRoles.syncModRole_Moderator;

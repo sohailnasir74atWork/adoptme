@@ -45,7 +45,7 @@ import {
   getCountFromServer, // ✅ Added for follower count
   writeBatch,
 } from '@react-native-firebase/firestore';
-import { ref, get, set, remove } from '@react-native-firebase/database';
+import { ref, get, set, update, remove } from '@react-native-firebase/database';
 import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
 import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 
@@ -1310,7 +1310,9 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), true);
+      // One atomic write: the flag + a rolesUpdatedAt stamp, so the Supabase
+      // mirror always runs (even if the flag value did not change).
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isBabyMod: true, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       setRoleOverride(selectedUserId, { isBabyMod: true });
       setUserData(prev => ({ ...prev, isBabyMod: true }));
@@ -1330,7 +1332,9 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isBabyMod`), null);
+      // `null` inside update() still deletes the key; the stamp makes a repeat
+      // removal a real write so a stale Supabase copy gets re-mirrored.
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isBabyMod: null, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       setRoleOverride(selectedUserId, { isBabyMod: false });
       setUserData(prev => ({ ...prev, isBabyMod: false }));
@@ -1351,7 +1355,7 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), true);
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isTrusted: true, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('trustedRoster', null);
       setUserData(prev => ({ ...prev, isTrusted: true }));
@@ -1371,7 +1375,7 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isTrusted`), null);
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isTrusted: null, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('trustedRoster', null);
       setUserData(prev => ({ ...prev, isTrusted: false }));
@@ -1392,7 +1396,7 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), true);
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isCMSR: true, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: true }));
@@ -1412,7 +1416,7 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isCMSR`), null);
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isCMSR: null, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: false }));

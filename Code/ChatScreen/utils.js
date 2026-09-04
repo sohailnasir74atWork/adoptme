@@ -887,7 +887,9 @@ export const makeModerator = async (userId) => {
   try {
     const db = getDatabase();
     const userRef = ref(db, `users/${userId}`);
-    await update(userRef, { isModerator: true });
+    // rolesUpdatedAt forces the Supabase mirror to run even if the flag value
+    // is unchanged (see functions/mirrorUsersToSupabase.js ROLES_KEYS).
+    await update(userRef, { isModerator: true, rolesUpdatedAt: Date.now() });
     Alert.alert('Success', 'User is now a moderator.');
     return true;
   } catch (error) {
@@ -906,7 +908,10 @@ export const removeModerator = async (userId) => {
   try {
     const db = getDatabase();
     const userRef = ref(db, `users/${userId}`);
-    await update(userRef, { isModerator: false });
+    // rolesUpdatedAt makes a repeat removal a real write again — without it a
+    // second "remove" on an already-false flag fires no trigger and a stale
+    // Supabase copy of the role can never be repaired from the UI.
+    await update(userRef, { isModerator: false, rolesUpdatedAt: Date.now() });
     Alert.alert('Success', 'Moderator privileges removed.');
     return true;
   } catch (error) {

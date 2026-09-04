@@ -394,6 +394,10 @@ export const getRoleOverride = (uid) => {
 export const invalidateFullProfile = (uid) => {
   if (!uid) return;
   try { cache.delete(FULL_KEY(uid)); } catch {}
+  // Also drop the slim chat/online-list profile (p_<uid>, 30-min TTL) so the
+  // admin's own message list and online list stop showing a removed role badge
+  // immediately instead of up to 30 minutes later.
+  try { cache.delete(`p_${uid}`); } catch {}
 };
 
 // Read the raw /users/{uid} once, cache it, return it. Returns null on missing.

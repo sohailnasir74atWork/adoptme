@@ -643,7 +643,7 @@ from the shared org invoice (adoptme ≈ 4.1 M of 31.2 M messages).
   redeploy: mirror 300/300 ok, notifier 63×200 + 2×500 (the 500s are the
   pre-existing "APNs payload too large" case, 1–3/hour all day).
 
-### In code (app, next build)
+### In code (app) — signed AAB built 2026-09-04: `android/app/build/outputs/bundle/release/app-release.aab`, versionName 1.15.25 / versionCode 151, 73.3 MB (same size as the previous build)
 Same set as Blox S1/F3/F6: one realtime binding per channel
 (`chatMetaBackend`, `groupMetaBackend`, `chatBackend`, `privateMessagesBackend`,
 `groupMessagesBackend`), unread resets skip rows already at 0, no channel
@@ -659,9 +659,49 @@ more mirror CF per DM view, and `notifyNewMessage`'s push suppression now sees
 web users); trade/feed detail pages `cache()` + `revalidate`. `tsc` clean.
 
 ### For you
-- `supabase/027_hooks_purge_and_maintenance.sql` — hooks purge cron + batched
-  initial purge + vacuum/reindex; the bulk delete was declined for automation.
+- ~~`supabase/027_hooks_purge_and_maintenance.sql`~~ — DONE 2026-09-04: purge
+  cron scheduled (job 6), 3.1 M old webhook-log rows deleted, `hooks` 458 MB →
+  5.8 MB, `net._http_response` 1 GB → 1.1 MB, database **3.4 GB → 1.9 GB**.
 - ~~Delete the two unused functions~~ — DONE 2026-09-04 (33 functions remain, all live).
 - Still open from the first pass: F2 (`/users` world-readable), F5 retention
   was added (025/026), F10 listener churn is largely addressed by the app edits
   above.
+
+---
+
+## 6. Bug fix — removed roles came back (2026-09-04)
+
+**Root cause.** Every screen reads roles from the Supabase `user_roles` mirror
+and only falls back to RTDB when the row is *missing* (never, since the May
+backfill). `mirrorUsersToSupabase` was hard-down from 2026-09-02 16:08 UTC to
+2026-09-03 11:55 UTC (`Node.js 20 detected without native WebSocket support`,
+fixed in 46d5680), so every role removal made in that window reached RTDB but
+not Supabase. Removing the role again writes the same value → RTDB sees no
+change → no trigger → the stale `true` in Supabase lives forever, and the
+demoted user's own app re-reads it at login and keeps mod powers. Verified:
+RTDB was consistent (13 flag holders = 13 roster entries); only the mirror lied.
+
+**Fixes (all backward compatible):**
+- **Healed now**: `scripts/backfill-user-roles.js` re-upserted all 162,264
+  `user_roles` rows from RTDB in 4.6 min (75 role holders).
+- **Every admin role write now carries a `rolesUpdatedAt` stamp** in the same
+  atomic `update()` (`BottomDrawer.jsx` make/remove JMD, Trusted, CMSR;
+  `utils.js` make/removeModerator) and the mirror lists `rolesUpdatedAt` in
+  `ROLES_KEYS`, so a repeat removal is a real write that re-mirrors.
+- **New 6-hourly `reconcileRolesMirror`** Cloud Function diffs the true-sets
+  in RTDB (indexed queries) and Supabase and repairs any drift — the permanent
+  safety net for the next mirror outage.
+- `invalidateFullProfile` now also drops the slim `p_<uid>` profile cache so
+  the admin's own chat/online lists update immediately.
+- **Rules**: `users/$userId` was world-writable — anyone could grant
+  themselves `admin`/`isModerator`. Now: any authenticated user may still write
+  non-role fields (bans, strikes, coins, etc. keep working), but the role
+  leaves only change when the writer is an admin (`admin`/`isAdmin`), a
+  `jmd_granters` entry for `isBabyMod`, or a moderator for `isTrusted`/`isCMSR`;
+  a user may still delete their own node. Deployed.
+
+**Not done (recommended):** the demoted user's app only refreshes its own
+role flags at next login (two leaf listeners on own `isModerator`/`isBabyMod`
+would fix it); `handleMakeTrusted/CMSR` still lack `setRoleOverride`; the same
+mirror-staleness pattern exists in Blox Fruit — port the stamp + reconcile job
+there too.

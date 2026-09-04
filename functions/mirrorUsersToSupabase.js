@@ -135,7 +135,12 @@ async function mirrorRoblox(uid, before, after, supabase) {
   if (error) console.error('[mirrorUsers/roblox]', uid, error.message);
 }
 
-const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper'];
+// `rolesUpdatedAt` is a stamp the admin UI writes alongside every role change
+// (2026-09-04). It guarantees this mirror runs even when the flag's VALUE is
+// unchanged — e.g. an admin re-removing a role whose Supabase copy went stale
+// while this function was down. Without it a repeat removal is a no-op write,
+// fires no trigger, and the stale `true` in user_roles lives forever.
+const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper', 'rolesUpdatedAt'];
 // `isCreate` (2026-09-02, cost): an ordinary user never has ANY role key set,
 // so anyKeyChanged() was always false and NO user_roles row was ever written
 // for them. getRoles() then returned null on every client, and BottomDrawer's
