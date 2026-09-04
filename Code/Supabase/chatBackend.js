@@ -218,20 +218,24 @@ export async function loadMessagesSince(roomId, since = null, { limit = 60 } = {
 export function subscribeToMessages(roomId, { onInsert, onUpdate, onDelete, onStatus } = {}) {
   const channel = supabase
     .channel(`room-messages:${roomId}`)
+    // ONE binding for all events (2026-09): three bindings = three server-side
+    // subscriptions evaluated per change; same deliveries, 3× the DB work.
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
-      (payload) => { onInsert?.(fromRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
-      (payload) => { onUpdate?.(fromRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
-      (payload) => { onDelete?.(payload.old?.id); },
+      { event: '*', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
+      (payload) => {
+        try {
+          const type = payload?.eventType;
+          if (type === 'INSERT') onInsert?.(fromRow(payload.new));
+          else if (type === 'UPDATE') onUpdate?.(fromRow(payload.new));
+          else if (type === 'DELETE') {
+            const id = payload.old?.id;
+            if (id) onDelete?.(id);
+          }
+        } catch (e) {
+          console.warn('[chatBackend] realtime handler failed:', e?.message);
+        }
+      },
     )
     .subscribe((status, err) => {
       onStatus?.(status, err);

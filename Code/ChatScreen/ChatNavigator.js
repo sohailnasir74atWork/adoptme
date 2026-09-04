@@ -67,6 +67,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   // Behaviour matches the previous RTDB child listeners: each existing
   // row arrives once via the initial load, then realtime
   // INSERT/UPDATE/DELETE keep the unread tally fresh.
+  //
+  // Read the banned list through a ref inside the subscription handler so a
+  // change to `bannedUsers` (array identity changes on every localState
+  // update) does NOT tear down and re-create the realtime channel. Each
+  // re-create is a new server-side subscription + a full initial load.
+  const bannedUsersRef = useRef(bannedUsers);
+  bannedUsersRef.current = bannedUsers;
+
   useEffect(() => {
     if (!user?.id || !appdatabase) {
       setunreadcount(0);
@@ -87,7 +95,8 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     const handleUpsert = (chatData) => {
       if (!chatData || !chatData.partnerId) return;
       const chatPartnerId = chatData.partnerId;
-      const isBlocked = Array.isArray(bannedUsers) && bannedUsers.includes(chatPartnerId);
+      const bannedNow = bannedUsersRef.current;
+      const isBlocked = Array.isArray(bannedNow) && bannedNow.includes(chatPartnerId);
       const rawUnread = chatData.unreadCount || 0;
 
       // Block-user safety reset: zero the badge in Supabase directly.
@@ -119,7 +128,8 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       unsubscribe();
       if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
     };
-  }, [user?.id, appdatabase, bannedUsers]);
+    // bannedUsers intentionally omitted: read via bannedUsersRef (see above).
+  }, [user?.id, appdatabase]);
 
   // Group list reads off Supabase (group_meta_data table). Writes
   // (createGroupChat, acceptGroupInvite, sendGroupMessage's per-member

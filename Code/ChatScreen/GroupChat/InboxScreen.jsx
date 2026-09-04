@@ -62,6 +62,11 @@ const InboxScreen = ({ bannedUsers }) => {
   // realtime silently missed an event). Costs one loadChatMeta per pull.
   const [refreshing, setRefreshing] = useState(false);
 
+  // Banned list via ref: keeps the shared chat-meta subscription alive across
+  // `bannedUsers` identity changes instead of re-subscribing (see ChatNavigator).
+  const bannedUsersRef = useRef(bannedUsers);
+  bannedUsersRef.current = bannedUsers;
+
   // Phase 5 clean-cut: this screen is Supabase-only for chat_meta_data
   // — reads via subscribeToChatMeta, writes via setChatMuted / resetUnreadCount
   // / deleteChatMeta. Mirrors PrivateChat's behaviour. Old-app builds
@@ -77,7 +82,8 @@ const InboxScreen = ({ bannedUsers }) => {
     if (!hasLoadedOnce.current) setLocalLoading(true);
 
     const chatsMap = new Map();
-    const banned = Array.isArray(bannedUsers) ? bannedUsers : [];
+    // Always the latest banned list (via ref) without being an effect dependency.
+    const getBanned = () => (Array.isArray(bannedUsersRef.current) ? bannedUsersRef.current : []);
 
     const updateChatsList = () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -102,7 +108,7 @@ const InboxScreen = ({ bannedUsers }) => {
       if (!chatData || !chatData.partnerId) return;
 
       const chatPartnerId = chatData.partnerId;
-      const isBlocked = banned.includes(chatPartnerId);
+      const isBlocked = getBanned().includes(chatPartnerId);
       const rawUnread = chatData.unreadCount || 0;
 
       // Block-user safety reset: zero the badge in Supabase directly so
@@ -202,7 +208,8 @@ const InboxScreen = ({ bannedUsers }) => {
       }
       setReconnecting(false);
     };
-  }, [user?.id, appdatabase, bannedUsers]);
+    // bannedUsers intentionally omitted: read via bannedUsersRef / getBanned().
+  }, [user?.id, appdatabase]);
 
   // 🔥 Fetch streaks on mount
   useEffect(() => {

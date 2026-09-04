@@ -610,3 +610,58 @@ regardless — it is the only finding with an unbounded downside.
   shows correct role pills; group list shows correct last message and unread
   badge on **web**; trades list still refreshes; login on a brand-new
   account.
+
+---
+
+## 5. Second pass — 2026-09-04 (ported from the Blox Fruit audit)
+
+Measured before this pass (30 days to 2026-09-04): RTDB egress 34.3 GB, 121 M
+listen ops, 137 avg connections; Firestore 36.7 M reads; `mirrorUsersToSupabase`
+still 4.9 M ok + 107k error invocations/month; Supabase (96-day stats):
+Realtime's per-change RLS query 319k s of DB time, `user_cosmetics` **11.1 M
+updates**, `supabase_functions.hooks` 3.3 M rows / 458 MB (no purge job),
+`net._http_response` 1 GB dead, subscription churn 25 M rows, 5 per-uid
+profile selects ≈ 126 M calls each. Realtime peak connections/messages come
+from the shared org invoice (adoptme ≈ 4.1 M of 31.2 M messages).
+
+### Done and live
+- **Rules** now tracked in the repo (`database.rules.json`, exported from the
+  live ruleset; `firebase.json` gained the `database` target) and deployed with
+  `.write: false` on the Cloud-Function-owned nodes `calcData`, `previousStock`,
+  `feedRanking`, `mods`, `leader_board` (no client writes to them in app or
+  site). `/users` read rules unchanged (F2 still staged).
+- **`mirrorUsersToSupabase`**: `activeItemsChanged` compared cosmetic OBJECTS by
+  identity, so every `/users` write for a user with any cosmetic re-upserted
+  `user_cosmetics` (the 11 M updates). Fixed to compare by value.
+- **Functions**: `functions/index.js` created — the repo is now the single
+  deploy source (33 live functions; `fetchWorldCupDataNow` and
+  `updateLeaderboardCacheManual` had 0 invocations and are not exported — delete
+  them with `firebase functions:delete fetchWorldCupDataNow updateLeaderboardCacheManual --project adoptme-7b50c`).
+  Four modules that called `initializeApp()` unguarded now guard it.
+  `firebase.json` gained the `functions` target. **All 33 redeployed from the
+  repo 2026-09-04 in three batches, all successful**; 15 min of logs after the
+  redeploy: mirror 300/300 ok, notifier 63×200 + 2×500 (the 500s are the
+  pre-existing "APNs payload too large" case, 1–3/hour all day).
+
+### In code (app, next build)
+Same set as Blox S1/F3/F6: one realtime binding per channel
+(`chatMetaBackend`, `groupMetaBackend`, `chatBackend`, `privateMessagesBackend`,
+`groupMessagesBackend`), unread resets skip rows already at 0, no channel
+re-create on banned-list changes (`ChatNavigator.js`, `InboxScreen.jsx`),
+public-room idle pause 90 s (`Trader.jsx`), `deviceId`/`isPro` written only when
+changed (`GlobelStats.js`), Home owned-pets focus read once per 10 min
+(`HomeTabScreen.jsx`). All 10 files parse; lint parity with HEAD.
+
+### Site `adoptme-web` — DEPLOYED 2026-09-04 (`./deploy.sh`, public URL verified)
+GroupsList limit 12 + cursor; presence socket only on `/chat*` and presence
+writes debounced; `activeChats/{uid}` instead of `users/{uid}/activeChat` (no
+more mirror CF per DM view, and `notifyNewMessage`'s push suppression now sees
+web users); trade/feed detail pages `cache()` + `revalidate`. `tsc` clean.
+
+### For you
+- `supabase/027_hooks_purge_and_maintenance.sql` — hooks purge cron + batched
+  initial purge + vacuum/reindex; the bulk delete was declined for automation.
+- ~~Delete the two unused functions~~ — DONE 2026-09-04 (33 functions remain, all live).
+- Still open from the first pass: F2 (`/users` world-readable), F5 retention
+  was added (025/026), F10 listener churn is largely addressed by the app edits
+  above.

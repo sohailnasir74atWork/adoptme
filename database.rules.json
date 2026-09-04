@@ -1,0 +1,499 @@
+{
+  "rules": {
+    "users": {
+      ".indexOn": [
+        "displayName",
+        "isSelectedReminderEnabled",
+        "isReminderEnabled",
+        "fcmToken",
+        "isModerator",
+        "isBabyMod",
+        "isTrusted",
+        "isCMSR",
+        "admin",
+        "isHelper"
+      ],
+      ".read": true,
+      "$userId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "_serverTime": {
+      "$uid": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "xlsData": {
+      ".read": false,
+      ".write": false
+    },
+    "worldcup_enabled": {
+      ".read": true,
+      ".write": true
+    },
+    "savedTrades": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeAcceptors": {
+      ".read": true,
+      ".write": true
+    },
+    "jmd_granters": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('admin').val() === true"
+    },
+    "tradeAcceptNotifications": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeJournal": {
+      ".read": true,
+      ".write": true,
+      "$uid": {
+        ".indexOn": [
+          "completedAt"
+        ]
+      }
+    },
+    "tradeStats": {
+      ".read": true,
+      ".write": true
+    },
+    "feedRanking": {
+      ".read": true,
+      ".write": false
+    },
+    "mod": {
+      ".read": true,
+      ".write": true
+    },
+    "mod_controls_enabled": {
+      ".read": true,
+      ".write": true
+    },
+    "mods": {
+      ".read": true,
+      ".write": false
+    },
+    "mod_votes_by_user": {
+      ".read": true,
+      ".write": true
+    },
+    "mod_votes_summary": {
+      ".read": true,
+      ".write": true
+    },
+    "trusted": {
+      ".read": true,
+      ".write": false
+    },
+    "cmsr": {
+      ".read": true,
+      ".write": false
+    },
+    "chat_house_design": {
+      ".read": true,
+      ".write": true
+    },
+    "chat_help": {
+      ".read": true,
+      ".write": true
+    },
+    "chat_playing": {
+      ".read": true,
+      ".write": true
+    },
+    "analytics": {
+      ".read": true,
+      ".write": true
+    },
+    "presence": {
+      ".indexOn": [
+        ".value"
+      ],
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "activeGroupChats": {
+      ".read": true,
+      ".write": true
+    },
+    "group_meta_data": {
+      ".read": true,
+      ".write": true
+    },
+    "group_messages": {
+      ".read": true,
+      ".write": false,
+      "$groupId": {
+        "messages": {
+          ".indexOn": [
+            "timestamp"
+          ]
+        }
+      }
+    },
+    "single_offer_wall": {
+      ".read": true,
+      ".write": true
+    },
+    "news": {
+      ".read": true,
+      ".write": true
+    },
+    "news_feedback": {
+      ".read": true,
+      ".write": true
+    },
+    "like_counter": {
+      ".read": true,
+      ".write": true
+    },
+    "pic_numbers": {
+      ".read": true,
+      ".write": true
+    },
+    "banned_users_by_email": {
+      ".indexOn": [
+        "bannedAt",
+        "displayName"
+      ],
+      ".read": true,
+      ".write": true
+    },
+    "banned_devices": {
+      ".read": true,
+      ".write": true
+    },
+    "banned_users_by_email_post": {
+      ".read": true,
+      ".write": true
+    },
+    "notifier": {
+      ".read": true,
+      ".write": true
+    },
+    "notifier_index": {
+      ".read": true,
+      ".write": true
+    },
+    "api": {
+      ".read": true,
+      ".write": true
+    },
+    "design": {
+      ".read": true,
+      ".write": true
+    },
+    "free_translation": {
+      ".read": true,
+      ".write": true
+    },
+    "server": {
+      ".read": true,
+      ".write": true
+    },
+    "users_server": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "expiresAt"
+      ]
+    },
+    "fruit_data": {
+      ".read": true,
+      ".write": true
+    },
+    "ratings": {
+      ".read": true,
+      ".write": true
+    },
+    "averageRatings": {
+      ".read": true,
+      ".write": true
+    },
+    "noman_app_version": {
+      ".read": true,
+      ".write": true
+    },
+    "leader_board": {
+      ".read": true,
+      ".write": false
+    },
+    "previous_enrole": {
+      ".read": true,
+      ".write": true
+    },
+    "waqas_app_version": {
+      ".read": true,
+      ".write": true
+    },
+    "ios_version": {
+      ".read": true,
+      ".write": true
+    },
+    "featuredCounts": {
+      ".read": true,
+      ".write": true
+    },
+    "reward": {
+      ".read": true,
+      ".write": true
+    },
+    "prize": {
+      ".read": true,
+      ".write": true
+    },
+    "winners": {
+      ".read": true,
+      ".write": true
+    },
+    "calcData": {
+      ".read": true,
+      ".write": false
+    },
+    "chat_new": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_es": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_pt": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_fr": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_de": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_tr": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_ar": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_ja": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_ko": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "chat_ru": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": [
+        "senderId",
+        "timestamp"
+      ]
+    },
+    "pin_messages": {
+      ".read": true,
+      ".write": true
+    },
+    "privateChats": {
+      ".read": false,
+      ".write": false
+    },
+    "privateChat": {
+      ".read": false,
+      ".write": false
+    },
+    "bannedUsers": {
+      ".read": true,
+      ".write": true
+    },
+    "reports": {
+      ".read": true,
+      ".write": true
+    },
+    "lastseen": {
+      ".read": true,
+      ".write": false
+    },
+    "codes": {
+      ".read": true,
+      ".write": true
+    },
+    "factor": {
+      ".read": true,
+      ".write": true
+    },
+    "onlineUsers": {
+      ".read": true,
+      ".write": false,
+      ".indexOn": [
+        "status"
+      ]
+    },
+    "enrole": {
+      ".read": true,
+      ".write": true
+    },
+    "online_users_count": {
+      ".read": true,
+      ".write": true
+    },
+    "freeTradeUsed": {
+      ".read": true,
+      ".write": true
+    },
+    "tradeReports": {
+      ".read": true,
+      ".write": true
+    },
+    "activeChats": {
+      ".read": true,
+      ".write": true
+    },
+    "previousStock": {
+      ".read": true,
+      ".write": false
+    },
+    "onlineUsersCount": {
+      ".read": true,
+      ".write": false
+    },
+    "notifications": {
+      ".read": false,
+      ".write": false
+    },
+    "image_url": {
+      ".read": true,
+      ".write": true
+    },
+    "image_url_gg": {
+      ".read": true,
+      ".write": true
+    },
+    "appVersions": {
+      ".read": true,
+      ".write": true
+    },
+    "lastChecked": {
+      ".read": true,
+      ".write": true
+    },
+    "testing": {
+      ".read": true,
+      ".write": true
+    },
+    "private_chat_new": {
+      ".indexOn": [
+        "participants"
+      ],
+      ".read": true,
+      ".write": false,
+      "$chatId": {
+        "messages": {
+          ".indexOn": [
+            "timestamp"
+          ]
+        },
+        "participants": {
+          ".indexOn": [
+            "user1",
+            "user2"
+          ]
+        }
+      }
+    },
+    "chat_meta_data": {
+      ".read": true,
+      ".write": false
+    },
+    "private_messages": {
+      ".read": true,
+      ".write": false,
+      "$chatId": {
+        "messages": {
+          ".read": true,
+          ".write": false
+        },
+        "unread": {
+          ".read": true,
+          ".write": true
+        },
+        "lastRead": {
+          ".read": true,
+          ".write": true
+        },
+        "trade": {
+          ".read": true,
+          ".write": true
+        },
+        "post": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    },
+    "private_chat": {
+      ".read": true,
+      ".write": false,
+      "$chatId": {
+        "messages": {
+          ".indexOn": [
+            "timestamp"
+          ]
+        },
+        "participants": {
+          ".indexOn": [
+            "user1",
+            "user2"
+          ]
+        }
+      }
+    }
+  }
+}

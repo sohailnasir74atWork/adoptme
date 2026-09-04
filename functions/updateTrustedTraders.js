@@ -1,8 +1,8 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { initializeApp } = require('firebase-admin/app');
+const { initializeApp, getApps } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 
-initializeApp();
+if (!getApps().length) initializeApp(); // guarded: shared index.js loads many modules
 
 const db = getFirestore();
 const MIN_VOTES = 1;  // Lowered from 3 — show traders with any votes

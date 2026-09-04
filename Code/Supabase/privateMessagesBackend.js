@@ -181,20 +181,25 @@ export function subscribeToPrivateMessages(chatId, { onInsert, onUpdate, onDelet
 
   const channel = supabase
     .channel(`pvt-messages:${chatId}`)
+    // ONE binding for all events (2026-09): each `.on('postgres_changes')` is a
+    // separate server-side subscription evaluated per change — same deliveries,
+    // a third of the DB work. Callbacks unchanged, dispatched on eventType.
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chatId}` },
-      (payload) => { onInsert?.(fromPrivateMessageRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chatId}` },
-      (payload) => { onUpdate?.(fromPrivateMessageRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chatId}` },
-      (payload) => { onDelete?.(payload.old?.id); },
+      { event: '*', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chatId}` },
+      (payload) => {
+        try {
+          const type = payload?.eventType;
+          if (type === 'INSERT') onInsert?.(fromPrivateMessageRow(payload.new));
+          else if (type === 'UPDATE') onUpdate?.(fromPrivateMessageRow(payload.new));
+          else if (type === 'DELETE') {
+            const id = payload.old?.id;
+            if (id) onDelete?.(id);
+          }
+        } catch (e) {
+          console.warn('[privateMessagesBackend] realtime handler failed:', e?.message);
+        }
+      },
     )
     .subscribe((status, err) => { onStatus?.(status, err); });
 

@@ -94,6 +94,10 @@ export const GlobalStateProvider = ({ children }) => {
 
   // const [robloxUsername, setRobloxUsername] = useState('');
   const robloxUsernameRef = useRef('');
+  // Last isPro value known to be in RTDB (users/{uid} read at login, or our own
+  // last write) so updateUserProStatus only writes when the value changes —
+  // every /users write fans out to two Cloud Functions.
+  const lastKnownIsProRef = useRef({ uid: null, value: undefined });
 
   // Keep localState.theme in a ref so the Appearance listener can read it without stale closures
   const themeSettingRef = useRef(localState.theme);
@@ -246,6 +250,7 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ Memoize handleUserLogin
   const handleUserLogin = useCallback(async (loggedInUser) => {
     if (!loggedInUser) {
+      lastKnownIsProRef.current = { uid: null, value: undefined };
       resetUserState(); // No longer recreates resetUserState
       return;
     }
@@ -419,6 +424,10 @@ export const GlobalStateProvider = ({ children }) => {
         userData.robloxUsernameVerified = robloxRow.robloxUsernameVerified ?? false;
       }
 
+      lastKnownIsProRef.current = {
+        uid: userId,
+        value: typeof userData?.isPro === 'boolean' ? userData.isPro : undefined,
+      };
       setUser(userData);
 
       // 🔥 Crashlytics: tag this user so crash reports show who was affected
@@ -437,8 +446,20 @@ export const GlobalStateProvider = ({ children }) => {
       // from any other session. Best-effort, fire-and-forget — failure here
       // (Keychain locked, RTDB write rejected) only weakens device-ban
       // enforcement for the current session, not core auth.
-      getDeviceFingerprint().then((fp) => {
+      // 2026-09: deviceId is not part of the login projection above, so read
+      // the single leaf first and only write when it differs — a read is far
+      // cheaper than a /users write (which fires two Cloud Functions). A
+      // failed read falls through to the write, i.e. the previous behaviour.
+      getDeviceFingerprint().then(async (fp) => {
         if (!fp) return;
+        let current;
+        try {
+          const snap = await get(ref(appdatabase, `users/${userId}/deviceId`));
+          current = snap && snap.exists() ? snap.val() : undefined;
+        } catch (_) {
+          current = undefined;
+        }
+        if (current === fp) return;
         update(ref(appdatabase, `users/${userId}`), { deviceId: fp }).catch(() => {});
       }).catch(() => {});
 
@@ -634,8 +655,16 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ PERF: Memoize updateUserProStatus to prevent recreation every render
   const updateUserProStatus = useCallback(() => {
     if (!user?.id || !appdatabase) return;
+    const nextIsPro = localState?.isPro;
+    const known = lastKnownIsProRef.current;
+    // Skip the write when RTDB already holds this value (login read / last write).
+    if (known?.uid === user.id && known.value === nextIsPro) return;
     const userIsProRef = ref(appdatabase, `users/${user.id}/isPro`);
-    set(userIsProRef, localState?.isPro).catch(() => {});
+    set(userIsProRef, nextIsPro)
+      .then(() => {
+        lastKnownIsProRef.current = { uid: user.id, value: nextIsPro };
+      })
+      .catch(() => {});
   }, [user?.id, appdatabase, localState?.isPro]);
 
   useEffect(() => {

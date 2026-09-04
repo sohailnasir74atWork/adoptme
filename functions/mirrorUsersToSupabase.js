@@ -174,7 +174,11 @@ function activeItemsChanged(before, after) {
   const beforeItems = before?.shop?.activeItems || {};
   const afterItems  = after?.shop?.activeItems  || {};
   for (const k of ACTIVE_ITEM_KEYS) {
-    if ((beforeItems[k] ?? null) !== (afterItems[k] ?? null)) return true;
+    // Active items are OBJECTS ({expiresAt, color, ...}); `!==` compared object
+    // identity, which is always different between the before/after snapshots,
+    // so every /users write for a user with any cosmetic re-upserted the row
+    // (11 M needless user_cosmetics updates measured 2026-09). Compare by value.
+    if (JSON.stringify(beforeItems[k] ?? null) !== JSON.stringify(afterItems[k] ?? null)) return true;
   }
   return false;
 }

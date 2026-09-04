@@ -93,6 +93,13 @@ const wcPromoStyles = StyleSheet.create({
   ctaText: { fontSize: 13, fontWeight: '900', color: '#fff' },
 });
 
+// The owned-pets focus read below (user_profiles/{me} → reviews/{me}) ran on
+// EVERY focus of the Home tab. Serve the last result for 10 min per uid
+// instead; the first focus for a uid (and any uid change) still reads
+// immediately and the screen shows the same data.
+const HOME_FOCUS_REFRESH_MS = 10 * 60 * 1000;
+const ownedPetsFocusCache = new Map(); // uid -> { ts, ownedPets }
+
 const HomeTabScreen = ({ selectedTheme }) => {
   const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo, worldCupEnabled } = useGlobalState();
   const { localState } = useLocalState();
@@ -196,7 +203,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
     return () => unsubscribe(); // onValue returns the unsubscribe function directly
   }, [user?.id, appdatabase, firestoreDB]);
 
-  // Re-fetch owned pets when home screen gains focus (e.g. after editing in My Stuff)
+  // Re-fetch owned pets when home screen gains focus (e.g. after editing in
+  // My Stuff) — at most once per 10 min per uid (see ownedPetsFocusCache);
+  // otherwise re-apply the cached list.
   useFocusEffect(
     useCallback(() => {
       // Refresh cosmetics from the (instantly-updated) MMKV cache so a frame
@@ -204,14 +213,23 @@ const HomeTabScreen = ({ selectedTheme }) => {
       // for a remount. Synchronous read — no DB cost.
       setMyCosmetics(getMyCosmetics());
       if (!user?.id || !firestoreDB) return;
+      const uid = user.id;
+      const cached = ownedPetsFocusCache.get(uid);
+      if (cached && (Date.now() - cached.ts) < HOME_FOCUS_REFRESH_MS) {
+        if (Array.isArray(cached.ownedPets)) setOwnedPets(cached.ownedPets);
+        return;
+      }
       (async () => {
         try {
-          let snap = await getDoc(doc(firestoreDB, 'user_profiles', user.id));
-          if (!snap.exists()) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
+          let snap = await getDoc(doc(firestoreDB, 'user_profiles', uid));
+          if (!snap.exists()) snap = await getDoc(doc(firestoreDB, 'reviews', uid));
+          let pets = null;
           if (snap.exists()) {
             const data = snap.data();
-            setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
+            pets = Array.isArray(data?.ownedPets) ? data.ownedPets : [];
+            setOwnedPets(pets);
           }
+          ownedPetsFocusCache.set(uid, { ts: Date.now(), ownedPets: pets });
         } catch (e) { console.warn('[Home] refresh pets:', e?.message); }
       })();
     }, [user?.id, firestoreDB])

@@ -28,7 +28,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { logger } = require("firebase-functions");
 const admin = require("firebase-admin");
 
-admin.initializeApp();
+if (!admin.apps.length) admin.initializeApp(); // guarded: shared index.js loads many modules
 
 const VALUES_URL = "https://mm2-api.b-cdn.net/mm2values.json";
 const GAME = "mm2";

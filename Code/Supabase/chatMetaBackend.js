@@ -121,7 +121,11 @@ export async function resetUnreadCount(ownerUid, partnerUid) {
     .from('chat_meta_data')
     .update({ unread_count: 0, updated_at: new Date().toISOString() })
     .eq('owner_uid', ownerUid)
-    .eq('partner_uid', partnerUid);
+    .eq('partner_uid', partnerUid)
+    // 2026-09: only touch rows that actually have unread — an UPDATE that
+    // changes nothing still writes WAL and echoes a realtime UPDATE to our
+    // own chat-meta channel (billed), and this runs on every chat focus/blur.
+    .gt('unread_count', 0);
   // Errors are intentionally swallowed — the realtime subscription
   // will reconcile state on the next upstream event.
 }
@@ -289,38 +293,30 @@ export function subscribeToChatMeta(ownerUid, { onUpsert, onRemove, onReady, onS
   const topic = `chat-meta:${ownerUid}:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const channel = supabase
     .channel(topic)
+    // ONE binding for all events (2026-09). Each `.on('postgres_changes')`
+    // is a separate server-side subscription that Realtime evaluates (RLS
+    // query) on every change — three bindings tripled that work for the
+    // same deliveries. Same callbacks, dispatched on payload.eventType.
     .on(
       'postgres_changes',
       {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_meta_data',
-        filter: `owner_uid=eq.${ownerUid}`,
-      },
-      (payload) => deliver(fromChatMetaRow(payload.new)),
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'chat_meta_data',
-        filter: `owner_uid=eq.${ownerUid}`,
-      },
-      (payload) => deliver(fromChatMetaRow(payload.new)),
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'DELETE',
+        event: '*',
         schema: 'public',
         table: 'chat_meta_data',
         filter: `owner_uid=eq.${ownerUid}`,
       },
       (payload) => {
         if (cancelled) return;
-        const partnerId = payload.old?.partner_uid;
-        if (partnerId) onRemove?.(partnerId);
+        try {
+          if (payload?.eventType === 'DELETE') {
+            const partnerId = payload.old?.partner_uid;
+            if (partnerId) onRemove?.(partnerId);
+          } else if (payload?.new) {
+            deliver(fromChatMetaRow(payload.new));
+          }
+        } catch (e) {
+          console.warn('[chatMetaBackend] realtime handler failed:', e?.message);
+        }
       },
     );
 

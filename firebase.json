@@ -4,7 +4,17 @@
       "messaging_auto_init_enabled": true,
       "crashlytics_debug_enabled": false
     },
+    "database": {
+      "rules": "database.rules.json"
+    },
     "firestore": {
       "indexes": "firestore.indexes.json"
-    }
+    },
+    "functions": [
+      {
+        "source": "functions",
+        "codebase": "default",
+        "ignore": ["node_modules", ".git", "*.local.js", "README.md"]
+      }
+    ]
   }

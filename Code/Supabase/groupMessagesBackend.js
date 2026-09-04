@@ -140,20 +140,23 @@ export function subscribeToGroupMessages(groupId, { onInsert, onUpdate, onDelete
 
   const channel = supabase
     .channel(`group-messages:${groupId}`)
+    // ONE binding for all events (2026-09) — see privateMessagesBackend for why.
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },
-      (payload) => { onInsert?.(fromGroupMessageRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },
-      (payload) => { onUpdate?.(fromGroupMessageRow(payload.new)); },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },
-      (payload) => { onDelete?.(payload.old?.id); },
+      { event: '*', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },
+      (payload) => {
+        try {
+          const type = payload?.eventType;
+          if (type === 'INSERT') onInsert?.(fromGroupMessageRow(payload.new));
+          else if (type === 'UPDATE') onUpdate?.(fromGroupMessageRow(payload.new));
+          else if (type === 'DELETE') {
+            const id = payload.old?.id;
+            if (id) onDelete?.(id);
+          }
+        } catch (e) {
+          console.warn('[groupMessagesBackend] realtime handler failed:', e?.message);
+        }
+      },
     )
     .subscribe((status, err) => { onStatus?.(status, err); });
 
