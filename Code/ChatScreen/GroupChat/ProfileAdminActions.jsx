@@ -11,6 +11,7 @@ const ProfileAdminActions = ({
   handleMakeBabyMod, handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR, handleMakeHelper, handleRemoveHelper,
+  canResetAvatar = false, targetHasAvatar = false, handleResetAvatar,
   handleDeleteUserData, deletingUser = false,
   canDeleteUser = false,
 }) => {
@@ -107,6 +108,15 @@ const ProfileAdminActions = ({
             label={targetIsHelper ? 'Remove Helper' : 'Make Helper'}
             color={targetIsHelper ? '#f59e0b' : '#14b8a6'}
             onPress={targetIsHelper ? handleRemoveHelper : handleMakeHelper}
+          />
+        )}
+        {/* Only offered when there's a custom avatar to clear — resetting a
+            user who already shows the default would be a no-op. */}
+        {canResetAvatar && targetHasAvatar && handleResetAvatar && (
+          <Chip
+            label="Reset Avatar"
+            color="#ef4444"
+            onPress={handleResetAvatar}
           />
         )}
       </View>

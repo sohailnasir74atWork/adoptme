@@ -1267,9 +1267,13 @@ export const updateGroupName = async (firestoreDB, appdatabase, groupId, userId,
 
     const groupData = groupSnap.data();
 
-    // Only admin can update name
-    if (!isAdmin) {
-      return { success: false, error: 'Only admin can update the group name' };
+    // Same ownership model as updateGroupDescription / updateGroupAvatar: the
+    // creator owns their group's identity, global staff admins keep access for
+    // moderation. Was `isAdmin` only, so a non-staff creator could open the edit
+    // sheet and then be rejected on save.
+    const canEdit = hasGroupPermission(groupData, userId, 'edit_group') || isAdmin;
+    if (!canEdit) {
+      return { success: false, error: 'Only the group creator can update the group name' };
     }
 
     const trimmedName = groupName.trim();

@@ -1450,6 +1450,34 @@ const ProfileBottomDrawer = ({
     }
   };
 
+  // ── Avatar moderation ──
+  // Clears users/{uid}/avatar so the profile falls back to the default
+  // display-pic everywhere it's rendered. No Supabase write needed: `avatar` is
+  // in mirrorUsersToSupabase's IDENTITY_KEYS (and in mirrorModsRoster), so the
+  // existing RTDB trigger propagates the clear on its own.
+  const handleResetAvatar = async () => {
+    if (!selectedUserId || !appdatabase) return;
+    const confirm = await new Promise((resolve) => {
+      Alert.alert(
+        'Reset Avatar',
+        `Reset ${userName}'s profile picture back to the default?`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Reset', style: 'destructive', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirm) return;
+    try {
+      await update(ref(appdatabase, `users/${selectedUserId}`), { avatar: null });
+      invalidateFullProfile(selectedUserId);
+      setUserData(prev => ({ ...prev, avatar: null }));
+      Alert.alert('Success', `${userName}'s avatar has been reset to the default`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to reset avatar');
+    }
+  };
+
   const handleRemoveHelper = async () => {
     if (!selectedUserId || !appdatabase) return;
     const confirm = await new Promise((resolve) => {
@@ -3376,6 +3404,9 @@ const ProfileBottomDrawer = ({
                         handleRemoveCMSR={handleRemoveCMSR}
                         handleMakeHelper={handleMakeHelper}
                         handleRemoveHelper={handleRemoveHelper}
+                        canResetAvatar={canManageBadges}
+                        targetHasAvatar={!!mergedUser?.avatar}
+                        handleResetAvatar={handleResetAvatar}
                         handleDeleteUserData={handleDeleteUserData}
                         deletingUser={deletingUser}
                         canDeleteUser={canDeleteUser}
