@@ -482,7 +482,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
   }, []);
 
   // Handle edit group (Group creator, group admin, or global admin) - Opens CreateGroupModal in edit mode
-  const handleEditGroup = useCallback((groupId) => {
+  const handleEditGroup = useCallback(async (groupId) => {
     if (!groupId || !user?.id) return;
 
     const group = groups.find(g => g.groupId === groupId);
@@ -501,14 +501,36 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       return;
     }
 
-    setEditingGroup({
-      id: groupId,
-      name: group.groupName || group.name || '',
-      description: group.description || '',
-      avatar: group.groupAvatar || group.avatar || null,
-    });
+    // The description is NOT part of the group-list row. That row comes from
+    // Supabase group_meta_data, whose column list (GROUP_META_COLS) carries
+    // group_name / group_avatar but no description — so `group.description` is
+    // always undefined here and the edit sheet opened with an empty box even
+    // when the group had one. Firestore groups/{id} is the source of truth.
+    //
+    // Fetched BEFORE opening rather than filled in afterwards: CreateGroupModal
+    // seeds its fields once per editGroupId (initializedEditGroupIdRef) and its
+    // effect doesn't depend on editGroupDescription, so a late-arriving value
+    // would be ignored. One doc read, on an explicit Edit tap only — the same
+    // thing handleShowGroupInfo does.
+    let description = '';
+    let name = group.groupName || group.name || '';
+    let avatar = group.groupAvatar || group.avatar || null;
+    try {
+      const snap = await getDoc(doc(firestoreDB, 'groups', groupId));
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        description = data.description || '';
+        name = data.groupName || data.name || name;
+        avatar = data.avatar || data.groupAvatar || avatar;
+      }
+    } catch (e) {
+      // Non-fatal: the sheet still opens, the description box just starts empty.
+      console.warn('Could not load group description for edit:', e?.message);
+    }
+
+    setEditingGroup({ id: groupId, name, description, avatar });
     setEditGroupModalVisible(true);
-  }, [isAdmin, groups, user?.id, showErrorMessage]);
+  }, [isAdmin, groups, user?.id, showErrorMessage, firestoreDB]);
 
   // Handle group updated callback
   const handleGroupUpdated = useCallback(() => {

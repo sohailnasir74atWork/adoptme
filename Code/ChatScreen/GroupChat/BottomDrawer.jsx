@@ -1437,7 +1437,10 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isHelper`), true);
+      // Matches the Trusted / CMSR / Junior Mod handlers: one atomic update on
+      // the parent carrying the flag plus a rolesUpdatedAt stamp, so the
+      // Supabase mirror re-runs even when the flag's value is unchanged.
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isHelper: true, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('helperRoster', null);
       setUserData(prev => ({ ...prev, isHelper: true }));
@@ -1457,7 +1460,7 @@ const ProfileBottomDrawer = ({
     });
     if (!confirm) return;
     try {
-      await set(ref(appdatabase, `users/${selectedUserId}/isHelper`), null);
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isHelper: null, rolesUpdatedAt: Date.now() });
       invalidateFullProfile(selectedUserId);
       updateLocalState('helperRoster', null);
       setUserData(prev => ({ ...prev, isHelper: false }));

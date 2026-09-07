@@ -1321,9 +1321,14 @@ export const updateGroupDescription = async (firestoreDB, appdatabase, groupId, 
 
     const groupData = groupSnap.data();
 
-    // Only admin can update description
-    if (!isAdmin) {
-      return { success: false, error: 'Only admin can update the group description' };
+    // The group creator owns their group's description; global staff admins keep
+    // access for moderation. Previously this was `isAdmin` only, so a creator who
+    // wasn't staff could open the edit sheet (GroupsScreen.handleEditGroup already
+    // allows them) and then get "Only admin can update the group description" on
+    // save. Uses the same edit_group permission every other group action checks.
+    const canEdit = hasGroupPermission(groupData, userId, 'edit_group') || isAdmin;
+    if (!canEdit) {
+      return { success: false, error: 'Only the group creator can update the group description' };
     }
 
     // Limit description to 100 characters
