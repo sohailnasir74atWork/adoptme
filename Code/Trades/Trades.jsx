@@ -22,13 +22,28 @@ import BannerAdComponent from '../Ads/bannerAds';
 import NativeAdCard from '../Ads/NativeAdCard';
 import { releaseByPrefix as releaseNativeAds } from '../Ads/NativeAdManager';
 import RewardedAdManager from '../Ads/RewardedAdManager';
+import { bannerAware, ABOVE_BANNER, FLOATING_BUTTON_ICON_SIZE, FLOATING_BUTTON_RIGHT } from '../Helper/floatingButtonLayout';
 
 // Free users can feature one trade per 24h by watching a rewarded ad. Pro keeps
 // its two instant boosts, so paying still buys both quantity and the
 // convenience of skipping the ad — the ad path must not undercut the
 // subscription.
 const AD_BOOST_DAILY_LIMIT = 1;
-const FEATURE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+// How long a boost keeps a trade at the top.
+const FEATURE_DURATION_MS = 12 * 60 * 60 * 1000;
+
+// The rolling window the per-user boost limits are counted over. Deliberately
+// SEPARATE from FEATURE_DURATION_MS: they used to be the same constant, so
+// shortening the boost would silently have doubled everyone's daily allowance.
+const BOOST_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Trades carry featuredUntil, not a boostedAt stamp, and
+// featuredUntil = boostedAt + FEATURE_DURATION_MS. So "boosted inside the
+// limit window" is featuredUntil > now - (WINDOW - DURATION). Using
+// `now - WINDOW` directly (what the old code did) counts a boost as recent for
+// WINDOW + DURATION, which quietly let people boost more often than intended.
+const BOOST_WINDOW_START_OFFSET_MS = BOOST_LIMIT_WINDOW_MS - FEATURE_DURATION_MS;
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
@@ -573,17 +588,17 @@ const TradeList = ({ route }) => {
     setFilteredTrades(markFeatured);
   }, [firestoreDB]);
 
-  // How many of this user's trades are already featured in the current 24h
+  // How many of this user's trades were boosted inside the current limit
   // window. Both paths read the same number, so a free user cannot stack an
   // ad boost on top of a Pro boost by switching plans mid-day.
   const countFeaturedInLast24h = useCallback(async () => {
-    const oneDayAgo = Timestamp.fromDate(new Date(Date.now() - FEATURE_DURATION_MS));
+    const windowStart = Timestamp.fromMillis(Date.now() - BOOST_WINDOW_START_OFFSET_MS);
     const snapshot = await getDocs(
       query(
         collection(firestoreDB, "trades_new"),
         where("userId", "==", user.id),
         where("isFeatured", "==", true),
-        where("featuredUntil", ">", oneDayAgo)
+        where("featuredUntil", ">", windowStart)
       )
     );
     return snapshot.size;
@@ -682,7 +697,7 @@ const TradeList = ({ route }) => {
 
     try {
       // 🔐 Check from Firestore how many featured trades user already has
-      const oneDayAgo = Timestamp.fromDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const oneDayAgo = Timestamp.fromMillis(Date.now() - BOOST_WINDOW_START_OFFSET_MS);
       const featuredSnapshot = await getDocs(
         query(
           collection(firestoreDB, "trades_new"),
@@ -715,7 +730,7 @@ const TradeList = ({ route }) => {
                   {
                     isFeatured: true,
                     featuredUntil: Timestamp.fromDate(
-                      new Date(Date.now() + 24 * 60 * 60 * 1000)
+                      new Date(Date.now() + FEATURE_DURATION_MS)
                     ),
                   }
                 );
@@ -2256,6 +2271,7 @@ const TradeList = ({ route }) => {
         <Animated.View
           style={[
             styles.scrollToTopButton,
+            { bottom: bannerAware(ABOVE_BANNER, !!localState.isPro) },
             {
               opacity: scrollButtonOpacity,
               transform: [
@@ -2276,7 +2292,7 @@ const TradeList = ({ route }) => {
           >
             <Icon
               name="chevron-up-circle"
-              size={48}
+              size={FLOATING_BUTTON_ICON_SIZE}
               color={'#3b82f6'}
             />
           </TouchableOpacity>
@@ -2805,16 +2821,18 @@ const getStyles = (isDarkMode, c) => {
     boost: {
       justifyContent: 'flex-start', paddingVertical: 2, paddingHorizontal: 5, borderRadius: 3, alignItems: 'center', margin: 4
     },
+    // Position comes from Helper/floatingButtonLayout so Trades, Feed and group chat
+    // cannot drift apart again. isPro is passed at the call site because a Pro
+    // member has no banner ad to clear.
     scrollToTopButton: {
       position: 'absolute',
-      bottom: 60, // Position above the bottom ad banner
-      right: 8,
+      right: FLOATING_BUTTON_RIGHT,
       zIndex: 1000,
-      elevation: 8, // For Android shadow
-      shadowColor: '#000', // For iOS shadow
+      elevation: 8,
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.25,
-      shadowRadius: 3.84,
+      shadowRadius: 4,
     },
     scrollToTopTouchable: {
       borderRadius: 28,

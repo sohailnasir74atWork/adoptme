@@ -46,6 +46,7 @@ exports.cleanupOldPosts = require('./cleanupOldPosts').cleanupOldPosts;
 exports.cleanupOldPrivateChats = require('./cleanupOldPrivateChats').cleanupOldPrivateChats;
 exports.cleanupOldPublicChats = require('./cleanupOldPublicChats').cleanupOldPublicChats;
 exports.cleanupOldTrades = require('./cleanupOldTrades').cleanupOldTrades;
+exports.expireFeaturedTrades = require('./expireFeaturedTrades').expireFeaturedTrades;
 exports.clearPresenceNode = require('./clearPresenceNode').clearPresenceNode;
 exports.scheduledFunction = require('./scheduledFunction').scheduledFunction;
 exports.sendScheduledPromoMessageMM2 = require('./sendScheduledPromoMessageMM2').sendScheduledPromoMessageMM2;
