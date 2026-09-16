@@ -17,6 +17,12 @@ import InterstitialAdManager from '../../Ads/IntAd';
 import { useLocalState } from '../../LocalGlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
+import {
+  SAFE_TEMPLATES,
+  TEMPLATE_CATEGORIES,
+  GAME_ID_TEMPLATE_ID,
+  isValidGameId,
+} from '../safeTemplates';
 
 
 import { safeCompressImage } from '../../Helper/safeCompressImage';
@@ -80,6 +86,11 @@ const PrivateMessageInput = ({
   setSelectedFruits,
   chatKey,
   userId,
+  // Safe chat: set when either participant is under 13 (see Helper/ageGate.js).
+  // 'me' | 'them' | 'both' | null. Swaps the free-text box for the vetted
+  // template picker and hides image attachment. UX only — the authority is the
+  // Postgres trigger in supabase/028_safe_chat_minors.sql.
+  safeChatMode = null,
 }) => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -89,6 +100,12 @@ const PrivateMessageInput = ({
 
   const { localState } = useLocalState();
   const { theme, user, isAdmin } = useGlobalState();
+  const isSafeChat = !!safeChatMode;
+  // The one non-fixed string safe chat allows, and only if it is already saved
+  // on the sender's profile — Settings round-trips it through the real Roblox
+  // API, so it is a genuine moderated account name rather than free text.
+  const myGameId = user?.robloxUsername || null;
+  const canShareGameId = isValidGameId(myGameId);
   // Admins and full moderators (not baby mods) bypass content moderation.
   const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
@@ -105,6 +122,10 @@ const PrivateMessageInput = ({
   // ✅ Memoize handlePickImage
   const handlePickImage = useCallback(async () => {
     if (isBanned) return;
+    // Belt-and-braces: the button is not rendered in safe chat, but any other
+    // route into this handler must not be able to attach a photo to a thread
+    // that involves a child.
+    if (isSafeChat) return;
 
     // Calculate how many more images can be selected
     const currentCount = imageUris.length;
@@ -208,7 +229,7 @@ const PrivateMessageInput = ({
     } catch (callbackError) {
       console.warn('Image picker callback error:', callbackError);
     }
-  }, [isBanned, imageUris.length, t]);
+  }, [isBanned, isSafeChat, imageUris.length, t]);
 
   // 🐰 Upload ONE image to Bunny (no atob)
   const uploadToBunny = useCallback(
@@ -271,6 +292,19 @@ const PrivateMessageInput = ({
     // nothing to send
     if (!trimmedInput && !hasImages && !hasFruits) return;
     if (isSending) return;
+
+    // Safe chat sends go through handleTemplateSelect / handleSendGameId,
+    // which stamp a template id. Free text and photos can only arrive here
+    // from a stale render, so drop them rather than letting them through.
+    if (isSafeChat && (trimmedInput || hasImages)) {
+      Alert.alert(
+        t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
+        t('chat.safe_mode_blocked', {
+          defaultValue: 'In this chat you can only send ready-made messages. Tap the messages button to pick one.',
+        }),
+      );
+      return;
+    }
 
     // ✅ Comprehensive content moderation check
     if (trimmedInput) {
@@ -336,7 +370,7 @@ const PrivateMessageInput = ({
     } finally {
       setIsSending(false); // ✅ always reset
     }
-  }, [input, imageUris, selectedFruits, isSending, onSend, onCancelReply, setSelectedFruits, localState?.isPro, uploadToBunny]);
+  }, [input, imageUris, selectedFruits, isSending, isSafeChat, t, onSend, onCancelReply, setSelectedFruits, localState?.isPro, uploadToBunny]);
 
   // ✅ Memoize hasFruits and hasContent
   const hasFruits = useMemo(() =>
@@ -349,37 +383,60 @@ const PrivateMessageInput = ({
     [input, imageUris, hasFruits]
   );
 
-  // ✅ Quick message templates for Adopt Me trading (matching blox style)
-  const messageTemplates = useMemo(() => [
-    t("chat.quick_msg_interest"),
-    t("chat.quick_msg_negotiate"),
-    t("chat.quick_msg_best_offer"),
-    t("chat.quick_msg_ready"),
-    t("chat.quick_msg_check_inv"),
-    t("chat.quick_msg_deal_accepted"),
-    t("chat.quick_msg_add_more"),
-    t("chat.quick_msg_meet_hub"),
-    t("chat.quick_msg_what_pets"),
-    t("chat.quick_msg_available"),
-    t("chat.quick_msg_add_pets"),
-    t("chat.quick_msg_fair_trade"),
-    t("chat.quick_msg_change_item"),
-    t("chat.quick_msg_discuss"),
-    t("chat.quick_msg_thanks"),
-    t("chat.quick_msg_online"),
-    t("chat.quick_msg_when"),
-    t("chat.quick_msg_have_item"),
-    t("chat.quick_msg_make_deal"),
-    t("chat.quick_msg_can_do"),
-  ], [t]);
+  // Vetted phrases, grouped for the drawer. Source of truth is
+  // ChatScreen/safeTemplates.js — the same list the server validates against.
+  // `label` is localised for display; `en` is what actually ships in `text`.
+  const templateSections = useMemo(() => {
+    const byCategory = new Map(TEMPLATE_CATEGORIES.map((c) => [c, []]));
+    SAFE_TEMPLATES.forEach((tpl) => {
+      byCategory.get(tpl.category)?.push({
+        ...tpl,
+        label: t(tpl.key, { defaultValue: tpl.en }),
+      });
+    });
+    return TEMPLATE_CATEGORIES
+      .map((category) => ({
+        category,
+        title: t(`chat.tpl_section_${category}`, {
+          defaultValue: category === 'trade' ? 'Trading'
+            : category === 'friendly' ? 'Chat'
+              : 'Stay safe',
+        }),
+        items: byCategory.get(category) || [],
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [t]);
 
-  // Handle template selection
+  // Handle template selection. Sends the CANONICAL ENGLISH as `text` plus the
+  // template id — the reader's app renders it in their own language from the
+  // id, while old builds, push previews and moderator review still read the
+  // English. See safeTemplates.js.
   const handleTemplateSelect = useCallback(async (template) => {
     setShowTemplateDrawer(false);
     if (onSend && typeof onSend === 'function') {
-      await onSend(template, null, []);
+      await onSend(template.en, null, [], replyTo, template.id);
+      if (onCancelReply && typeof onCancelReply === 'function') onCancelReply();
     }
-  }, [onSend]);
+  }, [onSend, replyTo, onCancelReply]);
+
+  // Share the Roblox username saved on this user's own profile — the only way
+  // to exchange an in-game name inside a safe chat, and never free-typed.
+  const handleSendGameId = useCallback(async () => {
+    setShowTemplateDrawer(false);
+    if (!canShareGameId) {
+      Alert.alert(
+        t('chat.game_id_missing_title', { defaultValue: 'No game name saved' }),
+        t('chat.game_id_missing_body', {
+          defaultValue: 'Add your Roblox username in Settings first, then you can share it here with one tap.',
+        }),
+      );
+      return;
+    }
+    if (onSend && typeof onSend === 'function') {
+      await onSend(myGameId, null, [], replyTo, GAME_ID_TEMPLATE_ID);
+      if (onCancelReply && typeof onCancelReply === 'function') onCancelReply();
+    }
+  }, [onSend, onCancelReply, replyTo, canShareGameId, myGameId, t]);
 
   return (
     <View style={styles.inputWrapper}>
@@ -402,6 +459,28 @@ const PrivateMessageInput = ({
         </View>
       )}
 
+      {/* Safe chat notice — explains why the keyboard is gone, without naming
+          anyone's age to the other person. */}
+      {isSafeChat && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 10,
+            paddingTop: 6,
+            paddingBottom: 2,
+          }}
+        >
+          <Icon name="shield-checkmark" size={14} color="#10B981" />
+          <Text style={{ flex: 1, fontSize: 11, color: isDark ? '#9CA3AF' : '#6B7280' }}>
+            {t('chat.safe_mode_notice', {
+              defaultValue: 'Safe Chat is on. Pick a ready-made message to send.',
+            })}
+          </Text>
+        </View>
+      )}
+
       {/* Input + Actions */}
       <View style={styles.inputContainer}>
         {/* Message Templates Drawer Icon */}
@@ -417,7 +496,8 @@ const PrivateMessageInput = ({
           />
         </TouchableOpacity>
 
-        {/* Pets drawer icon */}
+        {/* Pets drawer icon — allowed in safe chat: the picker only emits
+            items from the fixed value catalogue, never typed text. */}
         <TouchableOpacity
           style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
           onPress={() => {
@@ -434,60 +514,126 @@ const PrivateMessageInput = ({
           />
         </TouchableOpacity>
 
-        {/* Attach image */}
+        {/* Attach image — hidden entirely in safe chat */}
+        {!isSafeChat && (
+          <TouchableOpacity
+            style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
+            onPress={handlePickImage}
+            disabled={isSending || isBanned}
+          >
+            <Icon
+              name="attach"
+              size={20}
+              color={isDark ? '#FFF' : '#000'}
+            />
+          </TouchableOpacity>
+        )}
+
+        {isSafeChat ? (
+          <>
+            {/* Tapping anywhere on the bar opens the picker — there is no
+                keyboard to reach in this mode. */}
+            <TouchableOpacity
+              style={[
+                styles.input,
+                {
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#374151' : '#E5E7EB',
+                },
+              ]}
+              onPress={() => setShowTemplateDrawer(true)}
+              disabled={isSending || isBanned}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#888', fontSize: 15 }} numberOfLines={1}>
+                {t('chat.safe_mode_placeholder', {
+                  defaultValue: 'Tap to choose a message…',
+                })}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sendButton, { backgroundColor: '#1E88E5' }]}
+              onPress={() => setShowTemplateDrawer(true)}
+              disabled={isSending || isBanned}
+            >
+              <Text style={styles.sendButtonText}>
+                {isSending ? t('chat.sending') : t('chat.choose')}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TextInput
+              style={[styles.input, { color: isDark ? '#FFF' : '#000' }]}
+              placeholder={
+                chatBlockedBy === 'them'
+                  ? t(`chat.unavailable_them_${chatType}`, {
+                    defaultValue: chatType === 'trade'
+                      ? "This user isn't accepting trade chats right now."
+                      : "This user isn't accepting messages right now.",
+                  })
+                  : chatBlockedBy === 'me'
+                    ? t(`chat.unavailable_me_${chatType}`, {
+                      defaultValue: chatType === 'trade'
+                        ? "You've turned off trade chat. Turn it back on in Settings."
+                        : "You've turned off general chat. Turn it back on in Settings.",
+                    })
+                    : t('chat.type_message')
+              }
+              placeholderTextColor="#888"
+              value={input}
+              onChangeText={handleTextChange}
+              multiline
+              editable={!isBanned}
+            />
+
+            {/* Send */}
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                {
+                  backgroundColor:
+                    hasContent && !isSending ? '#1E88E5' : config.colors.primary,
+                },
+              ]}
+              onPress={handleSend}
+              disabled={!hasContent || isSending || isBanned}
+            >
+              <Text style={styles.sendButtonText}>
+                {isSending ? t('chat.sending') : t('chat.send')}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      {/* Pets attached in safe chat still need a send action, since the normal
+          send button is replaced by the picker above. */}
+      {isSafeChat && hasFruits && (
         <TouchableOpacity
-          style={[styles.sendButton, { marginRight: 3, paddingHorizontal: 3 }]}
-          onPress={handlePickImage}
+          style={{
+            marginHorizontal: 10,
+            marginTop: 6,
+            paddingVertical: 10,
+            borderRadius: 16,
+            alignItems: 'center',
+            backgroundColor: isSending ? config.colors.primary : '#1E88E5',
+          }}
+          onPress={handleSend}
           disabled={isSending || isBanned}
         >
-          <Icon
-            name="attach"
-            size={20}
-            color={isDark ? '#FFF' : '#000'}
-          />
-        </TouchableOpacity>
-
-        <TextInput
-          style={[styles.input, { color: isDark ? '#FFF' : '#000' }]}
-          placeholder={
-            chatBlockedBy === 'them'
-              ? t(`chat.unavailable_them_${chatType}`, {
-                defaultValue: chatType === 'trade'
-                  ? "This user isn't accepting trade chats right now."
-                  : "This user isn't accepting messages right now.",
-              })
-              : chatBlockedBy === 'me'
-                ? t(`chat.unavailable_me_${chatType}`, {
-                  defaultValue: chatType === 'trade'
-                    ? "You've turned off trade chat. Turn it back on in Settings."
-                    : "You've turned off general chat. Turn it back on in Settings.",
-                })
-                : t('chat.type_message')
-          }
-          placeholderTextColor="#888"
-          value={input}
-          onChangeText={handleTextChange}
-          multiline
-          editable={!isBanned}
-        />
-
-        {/* Send */}
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor:
-                hasContent && !isSending ? '#1E88E5' : config.colors.primary,
-            },
-          ]}
-          onPress={handleSend}
-          disabled={!hasContent || isSending || isBanned}
-        >
-          <Text style={styles.sendButtonText}>
-            {isSending ? t('chat.sending') : t('chat.send')}
+          <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>
+            {isSending
+              ? t('chat.sending')
+              : t('chat.send_pets', {
+                count: selectedFruits.length,
+                defaultValue: 'Send {{count}} pets',
+              })}
           </Text>
         </TouchableOpacity>
-      </View>
+      )}
 
       {/* Attached images indicator */}
       {Array.isArray(imageUris) && imageUris.length > 0 && (
@@ -573,7 +719,7 @@ const PrivateMessageInput = ({
             isDarkMode={isDark}
             style={{
               backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
-              maxHeight: '60%',
+              maxHeight: isSafeChat ? '80%' : '60%',
               paddingBottom: 20,
             }}
           >
@@ -607,39 +753,98 @@ const PrivateMessageInput = ({
               style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}
               showsVerticalScrollIndicator={false}
             >
-              <View
+              {/* Share game ID — the only in-game name exchange a safe chat
+                  allows. Always offered, because it saves everyone typing. */}
+              <TouchableOpacity
+                onPress={handleSendGameId}
+                disabled={isSending || isBanned}
                 style={{
                   flexDirection: 'row',
-                  flexWrap: 'wrap',
+                  alignItems: 'center',
                   gap: 8,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  marginBottom: 14,
+                  backgroundColor: canShareGameId
+                    ? (isDark ? '#1E3A8A' : '#DBEAFE')
+                    : (isDark ? '#374151' : '#F3F4F6'),
+                  borderWidth: 1,
+                  borderColor: canShareGameId
+                    ? (isDark ? '#3B82F6' : '#93C5FD')
+                    : (isDark ? '#4B5563' : '#D1D5DB'),
                 }}
               >
-                {messageTemplates.map((template, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    onPress={() => handleTemplateSelect(template)}
-                    disabled={isSending || isBanned}
+                <Icon
+                  name="game-controller-outline"
+                  size={18}
+                  color={canShareGameId ? (isDark ? '#BFDBFE' : '#1D4ED8') : '#9CA3AF'}
+                />
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 13,
+                    fontWeight: '600',
+                    color: canShareGameId
+                      ? (isDark ? '#EFF6FF' : '#1E3A8A')
+                      : '#9CA3AF',
+                  }}
+                  numberOfLines={1}
+                >
+                  {canShareGameId
+                    ? t('chat.share_game_id', {
+                      name: myGameId,
+                      defaultValue: 'Share my game ID: {{name}}',
+                    })
+                    : t('chat.share_game_id_empty', {
+                      defaultValue: 'Add your Roblox username in Settings to share it',
+                    })}
+                </Text>
+              </TouchableOpacity>
+
+              {templateSections.map((section) => (
+                <View key={section.category} style={{ marginBottom: 14 }}>
+                  <Text
                     style={{
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: 20,
-                      backgroundColor: isDark ? '#374151' : '#F3F4F6',
-                      borderWidth: 1,
-                      borderColor: isDark ? '#4B5563' : '#D1D5DB',
+                      fontSize: 11,
+                      fontWeight: '700',
+                      letterSpacing: 0.6,
+                      textTransform: 'uppercase',
+                      marginBottom: 8,
+                      color: isDark ? '#9CA3AF' : '#6B7280',
                     }}
                   >
-                    <Text
-                      style={{
-                        color: isDark ? '#F9FAFB' : '#111827',
-                        fontSize: 13,
-                        fontWeight: '500',
-                      }}
-                    >
-                      {template}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                    {section.title}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {section.items.map((template) => (
+                      <TouchableOpacity
+                        key={template.id}
+                        onPress={() => handleTemplateSelect(template)}
+                        disabled={isSending || isBanned}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          borderRadius: 20,
+                          backgroundColor: isDark ? '#374151' : '#F3F4F6',
+                          borderWidth: 1,
+                          borderColor: isDark ? '#4B5563' : '#D1D5DB',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: isDark ? '#F9FAFB' : '#111827',
+                            fontSize: 13,
+                            fontWeight: '500',
+                          }}
+                        >
+                          {template.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
             </ScrollView>
           </SwipeableBottomDrawer>
         </TouchableOpacity>

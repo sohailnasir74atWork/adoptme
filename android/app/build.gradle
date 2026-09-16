@@ -20,8 +20,8 @@ android {
         applicationId "com.adoptmevaluescalc"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 153
-        versionName "1.15.27"
+        versionCode 156
+        versionName "1.15.30"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
@@ -48,7 +48,20 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             shrinkResources enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // proguard-android-optimize.txt, NOT proguard-android.txt: the
+            // plain variant ships `-dontoptimize`, which switches R8's
+            // optimisation passes off entirely. That is what Play Console
+            // reports as "Optimization isn't enabled" — minifyEnabled alone
+            // only buys shrinking and obfuscation. Optimising inlines, merges
+            // classes and prunes dead branches, which shrinks the DEX and cuts
+            // class-loading work on low-end devices.
+            //
+            // Safe here because proguard-rules.pro already -keeps every
+            // reflection-sensitive library wholesale (RN, Firebase, GMS, Ads,
+            // RevenueCat, Nitro, Reanimated, and the app's own package). Still
+            // SMOKE-TEST A RELEASE BUILD before shipping — optimisation is the
+            // R8 stage most likely to surface a missing keep rule.
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             firebaseCrashlytics {
                 nativeSymbolUploadEnabled true
                 unstrippedNativeLibsDir "build/intermediates/merged_native_libs/release/out/lib"
@@ -57,8 +70,65 @@ android {
     }
 }
 
+// ── R8 optimisation unblocker: drop RevenueCat's Amazon store stub ───────────
+// purchases-store-amazon ships a consumer ProGuard rule containing
+// `-dontoptimize`. A single one of those disables R8 optimisation for the
+// ENTIRE app — there is no counter-flag — so `proguard-android-optimize.txt`
+// in buildTypes.release below was silently having no effect, and Play Console
+// kept reporting "Optimization isn't enabled". Verified by reading the R8
+// config the build actually emitted (outputs/mapping/release/configuration.txt).
+//
+// VERIFIED SAFE TO EXCLUDE (2026-09-16), because the module is a near-empty stub:
+//   * The whole AAR is 2,198 bytes. Its classes.jar holds exactly two classes:
+//     AmazonConfiguration and AmazonConfiguration$Builder.
+//   * purchases-hybrid-common has ZERO references to AmazonConfiguration.
+//   * react-native-purchases never constructs it — RNPurchasesModule passes
+//     the Store.AMAZON enum, which lives in the main `purchases` AAR.
+//   * This app never enables Amazon at all (useAmazon is never set).
+//   * Critically, AmazonStoreProduct — which StoreProductMapperKt does an
+//     `instanceof` against on every paywall product mapping — is in the MAIN
+//     `purchases` AAR and is NOT removed by this. That was the one real risk
+//     and it does not apply.
+//
+// Upgrading RevenueCat does not help: 9.26.1 and 9.29.0 both ship the rule.
+//
+// If RevenueCat ever stops shipping `-dontoptimize`, delete this block.
+// If you ever ship to the Amazon Appstore, delete this block first — you will
+// need AmazonConfiguration back, and you will lose R8 optimisation again.
+configurations.configureEach {
+    exclude group: 'com.revenuecat.purchases', module: 'purchases-store-amazon'
+}
+
 dependencies {
     implementation("com.facebook.react:react-android")
+
+    // ── AdMob bidding adapters — REMOVED 2026-09-16, BLOCKED ON A KOTLIN BUMP ─
+    // These three lines were here and they break every release build:
+    //
+    //   implementation("com.google.android.gms:play-services-ads:25.4.0")
+    //   implementation("com.google.ads.mediation:facebook:6.22.0.0")
+    //   implementation("com.google.ads.mediation:unity:4.20.0.1")
+    //
+    // WHY (traced, not guessed): play-services-ads 25.4.0 — which both adapters
+    // require — is COMPILED WITH KOTLIN 2.3.0. Its .kotlin_module metadata reads
+    // 2.3.0, and this project compiles with Kotlin 2.1.20 (React Native 0.83's
+    // pin). A Kotlin compiler cannot read metadata from a newer Kotlin, so
+    // :app:compileReleaseKotlin dies with "Internal compiler error".
+    //
+    // Both escape routes were tried on 2026-09-16 and both FAILED:
+    //   * Forcing kotlin-stdlib down to 2.1.20 — no help. The stdlib was never
+    //     the problem; the ads AAR's OWN classes carry 2.3.0 metadata.
+    //   * Raising the project to Kotlin 2.3.0 — :react-native-gesture-handler
+    //     then fails to compile. RN 0.83's library ecosystem is not 2.3-ready.
+    //
+    // TO RESTORE: upgrade React Native to 0.87+, which moves Kotlin (and AGP)
+    // for the whole project at once. Then paste the three lines back. This is
+    // the same upgrade Play Console's "AGP 9.0" and optimised resource
+    // shrinking both need — one job, not three.
+    //
+    // Meta Audience Network and Unity stay signed as bidding sources in the
+    // AdMob console; without their adapters in the binary they simply win
+    // nothing. No console change is needed when the lines come back.
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
         // Keep in step with the RNFB BoM override in android/build.gradle

@@ -20,6 +20,22 @@ target 'bloxfruitevalues' do
   $RNFirebaseAsStaticFramework = true
   $RNFirebaseAnalyticsWithoutAdIdSupport = true
 
+  # ── AdMob bidding adapters ────────────────────────────────────────────────
+  # iOS ONLY for now. The matching Android adapters were removed on 2026-09-16
+  # because play-services-ads 25.4.0 is compiled with Kotlin 2.3 and this
+  # project is on 2.1.20 — see the long note in android/app/build.gradle. That
+  # is an Android-toolchain problem; CocoaPods has no equivalent constraint, so
+  # these stay and iOS keeps serving Meta/Unity bidding. Re-add the Android
+  # side after the React Native 0.87 upgrade. Meta Audience
+  # Network and Unity Ads are signed as bidding sources in the AdMob console,
+  # but they cannot serve on iOS until their adapters ship in the binary.
+  # Left unpinned so CocoaPods resolves versions compatible with the
+  # Google-Mobile-Ads-SDK that RNGoogleMobileAds.podspec pins (13.1.0). If
+  # resolution fails on the SDK version, set $RNGoogleMobileAdsSDKVersion
+  # above this block rather than pinning the adapters by hand.
+  pod 'GoogleMobileAdsMediationFacebook'
+  pod 'GoogleMobileAdsMediationUnity'
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.

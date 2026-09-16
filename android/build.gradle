@@ -22,6 +22,18 @@ buildscript {
         mavenCentral()
     }
     dependencies {
+        // Unpinned on purpose — React Native 0.83's gradle plugin resolves
+        // AGP 8.12.0, and that is the version this toolchain actually builds
+        // with. Pinning 8.13.2 to unlock `android.r8.optimizedResourceShrinking`
+        // was tried on 2026-09-16 and FAILS: AGP 8.13 pulls kotlin-stdlib 2.3.0
+        // while the project compiles with Kotlin 2.1.20, and
+        // :app:compileReleaseKotlin dies with "binary version of its metadata
+        // is 2.3.0, expected version is 2.1.0" — an internal compiler error.
+        //
+        // Optimised resource shrinking therefore has to wait for the React
+        // Native upgrade, not a standalone AGP bump: RN 0.87.1 is the first
+        // release to pin AGP 9.x (0.83/0.85/0.86 all pin 8.12.0), and that is
+        // also what Play Console's "upgrade to AGP 9.0" actually requires.
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
@@ -36,6 +48,34 @@ allprojects {
     repositories {
         maven {
             url "$rootDir/../node_modules/@notifee/react-native/android/libs"
+        }
+    }
+
+    // ── Kotlin stdlib pin ───────────────────────────────────────────────────
+    // The AdMob mediation adapters (com.google.ads.mediation:facebook and
+    // :unity, in app/build.gradle) declare kotlin-stdlib 2.3.0. Gradle's
+    // conflict resolution picks the highest version, so the whole compile
+    // classpath moved to 2.3.0 while this project still compiles with Kotlin
+    // 2.1.20 (React Native 0.83's pin). A Kotlin compiler cannot read metadata
+    // from a NEWER Kotlin, so :app:compileReleaseKotlin died with:
+    //
+    //   kotlin-stdlib-2.3.0.jar!/META-INF/kotlin-stdlib.kotlin_module
+    //   Module was compiled with an incompatible version of Kotlin. The binary
+    //   version of its metadata is 2.3.0, expected version is 2.1.0.
+    //   > Internal compiler error.
+    //
+    // Forcing the stdlib back to the compiler's own version is the smaller of
+    // the two fixes — the other is raising Kotlin for the entire project,
+    // which moves every RN module at once. The adapters are ad SDKs; they do
+    // not use 2.2/2.3-only stdlib APIs, so 2.1.20 satisfies them.
+    //
+    // REMOVE THIS when the project moves to Kotlin 2.3+ (which the React
+    // Native 0.87 upgrade will do anyway) — leaving a force in place after the
+    // toolchain catches up silently holds the stdlib back.
+    configurations.configureEach {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:${rootProject.ext.kotlinVersion}"
+            force "org.jetbrains.kotlin:kotlin-stdlib-common:${rootProject.ext.kotlinVersion}"
         }
     }
 }

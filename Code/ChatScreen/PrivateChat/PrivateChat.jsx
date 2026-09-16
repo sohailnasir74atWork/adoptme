@@ -39,6 +39,8 @@ import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
 import { chatTypeForRoute, fetchChatAvailability, resolveChatBlock } from '../chatAvailability';
+import { resolveSafeChat } from '../../Helper/ageGate';
+import { isAllowedSafeMessage, GAME_ID_TEMPLATE_ID } from '../safeTemplates';
 import { incrementAndCheckBadge, checkFiveStarBadge, REVIEW_BADGE_THRESHOLDS } from '../GroupChat/badgeUtils';
 import {
   doc,
@@ -202,6 +204,25 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     [chatType, user, theirAvailability]
   );
   const isChatUnavailable = !!chatBlockedBy;
+
+  // Safe chat — 'me' | 'them' | 'both' | null. Turns on as soon as EITHER
+  // participant is under 13, and then applies to BOTH of them: vetted
+  // templates only, no free text, no photos. The partner's DOB rides along on
+  // the availability read, so this costs no extra round trip. See
+  // Helper/ageGate.js; the Postgres trigger is what actually enforces it.
+  const rawSafeChatMode = useMemo(
+    () => resolveSafeChat(user?.dateOfBirth, theirAvailability?.dateOfBirth),
+    [user?.dateOfBirth, theirAvailability?.dateOfBirth]
+  );
+  // Admins and full moderators keep a normal keyboard so support and
+  // enforcement messages still work — the same two roles the profanity filter
+  // already exempts, and the same exemption safe_chat_staff_exempt() applies
+  // server-side. It is one-directional: the minor on the other side is still
+  // restricted to templates.
+  const canBypassSafeChat = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
+  const safeChatMode = canBypassSafeChat ? null : rawSafeChatMode;
+  const isSafeChat = !!safeChatMode;
+
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
@@ -611,7 +632,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
 
   // ✅ Memoize sendMessage
-  const sendMessage = useCallback(async (text, image, fruits, replyToMsg) => {
+  const sendMessage = useCallback(async (text, image, fruits, replyToMsg, tpl = null) => {
     // Server-side guard for the availability switches. The input is already
     // disabled when this door is off, so this only catches a stale screen —
     // e.g. they switched it off while this chat was sitting open.
@@ -648,6 +669,33 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     if (!trimmedText && !hasImage && !hasFruits) {
       showErrorMessage(t("home.alert.error"), t("chat.cannot_empty"));
       return;
+    }
+
+    // Safe chat (either side under 13): photos are out, and any text must be
+    // an exact vetted template or the sender's own saved game ID. The input
+    // renders no keyboard in this mode, so reaching here with free text means
+    // a stale screen — the partner's age arrived after this view mounted.
+    // The Postgres trigger rejects it regardless; failing here just turns a
+    // confusing server error into a clear message.
+    if (isSafeChat) {
+      if (hasImage) {
+        showErrorMessage(
+          t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
+          t('chat.safe_mode_no_images', {
+            defaultValue: 'Photos cannot be sent in this chat.',
+          })
+        );
+        return;
+      }
+      if (trimmedText && !isAllowedSafeMessage(tpl, trimmedText)) {
+        showErrorMessage(
+          t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
+          t('chat.safe_mode_blocked', {
+            defaultValue: 'In this chat you can only send ready-made messages. Tap the messages button to pick one.',
+          })
+        );
+        return;
+      }
     }
 
     // ✅ Ban check
@@ -755,7 +803,12 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // What to show as last message in the inbox row.
     const imageCount = Array.isArray(image) ? image.length : (image ? 1 : 0);
     const lastMessagePreview =
-      trimmedText ||
+      (tpl === GAME_ID_TEMPLATE_ID
+        ? t('chat.message_preview_game_id', {
+          name: trimmedText,
+          defaultValue: 'Game ID: {{name}}',
+        })
+        : trimmedText) ||
       (hasImage ? (imageCount > 1 ? t('chat.message_preview_photos', { count: imageCount }) : t('chat.message_preview_photo')) : hasFruits ? t('chat.message_preview_pets', { count: fruits.length }) : '');
 
     // Identity fields written only on first message per session — saves
@@ -784,6 +837,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         // Stamp the door so the server can enforce the recipient's chat
         // availability without trusting this client to have done it.
         origin: chatType,
+        // Vetted-template id, so the reader can render the phrase in their own
+        // language and the server can verify the text against the canonical
+        // copy. Set on every drawer send, required on every safe-chat send.
+        tpl,
       });
 
       // Atomic two-sided chat_meta_data upsert. Replaces the prior
@@ -818,6 +875,27 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // We only get here if they flipped the switch after this screen loaded —
       // so refresh their availability and let the banner explain, rather than
       // showing a generic failure.
+      // Safe chat rejected it server-side. Reaching here means this screen
+      // still thought the thread was unrestricted — the partner's DOB had not
+      // landed yet when the send started. Refresh it so the input switches to
+      // the template picker, and say plainly what happened.
+      if (String(error?.message || '').includes('SAFE_CHAT_')) {
+        if (appdatabase && selectedUserId) {
+          fetchChatAvailability(appdatabase, selectedUserId).then(setTheirAvailability);
+        }
+        Alert.alert(
+          t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
+          String(error.message).includes('NO_IMAGES')
+            ? t('chat.safe_mode_no_images', {
+              defaultValue: 'Photos cannot be sent in this chat.',
+            })
+            : t('chat.safe_mode_blocked', {
+              defaultValue: 'In this chat you can only send ready-made messages. Tap the messages button to pick one.',
+            })
+        );
+        return;
+      }
+
       if (String(error?.message || '').includes('RECIPIENT_CHAT_UNAVAILABLE')) {
         if (appdatabase && selectedUserId) {
           fetchChatAvailability(appdatabase, selectedUserId).then(setTheirAvailability);
@@ -835,7 +913,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error("Error sending message:", error);
       Alert.alert(t('chat.error'), t('chat.send_error'));
     }
-  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin, chatBlockedBy, chatType, appdatabase]);
+  }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin, chatBlockedBy, chatType, appdatabase, isSafeChat]);
 
 
 
@@ -1157,6 +1235,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               isBanned={isBanned || isChatUnavailable}
               chatBlockedBy={chatBlockedBy}
               chatType={chatType}
+              safeChatMode={safeChatMode}
               bannedUsers={bannedUsers}
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(null)}

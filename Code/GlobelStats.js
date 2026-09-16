@@ -494,8 +494,13 @@ export const GlobalStateProvider = ({ children }) => {
         if (userData.displayName) setCrashlyticsAttribute(crashlyticsInstance, 'displayName', userData.displayName);
       } catch (_) {}
 
-      // 🔥 Refresh and update FCM token
-      await Promise.all([registerForNotifications(userId)]);
+      // 🔥 Refresh and update FCM token.
+      // Fire-and-forget on purpose. This runs after setUser() above, so the
+      // user state the tree renders from is already in place and nothing on
+      // screen is waiting on it — but awaiting it held the boot splash up for
+      // a full network round trip on first launch. Failures are already
+      // non-fatal (a missing token only costs push delivery until next login).
+      registerForNotifications(userId).catch(() => {});
 
       // Stamp the current device's fingerprint on users/{uid}/deviceId so
       // mirrorBanToDevice can lock this device when the account is banned
@@ -578,16 +583,43 @@ export const GlobalStateProvider = ({ children }) => {
       }
 
       requestIdleCallback(async () => {
-        await handleUserLogin(loggedInUser);
+        // isAppReady is ONLY the boot-splash gate (App.js calls
+        // RNBootSplash.hide on it — nothing else reads it), so what we await
+        // before setting it is exactly what a first-launch user spends staring
+        // at the logo. Everything that does not have to be on screen before
+        // the first frame belongs below it, not above.
+        try {
+          // This one DOES gate the splash: it ends in setUser(), and the whole
+          // tree renders from that user object. Showing the UI first would
+          // flash a signed-out app at an already signed-in user.
+          // It swallows its own errors internally, so it should not throw.
+          await handleUserLogin(loggedInUser);
+        } catch (e) {
+          logAuthEvent(`auth_handle_login_failed msg=${String(e?.message || e).slice(0, 80)}`);
+        } finally {
+          // In `finally` so a throw above can never strand the splash on
+          // screen forever. Before this change the splash hide sat at the very
+          // end of this callback with two un-caught awaits in front of it —
+          // one rejection there and the user was left looking at the logo with
+          // no way out but a reinstall.
+          await updateLocalState('isAppReady', true);
+        }
 
+        // ── Below here: background hydration. Never block the first frame. ──
+        //
+        // registerForNotifications is deliberately NOT called here.
+        // handleUserLogin already registers the FCM token (see "Refresh and
+        // update FCM token" in it), so the call that used to sit on this line
+        // was a second identical network round trip on every single login —
+        // and it was awaited, so the splash paid for both.
         if (loggedInUser?.uid) {
-          await registerForNotifications(loggedInUser.uid);
-
           // Hydrate localState.bannedUsers from Supabase user_blocks once per
           // login. The list lives in MMKV across launches, so subsequent
           // block/unblock writes still update it locally + RTDB (mirror CF
           // replays to Supabase). This seed only runs at sign-in to cover
-          // first-install or device-switch cases where MMKV is empty.
+          // first-install or device-switch cases where MMKV is empty — and in
+          // exactly that case (fresh install) there is nothing to hydrate, so
+          // letting it land a moment after the first frame costs nothing.
           // RTDB fallback (full /users/{uid}/blocked_users read) only fires
           // if Supabase returns an error — null result for "no blocks" is
           // an empty Set, not an error.
@@ -602,8 +634,6 @@ export const GlobalStateProvider = ({ children }) => {
             }
           } catch {}
         }
-
-        await updateLocalState('isAppReady', true);
       });
     });
 

@@ -21,6 +21,14 @@ import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import NativeAdCard from '../Ads/NativeAdCard';
 import { releaseByPrefix as releaseNativeAds } from '../Ads/NativeAdManager';
+import RewardedAdManager from '../Ads/RewardedAdManager';
+
+// Free users can feature one trade per 24h by watching a rewarded ad. Pro keeps
+// its two instant boosts, so paying still buys both quantity and the
+// convenience of skipping the ad — the ad path must not undercut the
+// subscription.
+const AD_BOOST_DAILY_LIMIT = 1;
+const FEATURE_DURATION_MS = 24 * 60 * 60 * 1000;
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
@@ -57,6 +65,13 @@ const getSevenDaysAgo = () => Timestamp.fromMillis(Date.now() - TRADE_MAX_AGE_MS
 // plus three load-mores without a second query, and caps the read count if the
 // number of featured trades grows.
 const FEATURED_FETCH_LIMIT = 12;
+// Feed rhythm — see mergeFeaturedWithNormal. Keep FEATURED_PER_PAGE a multiple
+// of FEATURED_BLOCK_SIZE so a page never ends on a half-filled featured block.
+// 12 = four blocks of 3, which carries the rhythm across a whole 20-trade page
+// (FFFnnnnnn x3 + FFFnn) instead of running out after two blocks.
+const FEATURED_BLOCK_SIZE = 3;
+const NORMAL_BLOCK_SIZE = 6;
+const FEATURED_PER_PAGE = 12;
 
 // Variant tag filters — narrow the feed to trades containing a Neon / Mega / Fly /
 // Ride pet. Selecting several means ONE pet has to satisfy all of them, so
@@ -94,6 +109,13 @@ const TradeList = ({ route }) => {
   const [hasMore, setHasMore] = useState(true);
   const [showofferwall, setShowofferwall] = useState(false);
   const [remainingFeaturedTrades, setRemainingFeaturedTrades] = useState([]);
+  // Cursor + exhausted flag for featured trades. A full page now consumes all
+  // FEATURED_PER_PAGE of them, so the reserve empties on page one and
+  // fetchMoreTrades has to top it up — otherwise page two would have no
+  // featured trades at all. A ref rather than state: it is read inside the
+  // fetch callbacks and must never trigger a re-render on its own.
+  const lastFeaturedDocRef = useRef(null);
+  const featuredExhaustedRef = useRef(false);
   const [openShareModel, setOpenShareModel] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [bannedUsers, setBannedUsers] = useState([]);
@@ -538,6 +560,110 @@ const TradeList = ({ route }) => {
 
   // console.log(isProStatus, 'from trade model')
 
+  // Shared by both paths so the Pro boost and the ad boost can never drift
+  // into writing different shapes for the same "featured" state.
+  const applyFeaturedToTrade = useCallback(async (item) => {
+    await updateDoc(doc(firestoreDB, "trades_new", item.id), {
+      isFeatured: true,
+      featuredUntil: Timestamp.fromDate(new Date(Date.now() + FEATURE_DURATION_MS)),
+    });
+    const markFeatured = (prev) =>
+      prev.map((trade) => (trade.id === item.id ? { ...trade, isFeatured: true } : trade));
+    setTrades(markFeatured);
+    setFilteredTrades(markFeatured);
+  }, [firestoreDB]);
+
+  // How many of this user's trades are already featured in the current 24h
+  // window. Both paths read the same number, so a free user cannot stack an
+  // ad boost on top of a Pro boost by switching plans mid-day.
+  const countFeaturedInLast24h = useCallback(async () => {
+    const oneDayAgo = Timestamp.fromDate(new Date(Date.now() - FEATURE_DURATION_MS));
+    const snapshot = await getDocs(
+      query(
+        collection(firestoreDB, "trades_new"),
+        where("userId", "==", user.id),
+        where("isFeatured", "==", true),
+        where("featuredUntil", ">", oneDayAgo)
+      )
+    );
+    return snapshot.size;
+  }, [firestoreDB, user?.id]);
+
+  // ── Watch an ad → feature the trade ──────────────────────────────────────
+  const handleFreeBoostTrade = useCallback(async (item) => {
+    if (!user?.id || !firestoreDB) return;
+
+    let alreadyFeatured;
+    try {
+      alreadyFeatured = await countFeaturedInLast24h();
+    } catch (err) {
+      console.error("Error checking featured trades:", err);
+      Alert.alert(t("home.alert.error"), t("trade.verify_error_message"));
+      return;
+    }
+
+    // Out of free boosts → this is the moment they actually want more, which
+    // makes it a better Pro pitch than a button that nags before they care.
+    if (alreadyFeatured >= AD_BOOST_DAILY_LIMIT) {
+      Alert.alert(
+        t("trade.limit_reached_title"),
+        t("trade.ad_boost_limit_message", {
+          defaultValue: "You've used your free boost for today. Pro members boost 2 trades a day, instantly and with no ads.",
+        }),
+        [
+          { text: t("trade.cancel"), style: "cancel" },
+          { text: t("trade.upgrade"), onPress: () => setShowofferwall(true) },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      t("trade.ad_boost_title", { defaultValue: "Feature this trade free" }),
+      t("trade.ad_boost_message", {
+        defaultValue: "Watch a short video and your trade is featured at the top for 24 hours.",
+      }),
+      [
+        { text: t("trade.cancel"), style: "cancel" },
+        {
+          text: t("trade.ad_boost_watch", { defaultValue: "Watch" }),
+          onPress: () => {
+            RewardedAdManager.showWithCallback(
+              // Earned — only now does the trade get featured.
+              async () => {
+                try {
+                  await applyFeaturedToTrade(item);
+                  showSuccessMessage(t("trade.feature_success"), t("trade.feature_success_message"));
+                } catch (error) {
+                  console.error("Error featuring trade after ad:", error);
+                  showErrorMessage(t("trade.feature_error"), t("trade.feature_error_message"));
+                }
+              },
+              // Closed early — no reward. Say so plainly rather than failing silently.
+              () => {
+                showErrorMessage(
+                  t("trade.ad_boost_incomplete_title", { defaultValue: "Not featured" }),
+                  t("trade.ad_boost_incomplete_message", {
+                    defaultValue: "You need to watch the whole video to feature your trade.",
+                  })
+                );
+              },
+              // No fill / cooling down. Not the user's fault — don't blame them.
+              () => {
+                showErrorMessage(
+                  t("trade.ad_boost_unavailable_title", { defaultValue: "No video right now" }),
+                  t("trade.ad_boost_unavailable_message", {
+                    defaultValue: "No video is available at the moment. Please try again in a few minutes.",
+                  })
+                );
+              }
+            );
+          },
+        },
+      ]
+    );
+  }, [user?.id, firestoreDB, countFeaturedInLast24h, applyFeaturedToTrade, t]);
+
   const handleMakeFeatureTrade = async (item) => {
     if (!isProStatus) {
       Alert.alert(
@@ -684,9 +810,45 @@ const TradeList = ({ route }) => {
         setHasMore(false);
         return;
       }
-      // ✅ Get **2 more** featured trades if available
-      const newFeaturedTrades = remainingFeaturedTrades.splice(0, 3);
-      setRemainingFeaturedTrades([...remainingFeaturedTrades]); // ✅ Update remaining featured
+      // Same block count as the first page so the rhythm continues across
+      // pagination instead of resetting.
+      //
+      // A full page consumes every featured trade the initial fetch reserved,
+      // so top the reserve up before slicing — otherwise page two would show
+      // no featured trades at all. This is the one extra read a full-rhythm
+      // page costs, and it only happens when the user actually scrolls, not on
+      // every feed load. Skipped once the collection is exhausted so a feed
+      // with only a handful of boosted trades doesn't re-query forever.
+      let featuredPool = remainingFeaturedTrades;
+      if (featuredPool.length < FEATURED_PER_PAGE && !featuredExhaustedRef.current && lastFeaturedDocRef.current) {
+        try {
+          const moreFeaturedSnap = await getDocs(query(
+            collection(firestoreDB, 'trades_new'),
+            where('isFeatured', '==', true),
+            ...statusClause,
+            ...variantClause,
+            where('featuredUntil', '>', Timestamp.now()),
+            orderBy('featuredUntil', 'desc'),
+            startAfter(lastFeaturedDocRef.current),
+            limit(FEATURED_FETCH_LIMIT)
+          ));
+          featuredPool = [
+            ...featuredPool,
+            ...moreFeaturedSnap.docs.map((docSnap) => ({ id: `featured-${docSnap.id}`, ...docSnap.data() })),
+          ];
+          lastFeaturedDocRef.current =
+            moreFeaturedSnap.docs[moreFeaturedSnap.docs.length - 1] || lastFeaturedDocRef.current;
+          if (moreFeaturedSnap.docs.length < FEATURED_FETCH_LIMIT) featuredExhaustedRef.current = true;
+        } catch (err) {
+          // Non-fatal: the page still renders, just without fresh featured
+          // trades. Never let this break normal pagination.
+          console.warn('⚠️ Could not top up featured trades:', err?.message);
+          featuredExhaustedRef.current = true;
+        }
+      }
+
+      const newFeaturedTrades = featuredPool.slice(0, FEATURED_PER_PAGE);
+      setRemainingFeaturedTrades(featuredPool.slice(FEATURED_PER_PAGE));
 
       // ✅ Merge & maintain balance
       const mergedTrades = mergeFeaturedWithNormal(newFeaturedTrades, newNormalTrades);
@@ -914,16 +1076,38 @@ const TradeList = ({ route }) => {
       // ✅ Remove _doc from trades before setting state
       searchedTrades = searchedTrades.map(({ _doc, ...trade }) => trade);
 
+      // Apply the feed's 3-featured / 6-normal rhythm to search results too.
+      //
+      // Search already MATCHED featured trades — neither query above filters on
+      // isFeatured, so both kinds were always searched. What was missing is that
+      // results were sorted purely by timestamp, so a boosted trade landed
+      // wherever its age put it and the boost bought nothing here. Since search
+      // is how people actually hunt for a specific pet, that was the one place
+      // a boost most needed to count.
+      //
+      // Matching is unchanged — this only reorders what was already found, so
+      // no trade appears or disappears because of it.
+      const searchFeatured = searchedTrades.filter((t) => t.isFeatured);
+      const searchNormal = searchedTrades.filter((t) => !t.isFeatured);
+      if (searchFeatured.length > 0) {
+        searchedTrades = mergeFeaturedWithNormal(searchFeatured, searchNormal);
+      }
+
       // ✅ Update state
       if (isLoadMore) {
         setTrades((prev) => {
           const combined = [...prev, ...searchedTrades];
           const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
-          return unique.sort((a, b) => {
-            const aTime = a.timestamp?.toMillis() || 0;
-            const bTime = b.timestamp?.toMillis() || 0;
-            return bTime - aTime;
-          });
+          // Sort by recency first so each kind is internally newest-first, then
+          // re-apply the featured rhythm. Sorting alone would flatten the
+          // interleave that was just built above.
+          const byNewest = (a, b) =>
+            (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0);
+          const featured = unique.filter((t) => t.isFeatured).sort(byNewest);
+          const normal = unique.filter((t) => !t.isFeatured).sort(byNewest);
+          return featured.length > 0
+            ? mergeFeaturedWithNormal(featured, normal)
+            : normal;
         });
       } else {
         setTrades(searchedTrades);
@@ -958,6 +1142,11 @@ const TradeList = ({ route }) => {
       handleSearchTrades(false);
     }
   }, [pendingVariants, searchQuery, handleSearchTrades]);
+
+  useEffect(() => {
+    if (isProStatus) return;
+    try { RewardedAdManager.prepare(); } catch (_) {}
+  }, [isProStatus]);
 
   const fetchInitialTrades = useCallback(async () => {
     setLoading(true);
@@ -1020,12 +1209,22 @@ const TradeList = ({ route }) => {
       }
       // console.log('✅ Featured trades:', featuredTrades[0]);
 
+      // Remember where the featured list got to, so load-more can continue from
+      // here instead of re-reading the same documents.
+      lastFeaturedDocRef.current =
+        featuredQuerySnapshot.docs[featuredQuerySnapshot.docs.length - 1] || null;
+      featuredExhaustedRef.current = featuredQuerySnapshot.docs.length < FEATURED_FETCH_LIMIT;
+
       // ✅ Keep some featured trades aside for future loadMore()
       setRemainingFeaturedTrades(featuredTrades);
 
       // ✅ Merge trades but **reserve** featured trades for later
+      // splice() mutates, so this both takes this page's featured trades AND
+      // leaves the rest in the array already handed to setRemainingFeaturedTrades
+      // above. Six = two blocks of three, which is what produces the visible
+      // 3-featured / 6-normal / 3-featured rhythm on the first screen.
       const mergedTrades = mergeFeaturedWithNormal(
-        featuredTrades.splice(0, 3), // ✅ Only use first 2 featured
+        featuredTrades.splice(0, FEATURED_PER_PAGE),
         normalTrades
       );
 
@@ -1120,46 +1319,43 @@ const TradeList = ({ route }) => {
   //   }
   // };
 
+  // Feed rhythm: 3 featured, 6 normal, 3 featured, 6 normal, ...
+  //
+  // Previously this was written as 4-and-4 but was only ever handed 3 featured
+  // trades, so the loop exhausted them on the first block and the rest of the
+  // page was one unbroken run of normal trades — the interleave never actually
+  // happened. Callers now pass enough featured trades for the pattern to repeat.
+  //
+  // Degrades gracefully in both directions: run out of featured and the
+  // remaining normal trades are appended in order; run out of normal and any
+  // leftover featured are appended. Nothing is dropped.
   const mergeFeaturedWithNormal = (featuredTrades, normalTrades) => {
-    // Input validation
     if (!Array.isArray(featuredTrades) || !Array.isArray(normalTrades)) {
       console.warn('⚠️ Invalid input: featuredTrades or normalTrades is not an array');
       return [];
     }
 
-    let result = [];
+    const result = [];
     let featuredIndex = 0;
     let normalIndex = 0;
-    const featuredCount = featuredTrades.length;
-    const normalCount = normalTrades.length;
-    const MAX_ITERATIONS = 1000; // Safety limit
-    let iterationCount = 0;
 
-    // Add first 4 featured trades (if available)
-    for (let i = 0; i < 4 && featuredIndex < featuredCount; i++) {
-      result.push(featuredTrades[featuredIndex]);
-      featuredIndex++;
-    }
+    const take = (source, from, count) => {
+      const slice = source.slice(from, from + count);
+      result.push(...slice);
+      return slice.length;
+    };
 
-    // Merge in the format of 4 normal trades, then 4 featured trades
-    while (normalIndex < normalCount && iterationCount < MAX_ITERATIONS) {
-      iterationCount++;
+    // Featured lead the page — that placement is what a boost is buying.
+    while (featuredIndex < featuredTrades.length || normalIndex < normalTrades.length) {
+      const tookFeatured = take(featuredTrades, featuredIndex, FEATURED_BLOCK_SIZE);
+      featuredIndex += tookFeatured;
 
-      // Insert up to 4 normal trades
-      for (let i = 0; i < 4 && normalIndex < normalCount; i++) {
-        result.push(normalTrades[normalIndex]);
-        normalIndex++;
-      }
+      const tookNormal = take(normalTrades, normalIndex, NORMAL_BLOCK_SIZE);
+      normalIndex += tookNormal;
 
-      // Insert up to 4 featured trades (if available)
-      for (let i = 0; i < 4 && featuredIndex < featuredCount; i++) {
-        result.push(featuredTrades[featuredIndex]);
-        featuredIndex++;
-      }
-    }
-
-    if (iterationCount >= MAX_ITERATIONS) {
-      console.warn('⚠️ Maximum iterations reached in mergeFeaturedWithNormal');
+      // Neither list advanced — both are exhausted. Without this the loop
+      // would spin forever on an empty tail.
+      if (tookFeatured === 0 && tookNormal === 0) break;
     }
 
     return result;
@@ -1699,15 +1895,28 @@ const TradeList = ({ route }) => {
         {/* ✅ Social Actions Row — Feed-style */}
         <View style={styles.socialActionsRow}>
           {/* ✅ Left side: Owner / Mod Actions */}
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {/* flexWrap: three owner buttons at this font size can overrun a
+              narrow phone, and without wrapping the last one is clipped
+              off-screen rather than moving to a second line. */}
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
             {/* Owner actions (boost/delete) */}
             {item.userId === user.id && (
               <>
-                {!item.isFeatured &&
+                {!item.isFeatured && (
                   <TouchableOpacity onPress={() => handleMakeFeatureTrade(item)} style={[styles.ownerBtn, { backgroundColor: '#8B5CF6' }]}>
                     <Icon name="rocket-outline" size={12} color="white" />
                     <Text style={styles.ownerBtnText}>{t('trade.boost_it')}</Text>
-                  </TouchableOpacity>}
+                  </TouchableOpacity>
+                )}
+                {/* Watch-an-ad boost. Hidden from Pro members on purpose: they
+                    already get two instant boosts a day, and part of what they
+                    paid for is not being shown ads. */}
+                {!item.isFeatured && !isProStatus && (
+                  <TouchableOpacity onPress={() => handleFreeBoostTrade(item)} style={[styles.ownerBtn, { backgroundColor: '#F59E0B' }]}>
+                    <Icon name="play-circle-outline" size={12} color="white" />
+                    <Text style={styles.ownerBtnText}>{t('trade.free_boost', { defaultValue: 'FREE BOOST' })}</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.ownerBtn, { backgroundColor: '#EF4444' }]}>
                   <Icon name="trash-outline" size={12} color="white" />
                   <Text style={styles.ownerBtnText}>{t('trade.delete_it')}</Text>

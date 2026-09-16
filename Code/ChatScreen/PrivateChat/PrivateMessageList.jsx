@@ -28,6 +28,7 @@ import axios from 'axios';
 import { getDeviceLanguage } from '../../../i18n';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
+import { TEMPLATE_BY_ID, TEMPLATE_ID_BY_TEXT, GAME_ID_TEMPLATE_ID } from '../safeTemplates';
 import { useMessageTranslation } from '../../Helper/useMessageTranslation';
 import ScamSafetyBox from './Scamwarning';
 import { useNavigation } from '@react-navigation/native';
@@ -188,6 +189,21 @@ const PrivateMessageList = ({
 
     const isMyMessage = item.senderId === userId;
     const isHighlighted = highlightedMessageId === item.id;
+
+    // Template messages carry their id in `tpl`, so render the phrase in the
+    // READER's language instead of the sender's. Rows written before `tpl`
+    // existed are matched back by their canonical English, which is what the
+    // drawer has always sent. Anything unrecognised renders as stored.
+    const tplId = item.tpl || (item.text ? TEMPLATE_ID_BY_TEXT[item.text] : null);
+    let displayText = item.text;
+    if (tplId === GAME_ID_TEMPLATE_ID) {
+      displayText = t('chat.game_id_body', {
+        name: item.text,
+        defaultValue: '🎮 My game ID: {{name}}',
+      });
+    } else if (tplId && TEMPLATE_BY_ID[tplId]) {
+      displayText = t(TEMPLATE_BY_ID[tplId].key, { defaultValue: TEMPLATE_BY_ID[tplId].en });
+    }
 
     // fruits helpers
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
@@ -404,20 +420,24 @@ const PrivateMessageList = ({
             )}
 
 
-            {/* Normal text (can be empty if only fruits) */}
-            {!!item.text && (
+            {/* Normal text (can be empty if only fruits).
+                A message sent from the quick-message drawer carries a template
+                id, so it renders in THIS reader's language rather than the
+                sender's. `displayText` falls back to the stored English for
+                free-typed messages and for rows written before `tpl` existed. */}
+            {!!displayText && (
               isMultiColorText(profile?.chatTextColor)
                 ? <RainbowText
                     colors={getMultiColorPalette(profile.chatTextColor)}
                     style={[{ fontSize: 12, color: c.text, lineHeight: 20 }]}
-                  >{item.text}</RainbowText>
+                  >{displayText}</RainbowText>
                 : <Text
                     style={[
                       { fontSize: 12, color: c.text, lineHeight: 20 },
                       profile?.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile?.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
                     ]}
                   >
-                    {item.text}
+                    {displayText}
                   </Text>
             )}
           </MenuTrigger>

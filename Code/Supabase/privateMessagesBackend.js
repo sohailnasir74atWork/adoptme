@@ -23,9 +23,15 @@ const PAGE_SIZE_DEFAULT = 15;
 
 // Egress: only the columns fromPrivateMessageRow maps. Skips updated_at /
 // deleted_at / deleted_by on every paginated history fetch.
-const PRIVATE_MSG_COLS =
+const PRIVATE_MSG_COLS_BASE =
   'id,client_msg_id,chat_id,sender_id,recipient_id,text,image_url,image_urls,' +
   'fruits,reply_to,os,deleted,report_count,created_at';
+
+// `tpl` is dropped from the projection if the migration hasn't been applied, so
+// an app build that ships ahead of the database still renders history instead
+// of showing every thread as empty (selectPrivateMessages handles the retry).
+const privateMsgCols = () =>
+  tplColumnSupported ? `${PRIVATE_MSG_COLS_BASE},tpl` : PRIVATE_MSG_COLS_BASE;
 
 // Canonical chat id used by both RTDB and the Supabase chat_id column.
 // Sort the two UIDs alphabetically and join with an underscore.
@@ -56,6 +62,12 @@ export function fromPrivateMessageRow(row) {
     senderId: row.sender_id,
     recipientId: row.recipient_id,
     text: row.text ?? null,
+    // Vetted-template id (ChatScreen/safeTemplates.js). Present on every
+    // message sent from the quick-message drawer and on everything sent in a
+    // safe chat. Lets the reader render the phrase in their OWN language while
+    // `text` keeps the canonical English for old builds, push previews and
+    // moderator review.
+    tpl: row.tpl ?? null,
     imageUrl: row.image_url ?? null,
     imageUrls: Array.isArray(row.image_urls) ? row.image_urls : (row.image_urls ?? null),
     fruits: Array.isArray(row.fruits) ? row.fruits : [],
@@ -68,14 +80,15 @@ export function fromPrivateMessageRow(row) {
   };
 }
 
-// Set false the first time Postgres tells us `origin` doesn't exist, so a
+// Set false the first time Postgres tells us the column doesn't exist, so a
 // database whose migration hasn't been applied yet keeps sending messages
 // instead of failing every insert. Resets on app restart.
 let originColumnSupported = true;
+let tplColumnSupported = true;
 
 function toInsertPayload({
   chatId, clientMsgId, senderId, recipientId,
-  text, imageUrl, imageUrls, fruits, replyTo, OS, origin,
+  text, imageUrl, imageUrls, fruits, replyTo, OS, origin, tpl,
 }) {
   return {
     chat_id: chatId,
@@ -95,45 +108,61 @@ function toInsertPayload({
     // clients, which the server treats as 'general'. Omitted entirely when the
     // column isn't there, so the insert stays valid either way.
     ...(originColumnSupported ? { origin: origin ?? null } : {}),
+    // Vetted-template id, or null for a free-typed message. In a safe chat
+    // (either participant under 13) the server REQUIRES this and checks the
+    // text against the canonical copy — see supabase/028_safe_chat_minors.sql.
+    ...(tplColumnSupported ? { tpl: tpl ?? null } : {}),
   };
 }
 
 // PostgREST reports an unknown column as 42703 (or PGRST204 on newer builds).
-const isUnknownOriginColumn = (error) =>
+const isUnknownColumn = (error, column) =>
   !!error && (error.code === '42703' || error.code === 'PGRST204') &&
-  String(error.message || '').includes('origin');
+  String(error.message || '').includes(column);
 
 // =====================================================================
 // Reads
 // =====================================================================
 
+// Runs a built query, and on "no such column: tpl" retries once without it.
+// `build(cols)` must return a fresh PostgREST query each call — they are
+// single-use.
+async function selectPrivateMessages(build, label) {
+  let { data, error } = await build(privateMsgCols());
+  if (isUnknownColumn(error, 'tpl')) {
+    tplColumnSupported = false;
+    ({ data, error } = await build(privateMsgCols()));
+  }
+  if (error) {
+    console.warn(`[privateMessagesBackend] ${label} error:`, error.message);
+    return [];
+  }
+  return (data || []).map(fromPrivateMessageRow);
+}
+
 // Initial / paginated load. `before` is a cursor: { createdAt: ISO, id }
 // returned by the previous page's last row. Newest-first within a chat.
 export async function loadPrivateMessages(chatId, { limit = PAGE_SIZE_DEFAULT, before = null } = {}) {
   if (!chatId) return [];
-  let q = supabase
-    .from('private_messages')
-    .select(PRIVATE_MSG_COLS)
-    .eq('chat_id', chatId)
-    .eq('deleted', false)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit);
+  return selectPrivateMessages((cols) => {
+    let q = supabase
+      .from('private_messages')
+      .select(cols)
+      .eq('chat_id', chatId)
+      .eq('deleted', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
 
-  if (before?.createdAt) {
-    // Composite cursor — Postgres evaluates this as a row comparison;
-    // the (chat_id, created_at desc, id desc) index serves it.
-    q = q.or(
-      `created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})`,
-    );
-  }
-
-  const { data, error } = await q;
-  if (error) {
-    console.warn('[privateMessagesBackend] loadPrivateMessages error:', error.message);
-    return [];
-  }
-  return (data || []).map(fromPrivateMessageRow);
+    if (before?.createdAt) {
+      // Composite cursor — Postgres evaluates this as a row comparison;
+      // the (chat_id, created_at desc, id desc) index serves it.
+      q = q.or(
+        `created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})`,
+      );
+    }
+    return q;
+  }, 'loadPrivateMessages');
 }
 
 // Forward pagination: messages strictly newer than `since`. Used for
@@ -141,27 +170,23 @@ export async function loadPrivateMessages(chatId, { limit = PAGE_SIZE_DEFAULT, b
 // are backfilled. Returns newest-first to match render order.
 export async function loadPrivateMessagesSince(chatId, since = null, { limit = 200 } = {}) {
   if (!chatId) return [];
-  let q = supabase
-    .from('private_messages')
-    .select(PRIVATE_MSG_COLS)
-    .eq('chat_id', chatId)
-    .eq('deleted', false)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limit);
+  return selectPrivateMessages((cols) => {
+    let q = supabase
+      .from('private_messages')
+      .select(cols)
+      .eq('chat_id', chatId)
+      .eq('deleted', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit);
 
-  if (since?.createdAt) {
-    q = q.or(
-      `created_at.gt.${since.createdAt},and(created_at.eq.${since.createdAt},id.gt.${since.id})`,
-    );
-  }
-
-  const { data, error } = await q;
-  if (error) {
-    console.warn('[privateMessagesBackend] loadPrivateMessagesSince error:', error.message);
-    return [];
-  }
-  return (data || []).map(fromPrivateMessageRow);
+    if (since?.createdAt) {
+      q = q.or(
+        `created_at.gt.${since.createdAt},and(created_at.eq.${since.createdAt},id.gt.${since.id})`,
+      );
+    }
+    return q;
+  }, 'loadPrivateMessagesSince');
 }
 
 // =====================================================================
@@ -217,7 +242,7 @@ export async function sendPrivateMessage({
   chatId, senderId, recipientId,
   text = null, imageUrl = null, imageUrls = null,
   fruits = [], replyTo = null,
-  OS = null, clientMsgId = null, origin = null,
+  OS = null, clientMsgId = null, origin = null, tpl = null,
 }) {
   if (!chatId || !senderId || !recipientId) {
     throw new Error('sendPrivateMessage: chatId + senderId + recipientId required');
@@ -235,6 +260,7 @@ export async function sendPrivateMessage({
     replyTo,
     OS,
     origin,
+    tpl,
   });
 
   let payload = buildPayload();
@@ -244,10 +270,11 @@ export async function sendPrivateMessage({
     .select()
     .single();
 
-  // Schema hasn't caught up: drop `origin` and send again rather than losing the
-  // message. One wasted round-trip, once per app session.
-  if (isUnknownOriginColumn(error)) {
-    originColumnSupported = false;
+  // Schema hasn't caught up: drop the unknown column and send again rather than
+  // losing the message. One wasted round-trip, once per column per app session.
+  if (isUnknownColumn(error, 'origin') || isUnknownColumn(error, 'tpl')) {
+    if (isUnknownColumn(error, 'origin')) originColumnSupported = false;
+    if (isUnknownColumn(error, 'tpl')) tplColumnSupported = false;
     payload = buildPayload();
     ({ data, error } = await supabase
       .from('private_messages')
