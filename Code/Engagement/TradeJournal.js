@@ -32,6 +32,12 @@ import { getThemeColors } from '../Helper/themeColors';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import BannerAdComponent from '../Ads/bannerAds';
+import {
+  VALUE_SOURCE,
+  VALUE_UNIT,
+  DEFAULT_VALUE_SOURCE,
+  valueOf,
+} from '../Helper/valueSources';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PET_CARD_SIZE = (SCREEN_WIDTH - 64) / 3;
@@ -423,40 +429,48 @@ const TradeJournal = ({
     }
   }, [ownedPets, wishlistPets]);
 
-  // ── Real-time pet value lookup from RTDB data ──
+  // ── Real-time pet value lookup from the ACTIVE value source ──
+  //
+  // Re-priced live against whichever catalogue the calculator is set to, not
+  // against the snapshot stored when the pet was added. Same rule as the Home
+  // tab's "My Stuff Worth" — if one screen quoted Elvebredd while another
+  // quoted GG, the two would disagree by roughly 1.9x with nothing on screen
+  // to explain why.
+  const valueSource = localState?.valueSource || DEFAULT_VALUE_SOURCE;
+
   const parsedPetData = useMemo(() => {
     try {
-      const raw = localState?.data;
+      // Falls back to Elvebredd until the GG feed arrives, so a cold start
+      // shows the old total rather than zero.
+      const raw = (valueSource === VALUE_SOURCE.GG && localState?.ggData)
+        ? localState.ggData
+        : localState?.data;
       if (!raw) return [];
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
       return typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [];
     } catch { return []; }
-  }, [localState?.data]);
+  }, [localState?.data, localState?.ggData, valueSource]);
 
   const lookupPetValue = useCallback((pet) => {
     if (!pet?.name || parsedPetData.length === 0) return Number(pet?.value) || 0;
     const petName = (pet.name || '').toLowerCase().trim();
     const item = parsedPetData.find(d => (d?.name || '').toLowerCase().trim() === petName);
+    // The active source may not list this pet — 2,363 Elvebredd names are
+    // absent from GG. Fall back to the stored snapshot rather than zero, so a
+    // pet never vanishes from the total just because the source changed.
     if (!item) return Number(pet?.value) || 0;
 
-    // Simple categories — use base value
-    const simpleCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts'];
-    if (simpleCategories.includes(item.type?.toLowerCase())) {
-      return Number(item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0;
-    }
-
-    // Determine value type from stored pet data (d=default/regular, n=neon, m=mega)
-    const vType = pet.valueType || 'd';
-    const valueKey = vType === 'n' ? 'nvalue' : vType === 'm' ? 'mvalue' : 'rvalue';
-
-    // Determine modifier suffix
-    const isFly = pet.isFly || false;
-    const isRide = pet.isRide || false;
-    const suffix = isFly && isRide ? ' - fly&ride' :
-      isFly ? ' - fly' : isRide ? ' - ride' : ' - nopotion';
-
-    return Number(item[valueKey + suffix]) || Number(item.rvalue) || 0;
-  }, [parsedPetData]);
+    // Sharks on both feeds: this screen has no Shark/Frost toggle, and
+    // Elvebredd is already shark-native, so the two sources stay in the same
+    // ballpark instead of dropping ~164x when GG is picked.
+    return valueOf(item, {
+      source: valueSource,
+      unit: VALUE_UNIT.SHARK,
+      valueType: pet.valueType || 'd',
+      isFly: pet.isFly || false,
+      isRide: pet.isRide || false,
+    }) || Number(pet?.value) || 0;
+  }, [parsedPetData, valueSource]);
 
   // ── Demand data ──
   const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });

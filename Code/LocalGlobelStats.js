@@ -50,6 +50,12 @@ export const LocalStateProvider = ({ children }) => {
     isPro: storage.getBoolean('isPro') ?? false,
     fetchDataTime: storage.getString('fetchDataTime') || null,
     data: null, // Loaded async to avoid blocking cold start
+    // The GG catalogue (adoptmevalues.gg), the app's second value source.
+    // Kept separate from `data` rather than merged: the two sites price in
+    // different units and disagree by a median 16.5% on the pets they share,
+    // and that disagreement is what the source toggle exists to show.
+    // 16 screens read `data`; none of them need to change.
+    ggData: null,
 
     codes: safeParseJSON('codes', {}),
     normalStock: safeParseJSON('normalStock', []),
@@ -78,6 +84,15 @@ export const LocalStateProvider = ({ children }) => {
     ownedPets: safeParseJSON('ownedPets', []),
     wishlistPets: safeParseJSON('wishlistPets', []),
     imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
+    // The calculator's value mode, stored as its two axes because the price
+    // maths needs them apart — see Code/Helper/valueSources.js. The UI pairs
+    // them back into one exclusive choice of Shark | Frost | GG, and both keys
+    // move together, so they are never read independently of each other.
+    // Which site priced the item: 'elvebredd' | 'gg'.
+    valueSource: storage.getString('valueSource') || 'elvebredd',
+    // What the number is counted in: 'shark' | 'frost'. Shark is the default —
+    // it is what the app opened in before the choice was remembered.
+    valueUnit: storage.getString('valueUnit') || 'shark',
     showAd1: storage.getBoolean('showAd1') ?? true,
     postsCache: safeParseJSON('postsCache', []),
     tradingServerLink: storage.getString('tradingServerLink') || null,
@@ -114,15 +129,26 @@ export const LocalStateProvider = ({ children }) => {
   const dataLoadedRef = useRef(false);
   useEffect(() => {
     const id = requestIdleCallback(() => {
+      // Both catalogues hydrate in the same idle slot. A missing or corrupt
+      // ggData must not take `data` down with it — 16 screens depend on
+      // `data` and only the calculator reads `ggData`, so they are parsed
+      // independently.
+      let parsed = {};
+      let parsedGG = null;
       try {
         const raw = storage.getString('data');
-        const parsed = raw ? JSON.parse(raw) : {};
-        dataLoadedRef.current = true;
-        setLocalState(prev => ({ ...prev, data: parsed }));
+        parsed = raw ? JSON.parse(raw) : {};
       } catch (e) {
-        dataLoadedRef.current = true;
-        setLocalState(prev => ({ ...prev, data: {} }));
+        parsed = {};
       }
+      try {
+        const rawGG = storage.getString('ggData');
+        parsedGG = rawGG ? JSON.parse(rawGG) : null;
+      } catch (e) {
+        parsedGG = null;
+      }
+      dataLoadedRef.current = true;
+      setLocalState(prev => ({ ...prev, data: parsed, ggData: parsedGG }));
     });
     return () => cancelIdleCallback(id);
   }, []);
@@ -139,6 +165,20 @@ export const LocalStateProvider = ({ children }) => {
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [localState.data]);
+
+  // Same treatment for the GG catalogue, in its own effect so a write of one
+  // never re-serialises the other — together they are ~2.3 MB of JSON.
+  useEffect(() => {
+    if (!dataLoadedRef.current || !localState.ggData) return;
+    const timeoutId = setTimeout(() => {
+      try {
+        storage.set('ggData', JSON.stringify(localState.ggData));
+      } catch (e) {
+        // Silently handle serialization errors
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [localState.ggData]);
 
   // console.log(localState.isPro)
   // ✅ Memoize updateLocalState to prevent recreation on every render

@@ -8,6 +8,11 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
+import {
+    VALUE_SOURCE,
+    SOURCE_NAME,
+    formatValue as sharedFormatValue,
+} from '../Helper/valueSources';
 
 // ── Value Formatter (K / M / B) ────────────────────────
 const formatValue = (value) => {
@@ -15,7 +20,10 @@ const formatValue = (value) => {
     if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-    if (value < 1) return value.toFixed(2);
+    // Below 1, two decimals is not enough. Cheap items are worth thousandths,
+    // and `toFixed(2)` renders every one of them as "0.00" — which looks like
+    // a broken portfolio rather than a cheap one. Scale the decimals instead.
+    if (value < 1) return sharedFormatValue(value);
     return value.toLocaleString();
 };
 
@@ -93,6 +101,27 @@ const PortfolioValuation = ({ ownedPets = [], wishlistPets = [], isDarkMode, t }
 
         const bestCategory = categories.length > 0 ? categories[0] : null;
 
+        // Which catalogue(s) priced this portfolio.
+        //
+        // Every row is a SNAPSHOT taken when the user added it, in the source
+        // and unit active at that moment — nothing re-prices them later. Rows
+        // added before 2026-09 carry no valueSource, and Elvebredd is the
+        // honest answer for those: it was the only catalogue then.
+        //
+        // The total is still arithmetically sound (ValueScreen stores every
+        // snapshot in Sharks), but a mixed portfolio is adding up two different
+        // price lists, and the two disagree by a median 16.5% on the pets they
+        // share. So say so rather than presenting one confident number.
+        const sourceCounts = {};
+        ownedPets.forEach((pet) => {
+            const src = pet.valueSource === VALUE_SOURCE.GG ? VALUE_SOURCE.GG : VALUE_SOURCE.ELVEBREDD;
+            sourceCounts[src] = (sourceCounts[src] || 0) + 1;
+        });
+        const sourcesUsed = Object.keys(sourceCounts);
+        const sourceNote = sourcesUsed.length > 1
+            ? `Mixed: ${sourcesUsed.map((k) => `${sourceCounts[k]} ${SOURCE_NAME[k]}`).join(', ')}`
+            : `Based on ${SOURCE_NAME[sourcesUsed[0]]} values`;
+
         // Top 3 valuable pets
         const top3 = [...ownedPets]
             .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
@@ -114,6 +143,8 @@ const PortfolioValuation = ({ ownedPets = [], wishlistPets = [], isDarkMode, t }
             top3,
             wishlistTotal,
             wishlistGap,
+            sourceNote,
+            mixedSources: sourcesUsed.length > 1,
         };
     }, [ownedPets, wishlistPets]);
 
@@ -167,6 +198,20 @@ const PortfolioValuation = ({ ownedPets = [], wishlistPets = [], isDarkMode, t }
                     <Icon name="analytics-outline" size={12} color={isDarkMode ? '#94a3b8' : '#6b7280'} />
                     <Text style={styles.avgText}>
                         {t('settings.portfolio.avg_value')}: {formatValue(portfolio.avgValue)}
+                    </Text>
+                </View>
+                {/* Which catalogue these numbers came from. A mixed portfolio is
+                    adding up two price lists that disagree by a median 16.5% on
+                    the pets they share — the total is still arithmetically
+                    sound, but the reader should know what it is a total OF. */}
+                <View style={styles.avgRow}>
+                    <Icon
+                        name={portfolio.mixedSources ? 'alert-circle-outline' : 'pricetag-outline'}
+                        size={12}
+                        color={portfolio.mixedSources ? '#f59e0b' : (isDarkMode ? '#94a3b8' : '#6b7280')}
+                    />
+                    <Text style={[styles.avgText, portfolio.mixedSources && { color: '#f59e0b' }]}>
+                        {portfolio.sourceNote}
                     </Text>
                 </View>
             </View>

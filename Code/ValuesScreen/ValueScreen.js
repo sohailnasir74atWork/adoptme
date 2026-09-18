@@ -20,6 +20,14 @@ import { useGlobalState } from '../GlobelStats';
 import CodesDrawer from './Code';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
+import {
+  VALUE_SOURCE,
+  VALUE_UNIT,
+  DEFAULT_VALUE_SOURCE,
+  valueOf,
+  categoriesFor,
+  resolveItemImage,
+} from '../Helper/valueSources';
 import { useTranslation } from 'react-i18next';
 import { ref, update } from '@react-native-firebase/database';
 import { mixpanel } from '../AppHelper/MixPenel';
@@ -121,11 +129,9 @@ const ItemImage = React.memo(({ uri, badges, styles }) => (
 ));
 
 // ✅ PERF FIX: Moved to module level (was inside ValueScreen, recreated every render)
-const getImageUrl = (item, baseImgUrl) => {
-  if (!item || !item.name) return '';
-  if (!item.image || !baseImgUrl) return '';
-  return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-};
+// Delegates to valueSources so GG-only items (36 Houses + 8 spelling
+// mismatches) fall back to their amvgg art instead of rendering blank.
+const getImageUrl = (item, baseImgUrl) => resolveItemImage(item, baseImgUrl);
 
 // Rounding for displayed values. Two decimals is right for most of the catalog,
 // but 613 items (toys, stickers, badges) are priced below 0.01 — at 2dp they all
@@ -156,7 +162,10 @@ const formatValue = (n) => {
 // check used elsewhere (e.g. TradeShowdown, IceBreaker).
 const PET_TYPES = ['PETS', 'PET'];
 const isPetType = (type) => PET_TYPES.includes(String(type || '').toUpperCase());
-const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS', 'OTHER'];
+// Category filters are derived from the ACTIVE feed (see categoriesFor), not
+// hardcoded — the two sources need not carry the same set. This constant is
+// only the cold-start fallback for code paths that run before data loads.
+const CATEGORIES_FALLBACK = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS', 'OTHER'];
 
 const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, fromChat, fromSetting, imgurl, t }) => {
   const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
@@ -430,9 +439,22 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
 
   // Memoize the parsed data to prevent unnecessary re-parsing
+  // Which site's values this list shows. Set on the calculator; the list
+  // follows it so the two screens never disagree.
+  const valueSource = localState?.valueSource || DEFAULT_VALUE_SOURCE;
+
   const parsedValuesData = useMemo(() => {
     try {
-      const rawData = localState.data;
+      // The GG catalogue is its own list, not a re-pricing of the Elvebredd
+      // one: it carries 36 Houses that Elvebredd has no category for, and
+      // omits 2,363 near-worthless cosmetics that Elvebredd lists. Showing
+      // the active source's own rows is the honest view.
+      //
+      // Falls back to Elvebredd if the GG feed has not arrived yet, so
+      // picking GG on a cold start shows the old list rather than nothing.
+      const rawData = (valueSource === VALUE_SOURCE.GG && localState.ggData)
+        ? localState.ggData
+        : localState.data;
       if (!rawData) return [];
 
       const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -441,7 +463,23 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       console.error("❌ Error parsing data:", error);
       return [];
     }
-  }, [localState.data]);
+  }, [localState.data, localState.ggData, valueSource]);
+
+  /**
+   * Category filters, derived from whatever the active feed actually contains.
+   *
+   * Hardcoding them fails silently in both directions: a type the feed carries
+   * but the list omits becomes unreachable, and a type the list names but the
+   * feed lacks shows an empty filter. The two sources line up today only
+   * because the pipeline maps GG's categories onto Elvebredd's names — that is
+   * a mapping, not a guarantee.
+   */
+  const CATEGORIES = useMemo(
+    () => (parsedValuesData.length
+      ? categoriesFor(parsedValuesData, { prefix: ['ALL'] })
+      : CATEGORIES_FALLBACK),
+    [parsedValuesData]
+  );
 
   // ✅ PERF FIX: getImageUrl moved to module level
   // Memoize the parsed codes data
@@ -474,32 +512,39 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
 
-    const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'food', 'strollers', 'gifts', 'stickers'];
-    if (simpleValueCategories.includes(item.type?.toLowerCase())) {
-      return roundValue(Number((item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0));
-    }
+    // Both feeds are shown in SHARKS here. This list has no Shark/Frost
+    // toggle, and Elvebredd is already shark-native, so converting GG's
+    // frost-native numbers keeps the two sources in the same ballpark —
+    // switching source changes the prices, not the order of magnitude.
+    //
+    // No lookup is needed: the rows already come from the active source
+    // (see parsedValuesData), so their numbers are that source's own.
+    const value = valueOf(item, {
+      source: valueSource,
+      unit: VALUE_UNIT.SHARK,
+      valueType: selectedValueType,
+      isFly: isFlySelected,
+      isRide: isRideSelected,
+    });
 
-    if (!selectedValueType) return 0;
-
-    const valueKey = selectedValueType === 'n' ? 'nvalue' :
-      selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-
-    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-      isFlySelected ? ' - fly' :
-        isRideSelected ? ' - ride' : ' - nopotion';
+    if (value) return roundValue(value);
 
     // A few pets carry only a flat `value` and no variant keys at all
     // (Dylan / Pistachio / River today). Without the fallback they render as 0
     // despite being priced in the feed. Keyed on the variant key being ABSENT,
     // not on it being zero — a pet legitimately worth 0 keeps showing 0.
-    const rawVariant = item[valueKey + modifierSuffix];
-    if (rawVariant === undefined || rawVariant === null) {
+    if (!isPetType(item.type)) return 0;
+    const valueKey = selectedValueType === 'n' ? 'nvalue' :
+      selectedValueType === 'm' ? 'mvalue' : 'rvalue';
+    const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
+      isFlySelected ? ' - fly' :
+        isRideSelected ? ' - ride' : ' - nopotion';
+    if (item[valueKey + modifierSuffix] === undefined || item[valueKey + modifierSuffix] === null) {
       const flat = Number(item.value);
       return Number.isFinite(flat) ? roundValue(flat) : 0;
     }
-
-    return roundValue(Number(rawVariant) || 0);
-  }, []);
+    return 0;
+  }, [valueSource]);
   const filteredData = useMemo(() => {
     if (!Array.isArray(parsedValuesData) || parsedValuesData.length === 0) return [];
 
@@ -673,6 +718,18 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           imageUrl,
           category: item.type,
           id: item.id,
+          // `value` above is a SNAPSHOT, taken in whichever source and unit were
+          // active when the user tapped. Without these two fields it is an
+          // unlabelled number: a portfolio total mixes Elvebredd Sharks with GG
+          // Frosts and silently reads as nonsense, and the chat caption
+          // ("Based on … values") has nothing to read and always says Elvebredd.
+          //
+          // The rows are also the only record — nothing re-prices them later.
+          valueSource,
+          valueUnit: VALUE_UNIT.SHARK,
+          // GG-only. `type` is 'other' for both Elvebredd potions and GG Houses,
+          // so this is what tells a portfolio or a filter which it is holding.
+          ...(item.ggCategory ? { ggCategory: item.ggCategory } : {}),
         };
 
         // 👉 From chat: always add another copy

@@ -34,6 +34,7 @@ import ScamSafetyBox from './Scamwarning';
 import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
 import { getCachedProfile } from '../../Helper/profileCache';
+import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
 
 // Above this many pets a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
@@ -416,6 +417,16 @@ const PrivateMessageList = ({
                     </Text>
                   </View>
                 )}
+
+                {/* Which catalogue priced this list. The two sites disagree by
+                    a median 16.5% on the pets they share, and 2,363 Elvebredd
+                    items are not on GG at all — so a reader needs to know which
+                    one these numbers came from. Lists shared before 2026-09
+                    carry no valueSource, and Elvebredd is the honest answer for
+                    those: it was the only catalogue then. */}
+                <Text style={{ fontSize: 9, marginTop: 4, opacity: 0.6, color: c?.text || '#888' }}>
+                  {sourceStatement(sourceOfItems(fruits))}
+                </Text>
               </View>
             )}
 

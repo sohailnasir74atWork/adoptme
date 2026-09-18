@@ -13,6 +13,13 @@ import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute, log as crashlyticsLog, recordError as crashlyticsRecordError } from '@react-native-firebase/crashlytics';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ensureGoogleSignInConfigured } from './Firebase/googleSignInConfig';
+import {
+  VALUE_SOURCE,
+  SOURCE_URL,
+  deriveFactor,
+  indexSource,
+  // factorHealth is used in HomeScreen, where the RTDB `factor` lives.
+} from './Helper/valueSources';
 
 // ── Auth diagnostics + silent re-login state (2026-09-04) ───────────────
 // Users reported "logged out for no reason, can't log back in until I clear
@@ -843,52 +850,99 @@ export const GlobalStateProvider = ({ children }) => {
       setLoading(true);
 
       const ls = localStateRef.current;
-      const lastActivity = ls.lastActivity ? new Date(ls.lastActivity).getTime() : 0;
       const now = Date.now();
-      const timeElapsed = now - lastActivity;
-      const EXPIRY_LIMIT = refresh ? 1 * 1000 : 3 * 60 * 1000; // 10s for refresh, 6min default
+
+      // ── Cache policy: 24h, or whenever the user pulls to refresh ──────────
+      //
+      // The app now fetches TWO catalogues (~105 KB gzipped each, ~1.2 MB raw),
+      // so the old 3-minute expiry meant a pair of full downloads every few
+      // minutes per active user. Values only change when the pipeline is
+      // re-run, which is roughly daily — a 24h TTL costs one pair of requests
+      // per user per day and loses nothing.
+      //
+      // The clock was also the wrong variable: it read `lastActivity`, the
+      // user-presence heartbeat (throttled to one write per 6h), not "when did
+      // I last fetch". That made the cadence unpredictable and unrelated to
+      // the data. `fetchDataTime` already existed in local state for exactly
+      // this and was never written; it is now.
+      const VALUES_TTL_MS = 24 * 60 * 60 * 1000;
+      const lastFetched = Number(ls.fetchDataTime) || 0;
+      const isStale = now - lastFetched > VALUES_TTL_MS;
+
+      // An explicit pull-to-refresh always goes to the network. Everything
+      // else is served from the cached copy until the TTL expires.
       const shouldFetch =
-        timeElapsed > EXPIRY_LIMIT ||
+        refresh ||
+        isStale ||
         !ls.data ||
         !Object.keys(ls.data).length ||
         !ls.imgurl;
 
 
       if (shouldFetch) {
-        const valuesNotGG = `https://adoptme.b-cdn.net?cb=${Date.now()}`;
+        // The cache-buster and `no-store` are for an EXPLICIT refresh only.
+        // Applying them to every fetch made each request a unique URL, so the
+        // CDN edge cache and the HTTP layer were both bypassed — no 304s, a
+        // full download every time. A normal fetch now uses the plain URL and
+        // the default cache, so an unchanged file costs a conditional request
+        // instead of 1.2 MB.
+        const bust = refresh ? `?cb=${Date.now()}` : '';
+        const elvebreddUrl = `${SOURCE_URL[VALUE_SOURCE.ELVEBREDD]}${bust}`;
+        const ggUrl = `${SOURCE_URL[VALUE_SOURCE.GG]}${bust}`;
 
-        // 🔹 Fetch non-GG data from Bunny CDN ONLY (no Firebase fallback)
-        try {
-          // console.log('🌐 Fetching non-GG data from:', valuesNotGG);
-          const res = await fetch(valuesNotGG, {
-            method: 'GET',
-            cache: 'no-store',
-          });
+        const loadFromCdn = async (url) => {
+          const res = await fetch(url, { method: 'GET', cache: refresh ? 'no-store' : 'default' });
+          // Bunny answers a missing file with a 200-looking HTML error page on
+          // some zones and a 404 on others, so check the status before parsing.
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const json = await res.json();
-
           if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
-            throw new Error('Non-GG CDN returned invalid data');
+            throw new Error('CDN returned invalid or error data');
           }
-          // console.log(JSON.stringify(json))
-          await updateLocalStateRef.current('data', json);
-        } catch (err) {
-          console.warn('⚠️ Non-GG CDN failed, using cached data:', err.message);
+          return json;
+        };
+
+        // Fetched independently, and that matters. Sharing one try block would
+        // let a GG failure discard a good Elvebredd response — the exact bug
+        // the MM2 app hit when its second feed 404'd.
+        const [elvebreddResult, ggResult] = await Promise.allSettled([
+          loadFromCdn(elvebreddUrl),
+          loadFromCdn(ggUrl),
+        ]);
+
+        // 🔹 Elvebredd — the primary catalogue. 16 screens read it.
+        if (elvebreddResult.status === 'fulfilled') {
+          await updateLocalStateRef.current('data', elvebreddResult.value);
+        } else {
+          console.warn('⚠️ Elvebredd CDN failed, using cached data:', elvebreddResult.reason?.message);
           // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase xlsData
           // This prevents downloading 12.43 MB from Firebase RTDB
-          // If no cached data exists, keep existing localState.data (empty or old)
           const localDataObj = typeof ls.data === 'string' ? JSON.parse(ls.data) : ls.data;
           const hasLocalData = localDataObj && Object.keys(localDataObj || {}).length > 0;
 
           if (!hasLocalData) {
             console.error('❌ No CDN data and no cached data available. App may not function correctly.');
-            // Keep existing localState.data (which might be empty)
-            // Don't download from Firebase to save costs
           } else {
             console.log('✅ Using cached data instead of downloading from Firebase xlsData');
           }
         }
 
+        // 🔹 GG — the second source. Optional: if it fails the app keeps
+        // working on Elvebredd, and the source toggle falls back to it.
+        if (ggResult.status === 'fulfilled') {
+          await updateLocalStateRef.current('ggData', ggResult.value);
+        } else {
+          console.warn('⚠️ GG CDN failed, keeping cached GG data:', ggResult.reason?.message);
+        }
 
+        // Stamp the cache only when at least one catalogue actually arrived.
+        // Stamping unconditionally would start the 24h clock on a failed
+        // fetch, leaving the app on stale data for a day because the network
+        // happened to be down at launch. A total failure leaves the old
+        // timestamp in place, so the next launch retries immediately.
+        if (elvebreddResult.status === 'fulfilled' || ggResult.status === 'fulfilled') {
+          await updateLocalStateRef.current('fetchDataTime', now);
+        }
 
         // 🔹 Fetch shared image_url only if missing (essentially static config)
         if (!ls.imgurl) {
@@ -918,6 +972,46 @@ export const GlobalStateProvider = ({ children }) => {
   const reload = useCallback(() => {
     fetchStockData(true);
   }, [fetchStockData]);
+
+  /**
+   * Derive each feed's Shark<->Frost factor FROM THAT FEED, and index both for
+   * cross-source lookups. Runs whenever either catalogue changes.
+   *
+   * This replaces the hardcoded RTDB `factor`, and it is the fix for a real
+   * bug: `factor` was 163.94, which is GG's Frost:Shark ratio (164.29), not
+   * Elvebredd's (313). Applied to Elvebredd values it inflated every Frost
+   * reading by ~1.91x — a Frost Dragon showed as 1.91 instead of 1.00.
+   *
+   * Deriving it means it can never drift again: the factor is simply the Frost
+   * Dragon's price in Sharks on that site, which arrives with every scrape.
+   */
+  useEffect(() => {
+    const asArray = (raw) => {
+      if (!raw) return null;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed)) return parsed;
+      return parsed && typeof parsed === 'object' ? Object.values(parsed) : null;
+    };
+
+    try {
+      const elvebredd = asArray(localState?.data);
+      if (elvebredd?.length) {
+        deriveFactor(VALUE_SOURCE.ELVEBREDD, elvebredd);
+        indexSource(VALUE_SOURCE.ELVEBREDD, elvebredd);
+      }
+
+      const gg = asArray(localState?.ggData);
+      if (gg?.length) {
+        deriveFactor(VALUE_SOURCE.GG, gg);
+        indexSource(VALUE_SOURCE.GG, gg);
+      }
+
+    } catch (e) {
+      // A malformed cached catalogue must not take the provider down; the
+      // fallback factors in valueSources keep the app approximately right.
+      console.warn('⚠️ Could not derive value factors:', e.message);
+    }
+  }, [localState?.data, localState?.ggData]);
 
 
 

@@ -7,6 +7,7 @@ import { useGlobalState } from '../GlobelStats';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../Helper/UserBadgePill';
+import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
@@ -1752,7 +1753,28 @@ const TradeList = ({ route }) => {
                   );
                 })()}
               </View>
-              <Text style={styles.cardTime}>{formattedTime}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={styles.cardTime}>{formattedTime}</Text>
+                {/* Which catalogue priced this trade. Win/Fair/Lose is a verdict
+                    on the totals, and the totals depend entirely on the source:
+                    the two sites disagree by a median 16.5% on the pets they
+                    share, and 2,363 Elvebredd items are not on GG at all.
+                    Without this a viewer cannot tell what the verdict was
+                    measured against.
+
+                    Trades posted before 2026-09 carry no valueSource, and
+                    Elvebredd is the honest answer for those — it was the only
+                    catalogue then. */}
+                {(() => {
+                  const source = sourceOfTrade(item);
+                  const isGG = source === VALUE_SOURCE.GG;
+                  return (
+                    <View style={[styles.sourceBadge, isGG && styles.sourceBadgeGG]}>
+                      <Text style={styles.sourceBadgeText}>{isGG ? 'GG' : 'ELV'}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
             </View>
           </TouchableOpacity>
 
@@ -2727,6 +2749,22 @@ const getStyles = (isDarkMode, c) => {
       paddingVertical: 3,
       paddingHorizontal: 8,
       borderRadius: 8,
+    },
+    // Value-source tag on a trade card. Grey for Elvebredd (the default and
+    // the pre-2026-09 answer), accent for GG so the rarer one stands out.
+    sourceBadge: {
+      paddingVertical: 1,
+      paddingHorizontal: 5,
+      borderRadius: 4,
+      backgroundColor: isDarkMode ? '#475569' : '#94a3b8',
+    },
+    sourceBadgeGG: {
+      backgroundColor: config.colors.secondary,
+    },
+    sourceBadgeText: {
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: 7,
     },
     statusBadgeText: {
       color: 'white',

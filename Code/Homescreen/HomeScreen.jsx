@@ -28,6 +28,18 @@ import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react
 import { buildVariantTags } from '../Trades/tradeHelpers';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import TradeCompletion from '../Engagement/TradeCompletion';
+import {
+  VALUE_SOURCE,
+  VALUE_UNIT,
+  DEFAULT_VALUE_SOURCE,
+  SOURCE_LABEL,
+  priceOf,
+  formatValue,
+  itemInSource,
+  toLegacyMode,
+  categoriesFor,
+  resolveItemImage,
+} from '../Helper/valueSources';
 
 const GRID_STEPS = [9, 12, 15, 18];
 
@@ -40,34 +52,71 @@ const VALUE_TYPES = ['D', 'N', 'M'];
 const MODIFIERS = ['F', 'R'];
 const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'STICKERS'];
 
-const getItemValue = (item, selectedValueType, isFlySelected, isRideSelected, isSharkMode = true, factor) => {
+/**
+ * The calculator's value lookup. Delegates to Code/Helper/valueSources, which
+ * owns the unit maths for both feeds — see that file's header for why.
+ *
+ * The signature is unchanged so the existing call sites keep working, but two
+ * parameters changed meaning on 2026-09-17:
+ *
+ *   isSharkMode   still true | false, and still Shark | Frost. It selects the
+ *                 UNIT only. Which SITE priced the item is `valueSource`.
+ *   factor        IGNORED, and kept only so nothing has to be re-threaded.
+ *                 Each feed's Shark<->Frost factor is now derived from that
+ *                 feed's own Frost Dragon price at load time. The RTDB
+ *                 `factor` was 163.94 — GG's ratio, applied to Elvebredd data,
+ *                 which inflated every Frost reading by ~1.91x.
+ *
+ * Returns a full-precision number. Rounding is the renderer's job: use
+ * formatValue, never .toFixed(2) — 2 decimals renders 86% of the Elvebredd
+ * catalogue as "0.00" in Frost mode.
+ */
+const getItemValue = (
+  item,
+  selectedValueType,
+  isFlySelected,
+  isRideSelected,
+  isSharkMode = true,
+  factor,          // eslint-disable-line no-unused-vars -- see above
+  valueSource = DEFAULT_VALUE_SOURCE,
+) => {
   if (!item) return 0;
 
-  // Categories that only use 'value' field
-  const simpleValueCategories = ['eggs', 'vehicles', 'pet wear', 'other', 'toys', 'strollers', 'food', 'gifts', 'stickers'];
+  // priceOf, NOT valueOf. The grid is populated from the Elvebredd catalogue,
+  // so when GG is the active source the row in hand still holds Elvebredd
+  // numbers — priceOf follows it into the GG catalogue by name first. Calling
+  // valueOf directly would read Elvebredd's Shark figures and convert them as
+  // though they were GG's Frost figures, mispricing everything by ~313x.
+  const priced = priceOf(item, {
+    source: valueSource,
+    unit: isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK,
+    valueType: selectedValueType,
+    isFly: isFlySelected,
+    isRide: isRideSelected,
+  });
 
+  // `missing` means the active source does not list this item at all — 2,363
+  // Elvebredd names are absent from GG. Zero is the honest total contribution;
+  // the tile labels it via itemValueLabel so it does not read as "free".
+  return priced.value;
+};
 
-  // Handle simple value categories
-  if (simpleValueCategories.includes(item.type?.toLowerCase())) {
-    const value = Number(item.type?.toLowerCase() === 'eggs' ? item.rvalue : item.value) || 0;
-    return Number((isSharkMode ? value : value / factor).toFixed(2));
-  }
-
-  // For pets, use the exact value key based on selected type and modifiers
-  if (!selectedValueType) return 0;
-
-  // Determine value key based on selected type
-  const valueKey = selectedValueType === 'n' ? 'nvalue' :
-    selectedValueType === 'm' ? 'mvalue' : 'rvalue';
-
-  // Add modifier suffix
-  const modifierSuffix = isFlySelected && isRideSelected ? ' - fly&ride' :
-    isFlySelected ? ' - fly' :
-      isRideSelected ? ' - ride' : ' - nopotion';
-
-  const value = Number(item[valueKey + modifierSuffix]) || 0;
-  // console.log(value)
-  return Number((isSharkMode ? value : value / factor).toFixed(2));
+/**
+ * What to render on a tile: the formatted number, or a word when the active
+ * source cannot price it. Never ".toFixed(2)" — that renders most of the
+ * catalogue as "0.00" in Frost mode.
+ */
+const itemValueLabel = (item, selectedValueType, isFly, isRide, isSharkMode, valueSource) => {
+  if (!item) return '0';
+  const priced = priceOf(item, {
+    source: valueSource,
+    unit: isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK,
+    valueType: selectedValueType,
+    isFly,
+    isRide,
+  });
+  if (priced.missing) return 'N/L';   // not listed by this source
+  return formatValue(priced.value);
 };
 
 const getTradeStatus = (hasTotal, wantsTotal) => {
@@ -129,7 +178,44 @@ const HomeScreen = ({ selectedTheme }) => {
   const [selectedValueType, setSelectedValueType] = useState('d');
   const [isFlySelected, setIsFlySelected] = useState(false);
   const [isRideSelected, setIsRideSelected] = useState(false);
-  const [isSharkMode, setIsSharkMode] = useState(true);
+  // Seeded from storage, like valueSource below: the mode the user last picked
+  // is the mode the app reopens in. Shark when nothing was ever chosen.
+  const [isSharkMode, setIsSharkMode] = useState(
+    () => (localState?.valueUnit || VALUE_UNIT.SHARK) !== VALUE_UNIT.FROST
+  );
+  // WHICH SITE priced the item. Stored apart from the Shark/Frost unit above
+  // because the maths needs them apart — conflating the two is what let GG's
+  // 163.94 end up dividing Elvebredd values; see Code/Helper/valueSources.js.
+  // The UI pairs them back into one exclusive choice (see selectValueMode).
+  // Persisted so the choice sticks.
+  const [valueSource, setValueSource] = useState(
+    () => localState?.valueSource || DEFAULT_VALUE_SOURCE
+  );
+  const isGgMode = valueSource === VALUE_SOURCE.GG;
+  /**
+   * The calculator offers THREE mutually exclusive modes, not a unit toggle
+   * plus a source toggle:
+   *
+   *   Shark  Elvebredd, counted in Sharks
+   *   Frost  Elvebredd, counted in Frost Dragons
+   *   GG     the GG catalogue
+   *
+   * GG is read in Sharks so a pet shows the same number here as on the Values
+   * screen (which is shark-only), and because 641 of GG's 1,134 rows collapse
+   * toward zero in its native Frosts. One line below flips that if the GG
+   * numbers should instead read in GG's own units.
+   */
+  const selectValueMode = useCallback((mode) => {
+    const nextSource = mode === 'gg' ? VALUE_SOURCE.GG : VALUE_SOURCE.ELVEBREDD;
+    const nextUnit = mode === 'frost' ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK;
+    setValueSource(nextSource);
+    setIsSharkMode(nextUnit !== VALUE_UNIT.FROST);
+    // Both axes are persisted together — a half-written mode would reopen as a
+    // pair the user never picked (GG in Frosts, say).
+    updateLocalState('valueSource', nextSource);
+    updateLocalState('valueUnit', nextUnit);
+    triggerHapticFeedback('impactLight');
+  }, [updateLocalState, triggerHapticFeedback]);
   const [isAddingToFavorites, setIsAddingToFavorites] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [debouncedSearchText, setDebouncedSearchText] = useState(searchText);
@@ -178,9 +264,20 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
 
-  const CATEGORIES = useMemo(() => {
-    return ['MY_STUFF', 'ALL', 'PETS', 'EGGS', 'TOYS', 'VEHICLES', 'PET WEAR', 'STROLLERS', 'OTHER', 'FOOD', 'GIFTS', 'STICKERS'].map(cat => cat.toUpperCase());
-  }, []);
+  /**
+   * Category filters, derived from the pool the drawer is actually showing
+   * rather than hardcoded.
+   *
+   * The two feeds share one vocabulary today only because the pipeline maps
+   * GG's categories onto Elvebredd's names — Elvebredd carries 3,491 items to
+   * GG's 1,561, and either site can add a category at any time. A fixed list
+   * fails silently both ways: a new type gets no filter and its items become
+   * unreachable, and a type the active feed lacks shows an empty filter.
+   */
+  const CATEGORIES = useMemo(
+    () => categoriesFor(fruitRecords, { prefix: ['MY_STUFF', 'ALL'] }),
+    [fruitRecords]
+  );
 
   const getCategoryLabel = useCallback((category) => {
     const key = category.toLowerCase().replace(' ', '_');
@@ -272,16 +369,10 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
   // ✅ getImageUrl - No longer needs fallback since favorites now use current data
-  const getImageUrl = useCallback((item, baseImgUrl) => {
-    if (!item || !item.name) return '';
-
-    // For non-GG mode, check if item has image property
-    if (item.image && baseImgUrl) {
-      return `${baseImgUrl.replace(/"/g, '').replace(/\/$/, '')}/${item.image.replace(/^\//, '')}`;
-    }
-
-    return '';
-  }, []);
+  // Delegates to valueSources so GG-only items (36 Houses + 8 spelling
+  // mismatches) fall back to their amvgg art instead of rendering blank, and
+  // so an absolute URL is never prefixed with the Elvebredd host.
+  const getImageUrl = useCallback((item, baseImgUrl) => resolveItemImage(item, baseImgUrl), []);
 
 
   const updateTotal = useCallback((item, section, add = true, isNew = false) => {
@@ -351,12 +442,18 @@ const HomeScreen = ({ selectedTheme }) => {
         isFlySelected,
         isRideSelected,
         isSharkMode,
-        factor
+        factor,
+        valueSource
       );
 
       const selectedItem = {
         ...item,
         selectedValue: value,
+        // Stamp the source on the saved row so a trade opened later can say
+        // which catalogue priced it, and so old readers that only understand
+        // the three-way isSharkMode still render something sensible.
+        valueSource,
+        isSharkMode: toLegacyMode(valueSource, isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK),
         valueType: selectedValueType,
         isFly: isFlySelected,
         isRide: isRideSelected,
@@ -400,8 +497,8 @@ const HomeScreen = ({ selectedTheme }) => {
       isFlySelected,
       isRideSelected,
       isSharkMode,
-      isSharkMode,
       factor,
+      valueSource,
       triggerHapticFeedback,
       updateTotal,
       maybeExpandGrid,
@@ -476,10 +573,10 @@ const HomeScreen = ({ selectedTheme }) => {
   const updateItemsForMode = useCallback((items) => {
     return items.map(item => {
       if (!item) return null;
-      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, factor);
+      const value = getItemValue(item, item.valueType, item.isFly, item.isRide, isSharkMode, factor, valueSource);
       return { ...item, selectedValue: value };
     });
-  }, [isSharkMode, factor]); // ✅ Added missing dependencies
+  }, [isSharkMode, factor, valueSource]); // ✅ Added missing dependencies
 
   // ✅ Optimize the mode change effect - Fixed: Only update when mode changes, not when items change
   useEffect(() => {
@@ -545,10 +642,10 @@ const HomeScreen = ({ selectedTheme }) => {
       if (!item) return null;
       return {
         ...item,
-        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor),
+        cachedValue: getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, valueSource),
       };
     });
-  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor]); // ✅ Added missing dependencies
+  }, [fruitRecords, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, valueSource]); // ✅ Added missing dependencies
 
   // Step 3: Use optimized filteredData
   const filteredData = useMemo(() => {
@@ -575,7 +672,7 @@ const HomeScreen = ({ selectedTheme }) => {
           return {
             ...foundItem,
             _myStuffPet: pet,
-            cachedValue: getItemValue(foundItem, vType, fly, ride, isSharkMode, factor),
+            cachedValue: getItemValue(foundItem, vType, fly, ride, isSharkMode, factor, valueSource),
           };
         }
         return {
@@ -739,7 +836,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <Text style={styles.favoriteItemName} numberOfLines={1}>
               {item.name}{count > 1 ? ` (x${count})` : ''}
             </Text>
-            <Text style={styles.favoriteItemValue}>Value: {Number(currentValue).toLocaleString()}</Text>
+            <Text style={styles.favoriteItemValue}>Value: {formatValue(currentValue)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
               {tags.map(tag => (
                 <View key={tag.label} style={{ backgroundColor: tag.color, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
@@ -771,7 +868,7 @@ const HomeScreen = ({ selectedTheme }) => {
         </TouchableOpacity>
       </View>
     );
-  }, [localState.imgurl, isSharkMode, factor, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, isDarkMode, getImageUrl, analyticsMaps, t]);
+  }, [localState.imgurl, isSharkMode, factor, valueSource, selectedSection, hasItems, wantsItems, updateTotal, maybeExpandGrid, triggerHapticFeedback, isDarkMode, getImageUrl, analyticsMaps, t]);
 
   // Update renderGridItem to handle non-favorites mode
   const renderGridItem = useCallback(({ item }) => {
@@ -785,7 +882,7 @@ const HomeScreen = ({ selectedTheme }) => {
     const hot = getHotStatus(item.name, analyticsMaps.hotMap);
 
     if (viewMode === 'detailed') {
-      const currentValue = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor);
+      const currentValue = getItemValue(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, valueSource);
       return (
         <TouchableOpacity
           style={styles.detailedItem}
@@ -806,7 +903,7 @@ const HomeScreen = ({ selectedTheme }) => {
           )}
           <View style={styles.detailedItemInfo}>
             <Text numberOfLines={1} style={styles.detailedItemName}>{item.name}</Text>
-            <Text style={styles.detailedItemValue}>{t('value.label')} {Number(currentValue).toLocaleString()}</Text>
+            <Text style={styles.detailedItemValue}>{t('value.label')} {formatValue(currentValue)}</Text>
             {(demand || hot) && (
               <View style={styles.gridAnalyticsRow}>
                 {demand && demand.score >= 7 && (
@@ -871,7 +968,7 @@ const HomeScreen = ({ selectedTheme }) => {
         )}
       </TouchableOpacity>
     );
-  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps, viewMode, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, t]);
+  }, [selectItem, toggleFavorite, localState.favorites, isAddingToFavorites, localState.imgurl, isDarkMode, analyticsMaps, viewMode, selectedValueType, isFlySelected, isRideSelected, isSharkMode, factor, valueSource, t]);
 
   // Header for My Stuff tab showing count & total value
   const renderFavoritesHeader = useCallback(() => {
@@ -884,7 +981,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <Text style={styles.favoritesTitle}>{t('home.my_stuff', 'My Stuff')} ({myPets.length})</Text>
             {totalValue > 0 && (
               <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#10B981' : '#059669' }}>
-                {t('trade_journal.my_pets.total_value', 'Total')}: {Number(totalValue).toLocaleString()}
+                {t('trade_journal.my_pets.total_value', 'Total')}: {formatValue(totalValue)}
               </Text>
             )}
           </View>
@@ -1189,7 +1286,20 @@ const HomeScreen = ({ selectedTheme }) => {
         status: statusLetter,
         rating: userRating,
         ratingCount,
-        isSharkMode: isSharkMode,
+        // Which catalogue priced this trade. Win/Fair/Lose is a verdict on the
+        // totals, and the totals depend entirely on the source: the two sites
+        // disagree by a median 16.5% on the pets they share, and 2,363
+        // Elvebredd items are not on GG at all. Without this a viewer cannot
+        // tell what "Win" was measured against.
+        //
+        // Absent on every trade posted before 2026-09, which is exactly what
+        // Elvebredd means — it was the only catalogue then.
+        valueSource,
+        // The legacy three-way flag, kept in step so app versions that predate
+        // `valueSource` still render the right badge. Never read this for
+        // pricing — it conflates source and unit, which is the bug that put
+        // GG's 163.94 on Elvebredd values.
+        isSharkMode: toLegacyMode(valueSource, isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK),
         // ✅ Only include truthy profile fields (saves storage)
         ...(user?.avatar ? { avatar: user.avatar } : {}),
         ...(localState.isPro ? { isPro: true } : {}),
@@ -1758,18 +1868,32 @@ const HomeScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
               <View style={styles.typeContainer}>
 
+                {/*
+                  Exactly one of these three is active at a time. `isSharkMode`
+                  still carries the unit, but it is never read on its own here:
+                  a mode is the pair (source, unit), and selectValueMode sets
+                  both together so the two can never disagree on screen.
+                */}
                 <View style={styles.typeButtonsContainer}>
                   <TouchableOpacity
-                    style={[styles.typeButton, isSharkMode && styles.typeButtonActive]}
-                    onPress={() => setIsSharkMode(true)}
+                    style={[styles.typeButton, !isGgMode && isSharkMode && styles.typeButtonActive]}
+                    onPress={() => selectValueMode('shark')}
                   >
-                    <Text style={[styles.typeButtonText, isSharkMode && styles.typeButtonTextActive]}>{t('home.shark')}</Text>
+                    <Text style={[styles.typeButtonText, !isGgMode && isSharkMode && styles.typeButtonTextActive]}>{t('home.shark')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.typeButton, !isSharkMode && styles.typeButtonActive]}
-                    onPress={() => setIsSharkMode(false)}
+                    style={[styles.typeButton, !isGgMode && !isSharkMode && styles.typeButtonActive]}
+                    onPress={() => selectValueMode('frost')}
                   >
-                    <Text style={[styles.typeButtonText, !isSharkMode && styles.typeButtonTextActive]}>{t('home.frost')}</Text>
+                    <Text style={[styles.typeButtonText, !isGgMode && !isSharkMode && styles.typeButtonTextActive]}>{t('home.frost')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeButton, isGgMode && styles.typeButtonActive]}
+                    onPress={() => selectValueMode('gg')}
+                  >
+                    <Text style={[styles.typeButtonText, isGgMode && styles.typeButtonTextActive]}>
+                      {t('home.gg_values')}
+                    </Text>
                   </TouchableOpacity>
 
                 </View>
