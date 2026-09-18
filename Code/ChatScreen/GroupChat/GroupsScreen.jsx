@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import {
   View,
@@ -84,6 +85,7 @@ const truncateGroupName = (name, maxLength = 25) => {
 };
 
 const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user, theme, appdatabase, firestoreDB, isAdmin } = useGlobalState();
   const { localState } = useLocalState();
@@ -1894,6 +1896,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             borderTopRightRadius: 20,
             maxHeight: '90%',
             minHeight: 400,
+            paddingBottom: insets.bottom,
           }}>
             {/* Header */}
             <View style={{

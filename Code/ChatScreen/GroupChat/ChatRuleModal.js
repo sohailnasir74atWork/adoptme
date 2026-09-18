@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useMemo } from 'react';
 import { getThemeColors } from '../../Helper/themeColors';
 import {
@@ -13,6 +14,7 @@ import config from '../../Helper/Environment';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 
 const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
+  const insets = useSafeAreaInsets();
   const c = getThemeColors(isDarkMode);
   // ✅ Safety check and memoize rules array
   const rules = useMemo(() => {
@@ -46,7 +48,7 @@ const ChatRulesModal = ({ visible, onClose, isDarkMode }) => {
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={handleClose}>
       <View style={styles.overlay}>
-        <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDarkMode} style={[styles.modalContent, { backgroundColor: modalBgColor }]}>
+        <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDarkMode} style={[styles.modalContent, { backgroundColor: modalBgColor, paddingBottom: insets.bottom }]}>
           <Text style={[styles.title, { color: titleColor }]}>Community Chat Rules</Text>
           <ScrollView style={styles.scroll}>
             {rules.map((rule, index) => {

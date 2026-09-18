@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
@@ -47,6 +48,7 @@ const OnlineUsersList = ({
   // Group creation props (only used when mode === 'select')
   // ... existing props work for this
 }) => {
+  const insets = useSafeAreaInsets();
   // mode: 'view' = just view online users and start chats
   // mode: 'select' = select users for group creation/addition
   // mode: 'gameInvite' = select users to invite to game
@@ -758,7 +760,7 @@ const OnlineUsersList = ({
           <SwipeableBottomDrawer
             onClose={onClose}
             isDarkMode={isDarkMode}
-            style={styles.modalContent}
+            style={[styles.modalContent, { paddingBottom: insets.bottom }]}
           >
             {/* Header */}
             <View style={styles.header}>

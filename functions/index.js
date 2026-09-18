@@ -70,6 +70,13 @@ const rosters = require('./syncRosterMaintenance');
 exports.refreshAllRosters = rosters.refreshAllRosters;
 exports.seedAllRosters = rosters.seedAllRosters;
 
+// ── Moderation ────────────────────────────────────────────────────────
+// Stamps `bannedAt` onto any ban record that arrives without one. Needed
+// because old app builds still in the field write `appliedAt` only, and the
+// admin dashboard's list query (orderByChild('bannedAt')) cannot see a
+// record missing that key. See functions/stampBanTimestamp.js.
+exports.stampBanTimestamp = require('./stampBanTimestamp').stampBanTimestamp;
+
 // ── World Cup 2026 ────────────────────────────────────────────────────
 const worldCup = require('./fetchWorldCupData');
 exports.fetchWorldCupDataScheduled = worldCup.fetchWorldCupDataScheduled;

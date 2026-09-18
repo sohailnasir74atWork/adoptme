@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // OfferWall.jsx — Adopt Me Values PRO paywall
 // Goals: premium look, one obvious choice, kid-readable copy, honest pricing.
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -83,6 +84,7 @@ const formatMoney = (pkg, amount) => {
 };
 
 const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, inline }) => {
+  const insets = useSafeAreaInsets();
   const { packages, purchaseProduct, restorePurchases, localState } = useLocalState();
   const { theme } = useGlobalState();
   const { triggerHapticFeedback } = useHaptic();
@@ -414,7 +416,10 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
       </View>
 
       {/* ══ FIXED BOTTOM: plans + CTA + footer ══ */}
-      <View style={[s.fixedBottom, { backgroundColor: c.bottomBg, borderTopColor: c.bottomBorder }]}>
+      {/* BOTTOM_SAFE is a fixed 14/28pt guess; the real inset is 0 on a
+          gesture-nav device and ~48dp with 3-button navigation, which is
+          where the purchase button was ending up half-covered. */}
+      <View style={[s.fixedBottom, { backgroundColor: c.bottomBg, borderTopColor: c.bottomBorder, paddingBottom: BOTTOM_SAFE + insets.bottom }]}>
         {plans.length > 0 ? (
           <ScrollView
             style={s.planScroll}

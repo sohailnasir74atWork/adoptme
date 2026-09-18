@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useMemo, useCallback } from 'react';
 import {
   Modal,
@@ -26,6 +27,7 @@ const PetModal = ({
   onClose, 
   owned 
 }) => {
+  const insets = useSafeAreaInsets();
   const { theme } = useGlobalState();
   // ✅ Use strict equality and memoize
   const isDark = useMemo(() => theme === 'dark', [theme]);
@@ -57,7 +59,7 @@ const PetModal = ({
           <Pressable style={styles.backdrop} onPress={handleClose} />
 
           {/* Bottom drawer */}
-          <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDark} style={[styles.drawer, { backgroundColor: drawerBackgroundColor }]}>
+          <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDark} style={[styles.drawer, { backgroundColor: drawerBackgroundColor, paddingBottom: 16 + insets.bottom }]}>
             <ValueScreen
               fromChat={fromChat}
               selectedFruits={selectedFruits}

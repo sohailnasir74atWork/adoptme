@@ -53,7 +53,10 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
         const { action } = await sbReportMessage(message.id, user?.id ?? null);
         // On second report, ban the sender. Bans stay on RTDB.
         if (action === "deleted" && message.currentUserEmail) {
-          banUserwithEmail(message.currentUserEmail).catch((e) => {
+          banUserwithEmail(
+            message.currentUserEmail, false, message.senderId || null, null, null,
+            'Auto-ban: message reported twice', 'report',
+          ).catch((e) => {
             console.error("Error banning user:", e);
           });
         }
@@ -106,7 +109,10 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
 
         if (reportCount >= 1) {
           if (message.currentUserEmail) {
-            banUserwithEmail(message.currentUserEmail).catch((error) => {
+            banUserwithEmail(
+              message.currentUserEmail, false, message.senderId || null, null, null,
+              'Auto-ban: message reported twice', 'report',
+            ).catch((error) => {
               console.error("Error banning user:", error);
             });
           }

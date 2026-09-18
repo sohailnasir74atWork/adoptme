@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
@@ -37,6 +38,7 @@ const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 
 const UploadModal = ({ visible, onClose, onUpload, user }) => {
+  const insets = useSafeAreaInsets();
   const [desc, setDesc] = useState('');
   const [imageUris, setImageUris] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -322,7 +324,10 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={themedStyles.fullScreenContainer}>
+      {/* presentationStyle="pageSheet" is an iOS hint; on Android this is a
+          full-screen, edge-to-edge surface, so the header needs the status
+          bar inset or it sits under the clock. */}
+      <View style={[themedStyles.fullScreenContainer, { paddingTop: insets.top }]}>
         {/* Header - Fixed at top */}
         <View style={themedStyles.header}>
           <Text style={themedStyles.headerTitle}>Create Post</Text>
@@ -334,7 +339,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
         <ConditionalKeyboardWrapper style={{ flex: 1 }}>
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >

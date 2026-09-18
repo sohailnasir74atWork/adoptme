@@ -116,7 +116,21 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
       // Side-effects OUTSIDE the transaction to avoid retries breaking things
       if (txResult.shouldBan && txResult.email && txResult.userId) {
         try {
-          await banUserwithEmail(txResult.email, txResult.userId);
+          // The userId was being passed into the `isAdmin` slot. Two
+          // consequences: the reporting user got an "User Banned — Strike N
+          // applied" alert (leaking a moderation outcome to a stranger),
+          // and the ban record was written with userId: null because the
+          // real senderId slot was left empty. Correct positions here;
+          // `false` for isAdmin is what suppresses that alert.
+          await banUserwithEmail(
+            txResult.email,
+            false,
+            txResult.userId,
+            null,
+            null,
+            `Auto-ban: post reached ${REPORT_THRESHOLD} reports`,
+            'report',
+          );
         } catch (err) {
           console.error('Ban error:', err);
           // optional: decide if you want to unset 'banned' on the post here

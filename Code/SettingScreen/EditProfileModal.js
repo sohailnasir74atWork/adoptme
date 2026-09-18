@@ -9,7 +9,12 @@ import {
   Modal,
   Pressable,
   KeyboardAvoidingView,
+  // `Platform` is referenced by the KeyboardAvoidingView behavior prop
+  // below but was never imported — this component threw
+  // "ReferenceError: Platform is not defined" as soon as it rendered.
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../GlobelStats';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
@@ -21,6 +26,7 @@ export default function EditProfileModal({
   selectedImage,
   setSelectedImage,
 }) {
+  const insets = useSafeAreaInsets();
   // const {localeState} = useGlobalState();
   // console.log(localeState.data, 'SDD')
   const imageOptions = [
@@ -55,6 +61,9 @@ export default function EditProfileModal({
       <SwipeableBottomDrawer onClose={onClose} style={{
           backgroundColor: '#fff',
           padding: 20,
+          // Clears the system navigation bar (targetSdk 36 draws
+          // edge-to-edge, so nothing is inset for us).
+          paddingBottom: 20 + insets.bottom,
         }}>
         <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 15 }}>
           Edit Profile

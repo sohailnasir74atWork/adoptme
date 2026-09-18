@@ -16,7 +16,7 @@
       ".read": true,
       "$userId": {
         ".read": true,
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (!newData.exists() && auth.uid === $userId) || (newData.child('admin').val() === data.child('admin').val() && newData.child('isAdmin').val() === data.child('isAdmin').val() && newData.child('isSeniorMod').val() === data.child('isSeniorMod').val() && newData.child('isModerator').val() === data.child('isModerator').val() && (newData.child('isHelper').val() === data.child('isHelper').val() || root.child('users').child(auth.uid).child('isModerator').val() === true) && (newData.child('isBabyMod').val() === data.child('isBabyMod').val() || root.child('jmd_granters').child(auth.uid).val() === true) && (newData.child('isTrusted').val() === data.child('isTrusted').val() || root.child('users').child(auth.uid).child('isModerator').val() === true) && (newData.child('isCMSR').val() === data.child('isCMSR').val() || root.child('users').child(auth.uid).child('isModerator').val() === true)))"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (!newData.exists() && auth.uid === $userId) || (newData.child('admin').val() === data.child('admin').val() && newData.child('isAdmin').val() === data.child('isAdmin').val() && newData.child('isSeniorMod').val() === data.child('isSeniorMod').val() && (newData.child('isModerator').val() === data.child('isModerator').val() || root.child('jmd_granters').child(auth.uid).exists()) && (newData.child('isHelper').val() === data.child('isHelper').val() || root.child('users').child(auth.uid).child('isModerator').val() === true) && (newData.child('isBabyMod').val() === data.child('isBabyMod').val() || root.child('jmd_granters').child(auth.uid).exists()) && (newData.child('isTrusted').val() === data.child('isTrusted').val() || root.child('users').child(auth.uid).child('isModerator').val() === true) && (newData.child('isCMSR').val() === data.child('isCMSR').val() || root.child('users').child(auth.uid).child('isModerator').val() === true)))"
       }
     },
     "_serverTime": {
@@ -161,6 +161,7 @@
     "banned_users_by_email": {
       ".indexOn": [
         "bannedAt",
+        "bannedUntil",
         "displayName"
       ],
       ".read": true,

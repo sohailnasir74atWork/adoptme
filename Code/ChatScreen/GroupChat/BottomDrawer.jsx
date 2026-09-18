@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Modal,
@@ -230,6 +231,7 @@ const ProfileBottomDrawer = ({
   bannedUsers,
   fromPvtChat,
 }) => {
+  const insets = useSafeAreaInsets();
   const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled, canGrantJmd } = useGlobalState();
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
@@ -1153,7 +1155,10 @@ const ProfileBottomDrawer = ({
     const bannerInfo = {
       id: currentUser?.uid,
       displayName: currentUser?.displayName || 'Admin',
-      avatar: currentUser?.photoURL
+      avatar: currentUser?.photoURL,
+      // Recorded on the audit-log row so the history shows what authority
+      // the action was taken under, not just who took it.
+      role: isAdmin ? 'admin' : (user?.isModerator ? 'moderator' : (user?.isBabyMod ? 'baby_mod' : null)),
     };
     
     // Use fallback email from reasonActionType if mergedUser.email is missing
@@ -1176,7 +1181,8 @@ const ProfileBottomDrawer = ({
         true,
         bannerInfo,
         mergedUser,
-        finalReason
+        finalReason,
+        'group_chat'
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1191,7 +1197,8 @@ const ProfileBottomDrawer = ({
         mergedUser,
         bannerInfo,
         true,
-        finalReason
+        finalReason,
+        'group_chat'
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1205,7 +1212,8 @@ const ProfileBottomDrawer = ({
         selectedUserId,
         mergedUser,
         bannerInfo,
-        finalReason
+        finalReason,
+        'group_chat'
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1232,7 +1240,12 @@ const ProfileBottomDrawer = ({
 
     if (!confirm) return;
 
-    const success = await unbanUserWithEmail(mergedUser.email);
+    const me = auth().currentUser;
+    const success = await unbanUserWithEmail(mergedUser.email, true, {
+      id: me?.uid,
+      displayName: me?.displayName || 'Admin',
+      role: isAdmin ? 'admin' : (user?.isModerator ? 'moderator' : (user?.isBabyMod ? 'baby_mod' : null)),
+    }, null, 'group_chat');
     if (success) {
       invalidateFullProfile(selectedUserId);
       setIsBanned(false);
@@ -1297,6 +1310,14 @@ const ProfileBottomDrawer = ({
   // GlobelStats resolves into `canGrantJmd`. A granter can only add/remove the
   // Junior Mod role — no other staff power comes with it.
   const canManageBabyMod = isAdmin || !!canGrantJmd;
+  // A JMD granter can promote/demote MODERATORS as well as Junior Mods
+  // (owner's decision, 2026-09-17). That is a real escalation — the mods they
+  // create get strikes, mute and badge powers the granter does not hold — so
+  // it is deliberately the same single grant, revocable from one place
+  // (RTDB /jmd_granters/{uid}), and the RTDB rule carries the matching
+  // carve-out. Changing this gate alone would not work: without the rule the
+  // server rejects the write.
+  const canManageModerator = isAdmin || !!canGrantJmd;
   const canManageBadges = isAdmin || !!user?.isModerator;
   const canDeleteUser = isAdmin;
 
@@ -2724,7 +2745,9 @@ const ProfileBottomDrawer = ({
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,
               maxHeight: '85%',
-              paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+              // Was a hardcoded platform guess. An Android 3-button nav
+              // bar is 48dp, so 20 left the sheet's last row under it.
+              paddingBottom: (Platform.OS === 'ios' ? 34 : 20) + insets.bottom,
             }}
           >
             {/* Header */}
@@ -3391,6 +3414,7 @@ const ProfileBottomDrawer = ({
                         isModerator={!!user?.isModerator}
                         isStaff={isAdmin || !!user?.isModerator || !!user?.isBabyMod}
                         canManageBabyMod={canManageBabyMod}
+                        canManageModerator={canManageModerator}
                         targetIsBabyMod={!!mergedUser?.isBabyMod}
                         handleMakeBabyMod={handleMakeBabyMod}
                         handleRemoveBabyMod={handleRemoveBabyMod}

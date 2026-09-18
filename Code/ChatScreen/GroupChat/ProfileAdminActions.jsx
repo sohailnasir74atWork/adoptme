@@ -8,6 +8,7 @@ const ProfileAdminActions = ({
   handlePromoteModerator, handleDemoteModerator,
   isBabyMod = false, isModerator = false, isStaff = true,
   canManageBabyMod = false, targetIsBabyMod = false,
+  canManageModerator = false,
   handleMakeBabyMod, handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR, handleMakeHelper, handleRemoveHelper,
@@ -17,8 +18,9 @@ const ProfileAdminActions = ({
 }) => {
   const c = getThemeColors(isDarkMode);
   const isBabyModOnly = isBabyMod && !isAdmin && !isModerator;
-  // A user who only holds the delegated "can grant Junior Mod" permission is not
-  // staff — they get the Junior Mod chip and nothing else.
+  // A user who only holds the delegated grant is not staff: no strikes, no
+  // mute, no unban, no badges, no delete. They get exactly two chips —
+  // Make/Remove Moderator and Make/Remove Junior Mod — and nothing else.
   const grantOnly = !isStaff;
 
   const bg = c.bg;
@@ -39,7 +41,7 @@ const ProfileAdminActions = ({
 
       <Text style={{ fontSize: 10, fontWeight: '700', color: dim,
         textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : grantOnly ? 'Junior Mod Access' : 'Junior Mod'}
+        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : grantOnly ? 'Staff Access' : 'Junior Mod'}
       </Text>
 
       {!isBabyModOnly && !grantOnly && (
@@ -75,7 +77,11 @@ const ProfileAdminActions = ({
         {!isBabyModOnly && !grantOnly && isBanned && (
           <Chip label="Unban" color="#10b981" onPress={handleUnbanUser} />
         )}
-        {isAdmin && (
+        {/* Admins, plus anyone holding the delegated JMD grant — see
+            canManageModerator in BottomDrawer. Shown to grant-only users too:
+            promoting a Moderator is the point of the grant, so it is the one
+            staff action that survives the `grantOnly` suppression below. */}
+        {(isAdmin || canManageModerator) && (
           <Chip
             label={mergedUser?.isModerator ? 'Remove Mod' : 'Make Mod'}
             color={mergedUser?.isModerator ? '#f59e0b' : '#3b82f6'}

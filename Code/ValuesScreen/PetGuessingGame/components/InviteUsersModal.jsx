@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // InviteUsersModal.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -23,6 +24,7 @@ import {
 import { showSuccessMessage, showErrorMessage } from '../../../Helper/MessageHelper';
 
 const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent }) => {
+  const insets = useSafeAreaInsets();
   const { appdatabase, firestoreDB, theme } = useGlobalState();
   const isDarkMode = theme === 'dark';
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -253,7 +255,7 @@ const InviteUsersModal = ({ visible, onClose, roomId, currentUser, onInviteSent 
           style={{ flex: 1, justifyContent: 'flex-end' }}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#fff' }]}>
+          <View style={[styles.container, { backgroundColor: isDarkMode ? '#1e293b' : '#fff', paddingBottom: insets.bottom }]}>
             <View style={styles.header}>
               <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
                 Invite Friends to Play

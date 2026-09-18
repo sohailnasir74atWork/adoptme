@@ -36,6 +36,7 @@ import {
   query,
   orderByChild,
   orderByKey,
+  equalTo,
   startAt,
   endAt,
   limitToFirst,
@@ -67,9 +68,16 @@ import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser, canStaff
 import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
 import { adminLoadPrivateMessages, adminDeletePrivateChat } from '../Supabase/privateMessagesBackend';
 import { searchIdentityByName, searchIdentityByEmail, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
+import {
+  fetchUserModHistory,
+  fetchUserModCounts,
+  fetchModLeaderboard,
+  fetchRecentModActions,
+} from '../Supabase/modLogBackend';
 import { useGlobalState } from '../GlobelStats';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { safeCompressImage } from '../Helper/safeCompressImage';
@@ -102,6 +110,102 @@ const base64ToBytes = (base64) => {
 };
 
 const decodeEmail = (encoded) => (encoded ? encoded.replace(/\(dot\)/g, '.') : '');
+
+// The ONE way this screen turns an email into an RTDB key.
+//
+// Writes go through encodeEmailForBan() in ChatScreen/utils.js, which
+// lowercases and trims before encoding. Two readers here did not
+// (`email.replace(/\./g,'(dot)')`), so for any user with a capital letter
+// in their email the dashboard read a key that had never been written —
+// which is why strike history and ban status came back empty for them
+// while the user was very much banned. Same rule, one function.
+const encodeEmailKey = (email) =>
+  (email || '').toLowerCase().trim().replace(/\./g, '(dot)');
+
+// Human labels for the audit log's action enum.
+// ─────────────────────────────────────────────────────────────────────
+// Design tokens
+//
+// This screen had 218 inline isDark-ternaries for colour, so
+// every surface drifted a shade from its neighbours and nothing shared a
+// spacing scale. One palette, two themes, referenced everywhere.
+//
+// Colour is treated as information, not decoration: neutrals carry the
+// layout, and a hue only appears where it means something (a status, a
+// destructive action). That is why status chips are tinted rather than
+// filled — a list of solid red BANNED badges is hard to scan precisely
+// because every row shouts equally loudly.
+// ─────────────────────────────────────────────────────────────────────
+const palette = {
+  light: {
+    bg: '#F2F2F7',
+    surface: '#FFFFFF',
+    surfaceAlt: '#F7F7FA',
+    border: '#E4E4E9',
+    borderStrong: '#D3D3DA',
+    text: '#0B0B0F',
+    textMuted: '#61616B',
+    textFaint: '#9A9AA3',
+    fieldBg: '#FFFFFF',
+    overlay: 'rgba(0,0,0,0.45)',
+  },
+  dark: {
+    bg: '#000000',
+    surface: '#131316',
+    surfaceAlt: '#1C1C21',
+    border: '#2A2A31',
+    borderStrong: '#3A3A43',
+    text: '#FFFFFF',
+    textMuted: '#9C9CA6',
+    textFaint: '#63636D',
+    fieldBg: '#1C1C21',
+    overlay: 'rgba(0,0,0,0.65)',
+  },
+};
+
+// Semantic hues — identical in both themes so a status always reads the
+// same colour, with a low-alpha tint for chip backgrounds.
+const HUE = {
+  accent:  '#0A84FF',
+  danger:  '#FF3B30',
+  warn:    '#FF9500',
+  warnMid: '#FF6B00',
+  success: '#34C759',
+  mute:    '#5856D6',
+  gold:    '#FFC93C',
+};
+const tint = (hex, a = '1F') => `${hex}${a}`;
+
+const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+const RADIUS = { sm: 8, md: 12, lg: 16, pill: 999 };
+
+// `label` heads a single entry ("Muted · 10 min"); `noun` is the counting
+// form used in tallies ("3 mutes"), because "3 muted" does not read.
+const ACTION_META = {
+  mute:   { label: 'Muted',    noun: 'mutes',   icon: 'volume-mute',      color: HUE.mute },
+  strike: { label: 'Strike',   noun: 'strikes', icon: 'warning',          color: HUE.warn },
+  ban:    { label: 'Banned',   noun: 'bans',    icon: 'ban',              color: HUE.danger },
+  unban:  { label: 'Unbanned', noun: 'unbans',  icon: 'checkmark-circle', color: HUE.success },
+};
+
+const SOURCE_LABEL = {
+  admin_dashboard: 'Dashboard',
+  group_chat: 'Chat',
+  report: 'Auto (reports)',
+  auto: 'Auto',
+  unknown: '—',
+};
+
+// The ACTUAL durations setUserStrike applies. These were previously
+// advertised on the buttons as "3 hours / 3 days / Permanent", which
+// matched nothing in the code — the real ladder is 12h / 24h / permanent.
+// Kept next to each other so the label can never drift from the behaviour
+// again without someone seeing both.
+const STRIKE_TIERS = [
+  { count: 1, label: 'Strike 1', duration: '12 hours',  color: HUE.warn },
+  { count: 2, label: 'Strike 2', duration: '24 hours',  color: '#FF6B00' },
+  { count: 3, label: 'Strike 3', duration: 'Permanent', color: HUE.danger },
+];
 const BAD_KEYS = new Set(['undefined', 'onloaduser', '', null, undefined]);
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
 const USER_CHATS_PAGE_SIZE = 20;
@@ -179,6 +283,14 @@ const AdminDashboard = () => {
   // Moderator ban/mute powers can be disabled by an admin. Admins are never blocked.
   const canBanMute = canStaffBanMute({ isAdmin, isModerator, isBabyMod, modControlsEnabled });
   const navigation = useNavigation();
+  // targetSdk 36 means Android draws edge-to-edge and nothing is inset for
+  // us. This screen handled insets nowhere, so the bottom of every list —
+  // and, worst of all, the strike buttons in the user modal — sat behind
+  // the system navigation bar.
+  const insets = useSafeAreaInsets();
+  // Active palette. `C` is used everywhere in place of the old inline
+  // isDark ternaries.
+  const C = isDark ? palette.dark : palette.light;
 
   // Tabs
   const [activeTab, setActiveTab] = useState('banned');
@@ -278,6 +390,11 @@ const AdminDashboard = () => {
   const [bannedSearchQuery, setBannedSearchQuery] = useState('');
   const [strikeFilter, setStrikeFilter] = useState('all'); // 'all' | '1' | '2' | '3+'
   const [isSearching, setIsSearching] = useState(false); // true while debounced search is in flight or active
+  // Paging state for the restriction list. There are ~2,000 active bans;
+  // the list used to stop at the first 25 with no way to see the rest.
+  const [loadingMoreBans, setLoadingMoreBans] = useState(false);
+  const [bansHasMore, setBansHasMore] = useState(true);
+  const banCursorRef = React.useRef(null);
 
   // ─────────────────────────────────────────────
   // Helper: check if a string looks like a Firebase user ID (not a display name)
@@ -302,12 +419,14 @@ const AdminDashboard = () => {
       const entry = child.val();
       const sc = entry?.strikeCount || 0;
 
-      // Skip 0-strike entries (expired mutes)
-      if (sc < 1) return;
-
-      // Skip expired non-permanent bans
+      // Drop only entries that are no longer in force. The old guard
+      // `if (sc < 1) return` was described as "skip expired mutes" but it
+      // skips ALL mutes, expired or not — a mute never carries a strike.
+      // So an admin could mute someone and then find them nowhere in the
+      // dashboard. Expiry is what decides visibility, not strike count.
       const until = entry?.bannedUntil;
-      if (until !== 'permanent' && typeof until === 'number' && until < now) return;
+      const isActive = until === 'permanent' || (typeof until === 'number' && until > now);
+      if (!isActive) return;
 
       const rawBannedBy = typeof entry?.bannedBy === 'string'
         ? entry.bannedBy
@@ -317,13 +436,18 @@ const AdminDashboard = () => {
         isBanned: true,
         email: decodeEmail(encodedEmail),
         encodedEmail,
-        reason: entry?.reason ?? '—',
+        // Reason has been written as the boolean `true` by this screen's
+        // own miswired ban call; only render an actual string.
+        reason: typeof entry?.reason === 'string' && entry.reason.trim() ? entry.reason.trim() : '—',
         strikeCount: sc,
         bannedUntil: until ?? null,
         displayName: entry?.displayName || 'Unknown',
         avatar: getAvatarSafe(entry),
         bannedBy: rawBannedBy,
-        bannedAt: entry?.bannedAt ?? null,
+        // setUserStrike historically wrote `appliedAt` and no `bannedAt`,
+        // so 1,999 of the 2,000 live bans carry only the former. Read both
+        // or every one of them sorts as "no date".
+        bannedAt: entry?.bannedAt ?? entry?.appliedAt ?? null,
         id: entry?.userId || null,
       });
 
@@ -350,29 +474,81 @@ const AdminDashboard = () => {
     return list;
   }, [db]);
 
-  // Fetch the 25 most-recent active bans. Replaces the old full-collection
-  // download. Requires `.indexOn: ["bannedAt"]` on banned_users_by_email
-  // in RTDB rules — without it RTDB serves the query but logs a warning
-  // and the work happens client-side (still better than 1MB, but slower).
-  const fetchRecentBans = useCallback(async () => {
-    if (loadingBanned) return;
-    setLoadingBanned(true);
+  // Fetch active restrictions, PAGED.
+  //
+  // WHY THIS CHANGED TWICE
+  // The original query was orderByChild('bannedAt').limitToLast(25), and it
+  // returned nothing an admin cared about. Measured on production:
+  //
+  //     2,695 records — 2,000 active, every one of them PERMANENT
+  //     1,999 of those 2,000 had NO `bannedAt` field at all
+  //
+  // RTDB sorts records missing the ordering key FIRST, so limitToLast could
+  // only ever reach the 695 expired mutes that did have it — which the
+  // active-filter then dropped. The list showed 0 while 2,000 users were
+  // banned. Cause: setUserStrike wrote `appliedAt`, never `bannedAt`
+  // (fixed in ChatScreen/utils.js, and backfilled onto the existing rows by
+  // scripts/backfill-ban-timestamps.js).
+  //
+  // With every record now carrying `bannedAt`, ONE ordered query reaches
+  // all of them, and keyset pagination walks back through the full roster
+  // 40 at a time. Each page stays bounded — this never becomes the
+  // full-node download the screen used to do — but "Load more" now reaches
+  // every banned user instead of stopping at an arbitrary 25.
+  const BAN_PAGE_SIZE = 40;
+
+  const fetchRecentBans = useCallback(async (reset = true) => {
+    if (reset ? loadingBanned : (loadingMoreBans || !bansHasMore)) return;
+    if (reset) { setLoadingBanned(true); banCursorRef.current = null; setBansHasMore(true); }
+    else setLoadingMoreBans(true);
+
     try {
-      const q = query(
-        ref(db, 'banned_users_by_email'),
-        orderByChild('bannedAt'),
-        limitToLast(25),
-      );
+      // Page backwards through bannedAt: each page ends just before the
+      // oldest row already loaded.
+      const cursor = reset ? null : banCursorRef.current;
+      const q = cursor == null
+        ? query(ref(db, 'banned_users_by_email'), orderByChild('bannedAt'), limitToLast(BAN_PAGE_SIZE))
+        : query(ref(db, 'banned_users_by_email'), orderByChild('bannedAt'), endAt(cursor - 1), limitToLast(BAN_PAGE_SIZE));
+
       const snapshot = await get(q);
-      const list = await buildBanRowsFromSnapshot(snapshot);
-      setAllBannedUsers(list);
+
+      // Oldest bannedAt in this page becomes the next cursor. Taken from
+      // the RAW snapshot, not the filtered rows — otherwise a page whose
+      // records are all expired would leave the cursor unmoved and
+      // "Load more" would fetch the same page forever.
+      let oldest = null;
+      let rawCount = 0;
+      snapshot.forEach((child) => {
+        rawCount++;
+        const t = child.val()?.bannedAt;
+        if (typeof t === 'number' && (oldest === null || t < oldest)) oldest = t;
+      });
+
+      const rows = await buildBanRowsFromSnapshot(snapshot);
+
+      setAllBannedUsers((prev) => {
+        const merged = reset ? rows : [...prev, ...rows];
+        const seen = new Set();
+        return merged
+          .filter((r) => {
+            if (!r.encodedEmail || seen.has(r.encodedEmail)) return false;
+            seen.add(r.encodedEmail);
+            return true;
+          })
+          .sort((a, b) => (b.bannedAt || 0) - (a.bannedAt || 0));
+      });
+
+      banCursorRef.current = oldest;
+      // A short page means RTDB had nothing older left to give.
+      setBansHasMore(rawCount >= BAN_PAGE_SIZE && oldest !== null);
     } catch (err) {
-      console.error('Fetch recent bans error:', err);
+      console.error('Fetch bans error:', err);
     } finally {
       setLoadingBanned(false);
+      setLoadingMoreBans(false);
       setRefreshing(false);
     }
-  }, [db, loadingBanned, buildBanRowsFromSnapshot]);
+  }, [db, loadingBanned, loadingMoreBans, bansHasMore, buildBanRowsFromSnapshot]);
 
   // Email-prefix search. RTDB keys are encoded emails (`name(dot)domain(dot)tld`),
   // so an orderByKey range query gives us a cheap prefix match on the email
@@ -448,6 +624,9 @@ const AdminDashboard = () => {
   // here — `allBannedUsers` already reflects the query result.
   const filteredBannedUsers = useMemo(() => {
     if (strikeFilter === 'all') return allBannedUsers;
+    // Mutes carry no strike, so they need their own bucket now that they
+    // are no longer filtered out of the list entirely.
+    if (strikeFilter === 'mute') return allBannedUsers.filter((u) => (u.strikeCount || 0) < 1);
     if (strikeFilter === '1') return allBannedUsers.filter((u) => u.strikeCount === 1);
     if (strikeFilter === '2') return allBannedUsers.filter((u) => u.strikeCount === 2);
     if (strikeFilter === '3+') return allBannedUsers.filter((u) => u.strikeCount >= 3);
@@ -474,8 +653,30 @@ const AdminDashboard = () => {
   const [hasMoreReviews, setHasMoreReviews] = useState(true);
   const [lastReviewKey, setLastReviewKey] = useState(null);
 
-  // Strike History
-  const [strikeHistory, setStrikeHistory] = useState([]);
+  // Moderation history for the open profile.
+  // `currentSanction` is the live RTDB record (what is being enforced RIGHT
+  // NOW); `modHistory` + `modCounts` come from the Supabase audit log (what
+  // has EVER been done). These are different questions and the old screen
+  // conflated them — it read the single live record and labelled it
+  // "Strike History", so it could never show more than one entry, showed a
+  // mute as if it were a strike, and went blank the moment someone was
+  // unbanned.
+  const [currentSanction, setCurrentSanction] = useState(null);
+  const [modHistory, setModHistory] = useState([]);
+  const [modCounts, setModCounts] = useState(null);
+  const [modHistoryLoading, setModHistoryLoading] = useState(false);
+  const [modHistoryCursor, setModHistoryCursor] = useState(null);
+  const [modHistoryHasMore, setModHistoryHasMore] = useState(false);
+  // Same distinction as the Mod Log tab: "no history" and "the audit table
+  // isn't deployed" look identical on screen otherwise.
+  const [modSchemaMissing, setModSchemaMissing] = useState(false);
+
+  // Reason capture. Ban/strike/mute from this screen used to record no
+  // reason at all (worse: the dashboard passed a boolean into the
+  // customReason slot, so records were literally saved with reason `true`).
+  // Every action now goes through this prompt.
+  const [pendingAction, setPendingAction] = useState(null); // {type, value, user}
+  const [actionReason, setActionReason] = useState('');
 
   // Mute
   const [customMuteMinutes, setCustomMuteMinutes] = useState('');
@@ -491,6 +692,14 @@ const AdminDashboard = () => {
   const [chatSearching2, setChatSearching2] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [loadingChat, setLoadingChat] = useState(false);
+  // The viewer used to load one fixed page of 300 and stop, with nothing
+  // on screen to say so — a long conversation was silently truncated to
+  // its tail, which is exactly the part an admin has already seen.
+  const [chatOlderLoading, setChatOlderLoading] = useState(false);
+  const [chatHasOlder, setChatHasOlder] = useState(false);
+  const [chatError, setChatError] = useState(null);
+  const chatCursorRef = React.useRef(null);   // oldest Supabase row loaded
+  const chatLegacyLoadedRef = React.useRef(false); // RTDB history is one shot
   const [previewImage, setPreviewImage] = useState(null);
 
   // User Chats (Super Admin) — view all private chats of a single user
@@ -510,6 +719,64 @@ const AdminDashboard = () => {
   const [pollImageUrl, setPollImageUrl] = useState('');
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [uploadingPollImage, setUploadingPollImage] = useState(false);
+
+  // ── Mod Log tab ──
+  // Staff accountability view: who did how much, and the raw feed of what
+  // was done. Both are server-aggregated / server-filtered rpcs — nothing
+  // here downloads rows in order to count or filter them on the device.
+  const [modLogView, setModLogView] = useState('leaderboard'); // 'leaderboard' | 'feed'
+  const [modLogDays, setModLogDays] = useState(30);            // 7 | 30 | 90
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [feedItems, setFeedItems] = useState([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedCursor, setFeedCursor] = useState(null);
+  const [feedHasMore, setFeedHasMore] = useState(false);
+  const [feedActionFilter, setFeedActionFilter] = useState(null); // null | 'mute' | 'strike' | 'ban' | 'unban'
+  const [feedActorFilter, setFeedActorFilter] = useState(null);   // {uid, name} — set by tapping a leaderboard row
+  // True when Supabase says the mod_actions table/rpcs do not exist, i.e.
+  // supabase/029_mod_actions.sql has not been applied. Tracked separately
+  // from "no results" because the two look identical on screen and an
+  // admin has no way to tell them apart otherwise.
+  const [modLogSchemaMissing, setModLogSchemaMissing] = useState(false);
+
+  const loadLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      const rows = await fetchModLeaderboard({ days: modLogDays, limit: 50 });
+      setLeaderboard(rows);
+      setModLogSchemaMissing(!!rows.schemaMissing);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [modLogDays]);
+
+  const loadFeed = useCallback(async (reset = true) => {
+    setFeedLoading(true);
+    try {
+      const page = await fetchRecentModActions({
+        action: feedActionFilter,
+        actorUid: feedActorFilter?.uid || null,
+        days: modLogDays,
+        cursor: reset ? null : feedCursor,
+        limit: 30,
+      });
+      setFeedItems((prev) => (reset ? page.items : [...prev, ...page.items]));
+      setFeedCursor(page.cursor);
+      setFeedHasMore(page.hasMore);
+      setModLogSchemaMissing(!!page.schemaMissing);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [feedActionFilter, feedActorFilter, modLogDays, feedCursor]);
+
+  // Load on tab entry and whenever a filter changes. No realtime
+  // subscription and no polling — staff pull this when they open it.
+  useEffect(() => {
+    if (activeTab !== 'modLog') return;
+    if (modLogView === 'leaderboard') loadLeaderboard();
+    else loadFeed(true);
+  }, [activeTab, modLogView, modLogDays, feedActionFilter, feedActorFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // JMD Access (owner/admin only) — delegate the "Make Junior Mod" power.
   // Source of truth is RTDB /jmd_granters/{uid}; every device live-subscribes to
@@ -642,16 +909,25 @@ const AdminDashboard = () => {
     if (!email || !db) return null;
 
     try {
-      const encodeEmail = (em) => em.replace(/\./g, '(dot)');
-      const encodedEmail = encodeEmail(email);
+      // Was `em.replace(/\./g,'(dot)')` with no lowercasing, while the
+      // write path lowercases — so a banned user with any capital in their
+      // email showed up as ACTIVE here.
+      const encodedEmail = encodeEmailKey(email);
       const banRef = ref(db, `banned_users_by_email/${encodedEmail}`);
       const snapshot = await get(banRef);
 
       if (snapshot.exists()) {
-        const banData = snapshot.val();
+        const banData = snapshot.val() || {};
+        // Nothing deletes expired records — a 5-minute mute from March is
+        // still sitting in RTDB today. Treating `exists()` as "banned"
+        // meant the Search tab showed those users as BANNED forever.
+        const until = banData.bannedUntil;
+        const isActive = until === 'permanent' || (typeof until === 'number' && until > Date.now());
         return {
-          isBanned: true,
           ...banData,
+          isBanned: isActive,
+          // A mute is a record with no strike (muteUser never increments).
+          isMute: isActive && (banData.strikeCount || 0) < 1,
           email,
           encodedEmail,
         };
@@ -662,153 +938,6 @@ const AdminDashboard = () => {
       return null;
     }
   }, [db]);
-
-  // ─────────────────────────────────────────────
-  // Actions
-  const handleUnban = async (userItem) => {
-    const email = userItem.email || decodeEmail(userItem.encodedEmail);
-    if (!email) return;
-
-    try {
-      const success = await unbanUserWithEmail(email);
-      if (success) {
-        setSelectedUser(null);
-        refreshBannedList();
-        if (activeTab === 'search') {
-          setSearchResults((prev) => prev.map((u) => (u.email === email ? { ...u, isBanned: false } : u)));
-          // ✅ Clear cached ban status for this user
-          setUserBanStatus((prev) => {
-            const updated = { ...prev };
-            delete updated[email];
-            return updated;
-          });
-        }
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Could not unban user.');
-    }
-  };
-
-  const handleBan = async (userItem) => {
-    if (!canBanMute) {
-      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
-      return;
-    }
-    if (!userItem.email) {
-      Alert.alert('Error', 'User has no email associated.');
-      return;
-    }
-
-    const userInfo = {
-      id: userItem.id,
-      displayName: userItem.displayName,
-      avatar: userItem.avatar,
-      email: userItem.email
-    };
-
-    const bannerInfo = {
-      id: currentUser?.id,
-      displayName: currentUser?.userName || 'Admin',
-      avatar: currentUser?.avatar
-    };
-
-    const isStaff = isAdmin || isModerator;
-    const success = await banUserwithEmail(userItem.email, isAdmin, userItem.id, userInfo, bannerInfo, isStaff, isStaff);
-    if (success) {
-      setSelectedUser(null);
-      refreshBannedList();
-      setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
-      // ✅ Refresh cached ban status for this user
-      checkUserBanStatus(userItem.email).then((banData) => {
-        if (banData) {
-          setUserBanStatus((prev) => ({
-            ...prev,
-            [userItem.email]: banData,
-          }));
-        }
-      });
-    }
-  };
-
-  const handleSetStrike = async (userItem, strikeCount) => {
-    if (!canBanMute) {
-      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
-      return;
-    }
-    if (!userItem.email) {
-      Alert.alert('Error', 'User has no email associated.');
-      return;
-    }
-
-    const bannerInfo = {
-      id: currentUser?.id,
-      displayName: currentUser?.userName || currentUser?.displayName || 'Admin',
-      avatar: currentUser?.avatar
-    };
-    const userInfo = {
-      displayName: userItem.displayName || userItem.sender,
-      avatar: userItem.avatar
-    };
-
-    // Both Admins and Moderators should see confirmation and success alerts
-    const isStaff = isAdmin || isModerator;
-    const success = await setUserStrike(userItem.email, strikeCount, userItem.id, isStaff, bannerInfo, userInfo, isStaff);
-    if (success) {
-      setSelectedUser(null);
-      refreshBannedList();
-      if (activeTab === 'search') {
-        setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
-        // ✅ Refresh cached ban status for this user
-        checkUserBanStatus(userItem.email).then((banData) => {
-          if (banData) {
-            setUserBanStatus((prev) => ({
-              ...prev,
-              [userItem.email]: banData,
-            }));
-          }
-        });
-      }
-    }
-  };
-
-  const handleMuteUser = async (userItem, minutes) => {
-    if (!canBanMute) {
-      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
-      return;
-    }
-    if (!userItem.email) {
-      Alert.alert('Error', 'User has no email associated.');
-      return;
-    }
-
-    const bannerInfo = {
-      id: currentUser?.id,
-      displayName: currentUser?.userName || currentUser?.displayName || 'Admin',
-      avatar: currentUser?.avatar
-    };
-    const userInfo = {
-      id: userItem.id,
-      displayName: userItem.displayName,
-      avatar: userItem.avatar,
-    };
-
-    const success = await muteUser(userItem.email, minutes, userInfo, bannerInfo, true);
-    if (success) {
-      setSelectedUser(null);
-      refreshBannedList();
-      if (activeTab === 'search') {
-        setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
-        checkUserBanStatus(userItem.email).then((banData) => {
-          if (banData) {
-            setUserBanStatus((prev) => ({
-              ...prev,
-              [userItem.email]: banData,
-            }));
-          }
-        });
-      }
-    }
-  };
 
   // Admin-only: flip the global moderator ban/mute kill switch.
   // Writes RTDB /mod_controls_enabled; GlobelStats live-subscribes so every
@@ -1107,50 +1236,74 @@ const AdminDashboard = () => {
   }, [hasMoreReviews, lastReviewKey]);
 
   // ─────────────────────────────────────────────
-  // Fetch Strike History
-  const fetchStrikeHistory = useCallback(async (email) => {
-    if (!email) return;
+  // Current sanction — the LIVE RTDB record. This is what is being
+  // enforced right now, and it is exactly one thing: the most recent
+  // mute/strike/ban, because every write set()s the same key. Read it for
+  // "what is in force", never for "what has happened".
+  const fetchCurrentSanction = useCallback(async (email) => {
+    if (!email) { setCurrentSanction(null); return; }
     try {
-      const encodedEmail = email.replace(/\./g, '(dot)');
-      const bannedRef = ref(db, `banned_users_by_email/${encodedEmail}`);
-      const snapshot = await get(bannedRef);
+      const snapshot = await get(ref(db, `banned_users_by_email/${encodeEmailKey(email)}`));
+      if (!snapshot.exists()) { setCurrentSanction(null); return; }
 
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        if (data.strikeCount) {
-          // Resolve bannedBy: could be a user ID (new) or display name (old)
-          let appliedByName = null;
-          const rawBannedBy = typeof data.bannedBy === 'string' ? data.bannedBy : data.bannedBy?.displayName || null;
+      const data = snapshot.val() || {};
+      const until = data.bannedUntil;
+      const isActive = until === 'permanent' || (typeof until === 'number' && until > Date.now());
 
-          if (rawBannedBy && looksLikeUserId(rawBannedBy)) {
-            try {
-              const cached = await getOrFetchProfile(db, rawBannedBy);
-              appliedByName = cached?.displayName || rawBannedBy;
-            } catch {
-              appliedByName = rawBannedBy;
-            }
-          } else {
-            appliedByName = rawBannedBy;
-          }
-
-          setStrikeHistory([{
-            id: 'current',
-            strikeCount: data.strikeCount,
-            reason: data.reason || '—',
-            timestamp: data.bannedAt || null,
-            appliedBy: appliedByName,
-            bannedUntil: data.bannedUntil || null,
-          }]);
-        } else {
-          setStrikeHistory([]);
-        }
-      } else {
-        setStrikeHistory([]);
+      // bannedBy holds a uid on newer records and a display name on older
+      // ones. Resolve only when it looks like a uid — one cached profile
+      // read, not a per-row fan-out.
+      let appliedByName = typeof data.bannedBy === 'string' ? data.bannedBy : data.bannedBy?.displayName || null;
+      if (appliedByName && looksLikeUserId(appliedByName)) {
+        try {
+          const cached = await getOrFetchProfile(db, appliedByName);
+          appliedByName = cached?.displayName || appliedByName;
+        } catch { /* keep the raw id */ }
       }
+
+      // A record with strikeCount 0 is a mute (muteUser preserves the
+      // existing count and never increments). The old screen rendered it
+      // under "Strike History" as though it were a strike.
+      const kind = (data.strikeCount || 0) > 0 ? 'strike' : 'mute';
+
+      setCurrentSanction({
+        kind,
+        isActive,
+        strikeCount: data.strikeCount || 0,
+        // The reason was being written as the boolean `true` by this
+        // screen's own miswired call. Refuse to render that as text.
+        reason: typeof data.reason === 'string' && data.reason.trim() ? data.reason.trim() : null,
+        appliedAt: data.bannedAt || data.appliedAt || null,
+        appliedBy: appliedByName,
+        bannedUntil: until ?? null,
+      });
     } catch {
-      setStrikeHistory([]);
+      setCurrentSanction(null);
     }
   }, [db]);
+
+  // ─────────────────────────────────────────────
+  // Moderation history — the append-only Supabase audit log (029). This is
+  // the "how many times was this person muted / struck / banned, by whom,
+  // and why" view. Counts are aggregated server-side (one row back), so
+  // opening a profile never downloads a timeline just to count it.
+  const fetchModRecord = useCallback(async (email, uid, reset = true) => {
+    if (!email && !uid) return;
+    setModHistoryLoading(true);
+    try {
+      const [counts, page] = await Promise.all([
+        reset ? fetchUserModCounts({ email, uid }) : Promise.resolve(null),
+        fetchUserModHistory({ email, uid, cursor: reset ? null : modHistoryCursor, limit: 25 }),
+      ]);
+      if (counts) setModCounts(counts);
+      setModHistory((prev) => (reset ? page.items : [...prev, ...page.items]));
+      setModHistoryCursor(page.cursor);
+      setModHistoryHasMore(page.hasMore);
+      setModSchemaMissing(!!page.schemaMissing);
+    } finally {
+      setModHistoryLoading(false);
+    }
+  }, [modHistoryCursor]);
 
   // ─────────────────────────────────────────────
   // Delete a Review (Admin can delete any, Mod cannot delete mod/admin reviews)
@@ -1236,7 +1389,12 @@ const AdminDashboard = () => {
     setSelectedUser(userItem);
     setUserDetails(null);
     setReviews([]);
-    setStrikeHistory([]);
+    setCurrentSanction(null);
+    setModHistory([]);
+    setModCounts(null);
+    setModHistoryCursor(null);
+    setModHistoryHasMore(false);
+    setModSchemaMissing(false);
     setHasMoreReviews(true);
     setLastReviewKey(null);
 
@@ -1245,12 +1403,241 @@ const AdminDashboard = () => {
       fetchReviews(userItem.id, true);
     }
     if (userItem.email) {
-      fetchStrikeHistory(userItem.email);
+      fetchCurrentSanction(userItem.email);
     }
-  }, [fetchUserDetails, fetchReviews, fetchStrikeHistory]);
+    // The audit log is keyed by email but matches on uid too, so a record
+    // written before the user had a uid on file still resolves.
+    if (userItem.email || userItem.id) {
+      fetchModRecord(userItem.email, userItem.id, true);
+    }
+  }, [fetchUserDetails, fetchReviews, fetchCurrentSanction, fetchModRecord]);
+
+  // Re-read both sides after an action so the open profile reflects the
+  // write without the admin having to close and reopen it.
+  const refreshOpenProfile = useCallback((userItem) => {
+    if (!userItem) return;
+    if (userItem.email) fetchCurrentSanction(userItem.email);
+    if (userItem.email || userItem.id) fetchModRecord(userItem.email, userItem.id, true);
+  }, [fetchCurrentSanction, fetchModRecord]);
+
+  // ─────────────────────────────────────────────
+  // Actions
+  // Identity of whoever is taking the action, stamped onto both the RTDB
+  // record and the audit-log row. `role` records the authority the action
+  // was taken under — a moderator ban and an admin ban are not the same
+  // event, and the history should not have to guess later.
+  const actorInfo = useMemo(() => ({
+    id: currentUser?.id,
+    displayName: currentUser?.userName || currentUser?.displayName || 'Admin',
+    avatar: currentUser?.avatar,
+    role: isAdmin ? 'admin' : (isModerator ? 'moderator' : (isBabyMod ? 'baby_mod' : null)),
+  }), [currentUser?.id, currentUser?.userName, currentUser?.displayName, currentUser?.avatar, isAdmin, isModerator, isBabyMod]);
+
+  // Every punitive action opens the reason prompt first. Reasons were
+  // previously never collected on this screen, which is why the banned
+  // list is full of records reading "Strike 1" and nothing else — and why
+  // nobody could answer "what did they actually do?" a week later.
+  const requestAction = useCallback((type, value, userItem) => {
+    if (type !== 'unban' && !canBanMute) {
+      Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
+      return;
+    }
+    if (!userItem?.email) {
+      Alert.alert('Error', 'User has no email associated — ban records are keyed by email.');
+      return;
+    }
+    setActionReason('');
+    setPendingAction({ type, value, user: userItem });
+  }, [canBanMute]);
+
+  const handleUnban = useCallback(async (userItem, reason) => {
+    const email = userItem.email || decodeEmail(userItem.encodedEmail);
+    if (!email) return;
+
+    try {
+      const success = await unbanUserWithEmail(email, true, actorInfo, reason || null, 'admin_dashboard');
+      if (success) {
+        refreshBannedList();
+        refreshOpenProfile(userItem);
+        setSelectedUser((prev) => (prev ? { ...prev, isBanned: false } : prev));
+        setSearchResults((prev) => prev.map((u) => (u.email === email ? { ...u, isBanned: false } : u)));
+        // Mark as explicitly-checked-and-clear rather than deleting the
+        // key: an absent key means "never checked" to renderItem, which
+        // would make it re-query RTDB on every single re-render.
+        setUserBanStatus((prev) => ({ ...prev, [email]: null }));
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Could not unban user.');
+    }
+  }, [actorInfo, refreshBannedList, refreshOpenProfile]);
+
+  const handleBan = useCallback(async (userItem, reason) => {
+    const userInfo = {
+      id: userItem.id,
+      displayName: userItem.displayName,
+      avatar: userItem.avatar,
+      email: userItem.email,
+    };
+
+    // Argument order matters and was wrong here: this call used to pass
+    // `isStaff` into BOTH the customReason and a seventh, non-existent
+    // slot — so every ban from this dashboard was saved with
+    // `reason: true`, which rendered as an empty reason everywhere.
+    const success = await banUserwithEmail(
+      userItem.email,
+      isAdmin,
+      userItem.id,
+      userInfo,
+      actorInfo,
+      reason || null,
+      'admin_dashboard',
+    );
+    if (success) {
+      refreshBannedList();
+      refreshOpenProfile(userItem);
+      setSelectedUser((prev) => (prev ? { ...prev, isBanned: true } : prev));
+      setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
+      checkUserBanStatus(userItem.email).then((banData) => {
+        setUserBanStatus((prev) => ({ ...prev, [userItem.email]: banData }));
+      });
+    }
+  }, [isAdmin, actorInfo, refreshBannedList, refreshOpenProfile, checkUserBanStatus]);
+
+  const handleSetStrike = useCallback(async (userItem, strikeCount, reason) => {
+    const userInfo = {
+      id: userItem.id,
+      displayName: userItem.displayName || userItem.sender,
+      avatar: userItem.avatar,
+    };
+
+    // Same miswiring as handleBan: `isStaff` was landing in the
+    // customReason slot.
+    const success = await setUserStrike(
+      userItem.email,
+      strikeCount,
+      userItem.id,
+      true,
+      actorInfo,
+      userInfo,
+      reason || null,
+      'admin_dashboard',
+    );
+    if (success) {
+      refreshBannedList();
+      refreshOpenProfile(userItem);
+      setSelectedUser((prev) => (prev ? { ...prev, isBanned: true } : prev));
+      setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
+      checkUserBanStatus(userItem.email).then((banData) => {
+        setUserBanStatus((prev) => ({ ...prev, [userItem.email]: banData }));
+      });
+    }
+  }, [actorInfo, refreshBannedList, refreshOpenProfile, checkUserBanStatus]);
+
+  const handleMuteUser = useCallback(async (userItem, minutes, reason) => {
+    const userInfo = {
+      id: userItem.id,
+      displayName: userItem.displayName,
+      avatar: userItem.avatar,
+    };
+
+    const success = await muteUser(
+      userItem.email,
+      minutes,
+      userInfo,
+      actorInfo,
+      true,
+      reason || null,
+      'admin_dashboard',
+    );
+    if (success) {
+      refreshBannedList();
+      refreshOpenProfile(userItem);
+      setSearchResults((prev) => prev.map((u) => (u.email === userItem.email ? { ...u, isBanned: true } : u)));
+      checkUserBanStatus(userItem.email).then((banData) => {
+        setUserBanStatus((prev) => ({ ...prev, [userItem.email]: banData }));
+      });
+    }
+  }, [actorInfo, refreshBannedList, refreshOpenProfile, checkUserBanStatus]);
+
+  // Runs whatever the reason prompt was opened for.
+  const confirmPendingAction = useCallback(async () => {
+    if (!pendingAction) return;
+    const { type, value, user: target } = pendingAction;
+    const reason = actionReason.trim();
+
+    Keyboard.dismiss();
+    setPendingAction(null);
+    setActionReason('');
+
+    if (type === 'ban') await handleBan(target, reason);
+    else if (type === 'strike') await handleSetStrike(target, value, reason);
+    else if (type === 'mute') await handleMuteUser(target, value, reason);
+    else if (type === 'unban') await handleUnban(target, reason);
+  }, [pendingAction, actionReason, handleBan, handleSetStrike, handleMuteUser, handleUnban]);
+
 
   // ─────────────────────────────────────────────
   // Chat Viewer — search users for person slots
+  // Resolves a free-text query to users, for every people-picker on this
+  // screen (chat viewer slots, User Chats target).
+  //
+  // This used to be an RTDB orderByChild('displayName') prefix query run
+  // twice (lowercase + Capitalized). Three problems, all of which made the
+  // chat viewer feel broken:
+  //   * PREFIX ONLY — "pro" never found "xXPROxX".
+  //   * CASE SENSITIVE beyond those two hand-rolled variants, so most
+  //     real usernames (mixed case, symbols) simply did not come back.
+  //   * It downloaded up to 10 FULL user objects per variant, per search,
+  //     straight off RTDB — the exact pattern the main Search DB tab was
+  //     migrated away from for cost.
+  // Now it shares that migrated path: Supabase ilike (server-side,
+  // case-insensitive, substring), plus direct lookups for a pasted uid or
+  // a full email.
+  const resolveUsers = useCallback(async (raw) => {
+    const text = (raw || '').trim();
+    if (!text) return [];
+
+    // Pasted Firebase uid — direct lookup, no search.
+    if (looksLikeUserId(text)) {
+      try {
+        const snap = await get(ref(db, `users/${text}`));
+        if (snap.exists()) {
+          const u = snap.val() || {};
+          return [{
+            id: u.id || text,
+            displayName: u.displayName || u.userName || 'Unknown',
+            avatar: getAvatarSafe(u),
+            email: u.email || null,
+          }];
+        }
+      } catch { /* fall through to name search */ }
+      return [];
+    }
+
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+    const rows = isEmail
+      ? await searchIdentityByEmail(text, 10).catch(() => [])
+      : await searchIdentityByName(text, 10).catch(() => []);
+
+    const seen = new Set();
+    const out = [];
+    for (const r of rows || []) {
+      const id = r?.uid;
+      if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        displayName: r.displayName || 'Unknown',
+        avatar: getAvatarSafe(r),
+        // Carry the email through: the profile modal needs it to ban, and
+        // a picker result that arrives without one produces a user you can
+        // look at but not action.
+        email: r.decodedEmail || r.email || null,
+      });
+    }
+    return out;
+  }, [db]);
+
   const searchChatUser = useCallback(async (text, slot) => {
     const setSearching = slot === 1 ? setChatSearching1 : setChatSearching2;
     const setResults = slot === 1 ? setChatResults1 : setChatResults2;
@@ -1262,47 +1649,24 @@ const AdminDashboard = () => {
 
     setSearching(true);
     try {
-      const lower = sanitizeSearchQuery(text.trim().toLowerCase());
-      if (!lower) { setSearching(false); return; }
-      const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
-      const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
-
-      const seen = new Set();
-      const results = [];
-      for (const v of variants) {
-        const q = query(
-          ref(db, 'users'),
-          orderByChild('displayName'),
-          startAt(v),
-          endAt(v + '\uf8ff'),
-          limitToFirst(10)
-        );
-        const snapshot = await get(q);
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          for (const u of Object.values(data)) {
-            const id = u.id;
-            if (!id || seen.has(id)) continue;
-            seen.add(id);
-            results.push({
-              id,
-              displayName: u.displayName || u.userName || 'Unknown',
-              avatar: getAvatarSafe(u),
-              email: u.email,
-            });
-          }
-        }
-      }
-      setResults(results.slice(0, 8));
+      setResults(await resolveUsers(text));
     } catch (err) {
       console.error('Chat user search error:', err);
+      setResults([]);
     } finally {
       setSearching(false);
     }
-  }, [db]);
+  }, [resolveUsers]);
 
-  // Load Private Chat between two selected users
-  const loadChat = useCallback(async () => {
+  // Load Private Chat between two selected users.
+  //
+  // Paged. `reset` loads the newest page and the (frozen) RTDB history;
+  // subsequent calls page further back through Supabase only, because the
+  // RTDB subtree is pre-cut history that arrives whole on the first load
+  // and never grows.
+  const CHAT_PAGE_SIZE = 100;
+
+  const loadChat = useCallback(async (reset = true) => {
     if (!chatPerson1?.id || !chatPerson2?.id) {
       Alert.alert('Error', 'Please select both users first.');
       return;
@@ -1311,10 +1675,19 @@ const AdminDashboard = () => {
       Alert.alert('Error', 'Please select two different users.');
       return;
     }
+    if (!reset && (chatOlderLoading || !chatHasOlder)) return;
 
     Keyboard.dismiss();
-    setLoadingChat(true);
-    setChatMessages([]);
+    if (reset) {
+      setLoadingChat(true);
+      setChatMessages([]);
+      setChatError(null);
+      chatCursorRef.current = null;
+      chatLegacyLoadedRef.current = false;
+      setChatHasOlder(false);
+    } else {
+      setChatOlderLoading(true);
+    }
 
     try {
       const id1 = chatPerson1.id;
@@ -1331,48 +1704,82 @@ const AdminDashboard = () => {
       // Reading only RTDB is what broke this screen — chats that started
       // after the cut have no RTDB subtree at all and rendered as empty.
       const [supaMsgs, rtdbSnap] = await Promise.all([
-        adminLoadPrivateMessages(chatKey, { limit: 300 }).catch((err) => {
+        adminLoadPrivateMessages(chatKey, {
+          limit: CHAT_PAGE_SIZE,
+          before: chatCursorRef.current,
+        }).catch((err) => {
           // Surfaced below rather than swallowed — a 42501 here means the
           // caller isn't recognised as an admin server-side, which is a
           // config problem, not an empty chat.
           console.error('Supabase admin chat load failed:', err?.message);
           throw err;
         }),
-        get(query(ref(db, `private_messages/${chatKey}/messages`), orderByChild('timestamp')))
-          .catch(() => null),
+        // RTDB history is the oldest material there is, so it only needs
+        // fetching once — on the first page, or on the page that runs out
+        // of Supabase rows.
+        chatLegacyLoadedRef.current
+          ? Promise.resolve(null)
+          : get(query(ref(db, `private_messages/${chatKey}/messages`), orderByChild('timestamp')))
+              .catch(() => null),
       ]);
+
+      // The rpc returns newest-first; remember the oldest row as the cursor.
+      const oldest = (supaMsgs || [])[supaMsgs.length - 1];
+      if (oldest) {
+        chatCursorRef.current = { createdAt: new Date(oldest.timestamp).toISOString(), id: oldest.id };
+      }
+      const moreSupabase = (supaMsgs || []).length >= CHAT_PAGE_SIZE;
 
       // Backfilled rows carry the original push key in rtdb_key, so the
       // same message present in both stores collapses to one bubble.
-      const seenRtdbKeys = new Set(
-        (supaMsgs || []).map((m) => m.rtdbKey).filter(Boolean),
-      );
-
       const legacy = [];
       if (rtdbSnap?.exists()) {
+        chatLegacyLoadedRef.current = true;
+        const seenRtdbKeys = new Set(
+          (supaMsgs || []).map((m) => m.rtdbKey).filter(Boolean),
+        );
         for (const [key, value] of Object.entries(rtdbSnap.val() || {})) {
           if (seenRtdbKeys.has(key)) continue;
           legacy.push({ id: key, ...value, legacy: true });
         }
+      } else if (rtdbSnap !== null) {
+        chatLegacyLoadedRef.current = true;
       }
 
-      const msgs = [...(supaMsgs || []), ...legacy]
-        .sort((a, b) => (a?.timestamp || 0) - (b?.timestamp || 0));
+      setChatMessages((prev) => {
+        const merged = [...prev, ...(supaMsgs || []), ...legacy];
+        // Dedupe on id — a page boundary or the legacy merge can otherwise
+        // hand FlatList two rows with the same key.
+        const seen = new Set();
+        return merged
+          .filter((m) => {
+            const key = m?.id;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .sort((a, b) => (a?.timestamp || 0) - (b?.timestamp || 0));
+      });
 
-      setChatMessages(msgs);
+      // Only Supabase pages; once it is exhausted the legacy block is all
+      // that is left and it arrived in full.
+      setChatHasOlder(moreSupabase);
     } catch (err) {
       console.error('Chat load error:', err);
       const denied = err?.code === '42501' || /not authorized|unauthenticated/i.test(err?.message || '');
-      Alert.alert(
-        'Error',
-        denied
-          ? 'Your account is not recognised as an admin by the database. Apply supabase/024_admin_private_messages.sql.'
-          : 'Could not load chat. Check selections and try again.',
-      );
+      const msg = denied
+        ? 'Your account is not recognised as an admin by the database. Apply supabase/024_admin_private_messages.sql.'
+        : 'Could not load chat. Check selections and try again.';
+      // Held in state as well as alerted: the list used to fall back to
+      // "No messages found between these users" after a failed load, which
+      // reads as "these two never talked" when it means "the read failed".
+      setChatError(msg);
+      Alert.alert('Error', msg);
     } finally {
       setLoadingChat(false);
+      setChatOlderLoading(false);
     }
-  }, [db, chatPerson1, chatPerson2]);
+  }, [db, chatPerson1, chatPerson2, chatOlderLoading, chatHasOlder]);
 
   // Delete the entire private conversation between the two selected users.
   //
@@ -1518,38 +1925,55 @@ const AdminDashboard = () => {
     }
   }, [userChatsHasMore, userChatsLoadingMore, userChatsLoading]);
 
-  const loadUserChatsForInput = useCallback(async () => {
-    const id = userChatsInput.trim();
-    if (!id) { Alert.alert('Error', 'Paste a user ID first.'); return; }
-    if (!looksLikeUserId(id)) { Alert.alert('Error', 'Not a valid Firebase user ID.'); return; }
+  // Resolve whatever the admin typed into a target user.
+  //
+  // This used to demand a raw Firebase uid and reject anything else with
+  // "Not a valid Firebase user ID" — so using the tab meant going to
+  // another tab first, finding the person, copying their id, and coming
+  // back. It now takes a name, an email or a uid, and shows a picker when
+  // a name matches more than one person.
+  const [userChatsResults, setUserChatsResults] = useState([]);
 
-    Keyboard.dismiss();
-    setUserChatsLoading(true);
+  const selectUserChatsTarget = useCallback((target) => {
+    setUserChatsResults([]);
+    setUserChatsInput('');
+    setUserChatsTarget(target);
     setUserChatsList([]);
     userChatsCursorRef.current = null;
     setUserChatsHasMore(true);
-
-    let target = { id, displayName: id, avatar: DEFAULT_AVATAR, email: null };
-    try {
-      const uSnap = await get(ref(db, `users/${id}`));
-      if (uSnap.exists()) {
-        const u = uSnap.val() || {};
-        target = {
-          id,
-          displayName: u.displayName || u.userName || 'Unknown',
-          avatar: getAvatarSafe(u),
-          email: u.email || null,
-        };
-      }
-    } catch {}
-
-    setUserChatsTarget(target);
     fetchUserChats(target, true);
-  }, [db, userChatsInput, fetchUserChats]);
+  }, [fetchUserChats]);
+
+  const loadUserChatsForInput = useCallback(async () => {
+    const raw = userChatsInput.trim();
+    if (!raw) { Alert.alert('Error', 'Enter a name, email or user ID.'); return; }
+
+    Keyboard.dismiss();
+    setUserChatsLoading(true);
+    setUserChatsResults([]);
+    try {
+      const matches = await resolveUsers(raw);
+      if (matches.length === 0) {
+        Alert.alert('Not Found', 'No user matches that name, email or ID.');
+        return;
+      }
+      if (matches.length === 1) {
+        selectUserChatsTarget(matches[0]);
+        return;
+      }
+      setUserChatsResults(matches);
+    } catch (err) {
+      console.error('User chats lookup error:', err);
+      Alert.alert('Error', 'Could not look up that user.');
+    } finally {
+      setUserChatsLoading(false);
+    }
+  }, [userChatsInput, resolveUsers, selectUserChatsTarget]);
 
   const clearUserChatsTarget = useCallback(() => {
     setUserChatsTarget(null);
     setUserChatsInput('');
+    setUserChatsResults([]);
     setUserChatsList([]);
     userChatsCursorRef.current = null;
     setUserChatsHasMore(true);
@@ -1734,18 +2158,86 @@ const AdminDashboard = () => {
   }, [polls]);
 
   // Render Item (fix avatar)
+  // Fetches ban status for a search row exactly once per email.
+  //
+  // This used to live inline in renderItem, firing an RTDB get() DURING
+  // render — and it only wrote to the cache when the user turned out to be
+  // banned. For everyone NOT banned (the overwhelming majority) the key
+  // was never set, `hasOwnProperty` stayed false, and the next render
+  // fired the query again. On a 50-result search that is an unbounded
+  // stream of RTDB reads for as long as the tab is open, billed per
+  // download. Now: an effect (not render), and a `null` is cached as a
+  // real answer so a miss is remembered.
+  const pendingBanChecks = React.useRef(new Set());
+
+  useEffect(() => {
+    if (activeTab !== 'search' || searchResults.length === 0) return;
+
+    const toCheck = searchResults
+      .map((u) => u.email)
+      .filter((email) =>
+        email &&
+        !Object.prototype.hasOwnProperty.call(userBanStatus, email) &&
+        !pendingBanChecks.current.has(email));
+
+    if (toCheck.length === 0) return;
+    toCheck.forEach((email) => pendingBanChecks.current.add(email));
+
+    let cancelled = false;
+    Promise.all(toCheck.map((email) =>
+      checkUserBanStatus(email).then((banData) => [email, banData])
+    )).then((pairs) => {
+      pendingBanChecks.current.clear();
+      if (cancelled) return;
+      setUserBanStatus((prev) => {
+        const next = { ...prev };
+        // Cache misses as null — that is the answer, not the absence of one.
+        pairs.forEach(([email, banData]) => { next[email] = banData; });
+        return next;
+      });
+    });
+
+    return () => { cancelled = true; };
+  }, [activeTab, searchResults, userBanStatus, checkUserBanStatus]);
+
+  // Shown wherever the audit log would otherwise render a bare empty
+  // state. An empty Mod Log has two very different causes and an admin
+  // cannot tell them apart from an empty list alone.
+  const SetupNotice = () => (
+    <View style={[styles.panel, {
+      backgroundColor: tint(HUE.warn, '12'),
+      borderColor: tint(HUE.warn, '45'),
+      marginHorizontal: 0,
+    }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.sm }}>
+        <Ionicons name="construct-outline" size={16} color={HUE.warn} style={{ marginRight: 7 }} />
+        <Text style={{ color: HUE.warn, fontWeight: '700', fontSize: 13 }}>
+          Audit log not set up yet
+        </Text>
+      </View>
+      <Text style={{ color: C.textMuted, fontSize: 12.5, lineHeight: 18 }}>
+        The moderation history database table does not exist. Apply{' '}
+        <Text style={{ fontWeight: '700', color: C.text }}>supabase/029_mod_actions.sql</Text>{' '}
+        in the Supabase SQL editor, then reopen this tab.
+      </Text>
+      <Text style={{ color: C.textFaint, fontSize: 11.5, marginTop: SPACE.sm, lineHeight: 17 }}>
+        Bans, mutes and strikes still work normally — they just are not being
+        recorded to history until this is applied.
+      </Text>
+    </View>
+  );
+
   const renderItem = ({ item }) => {
     let isBanned = item.isBanned;
     let banInfo = null;
 
     if (activeTab === 'search') {
-      // ✅ Check if ban status was already fetched for this user
       const cachedBan = userBanStatus[item.email];
       if (cachedBan) {
-        isBanned = true;
+        isBanned = !!cachedBan.isBanned;
         banInfo = cachedBan;
       } else {
-        // Also check in bannedUsers list as fallback
+        // Fall back to the already-loaded banned list before querying.
         const foundBan = allBannedUsers.find((b) => b.email === item.email);
         if (foundBan) {
           isBanned = true;
@@ -1758,18 +2250,10 @@ const AdminDashboard = () => {
 
     const merged = { ...item, ...(banInfo || {}), isBanned };
     const avatarUri = getAvatarSafe(merged);
-
-    // ✅ If in search tab and not yet checked, check ban status
-    if (activeTab === 'search' && item.email && !userBanStatus.hasOwnProperty(item.email) && !isBanned) {
-      checkUserBanStatus(item.email).then((banData) => {
-        if (banData) {
-          setUserBanStatus((prev) => ({
-            ...prev,
-            [item.email]: banData,
-          }));
-        }
-      });
-    }
+    // A mute is a live restriction with no strike behind it. Showing it as
+    // "BANNED" overstated it; showing it as "ACTIVE" (what the banned-list
+    // builder did by skipping strikeCount < 1) hid it entirely.
+    const isMuted = isBanned && (merged.strikeCount || 0) < 1;
 
     return (
       <TouchableOpacity
@@ -1777,107 +2261,76 @@ const AdminDashboard = () => {
         onPress={() => handleSelectUser(merged)}
         style={[
           styles.card,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }
+          { backgroundColor: C.surface, borderColor: C.border }
         ]}
       >
         <Image source={{ uri: avatarUri }} style={styles.avatar} />
         <View style={styles.cardContent}>
-          <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+          <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
             {merged.displayName}
           </Text>
-          <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+          <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
             {merged.email || merged.decodedEmail || '—'}
           </Text>
         </View>
 
         <View style={styles.actionContainer}>
-          {isBanned ? (
-            <View style={styles.bannedBadge}><Text style={styles.bannedText}>BANNED</Text></View>
-          ) : (
-            <View style={styles.activeBadge}><Text style={styles.activeText}>ACTIVE</Text></View>
-          )}
-          <Ionicons name="ellipsis-vertical" size={20} color={isDark ? '#555' : '#CCC'} style={{ marginLeft: 8 }} />
+          {(() => {
+            const st = isMuted
+              ? { hue: HUE.mute, label: 'MUTED' }
+              : isBanned
+                ? { hue: HUE.danger, label: 'BANNED' }
+                : { hue: HUE.success, label: 'ACTIVE' };
+            return (
+              <View style={[styles.statusChip, { backgroundColor: tint(st.hue), borderColor: tint(st.hue, '40') }]}>
+                <Text style={[styles.statusChipText, { color: st.hue }]}>{st.label}</Text>
+              </View>
+            );
+          })()}
+          <Ionicons name="ellipsis-vertical" size={20} color={C.textFaint} style={{ marginLeft: 8 }} />
         </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7', paddingTop: 16 }]}>
-      {/* Tabs */}
+    <View style={[styles.container, { backgroundColor: C.bg, paddingTop: SPACE.md }]}>
+      {/* Tabs — was eight near-identical 8-line blocks; one list now, so a
+          style change happens in one place instead of eight. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0, flexShrink: 0 }}
         contentContainerStyle={styles.tabContainer}
       >
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'banned' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-          onPress={() => setActiveTab('banned')}
-        >
-          <Text style={[styles.tabText, activeTab === 'banned' && styles.activeTabText, { color: activeTab === 'banned' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-            Banned List
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'search' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-          onPress={() => setActiveTab('search')}
-        >
-          <Text style={[styles.tabText, activeTab === 'search' && styles.activeTabText, { color: activeTab === 'search' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-            Search DB
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'chatViewer' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-          onPress={() => setActiveTab('chatViewer')}
-        >
-          <Text style={[styles.tabText, activeTab === 'chatViewer' && styles.activeTabText, { color: activeTab === 'chatViewer' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-            Chat Viewer
-          </Text>
-        </TouchableOpacity>
-
-        {isAdmin && (
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'userChats' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-            onPress={() => setActiveTab('userChats')}
-          >
-            <Text style={[styles.tabText, activeTab === 'userChats' && styles.activeTabText, { color: activeTab === 'userChats' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-              User Chats
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'polls' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-          onPress={() => setActiveTab('polls')}
-        >
-          <Text style={[styles.tabText, activeTab === 'polls' && styles.activeTabText, { color: activeTab === 'polls' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-            Polls
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'statusFeed' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-          onPress={() => setActiveTab('statusFeed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'statusFeed' && styles.activeTabText, { color: activeTab === 'statusFeed' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-            Statuses
-          </Text>
-        </TouchableOpacity>
-
-        {/* Owner/admin only — delegate the "Make Junior Mod" power. */}
-        {isAdmin && (
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'jmdAccess' && styles.activeTab, { borderColor: isDark ? '#333' : '#E5E5EA' }]}
-            onPress={() => setActiveTab('jmdAccess')}
-          >
-            <Text style={[styles.tabText, activeTab === 'jmdAccess' && styles.activeTabText, { color: activeTab === 'jmdAccess' ? '#007AFF' : (isDark ? '#888' : '#666') }]}>
-              JMD Access
-            </Text>
-          </TouchableOpacity>
-        )}
+        {[
+          { key: 'banned',     label: 'Restrictions' },
+          { key: 'search',     label: 'Search DB' },
+          { key: 'modLog',     label: 'Mod Log' },
+          { key: 'chatViewer', label: 'Chat Viewer' },
+          { key: 'userChats',  label: 'User Chats', adminOnly: true },
+          { key: 'polls',      label: 'Polls' },
+          { key: 'statusFeed', label: 'Statuses' },
+          { key: 'jmdAccess',  label: 'JMD Access', adminOnly: true },
+        ]
+          .filter((t) => !t.adminOnly || isAdmin)
+          .map((t) => {
+            const on = activeTab === t.key;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                onPress={() => setActiveTab(t.key)}
+                style={[styles.tab, {
+                  backgroundColor: on ? HUE.accent : C.surface,
+                  borderColor: on ? HUE.accent : C.border,
+                }]}
+              >
+                <Text style={[styles.tabText, { color: on ? '#FFF' : C.textMuted }]}>
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
       </ScrollView>
 
       {/* Admin-only: moderator ban/mute kill switch. Hidden from moderators. */}
@@ -1886,28 +2339,40 @@ const AdminDashboard = () => {
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            marginHorizontal: 12,
-            marginTop: 8,
-            borderRadius: 12,
-            backgroundColor: isDark ? '#1C1C1E' : '#FFF',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            marginHorizontal: SPACE.lg,
+            // Had marginTop but NO marginBottom, so the next control in
+            // every tab was drawn flush against its bottom edge.
+            marginBottom: SPACE.md,
+            borderRadius: RADIUS.md,
+            borderWidth: 1,
+            borderColor: modControlsEnabled ? C.border : tint(HUE.warn, '55'),
+            backgroundColor: modControlsEnabled ? C.surface : tint(HUE.warn, '12'),
           }}
         >
-          <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFF' : '#000' }}>
+          {/* An OFF state is a live restriction on the whole mod team, so
+              it is tinted rather than left looking like an idle row. */}
+          <Ionicons
+            name={modControlsEnabled ? 'shield-checkmark' : 'shield-outline'}
+            size={18}
+            color={modControlsEnabled ? HUE.success : HUE.warn}
+            style={{ marginRight: 10 }}
+          />
+          <View style={{ flex: 1, paddingRight: SPACE.md }}>
+            <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>
               Moderator ban &amp; mute
             </Text>
-            <Text style={{ fontSize: 12, marginTop: 2, color: isDark ? '#888' : '#666' }}>
+            <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
               {modControlsEnabled
-                ? 'ON — moderators can ban & mute users'
-                : 'OFF — moderators cannot ban or mute (admins unaffected)'}
+                ? 'Moderators can ban & mute'
+                : 'Disabled for moderators — admins unaffected'}
             </Text>
           </View>
           <Switch
             value={modControlsEnabled}
             onValueChange={handleToggleModControls}
-            trackColor={{ false: '#767577', true: '#34C759' }}
+            trackColor={{ false: '#767577', true: HUE.success }}
             thumbColor="#FFF"
           />
         </View>
@@ -1919,8 +2384,8 @@ const AdminDashboard = () => {
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search by display name..."
-            placeholderTextColor={isDark ? '#666' : '#999'}
-            style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+            placeholderTextColor={C.textFaint}
+            style={[styles.searchInput, { backgroundColor: C.surface, color: C.text }]}
             returnKeyType="search"
             onSubmitEditing={handleSearch}
           />
@@ -1938,10 +2403,10 @@ const AdminDashboard = () => {
               value={bannedSearchQuery}
               onChangeText={setBannedSearchQuery}
               placeholder="Search by email prefix..."
-              placeholderTextColor={isDark ? '#666' : '#999'}
+              placeholderTextColor={C.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
-              style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
             />
             <View style={styles.searchBtn}>
               <Ionicons name="search" size={20} color="#FFF" />
@@ -1950,18 +2415,29 @@ const AdminDashboard = () => {
 
           {/* Section label — clarifies that the list is bounded */}
           <View style={{ paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8 }}>
-              {isSearching ? `Search results · ${allBannedUsers.length}` : `Recent bans · ${allBannedUsers.length}`}
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              {/* "Active restrictions", not "bans" — the list now includes
+                  live mutes, which it used to drop on the floor. */}
+              {isSearching
+                ? `Search results · ${allBannedUsers.length}`
+                : `Active restrictions · ${allBannedUsers.length}${bansHasMore ? '+' : ''}`}
             </Text>
             {loadingBanned && (
               <ActivityIndicator size="small" color="#007AFF" />
             )}
           </View>
 
-          {/* Strike Filter Pills */}
-          <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10, gap: 8 }}>
+          {/* Restriction filter pills. Horizontally scrollable — five pills
+              no longer fit a phone width in a fixed row. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 0, marginBottom: 10 }}
+            contentContainerStyle={{ flexDirection: 'row', paddingHorizontal: 16, gap: 8 }}
+          >
             {[
               { key: 'all', label: 'All' },
+              { key: 'mute', label: 'Muted' },
               { key: '1', label: 'Strike 1' },
               { key: '2', label: 'Strike 2' },
               { key: '3+', label: 'Permanent' },
@@ -1972,21 +2448,21 @@ const AdminDashboard = () => {
                   key={f.key}
                   onPress={() => setStrikeFilter(f.key)}
                   style={{
-                    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-                    backgroundColor: isActive ? '#007AFF' : (isDark ? '#1C1C1E' : '#F2F2F7'),
-                    borderWidth: 1, borderColor: isActive ? '#007AFF' : (isDark ? '#2C2C2E' : '#E5E5EA'),
+                    paddingHorizontal: 13, paddingVertical: 6, borderRadius: RADIUS.pill,
+                    backgroundColor: isActive ? HUE.accent : C.surface,
+                    borderWidth: 1, borderColor: isActive ? HUE.accent : C.border,
                   }}
                 >
                   <Text style={{
                     fontSize: 12, fontWeight: '600',
-                    color: isActive ? '#FFF' : (isDark ? '#AAA' : '#666'),
+                    color: isActive ? '#FFF' : C.textMuted,
                   }}>
                     {f.label}
                   </Text>
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
 
           {loadingBanned && !refreshing && allBannedUsers.length === 0 ? (
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
@@ -1994,18 +2470,35 @@ const AdminDashboard = () => {
             <FlatList
               data={filteredBannedUsers}
               keyExtractor={(item) => item.encodedEmail}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? '#FFF' : '#000'} />}
-              contentContainerStyle={styles.listContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.text} />}
+              contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
               renderItem={renderItem}
+              onEndReachedThreshold={0.4}
+              onEndReached={() => {
+                // Paging applies to the default roster only; a search is
+                // already a bounded 50-result query.
+                if (!isSearching && bansHasMore && !loadingBanned && !loadingMoreBans) {
+                  fetchRecentBans(false);
+                }
+              }}
+              ListFooterComponent={
+                isSearching ? null : loadingMoreBans ? (
+                  <ActivityIndicator size="small" color={HUE.accent} style={{ marginVertical: SPACE.lg }} />
+                ) : !bansHasMore && allBannedUsers.length > 0 ? (
+                  <Text style={{ color: C.textFaint, fontSize: 11.5, textAlign: 'center', paddingVertical: SPACE.lg }}>
+                    End of list — {allBannedUsers.length} active restriction{allBannedUsers.length !== 1 ? 's' : ''}
+                  </Text>
+                ) : null
+              }
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Ionicons name="shield-checkmark-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
+                  <Ionicons name="shield-checkmark-outline" size={48} color={C.textFaint} />
+                  <Text style={[styles.emptyText, { color: C.textFaint }]}>
                     {isSearching
-                      ? 'No matching bans for that email prefix'
+                      ? 'No matching restrictions for that email prefix'
                       : strikeFilter !== 'all'
-                        ? 'No bans match that strike tier in the recent slice'
-                        : 'No recent bans'}
+                        ? 'Nothing matches that filter in the current slice'
+                        : 'No active restrictions'}
                   </Text>
                 </View>
               }
@@ -2020,21 +2513,303 @@ const AdminDashboard = () => {
             <FlatList
               data={searchResults}
               keyExtractor={(item, index) => item.id || item.email || `search-${index}`}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
               renderItem={renderItem}
               ListEmptyComponent={
                 hasSearched ? (
                   <View style={styles.emptyState}>
-                    <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>No users found.</Text>
+                    <Text style={[styles.emptyText, { color: C.textFaint }]}>No users found.</Text>
                   </View>
                 ) : (
                   <View style={styles.emptyState}>
-                    <Ionicons name="search-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                    <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>Enter name to search database</Text>
+                    <Ionicons name="search-outline" size={48} color={C.textFaint} />
+                    <Text style={[styles.emptyText, { color: C.textFaint }]}>Enter name to search database</Text>
                   </View>
                 )
               }
             />
+          )}
+        </View>
+      ) : activeTab === 'modLog' ? (
+        <View style={{ flex: 1 }}>
+          {/* Leaderboard vs raw feed */}
+          {/* Segmented control — a single track with an inset selected
+              segment, rather than two free-floating buttons that read as
+              two unrelated actions. */}
+          <View style={{
+            flexDirection: 'row', marginHorizontal: SPACE.lg, marginBottom: SPACE.md,
+            padding: 3, borderRadius: RADIUS.md,
+            backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+          }}>
+            {[
+              { key: 'leaderboard', label: 'By moderator' },
+              { key: 'feed', label: 'Recent actions' },
+            ].map((v) => {
+              const on = modLogView === v.key;
+              return (
+                <TouchableOpacity
+                  key={v.key}
+                  onPress={() => setModLogView(v.key)}
+                  style={{
+                    flex: 1, paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center',
+                    backgroundColor: on ? C.surface : 'transparent',
+                    borderWidth: 1, borderColor: on ? C.border : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13, fontWeight: '700',
+                    color: on ? C.text : C.textMuted,
+                  }}>{v.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Time window. Bounded by design — every rpc scans by
+              created_at, so a window is what keeps the query cheap. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 0, marginBottom: 10 }}
+            contentContainerStyle={{ flexDirection: 'row', paddingHorizontal: 16, gap: 8 }}
+          >
+            {[{ d: 7, l: '7 days' }, { d: 30, l: '30 days' }, { d: 90, l: '90 days' }].map((w) => (
+              <TouchableOpacity
+                key={w.d}
+                onPress={() => setModLogDays(w.d)}
+                style={{
+                  paddingHorizontal: 13, paddingVertical: 6, borderRadius: RADIUS.pill,
+                  backgroundColor: modLogDays === w.d ? HUE.accent : C.surface,
+                  borderWidth: 1, borderColor: modLogDays === w.d ? HUE.accent : C.border,
+                }}
+              >
+                <Text style={{
+                  fontSize: 12, fontWeight: '600',
+                  color: modLogDays === w.d ? '#FFF' : C.textMuted,
+                }}>{w.l}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {modLogView === 'feed' && [
+              { k: null, l: 'All' },
+              { k: 'ban', l: 'Bans' },
+              { k: 'strike', l: 'Strikes' },
+              { k: 'mute', l: 'Mutes' },
+              { k: 'unban', l: 'Unbans' },
+            ].map((f) => (
+              <TouchableOpacity
+                key={f.k || 'all'}
+                onPress={() => setFeedActionFilter(f.k)}
+                style={{
+                  paddingHorizontal: 13, paddingVertical: 6, borderRadius: RADIUS.pill,
+                  backgroundColor: feedActionFilter === f.k ? HUE.mute : C.surface,
+                  borderWidth: 1, borderColor: feedActionFilter === f.k ? HUE.mute : C.border,
+                }}
+              >
+                <Text style={{
+                  fontSize: 12, fontWeight: '600',
+                  color: feedActionFilter === f.k ? '#FFF' : C.textMuted,
+                }}>{f.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Active actor filter, set by tapping a leaderboard row. */}
+          {modLogView === 'feed' && feedActorFilter && (
+            <TouchableOpacity
+              onPress={() => setFeedActorFilter(null)}
+              style={{
+                flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 10,
+                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                backgroundColor: C.surface,
+              }}
+            >
+              <Ionicons name="person" size={14} color="#007AFF" style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, flex: 1 }} numberOfLines={1}>
+                Only actions by {feedActorFilter.name}
+              </Text>
+              <Ionicons name="close-circle" size={18} color={C.textFaint} />
+            </TouchableOpacity>
+          )}
+
+          {modLogView === 'leaderboard' ? (
+            leaderboardLoading && leaderboard.length === 0 ? (
+              <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+            ) : (
+              <FlatList
+                data={leaderboard}
+                keyExtractor={(item) => item.actorUid}
+                contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
+                refreshControl={
+                  <RefreshControl refreshing={leaderboardLoading} onRefresh={loadLeaderboard} tintColor={C.text} />
+                }
+                ListEmptyComponent={
+                  modLogSchemaMissing ? (
+                    <View style={{ paddingTop: SPACE.sm }}><SetupNotice /></View>
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Ionicons name="shield-outline" size={44} color={C.textFaint} />
+                      <Text style={[styles.emptyText, { color: C.textFaint }]}>
+                        No moderation actions in this window
+                      </Text>
+                    </View>
+                  )
+                }
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setFeedActorFilter({ uid: item.actorUid, name: item.actorName });
+                      setFeedActionFilter(null);
+                      setModLogView('feed');
+                    }}
+                    style={[
+                      styles.card,
+                      { backgroundColor: C.surface, borderColor: C.border, alignItems: 'flex-start' },
+                    ]}
+                  >
+                    <View style={{
+                      width: 30, height: 30, borderRadius: 15, marginTop: 2,
+                      justifyContent: 'center', alignItems: 'center',
+                      backgroundColor: index === 0 ? '#FFD70030' : (C.border),
+                    }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: index === 0 ? '#B8860B' : (C.textMuted) }}>
+                        {index + 1}
+                      </Text>
+                    </View>
+
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.name, { color: C.text, flexShrink: 1 }]} numberOfLines={1}>
+                          {item.actorName}
+                        </Text>
+                        {item.actorRole && (
+                          <View style={{
+                            marginLeft: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
+                            backgroundColor: item.actorRole === 'admin' ? '#FF3B3020' : '#007AFF20',
+                          }}>
+                            <Text style={{
+                              fontSize: 9, fontWeight: '700',
+                              color: item.actorRole === 'admin' ? HUE.danger : HUE.accent,
+                            }}>
+                              {item.actorRole.replace('_', ' ').toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Raw action count AND distinct people touched.
+                          Ten mutes on one repeat offender is not ten
+                          people moderated, and ranking on the raw number
+                          alone would flatter whoever spams short mutes. */}
+                      <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>
+                        {item.totalCount} action{item.totalCount !== 1 ? 's' : ''} · {item.distinctTargets} user{item.distinctTargets !== 1 ? 's' : ''}
+                        {item.lastActionAt ? ` · last ${timeAgo(item.lastActionAt)}` : ''}
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                        {[
+                          { l: 'ban', n: item.banCount },
+                          { l: 'strike', n: item.strikeCount },
+                          { l: 'mute', n: item.muteCount },
+                          { l: 'unban', n: item.unbanCount },
+                        ].filter((x) => x.n > 0).map((x) => (
+                          <View key={x.l} style={{
+                            flexDirection: 'row', alignItems: 'center',
+                            paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+                            backgroundColor: `${ACTION_META[x.l].color}18`,
+                          }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: ACTION_META[x.l].color }}>
+                              {x.n} {x.n === 1 ? ACTION_META[x.l].noun.replace(/s$/, '') : ACTION_META[x.l].noun}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+
+                    <Ionicons name="chevron-forward" size={18} color={C.textFaint} style={{ marginTop: 6 }} />
+                  </TouchableOpacity>
+                )}
+              />
+            )
+          ) : (
+            feedLoading && feedItems.length === 0 ? (
+              <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
+            ) : (
+              <FlatList
+                data={feedItems}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
+                refreshControl={
+                  <RefreshControl refreshing={feedLoading} onRefresh={() => loadFeed(true)} tintColor={C.text} />
+                }
+                onEndReachedThreshold={0.5}
+                onEndReached={() => { if (feedHasMore && !feedLoading) loadFeed(false); }}
+                ListFooterComponent={
+                  feedLoading && feedItems.length > 0
+                    ? <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 16 }} />
+                    : null
+                }
+                ListEmptyComponent={
+                  modLogSchemaMissing ? (
+                    <View style={{ paddingTop: SPACE.sm }}><SetupNotice /></View>
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Ionicons name="document-text-outline" size={44} color={C.textFaint} />
+                      <Text style={[styles.emptyText, { color: C.textFaint }]}>
+                        No actions match these filters
+                      </Text>
+                    </View>
+                  )
+                }
+                renderItem={({ item }) => {
+                  const meta = ACTION_META[item.action] || { label: item.action, icon: 'ellipse', color: '#888' };
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      // Tapping an entry opens the target's profile, where
+                      // their full history lives.
+                      onPress={() => handleSelectUser({
+                        id: item.targetUid,
+                        email: item.targetEmail,
+                        displayName: item.targetName || item.targetEmail,
+                      })}
+                      style={[
+                        styles.card,
+                        {
+                          backgroundColor: C.surface,
+                          borderColor: C.border,
+                          alignItems: 'flex-start',
+                          borderLeftWidth: 3, borderLeftColor: meta.color,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={meta.icon} size={20} color={meta.color} style={{ marginTop: 3 }} />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: meta.color }}>
+                          {meta.label}
+                          {item.action === 'mute' && item.durationMinutes ? ` · ${item.durationMinutes} min` : ''}
+                          {item.action === 'strike' && item.strikeCount ? ` ${item.strikeCount}` : ''}
+                          {item.isPermanent ? ' · permanent' : ''}
+                        </Text>
+                        <Text style={[styles.name, { color: C.text, fontSize: 14, marginTop: 2 }]} numberOfLines={1}>
+                          {item.targetName || item.targetEmail}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: C.text, marginTop: 4 }}>
+                          {item.reason || 'No reason recorded'}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                          By {item.actorName || 'Unknown'}
+                          {item.actorRole ? ` (${item.actorRole.replace('_', ' ')})` : ''}
+                          {' · '}{SOURCE_LABEL[item.source] || item.source}
+                          {item.createdAt ? ` · ${timeAgo(item.createdAt)}` : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )
           )}
         </View>
       ) : activeTab === 'chatViewer' ? (
@@ -2044,16 +2819,16 @@ const AdminDashboard = () => {
 
             {/* Person 1 */}
             <View style={{ marginBottom: 12 }}>
-              <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
+              <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
               {chatPerson1 ? (
-                <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
                   <Image source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
-                    <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
+                    <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
+                    <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
                   </View>
                   <TouchableOpacity onPress={() => { setChatPerson1(null); setChatSearch1(''); setChatResults1([]); setChatMessages([]); }} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                    <Ionicons name="close-circle" size={22} color={C.textFaint} />
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -2063,8 +2838,8 @@ const AdminDashboard = () => {
                       value={chatSearch1}
                       onChangeText={setChatSearch1}
                       placeholder="Search user..."
-                      placeholderTextColor={isDark ? '#666' : '#999'}
-                      style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                      placeholderTextColor={C.textFaint}
+                      style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
                       autoCapitalize="none"
                       autoCorrect={false}
                       returnKeyType="search"
@@ -2073,23 +2848,23 @@ const AdminDashboard = () => {
                     {chatSearching1 ? (
                       <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
                     ) : (
-                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#5856D6' }]} onPress={() => searchChatUser(chatSearch1, 1)}>
+                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: HUE.mute }]} onPress={() => searchChatUser(chatSearch1, 1)}>
                         <Ionicons name="person-outline" size={18} color="#FFF" />
                       </TouchableOpacity>
                     )}
                   </View>
                   {chatResults1.length > 0 && (
-                    <View style={[styles.chatDropdown, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                    <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
                       {chatResults1.map((u) => (
                         <TouchableOpacity
                           key={u.id}
                           onPress={() => { setChatPerson1(u); setChatSearch1(''); setChatResults1([]); }}
-                          style={[styles.chatDropdownItem, { borderBottomColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                          style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
                         >
                           <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
                           <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
-                            <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                            <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                            <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -2101,16 +2876,16 @@ const AdminDashboard = () => {
 
             {/* Person 2 */}
             <View style={{ marginBottom: 12 }}>
-              <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
+              <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
               {chatPerson2 ? (
-                <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
                   <Image source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
-                    <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
+                    <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
+                    <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
                   </View>
                   <TouchableOpacity onPress={() => { setChatPerson2(null); setChatSearch2(''); setChatResults2([]); setChatMessages([]); }} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                    <Ionicons name="close-circle" size={22} color={C.textFaint} />
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -2120,8 +2895,8 @@ const AdminDashboard = () => {
                       value={chatSearch2}
                       onChangeText={setChatSearch2}
                       placeholder="Search user..."
-                      placeholderTextColor={isDark ? '#666' : '#999'}
-                      style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                      placeholderTextColor={C.textFaint}
+                      style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
                       autoCapitalize="none"
                       autoCorrect={false}
                       returnKeyType="search"
@@ -2136,17 +2911,17 @@ const AdminDashboard = () => {
                     )}
                   </View>
                   {chatResults2.length > 0 && (
-                    <View style={[styles.chatDropdown, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+                    <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
                       {chatResults2.map((u) => (
                         <TouchableOpacity
                           key={u.id}
                           onPress={() => { setChatPerson2(u); setChatSearch2(''); setChatResults2([]); }}
-                          style={[styles.chatDropdownItem, { borderBottomColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                          style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
                         >
                           <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
                           <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
-                            <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                            <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                            <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -2159,8 +2934,8 @@ const AdminDashboard = () => {
             {/* Load Chat Button */}
             {chatPerson1 && chatPerson2 && (
               <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#007AFF', height: 46, borderRadius: 14, marginBottom: 0 }]}
-                onPress={loadChat}
+                style={[styles.actionButton, { backgroundColor: HUE.accent, height: 46, borderRadius: 14, marginBottom: 0 }]}
+                onPress={() => loadChat(true)}
               >
                 <Ionicons name="chatbubbles" size={18} color="#FFF" style={{ marginRight: 8 }} />
                 <Text style={[styles.buttonText, { fontSize: 15 }]}>View Conversation</Text>
@@ -2186,14 +2961,52 @@ const AdminDashboard = () => {
           ) : (
             <FlatList
               data={chatMessages}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={[styles.listContent, { paddingTop: 4 }]}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={[styles.listContent, { paddingTop: 4, paddingBottom: 80 + insets.bottom }]}
+              // Messages are oldest-first, so "older" is at the TOP — the
+              // control to fetch more belongs in the header, not the footer.
+              ListHeaderComponent={
+                chatMessages.length === 0 ? null : chatHasOlder ? (
+                  <TouchableOpacity
+                    onPress={() => loadChat(false)}
+                    disabled={chatOlderLoading}
+                    style={{
+                      paddingVertical: 10, marginBottom: 8, borderRadius: 10, alignItems: 'center',
+                      backgroundColor: C.surface,
+                    }}
+                  >
+                    {chatOlderLoading
+                      ? <ActivityIndicator size="small" color="#007AFF" />
+                      : <Text style={{ color: HUE.accent, fontWeight: '600', fontSize: 13 }}>Load older messages</Text>}
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={{ color: C.textFaint, fontSize: 11, textAlign: 'center', marginBottom: 8 }}>
+                    Beginning of conversation
+                  </Text>
+                )
+              }
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Ionicons name="chatbubbles-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
-                    {chatPerson1 && chatPerson2 ? 'No messages found between these users' : 'Search and select two users to view their chat'}
+                  <Ionicons
+                    name={chatError ? 'alert-circle-outline' : 'chatbubbles-outline'}
+                    size={48}
+                    color={chatError ? HUE.danger : (C.textFaint)}
+                  />
+                  {/* An error is not an empty conversation. Saying "no
+                      messages found" after a failed read told admins the two
+                      users had never spoken. */}
+                  <Text style={[styles.emptyText, { color: chatError ? HUE.danger : (C.textFaint), textAlign: 'center' }]}>
+                    {chatError
+                      ? chatError
+                      : chatPerson1 && chatPerson2
+                        ? 'No messages found between these users'
+                        : 'Search and select two users to view their chat'}
                   </Text>
+                  {chatError && (
+                    <TouchableOpacity onPress={() => loadChat(true)} style={{ marginTop: 14 }}>
+                      <Text style={{ color: HUE.accent, fontWeight: '700' }}>Retry</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               }
               renderItem={({ item }) => {
@@ -2202,34 +3015,71 @@ const AdminDashboard = () => {
                 const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
                 return (
                   <View style={[styles.chatBubble, {
-                    backgroundColor: isPerson1 ? (isDark ? '#0A3D62' : '#DCF8C6') : (isDark ? '#1C1C1E' : '#FFF'),
+                    backgroundColor: isPerson1 ? (isDark ? '#0A3D62' : '#DCF8C6') : (C.surface),
                     alignSelf: isPerson1 ? 'flex-end' : 'flex-start',
-                    borderColor: isPerson1 ? (isDark ? '#1A5276' : '#B8E6A0') : (isDark ? '#2C2C2E' : '#E5E5EA'),
+                    borderColor: isPerson1 ? (isDark ? '#1A5276' : '#B8E6A0') : (C.border),
                   }]}>
                     <Text style={{ color: isPerson1 ? '#5DADE2' : '#AF52DE', fontSize: 11, fontWeight: '700', marginBottom: 3 }}>
                       {senderName || item.senderId || 'Unknown'}
                       {item.deleted ? <Text style={{ color: '#dc2626', fontWeight: '700' }}>  · deleted by user</Text> : null}
-                      {item.legacy ? <Text style={{ color: isDark ? '#666' : '#999', fontWeight: '600' }}>  · legacy</Text> : null}
+                      {item.legacy ? <Text style={{ color: C.textFaint, fontWeight: '600' }}>  · legacy</Text> : null}
                     </Text>
+                    {/* Quoted message. Present on replies and previously
+                        not rendered at all, which made half of every
+                        argument in a reported chat impossible to follow. */}
+                    {item.replyTo ? (
+                      <View style={{
+                        borderLeftWidth: 2, borderLeftColor: C.textFaint,
+                        paddingLeft: 8, marginBottom: 6, opacity: 0.8,
+                      }}>
+                        <Text style={{ color: C.textMuted, fontSize: 11 }} numberOfLines={2}>
+                          ↩ {typeof item.replyTo === 'string'
+                              ? item.replyTo
+                              : (item.replyTo?.text || item.replyTo?.message || 'Replied to a message')}
+                        </Text>
+                      </View>
+                    ) : null}
+
                     {item.text ? (
-                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
+                      <Text style={{ color: C.text, fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
                     ) : null}
-                    {item.imageUrl ? (
-                      <TouchableOpacity activeOpacity={0.85} onPress={() => setPreviewImage(item.imageUrl)}>
-                        <Image
-                          source={{ uri: item.imageUrl }}
-                          style={{ width: 200, height: 200, borderRadius: 8, marginTop: 6, backgroundColor: isDark ? '#000' : '#EEE' }}
-                          resizeMode="cover"
-                        />
-                      </TouchableOpacity>
-                    ) : null}
+
+                    {/* imageUrl is the single-image field; imageUrls is the
+                        multi-image one. Only the first was rendered, so a
+                        message carrying a gallery — often exactly what gets
+                        reported — showed up as an empty bubble. */}
+                    {(() => {
+                      const urls = [
+                        ...(item.imageUrl ? [item.imageUrl] : []),
+                        ...(Array.isArray(item.imageUrls) ? item.imageUrls : []),
+                      ].filter((u, i, arr) => u && arr.indexOf(u) === i);
+                      if (urls.length === 0) return null;
+                      return (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                          {urls.map((url) => (
+                            <TouchableOpacity key={url} activeOpacity={0.85} onPress={() => setPreviewImage(url)}>
+                              <Image
+                                source={{ uri: url }}
+                                style={{
+                                  width: urls.length > 1 ? 96 : 200,
+                                  height: urls.length > 1 ? 96 : 200,
+                                  borderRadius: 8,
+                                  backgroundColor: C.surfaceAlt,
+                                }}
+                                resizeMode="cover"
+                              />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      );
+                    })()}
                     {item.fruits && item.fruits.length > 0 ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
                         <Ionicons name="paw-outline" size={14} color="#FF9500" />
-                        <Text style={{ color: '#FF9500', fontSize: 12, marginLeft: 4 }}>{item.fruits.length} pet(s)</Text>
+                        <Text style={{ color: HUE.warn, fontSize: 12, marginLeft: 4 }}>{item.fruits.length} pet(s)</Text>
                       </View>
                     ) : null}
-                    <Text style={{ color: isDark ? '#555' : '#AAA', fontSize: 10, marginTop: 4, textAlign: 'right' }}>
+                    <Text style={{ color: C.textFaint, fontSize: 10, marginTop: 4, textAlign: 'right' }}>
                       {time}
                     </Text>
                   </View>
@@ -2241,16 +3091,16 @@ const AdminDashboard = () => {
       ) : activeTab === 'userChats' && isAdmin ? (
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
-            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Target User ID</Text>
+            <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Target User</Text>
             {userChatsTarget ? (
-              <View style={[styles.selectedPersonCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+              <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <Image source={{ uri: userChatsTarget.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{userChatsTarget.displayName}</Text>
-                  <Text style={{ color: isDark ? '#666' : '#999', fontSize: 11 }} numberOfLines={1}>{userChatsTarget.email || userChatsTarget.id}</Text>
+                  <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{userChatsTarget.displayName}</Text>
+                  <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{userChatsTarget.email || userChatsTarget.id}</Text>
                 </View>
                 <TouchableOpacity onPress={clearUserChatsTarget} style={{ padding: 4 }}>
-                  <Ionicons name="close-circle" size={22} color={isDark ? '#555' : '#CCC'} />
+                  <Ionicons name="close-circle" size={22} color={C.textFaint} />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -2258,17 +3108,37 @@ const AdminDashboard = () => {
                 <TextInput
                   value={userChatsInput}
                   onChangeText={setUserChatsInput}
-                  placeholder="Paste user ID..."
-                  placeholderTextColor={isDark ? '#666' : '#999'}
-                  style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+                  placeholder="Name, email or user ID..."
+                  placeholderTextColor={C.textFaint}
+                  style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="search"
                   onSubmitEditing={loadUserChatsForInput}
                 />
-                <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#34C759' }]} onPress={loadUserChatsForInput}>
+                <TouchableOpacity style={[styles.searchBtn, { backgroundColor: HUE.success }]} onPress={loadUserChatsForInput}>
                   <Ionicons name="search" size={20} color="#FFF" />
                 </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Disambiguation picker — shown only when a name matched
+                several people. */}
+            {userChatsResults.length > 0 && (
+              <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
+                {userChatsResults.map((u) => (
+                  <TouchableOpacity
+                    key={u.id}
+                    onPress={() => selectUserChatsTarget(u)}
+                    style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
+                  >
+                    <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                      <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
           </View>
@@ -2279,7 +3149,7 @@ const AdminDashboard = () => {
             <FlatList
               data={userChatsList}
               keyExtractor={(item) => item.partnerId}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
               onEndReachedThreshold={0.3}
               onEndReached={() => {
                 if (userChatsTarget && userChatsHasMore && !userChatsLoadingMore && !userChatsLoading) {
@@ -2288,9 +3158,9 @@ const AdminDashboard = () => {
               }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Ionicons name="chatbubbles-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                  <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
-                    {userChatsTarget ? 'No private chats for this user' : 'Paste a user ID to view all their private chats'}
+                  <Ionicons name="chatbubbles-outline" size={48} color={C.textFaint} />
+                  <Text style={[styles.emptyText, { color: C.textFaint }]}>
+                    {userChatsTarget ? 'No private chats for this user' : 'Search a name, email or user ID to view all their private chats'}
                   </Text>
                 </View>
               }
@@ -2302,21 +3172,21 @@ const AdminDashboard = () => {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   onPress={() => openChatFromUserChats(item)}
-                  style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}
+                  style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
                 >
                   <Image source={{ uri: item.partnerAvatar }} style={styles.avatar} />
                   <View style={styles.cardContent}>
-                    <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                    <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                       {item.partnerName}
                     </Text>
-                    <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                    <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
                       {item.lastMessage || '—'}
                     </Text>
-                    <Text style={{ color: isDark ? '#555' : '#999', fontSize: 11, marginTop: 2 }}>
+                    <Text style={{ color: C.textFaint, fontSize: 11, marginTop: 2 }}>
                       {item.timestamp ? timeAgo(item.timestamp) : ''}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={isDark ? '#555' : '#CCC'} />
+                  <Ionicons name="chevron-forward" size={20} color={C.textFaint} />
                 </TouchableOpacity>
               )}
             />
@@ -2325,19 +3195,19 @@ const AdminDashboard = () => {
       ) : activeTab === 'polls' ? (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
           {/* Create Poll Form */}
-          <View style={[styles.pollFormCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
-            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, fontWeight: '700', marginBottom: 12 }}>Create New Poll</Text>
+          <View style={[styles.pollFormCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>Create New Poll</Text>
 
             <TextInput
               value={pollQuestion}
               onChangeText={setPollQuestion}
               placeholder="Poll question..."
-              placeholderTextColor={isDark ? '#666' : '#999'}
-              style={[styles.pollInput, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
+              placeholderTextColor={C.textFaint}
+              style={[styles.pollInput, { backgroundColor: C.border, color: C.text }]}
               multiline
             />
 
-            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Options</Text>
+            <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Options</Text>
             {pollOptions.map((opt, i) => (
               <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                 <TextInput
@@ -2348,8 +3218,8 @@ const AdminDashboard = () => {
                     setPollOptions(updated);
                   }}
                   placeholder={`Option ${i + 1}`}
-                  placeholderTextColor={isDark ? '#666' : '#999'}
-                  style={[styles.pollInput, { flex: 1, backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
+                  placeholderTextColor={C.textFaint}
+                  style={[styles.pollInput, { flex: 1, backgroundColor: C.border, color: C.text }]}
                 />
                 {pollOptions.length > 2 && (
                   <TouchableOpacity
@@ -2367,18 +3237,18 @@ const AdminDashboard = () => {
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}
               >
                 <Ionicons name="add-circle" size={20} color="#007AFF" />
-                <Text style={{ color: '#007AFF', marginLeft: 6, fontSize: 13, fontWeight: '500' }}>Add Option</Text>
+                <Text style={{ color: HUE.accent, marginLeft: 6, fontSize: 13, fontWeight: '500' }}>Add Option</Text>
               </TouchableOpacity>
             )}
 
-            <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Image (optional)</Text>
+            <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 6, marginTop: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Image (optional)</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
               <TextInput
                 value={pollImageUrl}
                 onChangeText={setPollImageUrl}
                 placeholder="Paste URL or upload below"
-                placeholderTextColor={isDark ? '#666' : '#999'}
-                style={[styles.pollInput, { flex: 1, backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000', marginBottom: 0 }]}
+                placeholderTextColor={C.textFaint}
+                style={[styles.pollInput, { flex: 1, backgroundColor: C.border, color: C.text, marginBottom: 0 }]}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
@@ -2391,7 +3261,7 @@ const AdminDashboard = () => {
             <TouchableOpacity
               onPress={handlePickPollImage}
               disabled={uploadingPollImage}
-              style={[styles.actionButton, { backgroundColor: '#007AFF', height: 38, borderRadius: 10, marginBottom: 6 }]}
+              style={[styles.actionButton, { backgroundColor: HUE.accent, height: 38, borderRadius: 10, marginBottom: 6 }]}
             >
               {uploadingPollImage ? (
                 <ActivityIndicator size="small" color="#FFF" />
@@ -2407,7 +3277,7 @@ const AdminDashboard = () => {
             ) : null}
 
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: '#5856D6', marginTop: 12, height: 46, borderRadius: 14 }]}
+              style={[styles.actionButton, { backgroundColor: HUE.mute, marginTop: 12, height: 46, borderRadius: 14 }]}
               onPress={handleCreatePoll}
               disabled={creatingPoll}
             >
@@ -2423,26 +3293,26 @@ const AdminDashboard = () => {
           </View>
 
           {/* Existing Polls */}
-          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 12 }}>Existing Polls</Text>
+          <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 12 }}>Existing Polls</Text>
 
           {loadingPolls ? (
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
           ) : polls.length === 0 ? (
-            <Text style={{ color: isDark ? '#666' : '#999', textAlign: 'center', paddingVertical: 20 }}>No polls created yet</Text>
+            <Text style={{ color: C.textFaint, textAlign: 'center', paddingVertical: 20 }}>No polls created yet</Text>
           ) : (
             polls.map((p) => (
-              <View key={p.id} style={[styles.pollListCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', borderColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+              <View key={p.id} style={[styles.pollListCard, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <View style={[styles.pollStatusBadge, { backgroundColor: p.active ? '#34C75920' : '#FF3B3020' }]}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.active ? '#34C759' : '#FF3B30', marginRight: 4 }} />
-                    <Text style={{ color: p.active ? '#34C759' : '#FF3B30', fontSize: 10, fontWeight: '700' }}>{p.active ? 'ACTIVE' : 'INACTIVE'}</Text>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.active ? HUE.success : HUE.danger, marginRight: 4 }} />
+                    <Text style={{ color: p.active ? HUE.success : HUE.danger, fontSize: 10, fontWeight: '700' }}>{p.active ? 'ACTIVE' : 'INACTIVE'}</Text>
                   </View>
-                  <Text style={{ color: isDark ? '#555' : '#CCC', fontSize: 11, marginLeft: 'auto' }}>
+                  <Text style={{ color: C.textFaint, fontSize: 11, marginLeft: 'auto' }}>
                     {p.totalVotes || 0} votes
                   </Text>
                 </View>
-                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600', marginBottom: 4 }} numberOfLines={2}>{p.question}</Text>
-                <Text style={{ color: isDark ? '#666' : '#999', fontSize: 12, marginBottom: 8 }}>
+                <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', marginBottom: 4 }} numberOfLines={2}>{p.question}</Text>
+                <Text style={{ color: C.textFaint, fontSize: 12, marginBottom: 8 }}>
                   {(p.options || []).map((o) => o.text).join(' • ')}
                 </Text>
                 <View style={{ flexDirection: 'row' }}>
@@ -2450,8 +3320,8 @@ const AdminDashboard = () => {
                     onPress={() => handleTogglePollActive(p)}
                     style={[styles.pollActionBtn, { backgroundColor: p.active ? '#FF950020' : '#34C75920' }]}
                   >
-                    <Ionicons name={p.active ? 'pause-circle' : 'play-circle'} size={16} color={p.active ? '#FF9500' : '#34C759'} />
-                    <Text style={{ color: p.active ? '#FF9500' : '#34C759', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                    <Ionicons name={p.active ? 'pause-circle' : 'play-circle'} size={16} color={p.active ? HUE.warn : HUE.success} />
+                    <Text style={{ color: p.active ? HUE.warn : HUE.success, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
                       {p.active ? 'Deactivate' : 'Activate'}
                     </Text>
                   </TouchableOpacity>
@@ -2460,7 +3330,7 @@ const AdminDashboard = () => {
                     style={[styles.pollActionBtn, { backgroundColor: '#FF3B3020', marginLeft: 8 }]}
                   >
                     <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-                    <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
+                    <Text style={{ color: HUE.danger, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -2480,13 +3350,13 @@ const AdminDashboard = () => {
                 <RefreshControl
                   refreshing={statusLoading}
                   onRefresh={() => fetchStatusFeed(true)}
-                  tintColor={isDark ? '#FFF' : '#000'}
+                  tintColor={C.text}
                 />
               }
               onEndReached={() => fetchStatusFeed(false)}
               onEndReachedThreshold={0.4}
               ListEmptyComponent={
-                <Text style={{ color: isDark ? '#888' : '#666', textAlign: 'center', marginTop: 40 }}>
+                <Text style={{ color: C.textMuted, textAlign: 'center', marginTop: 40 }}>
                   No statuses found.
                 </Text>
               }
@@ -2494,7 +3364,7 @@ const AdminDashboard = () => {
                 statusLoadingMore ? (
                   <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 12 }} />
                 ) : !statusHasMore && statusList.length > 0 ? (
-                  <Text style={{ color: isDark ? '#555' : '#AAA', textAlign: 'center', fontSize: 11, marginTop: 8 }}>
+                  <Text style={{ color: C.textFaint, textAlign: 'center', fontSize: 11, marginTop: 8 }}>
                     End of feed
                   </Text>
                 ) : null
@@ -2504,12 +3374,12 @@ const AdminDashboard = () => {
                 const viewers = Array.isArray(item.viewedBy) ? item.viewedBy.length : 0;
                 return (
                   <View style={{
-                    backgroundColor: isDark ? '#1C1C1E' : '#FFF',
+                    backgroundColor: C.surface,
                     borderRadius: 12,
                     padding: 12,
                     marginBottom: 10,
                     borderWidth: 1,
-                    borderColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                    borderColor: C.border,
                   }}>
                     {/* Header: avatar + name + date */}
                     <TouchableOpacity
@@ -2527,19 +3397,19 @@ const AdminDashboard = () => {
                         style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
                       />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                        <Text style={{ color: C.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
                           {item.userName || 'Unknown'}
                         </Text>
-                        <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11 }}>
+                        <Text style={{ color: C.textMuted, fontSize: 11 }}>
                           {created} {item.type || 'text'} {viewers} views
                         </Text>
                       </View>
-                      <Ionicons name="person-circle-outline" size={20} color={isDark ? '#666' : '#999'} />
+                      <Ionicons name="person-circle-outline" size={20} color={C.textFaint} />
                     </TouchableOpacity>
 
                     {/* Caption */}
                     {!!item.caption && (
-                      <Text style={{ color: isDark ? '#DDD' : '#333', fontSize: 13, marginBottom: 8 }} numberOfLines={4}>
+                      <Text style={{ color: C.text, fontSize: 13, marginBottom: 8 }} numberOfLines={4}>
                         {item.caption}
                       </Text>
                     )}
@@ -2548,7 +3418,7 @@ const AdminDashboard = () => {
                     {!!item.imageUrl && (
                       <Image
                         source={{ uri: item.imageUrl }}
-                        style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8, backgroundColor: isDark ? '#000' : '#EEE' }}
+                        style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8, backgroundColor: C.surfaceAlt }}
                         resizeMode="cover"
                       />
                     )}
@@ -2557,7 +3427,7 @@ const AdminDashboard = () => {
                     {Array.isArray(item.pollOptions) && item.pollOptions.length > 0 && (
                       <View style={{ marginBottom: 8 }}>
                         {item.pollOptions.map((opt, i) => (
-                          <Text key={i} style={{ color: isDark ? '#AAA' : '#555', fontSize: 12 }}>{opt}</Text>
+                          <Text key={i} style={{ color: C.textMuted, fontSize: 12 }}>{opt}</Text>
                         ))}
                       </View>
                     )}
@@ -2573,7 +3443,7 @@ const AdminDashboard = () => {
                         }}
                       >
                         <Ionicons name="trash-outline" size={14} color="#FF3B30" />
-                        <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
+                        <Text style={{ color: HUE.danger, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Delete</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
@@ -2582,12 +3452,12 @@ const AdminDashboard = () => {
                         }}
                         style={{
                           flexDirection: 'row', alignItems: 'center',
-                          backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                          backgroundColor: C.border,
                           paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 8,
                         }}
                       >
-                        <Ionicons name="copy-outline" size={14} color={isDark ? '#AAA' : '#666'} />
-                        <Text style={{ color: isDark ? '#AAA' : '#666', fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Copy ID</Text>
+                        <Ionicons name="copy-outline" size={14} color={C.textMuted} />
+                        <Text style={{ color: C.textMuted, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Copy ID</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -2599,7 +3469,7 @@ const AdminDashboard = () => {
       ) : activeTab === 'jmdAccess' && isAdmin ? (
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 }}>
-            <Text style={{ fontSize: 12, color: isDark ? '#888' : '#666', lineHeight: 17 }}>
+            <Text style={{ fontSize: 12, color: C.textMuted, lineHeight: 17 }}>
               Anyone listed here can make and remove Junior Mods from a user's profile.
               It grants no other staff power, and you can revoke it at any time.
             </Text>
@@ -2610,10 +3480,10 @@ const AdminDashboard = () => {
               value={jmdSearchQuery}
               onChangeText={setJmdSearchQuery}
               placeholder="Search by display name or paste a user ID..."
-              placeholderTextColor={isDark ? '#666' : '#999'}
+              placeholderTextColor={C.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
-              style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
               returnKeyType="search"
               onSubmitEditing={() => searchJmdUser(jmdSearchQuery)}
             />
@@ -2626,7 +3496,7 @@ const AdminDashboard = () => {
 
           {jmdSearchResults.length > 0 && (
             <View style={{ paddingHorizontal: 12, marginBottom: 12 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
                 Search results
               </Text>
               {jmdSearchResults.map((u) => {
@@ -2634,14 +3504,14 @@ const AdminDashboard = () => {
                 return (
                   <View
                     key={u.id}
-                    style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
+                    style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
                   >
                     <Image source={{ uri: getAvatarSafe(u) }} style={styles.avatar} />
                     <View style={styles.cardContent}>
-                      <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                         {u.displayName}
                       </Text>
-                      <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                      <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
                         {u.isAdmin ? 'Admin' : u.isModerator ? 'Moderator' : 'Member'} · {u.id}
                       </Text>
                     </View>
@@ -2650,11 +3520,11 @@ const AdminDashboard = () => {
                       onPress={() => handleGrantJmdAccess(u)}
                       style={{
                         paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
-                        backgroundColor: alreadyGranted ? (isDark ? '#2C2C2E' : '#E5E5EA') : '#007AFF',
+                        backgroundColor: alreadyGranted ? (C.border) : HUE.accent,
                         opacity: jmdSaving === u.id ? 0.5 : 1,
                       }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: alreadyGranted ? (isDark ? '#888' : '#666') : '#FFF' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: alreadyGranted ? (C.textMuted) : '#FFF' }}>
                         {alreadyGranted ? 'Granted' : 'Grant'}
                       </Text>
                     </TouchableOpacity>
@@ -2665,7 +3535,7 @@ const AdminDashboard = () => {
           )}
 
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#888' : '#666', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Allowed to make Junior Mods · {jmdGranters.length}
             </Text>
           </View>
@@ -2681,22 +3551,22 @@ const AdminDashboard = () => {
                 <RefreshControl
                   refreshing={jmdGrantersLoading}
                   onRefresh={fetchJmdGranters}
-                  tintColor={isDark ? '#FFF' : '#000'}
+                  tintColor={C.text}
                 />
               }
               ListEmptyComponent={
-                <Text style={{ color: isDark ? '#888' : '#666', textAlign: 'center', marginTop: 32, fontSize: 13 }}>
+                <Text style={{ color: C.textMuted, textAlign: 'center', marginTop: 32, fontSize: 13 }}>
                   Nobody has this permission yet.{'\n'}Search a user above to grant it.
                 </Text>
               }
               renderItem={({ item }) => (
-                <View style={[styles.card, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}>
+                <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
                   <Image source={{ uri: getAvatarSafe(item) }} style={styles.avatar} />
                   <View style={styles.cardContent}>
-                    <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                    <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                       {item.displayName}
                     </Text>
-                    <Text style={[styles.email, { color: isDark ? '#8E8E93' : '#666' }]} numberOfLines={1}>
+                    <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
                       {item.grantedAt ? `Granted ${timeAgo(item.grantedAt)}` : 'Granted'}
                       {item.grantedByName ? ` by ${item.grantedByName}` : ''}
                     </Text>
@@ -2710,7 +3580,7 @@ const AdminDashboard = () => {
                       opacity: jmdSaving === item.id ? 0.5 : 1,
                     }}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF3B30' }}>Revoke</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: HUE.danger }}>Revoke</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -2726,113 +3596,155 @@ const AdminDashboard = () => {
         presentationStyle="formSheet"
         onRequestClose={() => setSelectedUser(null)}
       >
-        <View style={[styles.modalContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
+        <View style={[
+          styles.modalContainer,
+          {
+            backgroundColor: C.bg,
+            // Without this the header sat under the status bar and the
+            // avatar was clipped by the notch.
+            paddingTop: insets.top,
+          },
+        ]}>
           {selectedUser && (
             <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.modalHeader}>
-                <Text style={{ fontSize: 18, fontWeight: '600', color: isDark ? '#FFF' : '#000' }}>User Details</Text>
+                <Text style={[styles.modalTitle, { color: C.text }]}>User Details</Text>
                 <TouchableOpacity onPress={() => setSelectedUser(null)} style={styles.modalCloseBtn}>
-                  <Ionicons name="close-circle" size={28} color={isDark ? '#555' : '#CCC'} />
+                  <Ionicons name="close" size={24} color={C.textMuted} />
                 </TouchableOpacity>
               </View>
 
-              {/* Header */}
-              <View style={{ alignItems: 'center', marginVertical: 20 }}>
+              {/* Identity — horizontal, not a centred stack.
+                  A 64px avatar centred above name, email, an ID chip and a
+                  status pill burned most of the first screen before a
+                  single fact appeared. Side-by-side puts identity and
+                  status in the same glance and leaves room for the record
+                  underneath. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.lg }}>
                 <Image source={{ uri: getAvatarSafe(selectedUser) }} style={styles.avatarLarge} />
-                <Text style={[styles.modalName, { color: isDark ? '#FFF' : '#000' }]}>{selectedUser.displayName}</Text>
-                <Text style={[styles.modalEmail, { color: isDark ? '#AAA' : '#666' }]}>{selectedUser.email || selectedUser.decodedEmail}</Text>
-
-                {selectedUser.id && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      Clipboard.setString(selectedUser.id);
-                      Alert.alert('Copied', 'User ID copied to clipboard.');
-                    }}
-                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#E5E5EA', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, marginBottom: 8 }}
-                  >
-                    <Ionicons name="copy-outline" size={14} color={isDark ? '#AAA' : '#666'} style={{ marginRight: 6 }} />
-                    <Text style={{ color: isDark ? '#CCC' : '#333', fontSize: 12 }} numberOfLines={1}>
-                      ID: {selectedUser.id}
+                <View style={{ flex: 1, marginLeft: SPACE.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <Text style={[styles.modalName, { color: C.text, textAlign: 'left' }]} numberOfLines={1}>
+                      {selectedUser.displayName}
                     </Text>
-                  </TouchableOpacity>
-                )}
-
-                {userDetails?.isPro && (
-                  <View style={[styles.proBadge]}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
-                    <Text style={{ color: '#ffb700be', fontWeight: 'bold', marginLeft: 4 }}>PRO</Text>
-                  </View>
-                )}
-
-                {selectedUser.isBanned && (
-                  <View style={[styles.infoBadge, { backgroundColor: '#FF3B3015', marginTop: 8 }]}>
-                    <Text style={{ color: '#FF3B30', fontWeight: 'bold' }}>
-                      {selectedUser.strikeCount} Strike(s) • {selectedUser.reason}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Unban / Ban Actions */}
-              <View style={{ marginTop: 20, marginBottom: 16 }}>
-                {selectedUser.isBanned ? (
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: '#34C759' }]}
-                    onPress={() => handleUnban(selectedUser)}
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.buttonText}>Unban User</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
-                    onPress={() => handleBan(selectedUser)}
-                  >
-                    <Ionicons name="ban-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.buttonText}>Ban User</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Stats */}
-              {loadingDetails ? (
-                <ActivityIndicator size="small" color="#007AFF" style={{ marginBottom: 16 }} />
-              ) : userDetails && (
-                <View style={[styles.statsSection, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
-                  {userDetails.createdAt && (
-                    <View style={styles.statRow}>
-                      <Ionicons name="calendar-outline" size={18} color={isDark ? '#888' : '#666'} />
-                      <Text style={{ color: isDark ? '#FFF' : '#000', marginLeft: 10 }}>
-                        Member since {new Date(toMillisSafe(userDetails.createdAt) || userDetails.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.statRow}>
-                    <Ionicons name="star" size={18} color="#FFD700" />
-                    <Text style={{ color: isDark ? '#FFF' : '#000', marginLeft: 10 }}>
-                      {parseRatingSafe(userDetails.rating).toFixed(2)} ({userDetails.ratingCount || 0} reviews)
-                    </Text>
+                    {userDetails?.isPro && (
+                      <View style={[styles.proBadge, { marginTop: 0 }]}>
+                        <Ionicons name="star" size={10} color={HUE.gold} />
+                        <Text style={{ color: HUE.gold, fontWeight: '700', marginLeft: 3, fontSize: 10 }}>PRO</Text>
+                      </View>
+                    )}
                   </View>
 
-                  {userDetails.robloxUsername && (
-                    <View style={styles.statRow}>
-                      <Ionicons name="game-controller-outline" size={18} color={isDark ? '#888' : '#666'} />
-                      <Text style={{ color: isDark ? '#FFF' : '#000', marginLeft: 10 }}>
-                        {userDetails.robloxUsername}
-                      </Text>
+                  <Text style={[styles.modalEmail, { color: C.textMuted, textAlign: 'left' }]} numberOfLines={1}>
+                    {selectedUser.email || selectedUser.decodedEmail}
+                  </Text>
+
+                  {/* Status sits with the name — it is the single most
+                      important thing about this person on this screen. */}
+                  {currentSanction?.isActive ? (() => {
+                    const hue = currentSanction.kind === 'mute' ? HUE.mute : HUE.danger;
+                    return (
+                      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                        <View style={[styles.statusChip, { backgroundColor: tint(hue), borderColor: tint(hue, '40') }]}>
+                          <Text style={[styles.statusChipText, { color: hue }]}>
+                            {currentSanction.kind === 'mute' ? 'MUTED' : `STRIKE ${currentSanction.strikeCount}`}
+                            {currentSanction.bannedUntil === 'permanent' ? ' · PERMANENT' : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })() : (
+                    <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                      <View style={[styles.statusChip, { backgroundColor: tint(HUE.success), borderColor: tint(HUE.success, '40') }]}>
+                        <Text style={[styles.statusChipText, { color: HUE.success }]}>NO RESTRICTIONS</Text>
+                      </View>
                     </View>
                   )}
                 </View>
+              </View>
+
+              {selectedUser.id && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Clipboard.setString(selectedUser.id);
+                    Alert.alert('Copied', 'User ID copied to clipboard.');
+                  }}
+                  style={[styles.idChip, { backgroundColor: C.surfaceAlt, alignSelf: 'flex-start', marginTop: 0, marginBottom: SPACE.lg }]}
+                >
+                  <Ionicons name="copy-outline" size={12} color={C.textFaint} style={{ marginRight: 5 }} />
+                  <Text style={{ color: C.textMuted, fontSize: 11 }} numberOfLines={1}>
+                    {selectedUser.id}
+                  </Text>
+                </TouchableOpacity>
               )}
 
-              {/* Reviews */}
-              <View style={styles.sectionContainer}>
-                <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>Reviews</Text>
+              {/* Account facts — a compact 3-up strip rather than three
+                  stacked rows in a tall card. Same information, a third of
+                  the height, and the numbers line up so they can be
+                  compared at a glance. */}
+              {loadingDetails ? (
+                <ActivityIndicator size="small" color={HUE.accent} style={{ marginBottom: SPACE.lg }} />
+              ) : userDetails && (
+                <View style={{ flexDirection: 'row', gap: SPACE.sm, marginBottom: SPACE.lg }}>
+                  {[
+                    {
+                      icon: 'calendar-outline',
+                      hue: C.textMuted,
+                      value: userDetails.createdAt
+                        ? new Date(toMillisSafe(userDetails.createdAt) || userDetails.createdAt)
+                            .toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                        : '—',
+                      label: 'Member since',
+                    },
+                    {
+                      icon: 'star',
+                      hue: HUE.gold,
+                      value: `${parseRatingSafe(userDetails.rating).toFixed(1)}`,
+                      label: `${userDetails.ratingCount || 0} review${(userDetails.ratingCount || 0) !== 1 ? 's' : ''}`,
+                    },
+                    {
+                      icon: 'game-controller-outline',
+                      hue: C.textMuted,
+                      value: userDetails.robloxUsername || '—',
+                      label: 'Roblox',
+                    },
+                  ].map((f) => (
+                    <View
+                      key={f.label}
+                      style={{
+                        flex: 1, paddingVertical: SPACE.md, paddingHorizontal: SPACE.sm,
+                        borderRadius: RADIUS.md, alignItems: 'center',
+                        backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+                      }}
+                    >
+                      <Ionicons name={f.icon} size={14} color={f.hue} />
+                      <Text
+                        style={{ color: C.text, fontSize: 13, fontWeight: '700', marginTop: 5 }}
+                        numberOfLines={1}
+                      >
+                        {f.value}
+                      </Text>
+                      <Text style={{ color: C.textFaint, fontSize: 10, marginTop: 1 }} numberOfLines={1}>
+                        {f.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-                {reviews.length === 0 && !loadingReviews ? (
-                  <Text style={{ color: isDark ? '#666' : '#999', textAlign: 'center', padding: 16 }}>No reviews yet</Text>
-                ) : (
+              {/* Reviews. Wrapped in the same panel as every other block so
+                  the modal reads as a stack of cards rather than headings
+                  floating over the page background — and the empty case is
+                  one muted line instead of a 16px-padded void. */}
+              <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: reviews.length === 0 ? 0 : SPACE.md }}>
+                  <Text style={[styles.sectionLabel, { color: C.textMuted, marginBottom: 0, flex: 1 }]}>Reviews</Text>
+                  {reviews.length === 0 && !loadingReviews && (
+                    <Text style={{ color: C.textFaint, fontSize: 12 }}>None</Text>
+                  )}
+                </View>
+
+                {reviews.length === 0 && !loadingReviews ? null : (
                   reviews.map((review) => {
                     const ratingVal = parseRatingSafe(review?.rating);
                     const reviewText = (review?.review ?? review?.comment ?? review?.text ?? '').toString().trim();
@@ -2840,29 +3752,29 @@ const AdminDashboard = () => {
                     const dateText = formatDateSafe(review?.createdAt) || formatDateSafe(review?.updatedAt) || '';
 
                     return (
-                      <View key={review.id} style={[styles.reviewCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
+                      <View key={review.id} style={[styles.reviewCard, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                          <Ionicons name="star" size={14} color="#FFD700" />
-                          <Text style={{ color: isDark ? '#FFF' : '#000', marginLeft: 4, fontWeight: '600' }}>
+                          <Ionicons name="star" size={14} color={HUE.gold} />
+                          <Text style={{ color: C.text, marginLeft: 4, fontWeight: '600' }}>
                             {ratingVal || 0}
                           </Text>
-                          <Text style={{ color: isDark ? '#666' : '#999', marginLeft: 'auto', fontSize: 11 }}>
+                          <Text style={{ color: C.textFaint, marginLeft: 'auto', fontSize: 11 }}>
                             {dateText || '—'}
                           </Text>
                           <TouchableOpacity
                             onPress={() => handleDeleteReview(review)}
                             style={{ marginLeft: 10, padding: 4 }}
                           >
-                            <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                            <Ionicons name="trash-outline" size={16} color={HUE.danger} />
                           </TouchableOpacity>
                         </View>
 
-                        <Text style={{ color: isDark ? '#CCC' : '#333' }}>
+                        <Text style={{ color: C.text }}>
                           {reviewText || 'No comment'}
                         </Text>
 
                         {!!reviewer && (
-                          <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, marginTop: 4 }}>
+                          <Text style={{ color: C.textMuted, fontSize: 11, marginTop: 4 }}>
                             — {reviewer}
                           </Text>
                         )}
@@ -2871,78 +3783,271 @@ const AdminDashboard = () => {
                   })
                 )}
 
-                {loadingReviews && <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 8 }} />}
+                {loadingReviews && <ActivityIndicator size="small" color={HUE.accent} style={{ marginTop: SPACE.sm }} />}
 
                 {hasMoreReviews && reviews.length > 0 && !loadingReviews && (
                   <TouchableOpacity style={styles.loadMoreBtn} onPress={() => fetchReviews(selectedUser.id, false)}>
-                    <Text style={{ color: '#007AFF', fontWeight: '600' }}>Load More</Text>
+                    <Text style={{ color: HUE.accent, fontWeight: '600', fontSize: 12.5 }}>Load more reviews</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
-              {/* Strike History */}
-              {strikeHistory.length > 0 && (
-                <View style={styles.sectionContainer}>
-                  <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>Strike History</Text>
-                  {strikeHistory.map((strike) => (
-                    <View key={strike.id} style={[styles.strikeCard, { backgroundColor: isDark ? '#2C1C1E' : '#FFF5F5' }]}>
+              {/* ── Moderation record ───────────────────────────────
+                  One panel, because an admin asking "what has this person
+                  done?" wants the live sanction, the tallies and the
+                  timeline together — they were three separate cards with
+                  their own headings and 24px gaps, so answering that
+                  question meant scrolling past two of them.
+
+                  Still two data sources, and the distinction matters:
+                    · what is in force RIGHT NOW  → live RTDB record
+                    · what has EVER been done     → Supabase audit log
+                  The old screen showed only the first and called it
+                  "Strike History". */}
+              <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.md }}>
+                  <Text style={[styles.sectionLabel, { color: C.textMuted, marginBottom: 0, flex: 1 }]}>
+                    Moderation record
+                  </Text>
+                  {modCounts && modCounts.totalCount > 0 && (
+                    <Text style={{ color: C.textFaint, fontSize: 11 }}>
+                      {modCounts.totalCount} action{modCounts.totalCount !== 1 ? 's' : ''} · {modCounts.distinctActors} staff
+                    </Text>
+                  )}
+                </View>
+
+                {/* Live sanction */}
+                {currentSanction && (() => {
+                  const active = currentSanction.isActive;
+                  const hue = !active ? HUE.success
+                    : currentSanction.kind === 'mute' ? HUE.mute
+                    : currentSanction.strikeCount >= 3 ? HUE.danger
+                    : currentSanction.strikeCount === 2 ? HUE.warnMid
+                    : HUE.warn;
+                  return (
+                    <View style={{
+                      backgroundColor: tint(hue, '12'), borderRadius: RADIUS.md,
+                      borderWidth: 1, borderColor: tint(hue, '33'),
+                      padding: SPACE.md, marginBottom: SPACE.md,
+                    }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={[
-                          styles.strikeBadge,
-                          {
-                            backgroundColor:
-                              strike.strikeCount >= 3 ? '#FF3B30' :
-                                strike.strikeCount === 2 ? '#FF6B00' :
-                                  '#FF9500'
-                          }
-                        ]}>
-                          <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 11 }}>Strike {strike.strikeCount}</Text>
+                        <View style={[styles.strikeBadge, { backgroundColor: hue }]}>
+                          <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 10 }}>
+                            {!active ? 'EXPIRED'
+                              : currentSanction.kind === 'mute' ? 'MUTED'
+                              : `STRIKE ${currentSanction.strikeCount}`}
+                          </Text>
                         </View>
-                        <Text style={{ color: isDark ? '#666' : '#999', marginLeft: 'auto', fontSize: 11 }}>
-                          {strike.timestamp ? new Date(strike.timestamp).toLocaleDateString() : ''}
+                        <Text style={{ color: C.text, fontSize: 12, fontWeight: '600', marginLeft: SPACE.sm, flex: 1 }} numberOfLines={1}>
+                          {currentSanction.bannedUntil === 'permanent'
+                            ? 'Permanent'
+                            : active
+                              ? `Until ${new Date(currentSanction.bannedUntil).toLocaleString()}`
+                              : `Ended ${timeAgo(currentSanction.bannedUntil)}`}
                         </Text>
                       </View>
-
-                      {strike.reason && <Text style={{ color: isDark ? '#CCC' : '#333', marginTop: 6 }}>{strike.reason}</Text>}
-                      {strike.appliedBy && <Text style={{ color: isDark ? '#888' : '#666', fontSize: 11, marginTop: 4 }}>By: {strike.appliedBy}</Text>}
+                      <Text style={{ color: C.text, marginTop: 7, fontSize: 13, lineHeight: 18 }}>
+                        {currentSanction.reason || 'No reason recorded'}
+                      </Text>
+                      <Text style={{ color: C.textFaint, fontSize: 11, marginTop: 4 }}>
+                        {currentSanction.appliedBy ? `By ${currentSanction.appliedBy}` : 'Applied by unknown'}
+                        {currentSanction.appliedAt ? ` · ${timeAgo(currentSanction.appliedAt)}` : ''}
+                      </Text>
                     </View>
-                  ))}
-                </View>
-              )}
+                  );
+                })()}
 
-              {/* Mute Buttons */}
-              <View style={{ marginTop: 16 }}>
-                <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
-                  Mute User (temporary silence, no strike)
+                {/* Tallies — server-aggregated, one row back. */}
+                {modCounts && (
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: SPACE.md }}>
+                    {[
+                      { label: 'Mutes', value: modCounts.muteCount, hue: HUE.mute },
+                      { label: 'Strikes', value: modCounts.strikeCount, hue: HUE.warn },
+                      { label: 'Bans', value: modCounts.banCount, hue: HUE.danger },
+                      { label: 'Unbans', value: modCounts.unbanCount, hue: HUE.success },
+                    ].map((c) => (
+                      <View
+                        key={c.label}
+                        style={{
+                          flex: 1, alignItems: 'center', paddingVertical: SPACE.sm,
+                          borderRadius: RADIUS.sm,
+                          backgroundColor: c.value > 0 ? tint(c.hue, '12') : C.surfaceAlt,
+                          borderWidth: 1,
+                          borderColor: c.value > 0 ? tint(c.hue, '33') : C.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 17, fontWeight: '800', color: c.value > 0 ? c.hue : C.textFaint }}>
+                          {c.value}
+                        </Text>
+                        <Text style={{ fontSize: 9.5, fontWeight: '700', color: C.textFaint, marginTop: 1, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                          {c.label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Timeline */}
+                {modHistoryLoading && modHistory.length === 0 ? (
+                  <ActivityIndicator size="small" color={HUE.accent} style={{ marginVertical: SPACE.md }} />
+                ) : modSchemaMissing ? (
+                  <SetupNotice />
+                ) : modHistory.length === 0 ? (
+                  <Text style={{ color: C.textFaint, textAlign: 'center', paddingVertical: SPACE.md, fontSize: 12, lineHeight: 17 }}>
+                    No recorded actions yet.{'\n'}
+                    History starts from the release that added the audit log — earlier
+                    actions were never recorded anywhere.
+                  </Text>
+                ) : (
+                  <>
+                    <View style={{ height: 1, backgroundColor: C.border, marginBottom: SPACE.md }} />
+                    {modHistory.map((a, i) => {
+                      const meta = ACTION_META[a.action] || { label: a.action, icon: 'ellipse', color: C.textMuted };
+                      return (
+                        <View
+                          key={a.id}
+                          style={{
+                            flexDirection: 'row',
+                            paddingBottom: SPACE.md,
+                            marginBottom: i === modHistory.length - 1 ? 0 : SPACE.md,
+                            borderBottomWidth: i === modHistory.length - 1 ? 0 : 1,
+                            borderBottomColor: C.border,
+                          }}
+                        >
+                          {/* Timeline rail — a coloured dot per entry reads
+                              faster than a repeated boxed card. */}
+                          <View style={{ alignItems: 'center', width: 22, paddingTop: 2 }}>
+                            <View style={{
+                              width: 8, height: 8, borderRadius: 4, backgroundColor: meta.color,
+                            }} />
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Text style={{ color: meta.color, fontWeight: '700', fontSize: 12 }}>
+                                {meta.label}
+                                {a.action === 'mute' && a.durationMinutes ? ` · ${a.durationMinutes} min` : ''}
+                                {a.action === 'strike' && a.strikeCount ? ` ${a.strikeCount}` : ''}
+                                {a.isPermanent ? ' · permanent' : ''}
+                              </Text>
+                              <Text style={{ color: C.textFaint, marginLeft: 'auto', fontSize: 10.5 }}>
+                                {a.createdAt ? timeAgo(a.createdAt) : ''}
+                              </Text>
+                            </View>
+
+                            <Text style={{ color: C.text, marginTop: 3, fontSize: 12.5, lineHeight: 17 }}>
+                              {a.reason || 'No reason recorded'}
+                            </Text>
+
+                            <Text style={{ color: C.textFaint, fontSize: 10.5, marginTop: 3 }}>
+                              {a.actorName || 'Unknown'}
+                              {a.actorRole ? ` · ${a.actorRole.replace('_', ' ')}` : ''}
+                              {' · '}{SOURCE_LABEL[a.source] || a.source}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                    {modHistoryHasMore && (
+                      <TouchableOpacity
+                        onPress={() => fetchModRecord(selectedUser?.email, selectedUser?.id, false)}
+                        disabled={modHistoryLoading}
+                        style={{ paddingTop: SPACE.md, alignItems: 'center' }}
+                      >
+                        {modHistoryLoading
+                          ? <ActivityIndicator size="small" color={HUE.accent} />
+                          : <Text style={{ color: HUE.accent, fontWeight: '600', fontSize: 12.5 }}>Load older actions</Text>}
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </View>
+
+              {/* ── Actions ──────────────────────────────────────────
+                  Every control that changes this user's state lives here,
+                  in one labelled block at the end.
+
+                  The Ban button used to sit directly under the name, above
+                  any information about the person — the most destructive
+                  control on the screen was the first thing an admin could
+                  hit, before they had seen a single reason, review or prior
+                  action. Reading now comes first; acting comes last.
+
+                  All four go through requestAction, which collects a
+                  reason before anything is written. */}
+              <View style={[styles.panel, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <Text style={[styles.sectionLabel, { color: C.textMuted }]}>Moderation actions</Text>
+
+                {/* Unban / Ban. Driven by the freshly-read live record so the
+                    button matches reality — the list row it came from can be
+                    minutes stale, which is how admins ended up pressing "Ban"
+                    on someone already banned. */}
+                <View style={{ marginTop: 20, marginBottom: 16 }}>
+                  {currentSanction?.isActive ? (
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: HUE.success }]}
+                      onPress={() => requestAction('unban', null, selectedUser)}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>
+                        {currentSanction.kind === 'mute' ? 'Remove Mute' : 'Unban User'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: HUE.danger }]}
+                      onPress={() => requestAction('ban', null, selectedUser)}
+                    >
+                      <Ionicons name="ban-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Ban User</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+
+                <View style={{ height: 1, backgroundColor: C.border, marginBottom: SPACE.lg }} />
+
+                <View style={{ marginTop: 0 }}>
+                <Text style={{ color: C.textFaint, fontSize: 11.5, marginBottom: SPACE.sm }}>
+                  Mute — temporary silence, adds no strike
                 </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#5856D6' }]} onPress={() => handleMuteUser(selectedUser, 5)}>
-                    <Ionicons name="volume-mute" size={16} color="#FFF" />
-                    <Text style={[styles.buttonText, { fontSize: 14 }]}>5 min</Text>
+                <View style={{ flexDirection: 'row', marginBottom: SPACE.sm, gap: SPACE.sm }}>
+                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: HUE.mute }]} onPress={() => requestAction('mute', 5, selectedUser)}>
+                    <Ionicons name="volume-mute" size={15} color="#FFF" />
+                    <Text style={[styles.buttonText, { fontSize: 13.5 }]}>5 min</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#AF52DE' }]} onPress={() => handleMuteUser(selectedUser, 10)}>
-                    <Ionicons name="volume-mute" size={16} color="#FFF" />
-                    <Text style={[styles.buttonText, { fontSize: 14 }]}>10 min</Text>
+                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#AF52DE' }]} onPress={() => requestAction('mute', 10, selectedUser)}>
+                    <Ionicons name="volume-mute" size={15} color="#FFF" />
+                    <Text style={[styles.buttonText, { fontSize: 13.5 }]}>10 min</Text>
                   </TouchableOpacity>
-                  <View style={[styles.strikeButton, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', justifyContent: 'center' }]}>
+                  {/* Was an unlabelled grey box showing only the word "Min",
+                      which read as a disabled third button rather than an
+                      input. */}
+                  <View style={[styles.strikeButton, {
+                    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, gap: 0,
+                  }]}>
+                    <Text style={{ color: C.textFaint, fontSize: 9.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Custom
+                    </Text>
                     <TextInput
                       value={customMuteMinutes}
                       onChangeText={setCustomMuteMinutes}
-                      placeholder="Min"
-                      placeholderTextColor={isDark ? '#666' : '#999'}
+                      placeholder="min"
+                      placeholderTextColor={C.textFaint}
                       keyboardType="number-pad"
-                      style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, textAlign: 'center', width: '100%', paddingVertical: 0 }}
+                      style={{ color: C.text, fontSize: 15, fontWeight: '700', textAlign: 'center', width: '100%', paddingVertical: 0 }}
                       maxLength={4}
                     />
                   </View>
                 </View>
                 {customMuteMinutes.trim().length > 0 && (
                   <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: '#5856D6', height: 40, marginBottom: 8 }]}
+                    style={[styles.actionButton, { backgroundColor: HUE.mute, height: 40, marginBottom: 8 }]}
                     onPress={() => {
                       const mins = parseInt(customMuteMinutes, 10);
                       if (mins > 0) {
-                        handleMuteUser(selectedUser, mins);
+                        requestAction('mute', mins, selectedUser);
                         setCustomMuteMinutes('');
                       } else {
                         Alert.alert('Error', 'Enter a valid number of minutes.');
@@ -2955,30 +4060,136 @@ const AdminDashboard = () => {
                 )}
               </View>
 
-              {/* Strike Buttons */}
-              <View style={{ marginTop: 16 }}>
-                <Text style={{ color: isDark ? '#888' : '#666', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
-                  Apply Strike (choose severity)
-                </Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#FF9500' }]} onPress={() => handleSetStrike(selectedUser, 1)}>
-                    <Text style={styles.buttonText}>Strike 1</Text>
-                    <Text style={{ color: '#fff', fontSize: 10 }}>3 hours</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#FF6B00' }]} onPress={() => handleSetStrike(selectedUser, 2)}>
-                    <Text style={styles.buttonText}>Strike 2</Text>
-                    <Text style={{ color: '#fff', fontSize: 10 }}>3 days</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.strikeButton, { backgroundColor: '#FF3B30' }]} onPress={() => handleSetStrike(selectedUser, 3)}>
-                    <Text style={styles.buttonText}>Strike 3+</Text>
-                    <Text style={{ color: '#fff', fontSize: 10 }}>Permanent</Text>
-                  </TouchableOpacity>
+                {/* Strike buttons. Durations come from STRIKE_TIERS, which
+                    sits next to the ladder setUserStrike actually applies —
+                    these labels used to read "3 hours / 3 days", matching
+                    nothing in the code. */}
+                <View style={{ marginTop: SPACE.lg }}>
+                  <Text style={{ color: C.textFaint, fontSize: 11.5, marginBottom: SPACE.sm }}>
+                    Apply strike — escalates the ban ladder
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: SPACE.sm }}>
+                    {STRIKE_TIERS.map((tier) => (
+                      <TouchableOpacity
+                        key={tier.count}
+                        style={[styles.strikeButton, { backgroundColor: tier.color }]}
+                        onPress={() => requestAction('strike', tier.count, selectedUser)}
+                      >
+                        <Text style={[styles.buttonText, { fontSize: 14 }]}>{tier.label}</Text>
+                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10.5, fontWeight: '600' }}>{tier.duration}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
 
-              <View style={{ height: 40 }} />
+              {/* Clears the system navigation bar. This was a flat 40,
+                  which left "12 hours / 24 hours / Permanent" under the
+                  nav bar on any device with gesture or button navigation. */}
+              <View style={{ height: 40 + insets.bottom }} />
             </ScrollView>
           )}
+        </View>
+      </Modal>
+
+      {/* Reason prompt — every punitive action passes through here.
+          Reasons are what make the history worth reading: "Strike 2" with
+          no reason tells the next moderator nothing, and this screen used
+          to record exactly that (or worse, the boolean `true`). */}
+      <Modal
+        visible={!!pendingAction}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingAction(null)}
+      >
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center',
+          paddingHorizontal: 24,
+          paddingTop: 24 + insets.top,
+          paddingBottom: 24 + insets.bottom,
+        }}>
+          <View style={{ backgroundColor: C.surface, borderRadius: 16, padding: 20 }}>
+            {(() => {
+              if (!pendingAction) return null;
+              const { type, value, user: target } = pendingAction;
+              const title =
+                type === 'ban' ? 'Ban User'
+                : type === 'unban' ? 'Lift Restriction'
+                : type === 'mute' ? `Mute for ${value} min`
+                : `Apply Strike ${value}`;
+              const consequence =
+                type === 'strike' ? (STRIKE_TIERS.find((t) => t.count === value)?.duration || '')
+                : type === 'ban' ? 'Escalates on the strike ladder (12h → 24h → permanent)'
+                : type === 'mute' ? `Silenced for ${value} minute${value !== 1 ? 's' : ''}, no strike`
+                : 'Clears the ban / mute and any mirrored device ban';
+
+              return (
+                <>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: C.text }}>{title}</Text>
+                  <Text style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }} numberOfLines={1}>
+                    {target?.displayName || 'User'} · {target?.email || '—'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{consequence}</Text>
+
+                  <TextInput
+                    value={actionReason}
+                    onChangeText={setActionReason}
+                    placeholder="Reason (shown in this user's history)"
+                    placeholderTextColor={C.textFaint}
+                    multiline
+                    maxLength={300}
+                    style={{
+                      marginTop: 14, minHeight: 72, borderRadius: 10, padding: 12,
+                      textAlignVertical: 'top', fontSize: 14,
+                      backgroundColor: C.border,
+                      color: C.text,
+                    }}
+                  />
+
+                  {/* Quick reasons — the point is that a reason gets
+                      recorded at all, so make the common ones one tap. */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {['Spam', 'Scamming', 'Harassment', 'Inappropriate content', 'Ban evasion'].map((r) => (
+                      <TouchableOpacity
+                        key={r}
+                        onPress={() => setActionReason(r)}
+                        style={{
+                          paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14,
+                          backgroundColor: actionReason === r ? HUE.accent : (C.border),
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 11, fontWeight: '600',
+                          color: actionReason === r ? '#FFF' : (C.textMuted),
+                        }}>{r}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                    <TouchableOpacity
+                      onPress={() => { setPendingAction(null); setActionReason(''); }}
+                      style={{
+                        flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center',
+                        backgroundColor: C.border,
+                      }}
+                    >
+                      <Text style={{ fontWeight: '600', color: C.text }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={confirmPendingAction}
+                      style={{
+                        flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center',
+                        backgroundColor: type === 'unban' ? HUE.success : HUE.danger,
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700', color: '#FFF' }}>Confirm</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
         </View>
       </Modal>
 
@@ -3003,7 +4214,7 @@ const AdminDashboard = () => {
           ) : null}
           <TouchableOpacity
             onPress={() => setPreviewImage(null)}
-            style={{ position: 'absolute', top: 50, right: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+            style={{ position: 'absolute', top: 16 + insets.top, right: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
           >
             <Ionicons name="close" size={28} color="#FFF" />
           </TouchableOpacity>
@@ -3015,150 +4226,141 @@ const AdminDashboard = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  tabContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16 },
-  tab: { marginRight: 16, paddingBottom: 8, borderBottomWidth: 2, borderColor: 'transparent' },
-  activeTab: { borderColor: '#007AFF' },
-  tabText: { fontSize: 16, fontWeight: '600' },
-  activeTabText: { color: '#007AFF' },
 
-  searchContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10 },
-  searchInput: { flex: 1, height: 44, borderRadius: 10, paddingHorizontal: 12, fontSize: 16 },
-  searchBtn: { width: 44, height: 44, backgroundColor: '#007AFF', borderRadius: 10, marginLeft: 8, justifyContent: 'center', alignItems: 'center' },
-
-  listContent: { paddingHorizontal: 16, paddingBottom: 80 },
-
-  card: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, marginBottom: 10, borderWidth: 1 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#DDD' },
-  cardContent: { flex: 1, marginLeft: 12 },
-  name: { fontSize: 16, fontWeight: '600' },
-  email: { fontSize: 13, marginTop: 2 },
-  actionContainer: { flexDirection: 'row', alignItems: 'center' },
-  bannedBadge: { backgroundColor: '#FF3B30', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  bannedText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
-  activeBadge: { backgroundColor: '#34C759', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  activeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
-
-  modalContainer: { flex: 1 },
-  modalContent: { padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  modalCloseBtn: { padding: 4 },
-  avatarLarge: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#DDD', marginBottom: 16 },
-  modalName: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
-  modalEmail: { fontSize: 14, marginBottom: 16 },
-
-  infoBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-
-  buttonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
-  actionButton: {
+  // ── Tabs ──
+  // Were text links with a 2px underline: the active state was easy to
+  // miss and the row gave no hint that it scrolled. Pills read as a
+  // control, and a partially-visible pill at the edge advertises the
+  // scroll.
+  tabContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: 50,
-    borderRadius: 12,
-    marginBottom: 12,
+    paddingHorizontal: SPACE.lg,
+    paddingBottom: SPACE.md,
+    gap: SPACE.sm,
+  },
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+  },
+  tabText: { fontSize: 13.5, fontWeight: '600', letterSpacing: 0.1 },
+
+  // ── Search ──
+  searchContainer: { flexDirection: 'row', paddingHorizontal: SPACE.lg, marginBottom: SPACE.md, gap: SPACE.sm },
+  searchInput: {
+    flex: 1, height: 44, borderRadius: RADIUS.md,
+    paddingHorizontal: 14, fontSize: 15, borderWidth: 1,
+  },
+  searchBtn: {
+    width: 44, height: 44, backgroundColor: HUE.accent,
+    borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center',
   },
 
-  emptyState: { alignItems: 'center', marginTop: 60, opacity: 0.7 },
-  emptyText: { marginTop: 16, fontSize: 16 },
+  listContent: { paddingHorizontal: SPACE.lg, paddingBottom: 80 },
 
+  // ── Section label ──
+  // Small, tracked, muted. A section heading should name the block
+  // without competing with the content inside it — the old 16px bold
+  // headings sat at the same visual weight as the data.
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    marginBottom: SPACE.sm,
+  },
+
+  // ── List cards ──
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: SPACE.md, borderRadius: RADIUS.lg,
+    marginBottom: SPACE.sm, borderWidth: 1,
+  },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#DDD' },
+  cardContent: { flex: 1, marginLeft: SPACE.md, marginRight: SPACE.sm },
+  name: { fontSize: 15, fontWeight: '600', letterSpacing: -0.1 },
+  email: { fontSize: 12.5, marginTop: 2 },
+  actionContainer: { flexDirection: 'row', alignItems: 'center' },
+
+  // Tinted status chips instead of saturated fills.
+  statusChip: {
+    paddingHorizontal: SPACE.sm, paddingVertical: 4,
+    borderRadius: RADIUS.sm, borderWidth: 1,
+  },
+  statusChipText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+
+  // ── Modal shell ──
+  modalContainer: { flex: 1 },
+  modalContent: { paddingHorizontal: SPACE.lg },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: SPACE.md,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '700' },
+  modalCloseBtn: { padding: SPACE.xs },
+
+  // Identity block — avatar was 90px and pushed everything below the
+  // fold before a single fact about the user appeared.
+  identityBlock: { alignItems: 'center', paddingBottom: SPACE.lg },
+  avatarLarge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#DDD', marginBottom: SPACE.md },
+  modalName: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3, textAlign: 'center' },
+  modalEmail: { fontSize: 13, marginTop: 2, textAlign: 'center' },
+  idChip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: SPACE.sm, paddingVertical: 5,
+    borderRadius: RADIUS.sm, marginTop: SPACE.md, maxWidth: '100%',
+  },
+
+  // ── Panels ──
+  panel: {
+    borderRadius: RADIUS.lg, borderWidth: 1,
+    padding: SPACE.lg, marginBottom: SPACE.lg,
+  },
+  statRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7 },
+
+  sectionContainer: { marginBottom: SPACE.xl },
+
+  reviewCard: { padding: SPACE.md, borderRadius: RADIUS.md, marginBottom: SPACE.sm, borderWidth: 1 },
+  strikeCard: { padding: SPACE.md, borderRadius: RADIUS.md, marginBottom: SPACE.sm, borderWidth: 1 },
+  strikeBadge: { paddingHorizontal: SPACE.sm, paddingVertical: 3, borderRadius: 6 },
+
+  // ── Buttons ──
+  buttonText: { color: '#FFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.1 },
+  actionButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    width: '100%', height: 48, borderRadius: RADIUS.md, marginBottom: SPACE.md,
+  },
   strikeButton: {
-    flex: 1,
-    height: 60,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4
+    flex: 1, height: 56, borderRadius: RADIUS.md,
+    justifyContent: 'center', alignItems: 'center', gap: 2,
   },
+
+  // ── Misc ──
+  emptyState: { alignItems: 'center', marginTop: 56, paddingHorizontal: SPACE.xl },
+  emptyText: { marginTop: SPACE.md, fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
   proBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1C1C1E',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 8
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: tint(HUE.gold, '22'),
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: RADIUS.pill, marginTop: SPACE.sm,
   },
 
-  statsSection: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16
-  },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8
-  },
-
-  sectionContainer: { marginBottom: 16 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 10 },
-
-  reviewCard: { padding: 12, borderRadius: 10, marginBottom: 8 },
-  strikeCard: { padding: 12, borderRadius: 10, marginBottom: 8 },
-  strikeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  infoBadge: { paddingHorizontal: SPACE.md, paddingVertical: 6, borderRadius: RADIUS.pill, marginTop: SPACE.md },
 
   loadMoreBtn: { alignItems: 'center', paddingVertical: 10 },
 
-  chatBubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-  },
-  selectedPersonCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  chatDropdown: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  chatDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-  },
-  pollFormCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-  },
-  pollInput: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  pollListCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 10,
-  },
-  pollStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  pollActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
+  chatBubble: { maxWidth: '82%', padding: SPACE.md, borderRadius: RADIUS.lg, marginBottom: SPACE.sm, borderWidth: 1 },
+  selectedPersonCard: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: RADIUS.md, borderWidth: 1 },
+  chatDropdown: { borderRadius: RADIUS.md, borderWidth: 1, marginTop: SPACE.xs, overflow: 'hidden' },
+  chatDropdownItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1 },
+
+  pollFormCard: { borderRadius: RADIUS.lg, borderWidth: 1, padding: SPACE.lg },
+  pollInput: { borderRadius: RADIUS.md, paddingHorizontal: SPACE.md, paddingVertical: 10, fontSize: 14, marginBottom: SPACE.xs, borderWidth: 1 },
+  pollListCard: { borderRadius: RADIUS.lg, borderWidth: 1, padding: 14, marginBottom: SPACE.sm },
+  pollStatusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.sm, paddingVertical: 3, borderRadius: RADIUS.sm },
+  pollActionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm },
 });
 
 export default AdminDashboard;

@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
@@ -478,6 +479,7 @@ const EditProfileDrawerContent = ({
 };
 
 export default function SettingsScreen({ selectedTheme }) {
+  const insets = useSafeAreaInsets();
   const settingsNav = useNavigation();
   const [isDrawerVisible, setDrawerVisible] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState('');
@@ -2769,7 +2771,7 @@ export default function SettingsScreen({ selectedTheme }) {
       <SettingsTabs />
 
       {/* User Profile Section */}
-      {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false}>
+      {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}>
         <View style={styles.cardContainer}>
           <View style={[styles.optionuserName, styles.option]}>
             {/* flex:1 + minWidth:0 bounds the avatar+name block to the row's
@@ -3287,7 +3289,7 @@ export default function SettingsScreen({ selectedTheme }) {
         </View>
       </ScrollView>
 
-        : <ScrollView showsVerticalScrollIndicator={false}>
+        : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}>
           {/* <Text style={styles.subtitle}>{t('settings.app_settings')}</Text> */}
           <View style={styles.cardContainer}>
             <View style={styles.option} onPress={() => {

@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
@@ -92,6 +93,7 @@ const PrivateMessageInput = ({
   // Postgres trigger in supabase/028_safe_chat_minors.sql.
   safeChatMode = null,
 }) => {
+  const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
@@ -720,7 +722,7 @@ const PrivateMessageInput = ({
             style={{
               backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
               maxHeight: isSafeChat ? '80%' : '60%',
-              paddingBottom: 20,
+              paddingBottom: 20 + insets.bottom,
             }}
           >
             {/* Header */}

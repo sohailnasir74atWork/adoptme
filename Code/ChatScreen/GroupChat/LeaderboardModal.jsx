@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
@@ -32,6 +33,7 @@ const LeaderboardModal = ({
   visible,
   onClose,
 }) => {
+  const insets = useSafeAreaInsets();
   const { theme, user, appdatabase, firestoreDB } = useGlobalState();
   const { localState, updateLocalState } = useLocalState();
   const navigation = useNavigation();
@@ -247,7 +249,7 @@ const LeaderboardModal = ({
             <SwipeableBottomDrawer
               onClose={onClose}
               isDarkMode={isDarkMode}
-              style={styles.modalContent}
+              style={[styles.modalContent, { paddingBottom: (Platform.OS === 'ios' ? 20 : 10) + insets.bottom }]}
             >
               {/* Header */}
               <View style={styles.header}>

@@ -6,6 +6,7 @@ import { Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getDeviceFingerprint } from '../Helper/deviceFingerprint';
 import { getServerTime } from '../Helper/serverTime';
+import { logModAction } from '../Supabase/modLogBackend';
 
 // Initialize the database reference
 const database = getDatabase();
@@ -558,7 +559,11 @@ const mirrorBanToDevice = async (email, userId, banPayload) => {
 export const canStaffBanMute = ({ isAdmin, isModerator, isBabyMod, modControlsEnabled } = {}) =>
   !!isAdmin || ((!!isModerator || !!isBabyMod) && modControlsEnabled !== false);
 
-export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null) => {
+// `source` tags where the action came from ('admin_dashboard' | 'group_chat' |
+// 'report' | 'auto') so the audit log can tell a deliberate staff ban apart
+// from an automatic report-threshold one. Appended last — existing callers
+// that omit it keep working and log as 'unknown'.
+export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null, source = 'unknown') => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for banUserwithEmail');
@@ -611,6 +616,23 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
     // email ban still applies as before.
     mirrorBanToDevice(email, banData.userId, banData).catch(() => {});
 
+    // Append to the moderation audit log. Fire-and-forget: the ban above
+    // has already been written and enforced, and a log failure must never
+    // turn a successful ban into a failed one.
+    logModAction({
+      action: 'ban',
+      targetEmail: email,
+      targetUid: banData.userId,
+      targetName: banData.displayName,
+      reason: banData.reason,
+      strikeCount,
+      bannedUntil,
+      actorUid: bannerInfo?.id || null,
+      actorName: bannerInfo?.displayName || null,
+      actorRole: bannerInfo?.role || null,
+      source,
+    }).catch(() => {});
+
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
     // let deletedCount = 0;
     // if (senderId) {
@@ -635,7 +657,7 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
 };
 
 // ✅ NEW: Set specific strike count (for Admin Dashboard)
-export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null, customReason = null) => {
+export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null, customReason = null, source = 'unknown') => {
   // Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for setUserStrike');
@@ -670,11 +692,21 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
     }
 
     // ✅ Enhanced: Save displayName and user info
+    const now = Date.now();
     const strikeData = {
       strikeCount,
       bannedUntil,
       reason: customReason || `Strike ${strikeCount}`,
-      appliedAt: Date.now(),
+      // This record used to carry ONLY `appliedAt`. The dashboard's recent
+      // list queries orderByChild('bannedAt').limitToLast(25), and RTDB
+      // sorts records missing the key first — so limitToLast never reached
+      // them and no strike applied through this function ever appeared in
+      // "Recent bans". banUserwithEmail and muteUser both write `bannedAt`;
+      // this one was the odd one out. Both keys are written now: `bannedAt`
+      // so the query and the sort see it, `appliedAt` so nothing reading
+      // existing records has to change.
+      bannedAt: now,
+      appliedAt: now,
       userId: senderId || userInfo?.id || null,
       displayName: userInfo?.displayName || 'Unknown User',
       avatar: userInfo?.avatar || null,
@@ -687,6 +719,21 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
 
     // Mirror onto banned_devices for cross-email enforcement.
     mirrorBanToDevice(email, strikeData.userId, strikeData).catch(() => {});
+
+    // Audit log — fire-and-forget (see banUserwithEmail).
+    logModAction({
+      action: 'strike',
+      targetEmail: email,
+      targetUid: strikeData.userId,
+      targetName: strikeData.displayName,
+      reason: strikeData.reason,
+      strikeCount,
+      bannedUntil,
+      actorUid: bannerInfo?.id || null,
+      actorName: bannerInfo?.displayName || null,
+      actorRole: bannerInfo?.role || null,
+      source,
+    }).catch(() => {});
 
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
     // let deletedCount = 0;
@@ -716,7 +763,7 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
  * Does NOT increment strikeCount — mutes are temporary silences, not strikes.
  * Existing useBanStatus/checkBanStatus already handle time-based expiry.
  */
-export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true, customReason = null) => {
+export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true, customReason = null, source = 'unknown') => {
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for muteUser');
     if (showAlert) Alert.alert('Error', 'Invalid email address.');
@@ -736,9 +783,37 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
     // Preserve existing strikeCount if user was previously banned
     const existingStrikeCount = snap.exists() ? (snap.val()?.strikeCount || 0) : 0;
 
+    // A mute and a ban share ONE record, and this writes with set(). Before
+    // the guard below, muting an already-banned user overwrote their ban
+    // with a few-minute bannedUntil — so a 5-minute mute silently released
+    // someone serving a permanent ban. Never shorten an existing sanction:
+    // if the user is already restricted for longer, refuse and say why.
+    const existingUntil = snap.exists() ? snap.val()?.bannedUntil : null;
+    const muteUntil = Date.now() + minutes * 60 * 1000;
+
+    if (existingUntil === 'permanent') {
+      if (showAlert) {
+        Alert.alert(
+          'Already Banned',
+          'This user is permanently banned. Muting would lift that ban — unban them first if that is what you intend.'
+        );
+      }
+      return false;
+    }
+    if (typeof existingUntil === 'number' && existingUntil > muteUntil) {
+      if (showAlert) {
+        const hoursLeft = Math.ceil((existingUntil - Date.now()) / (1000 * 60 * 60));
+        Alert.alert(
+          'Already Restricted',
+          `This user is already banned for about ${hoursLeft} more hour${hoursLeft !== 1 ? 's' : ''}. A ${minutes}-minute mute would shorten that, so it was not applied.`
+        );
+      }
+      return false;
+    }
+
     const muteData = {
       strikeCount: existingStrikeCount,
-      bannedUntil: Date.now() + minutes * 60 * 1000,
+      bannedUntil: muteUntil,
       reason: customReason || `Muted for ${minutes} min`,
       bannedAt: Date.now(),
       userId: userInfo?.id || null,
@@ -750,6 +825,24 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
     };
 
     await set(banRef, muteData);
+
+    // Audit log — fire-and-forget (see banUserwithEmail). This is the
+    // record that answers "how many times has this user been muted?",
+    // which the live record alone can never answer: the next mute
+    // overwrites it.
+    logModAction({
+      action: 'mute',
+      targetEmail: email,
+      targetUid: muteData.userId,
+      targetName: muteData.displayName,
+      reason: muteData.reason,
+      durationMinutes: minutes,
+      bannedUntil: muteUntil,
+      actorUid: bannerInfo?.id || null,
+      actorName: bannerInfo?.displayName || null,
+      actorRole: bannerInfo?.role || null,
+      source,
+    }).catch(() => {});
 
     if (showAlert) {
       Alert.alert('User Muted', `Muted for ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
@@ -763,7 +856,7 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
   }
 };
 
-export const unbanUserWithEmail = async (email, showAlert = true) => {
+export const unbanUserWithEmail = async (email, showAlert = true, actorInfo = null, reason = null, source = 'unknown') => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for unbanUserWithEmail');
@@ -781,11 +874,16 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
     // deleting. mirrorBanToDevice writes a `deviceIds` array (newer) and a
     // `deviceId` scalar (legacy) — honour both.
     const mirroredIds = new Set();
+    // Snapshot of what is being lifted, for the audit log. Without this the
+    // unban erases the record and the history loses all trace of what the
+    // sanction even was.
+    let liftedRecord = null;
     for (const key of [keyLower, keyOriginal]) {
       if (!key) continue;
       try {
         const snap = await get(ref(db, `banned_users_by_email/${key}`));
         const v = snap.val();
+        if (v && !liftedRecord) liftedRecord = v;
         if (Array.isArray(v?.deviceIds)) {
           for (const id of v.deviceIds) {
             if (typeof id === 'string' && id.length > 0) mirroredIds.add(id);
@@ -808,6 +906,23 @@ export const unbanUserWithEmail = async (email, showAlert = true) => {
           set(ref(db, `banned_devices/${id}`), null).catch(() => {})
         )
       ).catch(() => {});
+    }
+
+    // Audit log — fire-and-forget (see banUserwithEmail). Recorded even
+    // when nothing was found to lift is wrong, so only log a real lift.
+    if (liftedRecord) {
+      logModAction({
+        action: 'unban',
+        targetEmail: email,
+        targetUid: liftedRecord?.userId || null,
+        targetName: liftedRecord?.displayName || null,
+        reason,
+        strikeCount: Number.isFinite(liftedRecord?.strikeCount) ? liftedRecord.strikeCount : null,
+        actorUid: actorInfo?.id || null,
+        actorName: actorInfo?.displayName || null,
+        actorRole: actorInfo?.role || null,
+        source,
+      }).catch(() => {});
     }
 
     if (showAlert) Alert.alert('User Unbanned', 'Ban has been lifted.');

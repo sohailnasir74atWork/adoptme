@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
@@ -59,6 +60,7 @@ const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
 const MAX_LIVE = 150;
 
 const GroupChatScreen = () => {
+  const insets = useSafeAreaInsets();
   const route = useRoute();
   const navigation = useNavigation();
   const { groupId } = route.params || {};
@@ -1286,7 +1288,7 @@ const GroupChatScreen = () => {
         onRequestClose={() => setShowMembersModal(false)}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', overflow: 'hidden' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', overflow: 'hidden', paddingBottom: insets.bottom }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: c.border }}>
               <Text style={{ fontSize: 20, fontWeight: 'bold', color: c.text }}>
                 Members ({memberCount})
