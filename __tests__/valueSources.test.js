@@ -74,14 +74,23 @@ beforeEach(() => {
 // ── Factor derivation ─────────────────────────────────────────────────────
 
 describe('deriveFactor', () => {
-  test('reads each feed’s own Frost:Shark ratio from its anchor pets', () => {
+  test('reads Elvebredd’s own Frost:Shark ratio from its anchor pets', () => {
     expect(sharksPerFrost(VALUE_SOURCE.ELVEBREDD)).toBe(313);
-    expect(sharksPerFrost(VALUE_SOURCE.GG)).toBeCloseTo(164.2856, 3);
   });
 
-  test('the two sites disagree by ~1.9x — each must keep its own factor', () => {
-    const ratio = sharksPerFrost(VALUE_SOURCE.ELVEBREDD) / sharksPerFrost(VALUE_SOURCE.GG);
-    expect(ratio).toBeCloseTo(1.905, 2);
+  test('GG gets no factor — it is not counted in Sharks or Frosts', () => {
+    // Shark and Frost Dragon are ELVEBREDD's benchmark pets. GG is a separate
+    // system, shown as published, so there is nothing to derive.
+    expect(deriveFactor(VALUE_SOURCE.GG, GG)).toBeNull();
+    expect(sharksPerFrost(VALUE_SOURCE.GG)).toBeNull();
+  });
+
+  test('the 1.905x Shark disagreement is WHY GG gets no factor', () => {
+    // Had GG been given one, it would read 1.725 / 0.0105 = 164 Sharks per
+    // Frost against Elvebredd's 313. Dividing GG values by that is what showed
+    // a pet GG publishes at 0.66 as 62.86.
+    const ggFactorIfItHadOne = 1.725 / 0.0105;
+    expect(sharksPerFrost(VALUE_SOURCE.ELVEBREDD) / ggFactorIfItHadOne).toBeCloseTo(1.905, 2);
   });
 
   test('uses the headline rvalue, not a potion variant', () => {
@@ -104,9 +113,12 @@ describe('convert', () => {
     expect(convert(2.971, VALUE_SOURCE.GG, VALUE_UNIT.FROST)).toBe(2.971);
   });
 
-  test('elvebredd divides into Frosts, gg multiplies into Sharks', () => {
+  test('elvebredd converts into the asked-for unit; gg is returned as published', () => {
     expect(convert(313, VALUE_SOURCE.ELVEBREDD, VALUE_UNIT.FROST)).toBe(1);
-    expect(convert(1, VALUE_SOURCE.GG, VALUE_UNIT.SHARK)).toBeCloseTo(164.2856, 3);
+    // GG is exempt. Whatever unit is asked for, the number the GG site shows
+    // is the number the app shows.
+    expect(convert(1, VALUE_SOURCE.GG, VALUE_UNIT.SHARK)).toBe(1);
+    expect(convert(0.66, VALUE_SOURCE.GG, VALUE_UNIT.FROST)).toBe(0.66);
   });
 
   test('zero stays zero', () => {
@@ -114,22 +126,27 @@ describe('convert', () => {
   });
 });
 
-describe('the anchors read 1.00 on both feeds', () => {
+describe('anchors: Elvebredd converts, GG is published as-is', () => {
   const frostOpts = { valueType: 'd', isFly: true, isRide: true, unit: VALUE_UNIT.FROST };
 
-  test('a Frost Dragon is 1 Frost, whichever site priced it', () => {
+  test('a Frost Dragon is 1 Frost on Elvebredd; GG shows its own number', () => {
     const e = ELVEBREDD.find((i) => i.name === 'Frost Dragon');
     const g = GG.find((i) => i.name === 'Frost Dragon');
     expect(valueOf(e, { ...frostOpts, source: VALUE_SOURCE.ELVEBREDD })).toBeCloseTo(1, 6);
-    expect(valueOf(g, { ...frostOpts, source: VALUE_SOURCE.GG })).toBeCloseTo(1, 6);
+    // NOT a conversion. This fixture is the adoptmevalues.gg scale, on which
+    // the Frost Dragon happens to be 1.00 already. On the amvgg scale the same
+    // pet is 1.725 and the app shows 1.725 — see the amvgg block below.
+    expect(valueOf(g, { ...frostOpts, source: VALUE_SOURCE.GG })).toBe(1);
   });
 
-  test('a Shark is 1 Shark, whichever site priced it', () => {
+  test('a Shark is 1 Shark on Elvebredd; GG shows its own published price', () => {
     const e = ELVEBREDD.find((i) => i.name === 'Shark');
     const g = GG.find((i) => i.name === 'Shark');
     const opts = { valueType: 'd', unit: VALUE_UNIT.SHARK };
     expect(valueOf(e, { ...opts, source: VALUE_SOURCE.ELVEBREDD })).toBeCloseTo(1, 6);
-    expect(valueOf(g, { ...opts, source: VALUE_SOURCE.GG })).toBeCloseTo(1, 6);
+    // Rescaling this to 1.00 is exactly what made GG values unrecognisable
+    // against the GG site.
+    expect(valueOf(g, { ...opts, source: VALUE_SOURCE.GG })).toBeCloseTo(0.00608696, 8);
   });
 });
 
@@ -166,7 +183,13 @@ describe('formatValue', () => {
 
   test('stays short for ordinary Shark values', () => {
     expect(formatValue(930)).toBe('930');
-    expect(formatValue(12.345)).toBe('12.35');
+    // Below 100 keeps up to 4 decimals so GG's published numbers survive
+    // intact (1.725, 5.125). Trailing zeros are still trimmed, so round
+    // values stay short.
+    expect(formatValue(12.345)).toBe('12.345');
+    expect(formatValue(1.7)).toBe('1.7');
+    expect(formatValue(1.725)).toBe('1.725');
+    // At and above 100 the extra digits are noise, so 2 decimals still.
     expect(formatValue(1234.5678)).toBe('1,234.57');
   });
 
@@ -336,34 +359,49 @@ describe('amvgg units (Frost Dragon = 1.725, Shark = 0.0105)', () => {
     indexSource(VALUE_SOURCE.GG, AMVGG);
   });
 
-  test('the ratio is unchanged — both anchors scaled together', () => {
-    // adoptmevalues.gg gave 164.2856 from 1 / 0.00608696; amvgg gives the same
-    // from 1.725 / 0.0105. A source swap must not move the factor.
-    expect(sharksPerFrost(VALUE_SOURCE.GG)).toBeCloseTo(164.2857, 3);
+  test('a GG rebase is a no-op now — there is no factor to move', () => {
+    // GG has already moved scale twice (adoptmevalues.gg Frost 1.00 ->
+    // amvgg Frost 1.725). That used to matter because the numbers were being
+    // converted; it cannot matter now that they are shown as published.
+    expect(deriveFactor(VALUE_SOURCE.GG, AMVGG)).toBeNull();
+    expect(sharksPerFrost(VALUE_SOURCE.GG)).toBeNull();
   });
 
-  test('the anchors still read 1.00 in their own units', () => {
+  test('the anchors are shown exactly as amvgg publishes them', () => {
     const frost = AMVGG.find((i) => i.name === 'Frost Dragon');
     const shark = AMVGG.find((i) => i.name === 'Shark');
     const o = { source: VALUE_SOURCE.GG, valueType: 'd', isFly: true, isRide: true };
-    expect(valueOf(frost, { ...o, unit: VALUE_UNIT.FROST })).toBeCloseTo(1, 6);
-    expect(valueOf(shark, { ...o, unit: VALUE_UNIT.SHARK })).toBeCloseTo(1, 6);
+    expect(valueOf(frost, { ...o, unit: VALUE_UNIT.FROST })).toBe(1.725);
+    expect(valueOf(shark, { ...o, unit: VALUE_UNIT.SHARK })).toBe(0.0105);
   });
 
-  test('a raw 5.125 normalises to the same 2.971 Frosts the old source gave', () => {
+  test('a raw 5.125 is shown as 5.125, whichever unit is asked for', () => {
     const bat = AMVGG.find((i) => i.name === 'Bat Dragon');
-    const v = valueOf(bat, {
-      source: VALUE_SOURCE.GG, unit: VALUE_UNIT.FROST, valueType: 'd', isFly: true, isRide: true,
-    });
-    expect(v).toBeCloseTo(2.971, 3);
+    const o = { source: VALUE_SOURCE.GG, valueType: 'd', isFly: true, isRide: true };
+    expect(valueOf(bat, { ...o, unit: VALUE_UNIT.FROST })).toBe(5.125);
+    expect(valueOf(bat, { ...o, unit: VALUE_UNIT.SHARK })).toBe(5.125);
   });
 
-  test('and agrees with Elvebredd, which stores the same pet as 930 Sharks', () => {
+  test('the feeds still agree once each is read in its OWN Frosts', () => {
+    // Arithmetic on the raw numbers now, not something convert() does for GG.
+    // This is the check that exposed the Shark problem: in Frosts the two
+    // feeds line up (2.971 both ways), in Sharks they are 1.905x apart. That
+    // gap was the anchor, never the values — which is why converting GG into
+    // Sharks made it look like GG priced everything at ~0.62x.
     const bat = AMVGG.find((i) => i.name === 'Bat Dragon');
-    const viaGG = valueOf(bat, {
-      source: VALUE_SOURCE.GG, unit: VALUE_UNIT.FROST, valueType: 'd', isFly: true, isRide: true,
-    });
-    expect(viaGG).toBeCloseTo(930 / 313, 2);
+    const frost = AMVGG.find((i) => i.name === 'Frost Dragon');
+    const inGgFrosts = rawValue(bat, 'd', true, true) / rawValue(frost, 'd', false, false);
+    expect(inGgFrosts).toBeCloseTo(930 / 313, 2);
+  });
+
+  test('regression: Undead Jousting Horse reads 0.66, not 62.86 Sharks', () => {
+    // The pet that surfaced this. GG publishes 0.66; dividing by GG's own
+    // 0.0105 Shark anchor rendered it as 62.86, which matched nothing on the
+    // GG site and sat at half of Elvebredd's 122.
+    const horse = { ...pet('Undead Jousting Horse', 0.66), valueSource: 'gg' };
+    const o = { source: VALUE_SOURCE.GG, valueType: 'd', isFly: true, isRide: true };
+    expect(valueOf(horse, { ...o, unit: VALUE_UNIT.SHARK })).toBe(0.66);
+    expect(valueOf(horse, { ...o, unit: VALUE_UNIT.FROST })).toBe(0.66);
   });
 });
 

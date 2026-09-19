@@ -16,26 +16,41 @@
  * "Why this is derived and not stored" below for what a stale factor costs:
  *
  *   SOURCE   which site priced the item   Elvebredd | GG
- *   UNIT     what the number is counted in   Shark | Frost
+ *   UNIT     what the number is counted in   Shark | Frost — ELVEBREDD ONLY
  *
- * Every combination is valid. A user can read GG values in Sharks, or
- * Elvebredd values in Frosts. The old three-way `isSharkMode` toggle
- * (true | false | 'GG') conflated the two and could not express that.
+ * ── ⚠️ Units are Elvebredd's. GG has none. ───────────────────────────────
  *
- * ── The two sites quote in different pets ─────────────────────────────────
+ * 📅 2026-09-19. The Shark and the Frost Dragon are ELVEBREDD's benchmark
+ * pets. GG is a separate system with its own scale: on its own site it quotes
+ * in Baseless, Frost or Ride Pot, and its Shark is just another pet in the
+ * catalogue, not a unit. So GG has no anchors, no factor and nothing to
+ * convert — it is shown exactly as published, and `convert` returns it
+ * untouched.
  *
- * Adopt Me traders price things in benchmark pets, and the two sites picked
- * different benchmarks:
+ * Treating GG as convertible into Elvebredd's Sharks is what produced the bug
+ * this replaced. GG's own Shark price (0.0105 against its 1.725 Frost Dragon)
+ * puts a Frost at 164 Sharks where Elvebredd puts it at 313 — a 1.905x
+ * disagreement — so dividing by it dragged every GG number to a median 0.618x
+ * of its Elvebredd counterpart and matched nothing on the GG site. Undead
+ * Jousting Horse is the worked example: GG publishes 0.66 and the app showed
+ * 62.86, while Elvebredd read 122. In Frosts the two feeds agree (0.383 vs
+ * 0.390) — the gap was never in the values, only in the Shark anchor.
+ *
+ * Do not give GG an anchor entry again. If a third source appears, decide
+ * first whether it shares Elvebredd's benchmarks; if it does not, it belongs
+ * on this side of the line with GG.
+ *
+ * ── Elvebredd's own two units ────────────────────────────────────────────
+ *
+ * Adopt Me traders price things in benchmark pets:
  *
  *              Shark        Frost Dragon      1 Frost = ? Sharks
  *   Elvebredd  1.00  <-unit  313              313.00
- *   GG         0.00608696    1.00  <-unit     164.29
  *
- * So Elvebredd's raw numbers ARE Sharks and GG's raw numbers ARE Frosts.
- * Converting between them is division or multiplication by that feed's own
- * Frost Dragon price — which is why `sharksPerFrost` is derived FROM THE FEED
- * at load time (see deriveFactor) instead of being stored as a constant.
- * A site can rebase its scale whenever it likes; a constant cannot follow it.
+ * Converting between them is division by the feed's own Frost Dragon price —
+ * which is why `sharksPerFrost` is derived FROM THE FEED at load time (see
+ * deriveFactor) instead of being stored as a constant. A site can rebase its
+ * scale whenever it likes; a constant cannot follow it.
  *
  * ── ⚠️ Why this is derived and not stored ────────────────────────────────
  *
@@ -107,25 +122,14 @@ export const UNIT_LABEL = {
 };
 
 /**
- * Each feed's two anchor prices, in ITS OWN units. Everything is derived from
- * these, so no feed has to be "shark-native" or "frost-native".
+ * Elvebredd's two anchor prices, in its own units.
  *
- * That generality is not theoretical. The GG feed has already moved between
- * three different units:
- *
- *   adoptmevalues.gg   Shark 0.00608696   Frost Dragon 1.00
- *   amvgg.com          Shark 0.0105       Frost Dragon 1.725
- *   elvebredd.com      Shark 1.00         Frost Dragon 313
- *
- * All three price a Bat Dragon at the same 2.971 Frosts. Reading the anchors
- * instead of assuming a native unit is what makes a source swap a no-op.
- *
- * Defaults are the real 2026-09-17 figures, so a cold start is approximately
- * right; deriveFactor overwrites them as soon as a feed arrives.
+ * GG is deliberately absent — it has no unit system (see the header). The
+ * default is the real Elvebredd figure, so a cold start is approximately
+ * right; deriveFactor overwrites it as soon as the feed arrives.
  */
 const ANCHORS = {
   [VALUE_SOURCE.ELVEBREDD]: { shark: 1, frost: 313 },
-  [VALUE_SOURCE.GG]: { shark: 0.0105, frost: 1.725 },
 };
 
 // ── Factor derivation ──────────────────────────────────────────────────────
@@ -162,6 +166,11 @@ const findPet = (rows, name) => {
  * is kept rather than replaced with something wrong.
  */
 export const deriveFactor = (source, rows) => {
+  // GG has no unit system, so there is no factor to derive. Returning null
+  // here — rather than quietly computing one — is what stops the Shark
+  // conversion coming back.
+  if (source === VALUE_SOURCE.GG) return null;
+
   const shark = anchorValue(findPet(rows, 'Shark'));
   const frost = anchorValue(findPet(rows, 'Frost Dragon'));
 
@@ -179,8 +188,13 @@ export const deriveFactor = (source, rows) => {
 
 const anchorsOf = (source) => ANCHORS[source] || ANCHORS[VALUE_SOURCE.ELVEBREDD];
 
-/** How many Sharks one Frost Dragon is worth, on that feed. */
-export const sharksPerFrost = (source) => {
+/**
+ * How many Sharks one Frost Dragon is worth, on Elvebredd.
+ *
+ * Returns null for GG, which does not count in Sharks or Frosts at all.
+ */
+export const sharksPerFrost = (source = VALUE_SOURCE.ELVEBREDD) => {
+  if (source === VALUE_SOURCE.GG) return null;
   const a = anchorsOf(source);
   return a.shark > 0 ? a.frost / a.shark : 1;
 };
@@ -196,6 +210,7 @@ export const getDerivedFactors = () => ({ ...derived });
  * with the market, so exact equality is not expected or wanted.
  */
 export const factorHealth = (rtdbFactor, source = VALUE_SOURCE.ELVEBREDD) => {
+  if (source === VALUE_SOURCE.GG) return null;   // nothing to compare
   const rtdb = Number(rtdbFactor);
   const mine = sharksPerFrost(source);
   if (!Number.isFinite(rtdb) || rtdb <= 0 || !mine) return null;
@@ -212,13 +227,17 @@ export const factorHealth = (rtdbFactor, source = VALUE_SOURCE.ELVEBREDD) => {
  *
  *   sharks = value / sharkValue        frosts = value / frostValue
  *
- * That is all of it. No feed needs to be shark- or frost-native, and a source
- * that rebases its scale — as the GG feed did, twice — costs nothing, because
- * both anchors move together and the ratio is unchanged.
+ * GG is exempt — it has no units, so there is nothing to convert and it is
+ * returned exactly as published. See "Units are Elvebredd's" in the header for
+ * why, and for what converting it cost. Elvebredd keeps both units; its
+ * Shark/Frost toggle is unaffected.
  */
 export const convert = (value, source, unit) => {
   const n = Number(value);
   if (!Number.isFinite(n) || n === 0) return 0;
+
+  // Shown as published. See the block above before changing this.
+  if (source === VALUE_SOURCE.GG) return n;
 
   const a = anchorsOf(source);
   const divisor = unit === VALUE_UNIT.FROST ? a.frost : a.shark;
@@ -303,8 +322,16 @@ export const formatValue = (value, { maxSignificant = 4 } = {}) => {
 
   const abs = Math.abs(n);
   let decimals;
+  // 📅 2026-09-19. Below 100, allow 4 decimals and let the trim below drop
+  // what is not needed. GG is shown as published (see convert) and 28% of its
+  // values above 1 carry 3 or 4 decimals — 1.725, 5.125, 13.65 — so a fixed 2
+  // would round a Frost Dragon to "1.73" and undo native display. The whole GG
+  // catalogue tops out at 40, so it never reaches the 100 band. Elvebredd is
+  // barely affected: 34 of its 8,352 values above 1 carry a 3rd decimal, and
+  // the toFixed also truncates the ~172 float-noise values (1058.9000000000001)
+  // rather than exposing them.
   if (abs >= 100) decimals = 2;
-  else if (abs >= 1) decimals = 2;
+  else if (abs >= 1) decimals = 4;
   else {
     // Keep `maxSignificant` significant digits below 1, capped so the string
     // stays readable. 0.0456 -> 4 dp, 0.00015 -> 5 dp.

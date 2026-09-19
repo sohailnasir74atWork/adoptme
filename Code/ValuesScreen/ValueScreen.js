@@ -137,10 +137,13 @@ const getImageUrl = (item, baseImgUrl) => resolveItemImage(item, baseImgUrl);
 // but 613 items (toys, stickers, badges) are priced below 0.01 — at 2dp they all
 // collapsed to 0.00, which read as worthless and made them impossible to isolate
 // with the value-range filter. Nothing in the feed needs more than 4dp.
+// 4 decimals below 100 so GG's published numbers survive: it is shown as
+// published (see valueSources.convert) and 1.725 must not become 1.73. GG's
+// whole catalogue is under 40, so only Elvebredd reaches the 2-decimal band.
 const roundValue = (n) => {
   const num = Number(n);
   if (!Number.isFinite(num) || num === 0) return 0;
-  return parseFloat(num.toFixed(Math.abs(num) < 0.01 ? 4 : 2));
+  return parseFloat(num.toFixed(Math.abs(num) < 100 ? 4 : 2));
 };
 
 // toLocaleString() defaults to 3 fraction digits, so it renders 0.0002 as "0"
@@ -148,7 +151,9 @@ const roundValue = (n) => {
 // large values still get their thousands separators.
 const formatValue = (n) => {
   const num = Number(n) || 0;
-  return num.toLocaleString(undefined, { maximumFractionDigits: Math.abs(num) < 0.01 ? 4 : 2 });
+  // maximumFractionDigits never pads, so this shows 1.725 as "1.725" and 122
+  // as "122". Matches roundValue's bands above.
+  return num.toLocaleString(undefined, { maximumFractionDigits: Math.abs(num) < 100 ? 4 : 2 });
 };
 
 // ✅ PERF FIX: Moved to module level so React.memo actually works.
@@ -512,10 +517,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const getItemValue = useCallback((item, selectedValueType, isFlySelected, isRideSelected) => {
     if (!item) return 0;
 
-    // Both feeds are shown in SHARKS here. This list has no Shark/Frost
-    // toggle, and Elvebredd is already shark-native, so converting GG's
-    // frost-native numbers keeps the two sources in the same ballpark —
-    // switching source changes the prices, not the order of magnitude.
+    // Elvebredd is shown in Sharks here; this list has no Shark/Frost toggle.
+    // GG is shown exactly as GG publishes it, so a pet reads the same number
+    // here as on the GG site — see the GG exemption in valueSources.convert().
     //
     // No lookup is needed: the rows already come from the active source
     // (see parsedValuesData), so their numbers are that source's own.

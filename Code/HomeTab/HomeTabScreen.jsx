@@ -326,9 +326,10 @@ const HomeTabScreen = ({ selectedTheme }) => {
     // a pet never vanishes from the total just because the source changed.
     if (!item) return Number(pet?.value) || 0;
 
-    // Sharks on both feeds: the header has no Shark/Frost toggle, and
-    // Elvebredd is already shark-native, so this keeps the two sources in the
-    // same ballpark instead of dropping ~164x when GG is picked.
+    // `unit` applies to Elvebredd only. GG is shown exactly as GG publishes
+    // it — see the GG exemption in valueSources.convert(). Converting GG to
+    // Sharks used its own 0.0105 Shark anchor, which disagrees with
+    // Elvebredd's by 1.905x and pulled every GG number to ~0.618x.
     return valueOf(item, {
       source: valueSource,
       unit: VALUE_UNIT.SHARK,

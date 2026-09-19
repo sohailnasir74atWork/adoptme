@@ -974,16 +974,18 @@ export const GlobalStateProvider = ({ children }) => {
   }, [fetchStockData]);
 
   /**
-   * Derive each feed's Shark<->Frost factor FROM THAT FEED, and index both for
-   * cross-source lookups. Runs whenever either catalogue changes.
+   * Derive ELVEBREDD's Shark<->Frost factor from its own feed, and index both
+   * catalogues for cross-source lookups. Runs whenever either changes.
    *
-   * This replaces the hardcoded RTDB `factor`, and it is the fix for a real
-   * bug: `factor` was 163.94, which is GG's Frost:Shark ratio (164.29), not
-   * Elvebredd's (313). Applied to Elvebredd values it inflated every Frost
-   * reading by ~1.91x — a Frost Dragon showed as 1.91 instead of 1.00.
+   * Only Elvebredd has a factor. Shark and Frost are its benchmark pets; GG is
+   * a separate system that is shown exactly as published, so it is indexed but
+   * never given a factor (see valueSources.js).
    *
-   * Deriving it means it can never drift again: the factor is simply the Frost
+   * Deriving it means it can never drift: the factor is simply the Frost
    * Dragon's price in Sharks on that site, which arrives with every scrape.
+   * It replaced the RTDB `factor`, which sat at 163.94 — GG's Frost:Shark
+   * ratio, applied to Elvebredd data — and inflated every Frost reading by
+   * ~1.91x for 342 days.
    */
   useEffect(() => {
     const asArray = (raw) => {
@@ -1000,9 +1002,9 @@ export const GlobalStateProvider = ({ children }) => {
         indexSource(VALUE_SOURCE.ELVEBREDD, elvebredd);
       }
 
+      // Indexed, not factored: GG carries no units to derive one from.
       const gg = asArray(localState?.ggData);
       if (gg?.length) {
-        deriveFactor(VALUE_SOURCE.GG, gg);
         indexSource(VALUE_SOURCE.GG, gg);
       }
 
