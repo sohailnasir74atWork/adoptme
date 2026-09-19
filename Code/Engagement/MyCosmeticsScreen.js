@@ -48,13 +48,29 @@ const TYPE_LABELS = {
   chatBubbleBg: { emoji: '💬', label: 'Chat Bubbles' },
 };
 
-// Users allowed to see the test-mode toggle (flask) outside of dev builds —
-// it unlocks all cosmetics locally so they can preview & equip any of them
-// (equipping writes activeItems, so the choice persists). Add UIDs as needed.
+// Who sees the test-mode toggle (flask). It unlocks every cosmetic locally so
+// they can preview & equip any of them — equipping writes activeItems, so the
+// choice persists. In other words this IS "all cosmetics, free".
+//
+// 📅 2026-09-19. Granted to full moderators as a perk of the role:
+//
+//   __DEV__            dev builds
+//   isAdmin           admins, who outrank mods
+//   user.isModerator  FULL moderators only
+//   COSMETIC_TEST_UIDS one-off access without granting anyone a role
+//
+// Deliberately NOT isBabyMod (JMD) or isHelper — "full mods" was the ask, and
+// those two are the junior tiers. `isModerator` is live-synced in GlobelStats,
+// so losing the role removes the toggle without needing a reinstall.
+//
+// Worth knowing: the unlock is client-side. database.rules.json guards the
+// role flags against self-escalation but never checks activeItems against
+// ownedItems, so a determined user could already equip cosmetics they do not
+// own. This gate is a UI affordance, not a security boundary.
 const COSMETIC_TEST_UIDS = ['DNvBQC5ySWP8QiJNGpIvqd9DSWB2'];
 
 const MyCosmeticsScreen = ({ navigation }) => {
-  const { theme, user, appdatabase } = useGlobalState();
+  const { theme, user, appdatabase, isAdmin } = useGlobalState();
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
 
@@ -116,8 +132,8 @@ const MyCosmeticsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Test mode toggle — dev builds, or allowlisted users (COSMETIC_TEST_UIDS) */}
-        {(__DEV__ || COSMETIC_TEST_UIDS.includes(user?.id)) && (
+        {/* Test mode toggle — dev builds, admins, full mods, or allowlisted UIDs */}
+        {(__DEV__ || isAdmin || user?.isModerator || COSMETIC_TEST_UIDS.includes(user?.id)) && (
           <TouchableOpacity
             onPress={() => setTestMode(prev => !prev)}
             style={[s.backBtn, testMode && { backgroundColor: '#22c55e' }]}
@@ -131,7 +147,13 @@ const MyCosmeticsScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         {testMode && (
           <View style={s.testBanner}>
-            <Text style={s.testBannerText}>🧪 TEST MODE — All cosmetics unlocked. Tap to equip & preview.</Text>
+            {/* A mod is not testing anything — same unlock, honest wording.
+                Dev builds and one-off allowlisted UIDs keep "TEST MODE". */}
+            <Text style={s.testBannerText}>
+              {!__DEV__ && (isAdmin || user?.isModerator)
+                ? '✨ Mod perk — all cosmetics unlocked. Tap to equip & preview.'
+                : '🧪 TEST MODE — All cosmetics unlocked. Tap to equip & preview.'}
+            </Text>
           </View>
         )}
         {loading ? (
