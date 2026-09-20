@@ -112,6 +112,18 @@ export const logModAction = async (entry = {}) => {
       source: entry.source || 'unknown',
     };
 
+    // 📅 2026-09-19. Screenshots the acting mod attached (030). Written only
+    // when there are some, so rows from before the migration and rows from
+    // app builds that predate the feature stay null rather than [].
+    //
+    // Capped here as well as by the check constraint: a violated constraint
+    // would fail the INSERT, and this function is fire-and-forget, so the
+    // whole audit row would vanish silently over a fourth screenshot.
+    const evidence = Array.isArray(entry.evidenceUrls)
+      ? entry.evidenceUrls.filter((u) => typeof u === 'string' && u.length > 0).slice(0, 3)
+      : [];
+    if (evidence.length > 0) row.evidence_urls = evidence;
+
     const { error } = await supabase.from(MOD_ACTIONS).insert(row);
     if (error) {
       console.warn('[modLog] insert failed:', error.message);
@@ -156,6 +168,10 @@ const mapAction = (r) => ({
   actorName: r.actor_name,
   actorRole: r.actor_role,
   source: r.source,
+  // Always an array so the renderer never null-checks. Rows written before
+  // 030 — and by app builds that predate the feature — have no column value
+  // at all, which arrives as undefined rather than [].
+  evidenceUrls: Array.isArray(r.evidence_urls) ? r.evidence_urls.filter(Boolean) : [],
   createdAt: r.created_at ? Date.parse(r.created_at) : null,
   // Raw cursor values — keyset pagination pages on (created_at, id).
   _cursorCreated: r.created_at,

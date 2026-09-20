@@ -65,6 +65,9 @@ import {
 } from '@react-native-firebase/firestore';
 
 import { unbanUserWithEmail, banUserwithEmail, setUserStrike, muteUser, canStaffBanMute } from '../ChatScreen/utils';
+import ModEvidencePicker from './ModEvidencePicker';
+import EvidenceViewer from './EvidenceViewer';
+import { uploadEvidence } from '../Helper/modEvidenceUpload';
 import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
 import { adminLoadPrivateMessages, adminDeletePrivateChat } from '../Supabase/privateMessagesBackend';
 import { searchIdentityByName, searchIdentityByEmail, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
@@ -676,6 +679,13 @@ const AdminDashboard = () => {
   // customReason slot, so records were literally saved with reason `true`).
   // Every action now goes through this prompt.
   const [pendingAction, setPendingAction] = useState(null); // {type, value, user}
+
+  // Screenshots the acting mod attaches to the pending sanction. LOCAL uris
+  // until Confirm — ModEvidencePicker explains why upload is deferred.
+  const [actionEvidence, setActionEvidence] = useState([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  // Evidence already recorded on an audit row, opened from a thumbnail.
+  const [evidenceViewer, setEvidenceViewer] = useState(null); // {urls, index}
   const [actionReason, setActionReason] = useState('');
 
   // Mute
@@ -1471,7 +1481,7 @@ const AdminDashboard = () => {
     }
   }, [actorInfo, refreshBannedList, refreshOpenProfile]);
 
-  const handleBan = useCallback(async (userItem, reason) => {
+  const handleBan = useCallback(async (userItem, reason, evidenceUrls = null) => {
     const userInfo = {
       id: userItem.id,
       displayName: userItem.displayName,
@@ -1491,6 +1501,7 @@ const AdminDashboard = () => {
       actorInfo,
       reason || null,
       'admin_dashboard',
+      evidenceUrls,
     );
     if (success) {
       refreshBannedList();
@@ -1503,7 +1514,7 @@ const AdminDashboard = () => {
     }
   }, [isAdmin, actorInfo, refreshBannedList, refreshOpenProfile, checkUserBanStatus]);
 
-  const handleSetStrike = useCallback(async (userItem, strikeCount, reason) => {
+  const handleSetStrike = useCallback(async (userItem, strikeCount, reason, evidenceUrls = null) => {
     const userInfo = {
       id: userItem.id,
       displayName: userItem.displayName || userItem.sender,
@@ -1521,6 +1532,7 @@ const AdminDashboard = () => {
       userInfo,
       reason || null,
       'admin_dashboard',
+      evidenceUrls,
     );
     if (success) {
       refreshBannedList();
@@ -1533,7 +1545,7 @@ const AdminDashboard = () => {
     }
   }, [actorInfo, refreshBannedList, refreshOpenProfile, checkUserBanStatus]);
 
-  const handleMuteUser = useCallback(async (userItem, minutes, reason) => {
+  const handleMuteUser = useCallback(async (userItem, minutes, reason, evidenceUrls = null) => {
     const userInfo = {
       id: userItem.id,
       displayName: userItem.displayName,
@@ -1548,6 +1560,7 @@ const AdminDashboard = () => {
       true,
       reason || null,
       'admin_dashboard',
+      evidenceUrls,
     );
     if (success) {
       refreshBannedList();
@@ -1561,19 +1574,40 @@ const AdminDashboard = () => {
 
   // Runs whatever the reason prompt was opened for.
   const confirmPendingAction = useCallback(async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || evidenceBusy) return;
     const { type, value, user: target } = pendingAction;
     const reason = actionReason.trim();
+
+    // Upload BEFORE the modal closes. uploadEvidence throws, and at this
+    // moment the mod still has the screenshots in hand — closing first would
+    // apply the sanction with the proof silently dropped and no way to
+    // reattach it afterwards. The sanction is NOT applied if this fails.
+    let evidenceUrls = null;
+    if (actionEvidence.length > 0) {
+      setEvidenceBusy(true);
+      try {
+        evidenceUrls = await uploadEvidence(actionEvidence);
+      } catch (e) {
+        setEvidenceBusy(false);
+        Alert.alert(
+          'Screenshots did not upload',
+          `${e?.message || 'Upload failed.'}\n\nNothing has been applied. Try again, or remove the screenshots to proceed without them.`,
+        );
+        return;
+      }
+      setEvidenceBusy(false);
+    }
 
     Keyboard.dismiss();
     setPendingAction(null);
     setActionReason('');
+    setActionEvidence([]);
 
-    if (type === 'ban') await handleBan(target, reason);
-    else if (type === 'strike') await handleSetStrike(target, value, reason);
-    else if (type === 'mute') await handleMuteUser(target, value, reason);
+    if (type === 'ban') await handleBan(target, reason, evidenceUrls);
+    else if (type === 'strike') await handleSetStrike(target, value, reason, evidenceUrls);
+    else if (type === 'mute') await handleMuteUser(target, value, reason, evidenceUrls);
     else if (type === 'unban') await handleUnban(target, reason);
-  }, [pendingAction, actionReason, handleBan, handleSetStrike, handleMuteUser, handleUnban]);
+  }, [pendingAction, actionReason, actionEvidence, evidenceBusy, handleBan, handleSetStrike, handleMuteUser, handleUnban]);
 
 
   // ─────────────────────────────────────────────
@@ -3944,6 +3978,34 @@ const AdminDashboard = () => {
                               {a.actorRole ? ` · ${a.actorRole.replace('_', ' ')}` : ''}
                               {' · '}{SOURCE_LABEL[a.source] || a.source}
                             </Text>
+
+                            {/* Proof the acting mod attached (030). Thumbnails
+                                rather than a count, because "is there anything
+                                here?" is answered by looking, and a reason with
+                                a screenshot behind it reads differently from
+                                one without. Opens full screen, one at a time. */}
+                            {a.evidenceUrls?.length > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 8 }}>
+                                {a.evidenceUrls.map((url, idx) => (
+                                  <TouchableOpacity
+                                    key={`${a.id}-ev-${idx}`}
+                                    onPress={() => setEvidenceViewer({ urls: a.evidenceUrls, index: idx })}
+                                    activeOpacity={0.8}
+                                  >
+                                    <Image
+                                      source={{ uri: url }}
+                                      style={{
+                                        width: 52, height: 52, borderRadius: 6,
+                                        borderWidth: 1, borderColor: C.border,
+                                      }}
+                                    />
+                                  </TouchableOpacity>
+                                ))}
+                                <Text style={{ color: C.textFaint, fontSize: 10, marginBottom: 3 }}>
+                                  tap to view
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         </View>
                       );
@@ -4100,7 +4162,7 @@ const AdminDashboard = () => {
         visible={!!pendingAction}
         transparent
         animationType="fade"
-        onRequestClose={() => setPendingAction(null)}
+        onRequestClose={() => { setPendingAction(null); setActionEvidence([]); }}
       >
         <View style={{
           flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center',
@@ -4166,9 +4228,22 @@ const AdminDashboard = () => {
                     ))}
                   </View>
 
+                  {/* Proof. Not offered for an unban: there is nothing to
+                      evidence in lifting a sanction, and the reason field
+                      already carries the justification. */}
+                  {type !== 'unban' && (
+                    <ModEvidencePicker
+                      uris={actionEvidence}
+                      onChange={setActionEvidence}
+                      isDark={isDark}
+                      disabled={evidenceBusy}
+                    />
+                  )}
+
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                     <TouchableOpacity
-                      onPress={() => { setPendingAction(null); setActionReason(''); }}
+                      disabled={evidenceBusy}
+                      onPress={() => { setPendingAction(null); setActionReason(''); setActionEvidence([]); }}
                       style={{
                         flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center',
                         backgroundColor: C.border,
@@ -4178,12 +4253,16 @@ const AdminDashboard = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={confirmPendingAction}
+                      disabled={evidenceBusy}
                       style={{
                         flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center',
                         backgroundColor: type === 'unban' ? HUE.success : HUE.danger,
+                        opacity: evidenceBusy ? 0.7 : 1,
                       }}
                     >
-                      <Text style={{ fontWeight: '700', color: '#FFF' }}>Confirm</Text>
+                      {evidenceBusy
+                        ? <ActivityIndicator size="small" color="#FFF" />
+                        : <Text style={{ fontWeight: '700', color: '#FFF' }}>Confirm</Text>}
                     </TouchableOpacity>
                   </View>
                 </>
@@ -4192,6 +4271,14 @@ const AdminDashboard = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Evidence on a moderation action — one screenshot at a time. */}
+      <EvidenceViewer
+        visible={!!evidenceViewer}
+        urls={evidenceViewer?.urls || []}
+        startIndex={evidenceViewer?.index || 0}
+        onClose={() => setEvidenceViewer(null)}
+      />
 
       {/* Full-screen image preview */}
       <Modal

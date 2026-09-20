@@ -55,6 +55,8 @@ const BOTTOM_DRAWER_CACHE_ENABLED = true;
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
 import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute } from '../utils';
+import ModEvidencePicker from '../../AppHelper/ModEvidencePicker';
+import { uploadEvidence } from '../../Helper/modEvidenceUpload';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import CompactPortfolio from './CompactPortfolio';
 import ProfileAdminActions from './ProfileAdminActions';
@@ -310,6 +312,10 @@ const ProfileBottomDrawer = ({
   const [showReasonModal, setShowReasonModal] = useState(false);
   const [reasonActionType, setReasonActionType] = useState(null); 
   const [adminReason, setAdminReason] = useState('');
+  // Proof attached to this sanction. Local uris until Confirm — see
+  // ModEvidencePicker for why the upload is deferred to then.
+  const [adminEvidence, setAdminEvidence] = useState([]);
+  const [adminEvidenceBusy, setAdminEvidenceBusy] = useState(false);
 
   // ✅ Reset all user-specific state when switching profiles to prevent stale data flash
   useEffect(() => {
@@ -1172,6 +1178,26 @@ const ProfileBottomDrawer = ({
     // Fallback default reason logic
     const finalReason = adminReason.trim() !== '' ? adminReason.trim() : undefined;
 
+    // Upload the screenshots before anything is applied. uploadEvidence
+    // throws; a sanction that lands with its proof silently dropped is worse
+    // than one the mod has to retry while the images are still to hand.
+    let evidenceUrls = null;
+    if (adminEvidence.length > 0) {
+      setAdminEvidenceBusy(true);
+      try {
+        evidenceUrls = await uploadEvidence(adminEvidence);
+      } catch (e) {
+        setAdminEvidenceBusy(false);
+        setShowReasonModal(true);   // reopen: the mod still has their picks
+        Alert.alert(
+          'Screenshots did not upload',
+          `${e?.message || 'Upload failed.'}\n\nNothing has been applied. Try again, or remove the screenshots to proceed without them.`,
+        );
+        return;
+      }
+      setAdminEvidenceBusy(false);
+    }
+
     if (reasonActionType.type === 'strike') {
       const strikeCount = reasonActionType.value;
       const success = await setUserStrike(
@@ -1182,7 +1208,8 @@ const ProfileBottomDrawer = ({
         bannerInfo,
         mergedUser,
         finalReason,
-        'group_chat'
+        'group_chat',
+        evidenceUrls
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1198,7 +1225,8 @@ const ProfileBottomDrawer = ({
         bannerInfo,
         true,
         finalReason,
-        'group_chat'
+        'group_chat',
+        evidenceUrls
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1213,7 +1241,8 @@ const ProfileBottomDrawer = ({
         mergedUser,
         bannerInfo,
         finalReason,
-        'group_chat'
+        'group_chat',
+        evidenceUrls
       );
       if (success) {
         invalidateFullProfile(selectedUserId);
@@ -1222,6 +1251,7 @@ const ProfileBottomDrawer = ({
     }
     
     setReasonActionType(null);
+    setAdminEvidence([]);
   };
 
   const handleUnbanUser = async () => {
@@ -3479,12 +3509,29 @@ const ProfileBottomDrawer = ({
                 onChangeText={setAdminReason}
                 autoFocus
               />
+              <ModEvidencePicker
+                uris={adminEvidence}
+                onChange={setAdminEvidence}
+                isDark={isDarkMode}
+                disabled={adminEvidenceBusy}
+              />
+
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-                <TouchableOpacity onPress={() => setShowReasonModal(false)} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }}>
+                <TouchableOpacity
+                  disabled={adminEvidenceBusy}
+                  onPress={() => { setShowReasonModal(false); setAdminEvidence([]); }}
+                  style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }}
+                >
                   <Text style={{ color: c.text, fontWeight: '600' }}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={confirmAdminAction} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ef4444' }}>
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>
+                <TouchableOpacity
+                  onPress={confirmAdminAction}
+                  disabled={adminEvidenceBusy}
+                  style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#ef4444', opacity: adminEvidenceBusy ? 0.7 : 1 }}
+                >
+                  {adminEvidenceBusy
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>}
                 </TouchableOpacity>
               </View>
             </Pressable>
