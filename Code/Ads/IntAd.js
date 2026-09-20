@@ -5,7 +5,7 @@ import {
 } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { ensureAdsInitialized } from './init';
-import { setFullScreenAdVisible } from './adVisibility';
+import { setFullScreenAdVisible, whenModalSettled } from './adVisibility';
 
 const interstitialAdUnitId = getAdUnitId('interstitial');
 
@@ -52,6 +52,9 @@ class InterstitialAdManager {
   // caller's callback immediately so content is never blocked.
   static lastShownAt = 0;
   static COOLDOWN_MS = 30000;
+
+  // ✅ How long to wait for OPENED before treating the presentation as failed.
+  static SHOW_WATCHDOG_MS = 5000;
 
   static init() {
     if (this.hasInitialized) return;
@@ -190,35 +193,93 @@ class InterstitialAdManager {
   }
 
   static _show(onAdClosedCallback) {
-    // ✅ Mark as not loaded BEFORE showing to prevent double-show
+    // ✅ Mark as not loaded BEFORE showing to prevent double-show. This stays
+    // synchronous even though the present itself may be deferred below, so a
+    // second trigger inside that gap cannot show the same ad twice.
     this.isLoaded = false;
-    this.lastShownAt = Date.now();
-    setFullScreenAdVisible(true);
 
-    const unsubscribeClose = this.ad.addAdEventListener(
-      AdEventType.CLOSED,
-      () => {
-        setFullScreenAdVisible(false);
-        // Preload the next one: the user just proved they hit ad triggers,
-        // so a warm follow-up is justified (unlike blind preloading).
-        this._load();
+    // ✅ Never present while a modal is mid-transition. On iOS the ad is
+    // presented from the topmost view controller, and UIKit refuses to
+    // present from a controller that is itself animating — the ad silently
+    // fails while we have already consumed it. Synchronous when nothing is
+    // animating, so the common path is unchanged.
+    // Pin the instance: cleanup() / forceReload() can swap or drop it inside
+    // the deferral gap, and listeners must never be attached to a stale ad.
+    const ad = this.ad;
+    whenModalSettled(() => this._present(ad, onAdClosedCallback));
+  }
 
-        if (typeof onAdClosedCallback === 'function') {
-          onAdClosedCallback();
-        }
-        unsubscribeClose();
-      }
-    );
-
-    try {
-      this.ad.show();
-    } catch (error) {
-      setFullScreenAdVisible(false);
-      unsubscribeClose();
+  static _present(ad, onAdClosedCallback) {
+    if (!ad || ad !== this.ad) {
+      // The ad we reserved is gone. Nothing was shown, so hand control back
+      // to the caller rather than leaving its content blocked.
       this._load();
       if (typeof onAdClosedCallback === 'function') {
         onAdClosedCallback();
       }
+      return;
+    }
+
+    this.lastShownAt = Date.now();
+    setFullScreenAdVisible(true);
+
+    let settled = false;
+    let watchdog = null;
+    let unsubscribeOpened = null;
+    let unsubscribeClosed = null;
+
+    const cleanup = () => {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+      try { if (unsubscribeOpened) unsubscribeOpened(); } catch (_) {}
+      try { if (unsubscribeClosed) unsubscribeClosed(); } catch (_) {}
+    };
+
+    const finish = (didShow) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      setFullScreenAdVisible(false);
+      if (!didShow) {
+        // Nothing reached the screen, so nothing was consumed: don't burn the
+        // 30s frequency cap on an impression the user never saw.
+        this.lastShownAt = 0;
+      }
+      // Preload the next one: the user just proved they hit ad triggers,
+      // so a warm follow-up is justified (unlike blind preloading).
+      this._load();
+
+      if (typeof onAdClosedCallback === 'function') {
+        onAdClosedCallback();
+      }
+    };
+
+    // OPENED confirms the ad actually reached the screen; from there CLOSED is
+    // the real completion signal, so stand the watchdog down.
+    unsubscribeOpened = ad.addAdEventListener(AdEventType.OPENED, () => {
+      if (watchdog) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+    });
+
+    unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, () => finish(true));
+
+    // A presentation UIKit refuses fires neither OPENED nor CLOSED. Before
+    // this watchdog that meant the caller's callback never ran at all — the
+    // user's submit or search silently did nothing — and the loaded ad was
+    // thrown away. Recover both.
+    watchdog = setTimeout(() => {
+      watchdog = null;
+      finish(false);
+    }, this.SHOW_WATCHDOG_MS);
+
+    try {
+      ad.show();
+    } catch (error) {
+      finish(false);
     }
   }
 

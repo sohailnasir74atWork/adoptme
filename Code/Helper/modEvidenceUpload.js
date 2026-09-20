@@ -96,11 +96,23 @@ export const pickEvidenceImages = async (alreadyPicked = 0) => {
 /**
  * Compress and upload one local uri. Resolves to a CDN URL.
  *
- * Compression is best-effort: safeCompressImage returns the original uri if
- * it cannot do better, so a failure there costs bytes, not the upload.
+ * Compression is best-effort: safeCompressImage hands back the ORIGINAL uri
+ * inside its result when it cannot do better, so a failure there costs bytes,
+ * not the upload.
+ *
+ * It resolves to an object — { uri, compressed, reason } — on every path, and
+ * it never rejects. This used to read `await safeCompressImage(uri)` as if it
+ * were a bare string, so `.catch` never fired, the object was truthy enough to
+ * survive `|| uri`, and String() turned it into the literal read path
+ * '[object Object]'. Every attach failed with ENOENT. Unwrap `.uri`, the way
+ * all eight other call sites in the app do.
  */
 const uploadOne = async (uri) => {
-  const local = (await safeCompressImage(uri).catch(() => uri)) || uri;
+  // returnableOutputType matches the other call sites: safeCompressImage only
+  // checks that the compressor returned *a string*, so base64 would sail
+  // through its guard and be used as a path.
+  const compressed = await safeCompressImage(uri, { returnableOutputType: 'uri' }).catch(() => null);
+  const local = compressed?.uri || uri;
   const remotePath = `mod-evidence/${uuidv4()}.jpg`;
 
   const base64 = await RNFS.readFile(String(local).replace('file://', ''), 'base64');

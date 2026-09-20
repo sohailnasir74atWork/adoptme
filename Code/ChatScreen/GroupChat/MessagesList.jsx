@@ -39,8 +39,9 @@ import FramedAvatar from './FramedAvatar';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
 import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
 
-// Above this many pets a message switches to the compact two-column grid.
+// Above this many items a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
+
 
 
 const MessagesList = ({
@@ -320,8 +321,8 @@ const MessagesList = ({
 
     const fruits = Array.isArray(item.fruits) ? item.fruits : [];
     const hasFruits = fruits.length > 0;
-    // Past 9 pets the single-column list grows taller than the screen, so
-    // switch to two columns — 18 pets then occupy the same 9 rows.
+    // Past 9 items the single-column list grows taller than the screen, so
+    // switch to two columns — 18 items then occupy the same 9 rows.
     const isCompactFruits = fruits.length > COMPACT_FRUITS_THRESHOLD;
     const totalFruitValue = hasFruits
       ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
@@ -352,7 +353,8 @@ const MessagesList = ({
               flexDirection: 'row',
               alignSelf: item.senderId === user?.id ? 'flex-end' : 'flex-start',
               alignItems: 'flex-start',
-              maxWidth: '82%',
+              maxWidth: hasFruits ? '96%' : '82%',
+              width: hasFruits ? '96%' : undefined,
               marginBottom: 6,
               marginHorizontal: 8,
               ...(item.id === highlightedMessageId ? { borderWidth: 2, borderColor: '#F59E0B', borderRadius: 18 } : {}),
@@ -371,7 +373,7 @@ const MessagesList = ({
               </TouchableOpacity>
             )}
 
-            <View style={styles.messageTextBox}>
+            <View style={[styles.messageTextBox, messageLayoutStyles.content, hasFruits && messageLayoutStyles.withItems]}>
               {/* Render reply context if present */}
               {item.replyTo && (
                 <TouchableOpacity
@@ -401,8 +403,8 @@ const MessagesList = ({
                     : profile.chatBubbleBg
                       ? { backgroundColor: isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color }
                       : null,]}>
-                  <View style={styles.nameRow}>
-                    <TouchableOpacity onPress={() => handleProfileClick(item)} activeOpacity={0.7}>
+                  <View style={[styles.nameRow, messageLayoutStyles.nameRow]}>
+                    <TouchableOpacity onPress={() => handleProfileClick(item)} activeOpacity={0.7} style={messageLayoutStyles.name}>
                       <Text style={styles.userNameText}>{profile.displayName}</Text>
                     </TouchableOpacity>
 
@@ -502,7 +504,7 @@ const MessagesList = ({
                   <View
                     style={[
                       fruitStyles.fruitsWrapper,
-                  isCompactFruits && fruitStyles.fruitsWrapperCompact,
+                      isCompactFruits && fruitStyles.fruitsWrapperCompact,
                       { backgroundColor: fruitColors.wrapperBg },
                     ]}
                   >
@@ -530,12 +532,14 @@ const MessagesList = ({
                             <Text
                               style={[fruitStyles.fruitName, isCompactFruits && fruitStyles.fruitNameCompact, { color: nameColor }]}
                               numberOfLines={1}
+                              ellipsizeMode="tail"
                             >
                               {`${fruit.name || fruit.Name}  `}
                             </Text>
 
                             <Text
                               style={[fruitStyles.fruitValue, isCompactFruits && fruitStyles.fruitValueCompact, { color: valueColor }]}
+                              numberOfLines={1}
                             >
                               {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
                               {/* {fruit.category
@@ -577,6 +581,7 @@ const MessagesList = ({
                       <View
                         style={[
                           fruitStyles.totalRow,
+                          isCompactFruits && fruitStyles.totalRowCompact,
                           { borderTopColor: fruitColors.divider },
                         ]}
                       >
@@ -599,7 +604,7 @@ const MessagesList = ({
                     one these numbers came from. Lists shared before 2026-09
                     carry no valueSource, and Elvebredd is the honest answer for
                     those: it was the only catalogue then. */}
-                  <Text style={{ fontSize: 9, marginTop: 4, opacity: 0.6, color: c?.text || '#888' }}>
+                  <Text style={[fruitStyles.sourceStatement, { color: c?.text || '#888' }]}>
                     {sourceStatement(sourceOfItems(fruits))}
                   </Text>
                   </View>
@@ -795,6 +800,26 @@ const MessagesList = ({
     </>
   );
 };
+const messageLayoutStyles = StyleSheet.create({
+  content: {
+    maxWidth: '100%',
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  withItems: {
+    flex: 1,
+  },
+  nameRow: {
+    flexWrap: 'wrap',
+    rowGap: 4,
+    marginBottom: 3,
+  },
+  name: {
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
+});
+
 export const fruitStyles = StyleSheet.create({
   fruitsWrapper: {
     marginTop: 1,
@@ -804,45 +829,60 @@ export const fruitStyles = StyleSheet.create({
     borderRadius: 8,
 
   },
-  // Compact two-column layout, used when a message carries more than 9 pets.
-  // 18 pets in a single column ran ~18 rows tall and swallowed the screen; at
-  // two columns the same 18 occupy 9 rows, so a full list stays the height a
-  // 9-pet list used to be.
+  // Two-column grid, used when a message carries more than 9 items. 18 items
+  // in a single column ran ~18 rows tall and swallowed the screen; at two
+  // columns the same 18 occupy 9 rows.
+  //
+  // space-between opens a real channel between the columns, rather than the
+  // old padding INSIDE each card which let a long name run up to its
+  // neighbour and made the two columns read as one jumbled list.
   fruitsWrapperCompact: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 2,
   },
   fruitCardCompact: {
-    width: '50%',
-    paddingRight: 4,
+    // 48 + 48 leaves a 4% gutter the cards never grow into, so the columns
+    // stay aligned however long the names are.
+    width: '48%',
   },
   fruitImageCompact: {
     width: 15,
     height: 15,
   },
-  // fruitInfo is a row of name + value + badges; at half width it needs to be
-  // allowed to shrink or the name pushes the badges out of the card.
   fruitInfoCompact: {
-    flex: 1,
-    minWidth: 0,
+    gap: 2,
   },
+  // Half-width columns leave much less room, so the name is cut earlier and
+  // set a little smaller. fruitName already carries flex + minWidth, which is
+  // what lets numberOfLines ellipsise instead of shoving the value aside.
   fruitNameCompact: {
-    flexShrink: 1,
     fontSize: 10,
   },
+  // The value is the whole point of the list, so it keeps its width and the
+  // name is what gives way.
   fruitValueCompact: {
     fontSize: 9,
   },
-  // The total must span both columns rather than sitting in one.
+  // Total and source line span both columns rather than sitting in one.
   totalRowCompact: {
     width: '100%',
   },
+  sourceStatement: {
+    width: '100%',
+    fontSize: 9,
+    marginTop: 4,
+    opacity: 0.6,
+  },
   fruitCard: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    paddingVertical: 2,
     justifyContent: 'flex-start',
   },
   fruitImage: {
+    flexShrink: 0,
     width: 20,
     height: 20,
     borderRadius: 2,
@@ -850,23 +890,28 @@ export const fruitStyles = StyleSheet.create({
     backgroundColor: '#0002',
   },
   fruitInfo: {
-    // flex: 1,
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
+    gap: 3,
     justifyContent: 'flex-start',
-    // backgroundColor:'red',
     alignItems: 'center'
   },
   fruitName: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 12,
     fontWeight: '500',
     // color: '#fff',
   },
   fruitValue: {
+    flexShrink: 0,
     fontSize: 11,
     // color: '#e5e5e5',
     marginTop: 2,
   },
   badgeRow: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
@@ -901,6 +946,7 @@ export const fruitStyles = StyleSheet.create({
     backgroundColor: '#e74c3c', // R
   },
   totalRow: {
+    flexWrap: 'wrap',
     flexDirection: 'row',
     // justifyContent: 'space-between',
     alignItems: 'center',

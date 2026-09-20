@@ -656,10 +656,17 @@ export const fruitStyles = StyleSheet.create({
   fruitsWrapperCompact: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    // space-between opens a real channel between the two columns. The old
+    // layout butted two 50% cards edge to edge and relied on padding INSIDE
+    // the card, so a long name ran straight up to its neighbour and the two
+    // columns read as one jumbled list.
+    justifyContent: 'space-between',
+    rowGap: 2,
   },
   fruitCardCompact: {
-    width: '50%',
-    paddingRight: 4,
+    // 48 + 48 leaves a 4% gutter the cards never grow into, so the columns
+    // stay aligned however long the names are.
+    width: '48%',
   },
   fruitImageCompact: {
     width: 15,
@@ -671,11 +678,19 @@ export const fruitStyles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  // flex + minWidth are what make numberOfLines actually bite. Without them a
+  // Text sizes to its content, so the name never ellipsised — it just shoved
+  // the value sideways out of the card and into the next column. Now the name
+  // takes only the space left over and truncates earlier.
   fruitNameCompact: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     fontSize: 10,
   },
+  // The value is the whole point of the list, so it keeps its width and the
+  // name is what gives way.
   fruitValueCompact: {
+    flexShrink: 0,
     fontSize: 9,
   },
   // The total must span both columns rather than sitting in one.

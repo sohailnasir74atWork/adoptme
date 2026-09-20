@@ -30,6 +30,7 @@ import { mixpanel } from '../../AppHelper/MixPenel';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
+import { useModalHandoff, useModalTransition } from '../../Helper/modalPresentation';
 import {
   collection,
   doc,
@@ -316,6 +317,23 @@ const ProfileBottomDrawer = ({
   // ModEvidencePicker for why the upload is deferred to then.
   const [adminEvidence, setAdminEvidence] = useState([]);
   const [adminEvidenceBusy, setAdminEvidenceBusy] = useState(false);
+
+  // The reason modal is a SIBLING of the drawer, not a child: opening it in
+  // the same tick as toggleModal() asks iOS to present it while the drawer's
+  // view controller is still animating out, which UIKit refuses. The handoff
+  // waits for the drawer's onDismiss before presenting. Also tell the ad
+  // layer the drawer is animating so a full-screen ad isn't presented into
+  // the same transition.
+  const { handoff, onDismiss: onDrawerDismiss } = useModalHandoff();
+  useModalTransition(isVisible && !selectedPost);
+
+  // Every route that dismisses the reason modal must also drop the pending
+  // action: reasonActionType is what tells the "reset when drawer closes"
+  // effect below that a sanction is still in flight.
+  const closeReasonModal = useCallback(() => {
+    setShowReasonModal(false);
+    setReasonActionType(null);
+  }, []);
 
   // ✅ Reset all user-specific state when switching profiles to prevent stale data flash
   useEffect(() => {
@@ -894,8 +912,7 @@ const ProfileBottomDrawer = ({
             // Update mergedUser isn't possible from here, so use it directly
             setReasonActionType({ type: 'strike', value: strikeCount, email: emailSnap.val() });
             setAdminReason('');
-            toggleModal();
-            setShowReasonModal(true);
+            handoff(toggleModal, () => setShowReasonModal(true));
             return;
           }
         } catch (e) {
@@ -907,8 +924,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'strike', value: strikeCount, email: mergedUser.email });
     setAdminReason('');
-    toggleModal();
-    setShowReasonModal(true);
+    handoff(toggleModal, () => setShowReasonModal(true));
   };
 
   const handleMuteUser = async (minutes) => {
@@ -919,8 +935,7 @@ const ProfileBottomDrawer = ({
           if (emailSnap.exists() && emailSnap.val()) {
             setReasonActionType({ type: 'mute', value: minutes, email: emailSnap.val() });
             setAdminReason('');
-            toggleModal();
-            setShowReasonModal(true);
+            handoff(toggleModal, () => setShowReasonModal(true));
             return;
           }
         } catch (e) {
@@ -932,8 +947,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'mute', value: minutes, email: mergedUser.email });
     setAdminReason('');
-    toggleModal();
-    setShowReasonModal(true);
+    handoff(toggleModal, () => setShowReasonModal(true));
   };
 
   // ─────────────────────────────────────────────
@@ -1121,8 +1135,7 @@ const ProfileBottomDrawer = ({
           if (emailSnap.exists() && emailSnap.val()) {
             setReasonActionType({ type: 'ban', email: emailSnap.val() });
             setAdminReason('');
-            toggleModal();
-            setShowReasonModal(true);
+            handoff(toggleModal, () => setShowReasonModal(true));
             return;
           }
         } catch (e) {
@@ -1134,8 +1147,7 @@ const ProfileBottomDrawer = ({
     }
     setReasonActionType({ type: 'ban', email: mergedUser.email });
     setAdminReason('');
-    toggleModal();
-    setShowReasonModal(true);
+    handoff(toggleModal, () => setShowReasonModal(true));
   };
 
   const confirmAdminAction = async () => {
@@ -1207,10 +1219,17 @@ const ProfileBottomDrawer = ({
       } catch (e) {
         setAdminEvidenceBusy(false);
         setShowReasonModal(true);   // reopen: the mod still has their picks
-        Alert.alert(
-          'Screenshots did not upload',
-          `${e?.message || 'Upload failed.'}\n\nNothing has been applied. Try again, or remove the screenshots to proceed without them.`,
-        );
+        // Let the sheet finish presenting before the alert goes up. An alert
+        // is a UIAlertController presented from the topmost view controller,
+        // and UIKit refuses to present into a modal that is still animating
+        // in — the mod would be left with neither, on an error path where
+        // they most need to read the message.
+        setTimeout(() => {
+          Alert.alert(
+            'Screenshots did not upload',
+            `${e?.message || 'Upload failed.'}\n\nNothing has been applied. Try again, or remove the screenshots to proceed without them.`,
+          );
+        }, 400);
         return;
       }
       setAdminEvidenceBusy(false);
@@ -1575,7 +1594,11 @@ const ProfileBottomDrawer = ({
 
   // Reset when drawer closes
   useEffect(() => {
-    if (!isVisible && !showReasonModal) {
+    // reasonActionType is set before the drawer is closed, and the reason
+    // modal only opens once the drawer has finished dismissing. Without it in
+    // this guard the profile data would be wiped during that gap and the
+    // sanction sheet would open against a blank user.
+    if (!isVisible && !showReasonModal && !reasonActionType) {
       setLoadDetails(false);
       setRatingSummary(null);
       setUserBio(null);
@@ -1597,7 +1620,7 @@ const ProfileBottomDrawer = ({
       setLastTradeDoc(null);
       setHasMoreTrades(false);
     }
-  }, [isVisible, showReasonModal]);
+  }, [isVisible, showReasonModal, reasonActionType]);
 
   // ─────────────────────────────────────────────
   // Load rating summary + joined
@@ -2893,6 +2916,7 @@ const ProfileBottomDrawer = ({
         transparent={true}
         visible={isVisible && !selectedPost}
         onRequestClose={toggleModal}
+        onDismiss={onDrawerDismiss}
       >
         {/* Overlay */}
         <Pressable style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={toggleModal} />
@@ -3502,12 +3526,12 @@ const ProfileBottomDrawer = ({
       </Modal >
 
       {/* Admin Reason Modal - standalone modal shown after profile drawer closes */}
-      <Modal visible={showReasonModal} transparent animationType="fade" onRequestClose={() => setShowReasonModal(false)}>
+      <Modal visible={showReasonModal} transparent animationType="fade" onRequestClose={closeReasonModal}>
         {/* KAV only on iOS: Android already resizes via adjustResize, and KAV
             behavior="height" on top of it makes the modal flicker when the
             keyboard closes — taps then miss the Confirm button. */}
         <KeyboardAvoidingView behavior="padding" enabled={Platform.OS === 'ios'} style={{ flex: 1 }}>
-          <Pressable onPress={() => setShowReasonModal(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
+          <Pressable onPress={closeReasonModal} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }}>
             <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', backgroundColor: c.bg, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: c.border }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 10 }}>
                 {reasonActionType?.type === 'strike' && `Apply Strike ${reasonActionType.value}`}
@@ -3545,7 +3569,7 @@ const ProfileBottomDrawer = ({
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
                 <TouchableOpacity
                   disabled={adminEvidenceBusy}
-                  onPress={() => { setShowReasonModal(false); setAdminEvidence([]); }}
+                  onPress={() => { closeReasonModal(); setAdminEvidence([]); }}
                   style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }}
                 >
                   <Text style={{ color: c.text, fontWeight: '600' }}>Cancel</Text>

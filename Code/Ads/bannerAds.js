@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { View } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { useLocalState } from '../LocalGlobelStats';
@@ -25,12 +25,6 @@ const BannerAdComponent = ({
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
   const unitId = getAdUnitId(adType);
-
-  // Adaptive banners default to full device width, which puts the ad flush
-  // against both screen edges. Request the ad 20dp narrower (10dp inset per
-  // side); the SDK then auto-picks the right height for that width.
-  const { width: screenWidth } = useWindowDimensions();
-  const adWidth = Math.floor(screenWidth) - 20;
 
   // No-fill retry: a banner's FIRST load can fail (no fill / transient
   // network). The <BannerAd> won't re-request on its own until something
@@ -102,8 +96,12 @@ const BannerAdComponent = ({
       <BannerAd
         key={reloadKey}
         unitId={unitId}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        width={adWidth}
+        // Fixed MMA 320x50 banner everywhere (owner decision, 2026-09-20),
+        // replacing ANCHORED_ADAPTIVE_BANNER. A fixed size ignores the
+        // `width` prop — the SDK no longer derives a height from the device
+        // width — so the wrapper below just centres the 320dp slot and lets
+        // the side gutters fall where they may on wider phones.
+        size={BannerAdSize.BANNER}
         requestOptions={requestOptions}
         onAdLoaded={handleAdLoaded}
         onAdFailedToLoad={handleAdFailedToLoad}

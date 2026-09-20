@@ -2,7 +2,7 @@ import { AppState } from 'react-native';
 import { AppOpenAd, AdEventType } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { ensureAdsInitialized } from './init';
-import { setFullScreenAdVisible, isFullScreenAdVisible } from './adVisibility';
+import { setFullScreenAdVisible, isFullScreenAdVisible, whenModalSettled } from './adVisibility';
 
 const adUnitId = getAdUnitId('openapp');
 
@@ -53,6 +53,7 @@ class AppOpenAdManager {
   static unsubscribeEvents = [];
   static appStateSub = null;
   static showWatchdog = null;
+  static foregroundTimer = null;
 
   // Call once after onboarding, for non-Pro users.
   static start() {
@@ -76,7 +77,7 @@ class AppOpenAdManager {
       } else if (next === 'active') {
         if (this.wasBackgrounded) {
           this.wasBackgrounded = false;
-          this.showAdIfAvailable();
+          this._showOnForeground();
         }
       }
     });
@@ -158,6 +159,22 @@ class AppOpenAdManager {
     }
   }
 
+  // Returning to the foreground is the one moment the app is guaranteed to be
+  // mid-reflow: screens re-render and their AppState effects fire, which is
+  // exactly when a drawer can be re-presenting. Presenting an ad into that is
+  // what UIKit refuses, and the user is left looking at a frozen screen. One
+  // short beat lets the view-controller stack settle first.
+  static _showOnForeground() {
+    if (this.foregroundTimer) clearTimeout(this.foregroundTimer);
+    this.foregroundTimer = setTimeout(() => {
+      this.foregroundTimer = null;
+      // The user may have backgrounded again inside the delay — never present
+      // into an app that is no longer on screen.
+      if (AppState.currentState !== 'active') return;
+      this.showAdIfAvailable();
+    }, 350);
+  }
+
   static showAdIfAvailable() {
     if (isProUser()) return;
     // Never stack on top of an interstitial/rewarded, or on ourselves.
@@ -178,6 +195,13 @@ class AppOpenAdManager {
     this.isShowing = true;
     this.lastShownAt = Date.now();
     setFullScreenAdVisible(true);
+    // Hold the present until no modal is animating: on iOS the ad is shown
+    // from the topmost view controller, and UIKit refuses to present from one
+    // that is itself mid-transition. Synchronous when nothing is animating.
+    whenModalSettled(() => this._present());
+  }
+
+  static _present() {
     // Watchdog: App Open ads are frequently dismissed by re-backgrounding the
     // app rather than a clean close, and in those cases CLOSED can fail to
     // fire — which would leave isShowing + the shared full-screen flag stuck
@@ -190,6 +214,9 @@ class AppOpenAdManager {
       if (this.isShowing) {
         setFullScreenAdVisible(false);
         this.isShowing = false;
+        // Nothing was displayed, so don't burn the 2-minute cap on an
+        // impression the user never saw.
+        this.lastShownAt = 0;
         this._createAndLoad();
       }
     }, 10000);
@@ -200,6 +227,7 @@ class AppOpenAdManager {
       this._clearShowWatchdog();
       setFullScreenAdVisible(false);
       this.isShowing = false;
+      this.lastShownAt = 0;
       this._createAndLoad();
     }
   }
@@ -217,6 +245,10 @@ class AppOpenAdManager {
 
   static stop() {
     this._clearShowWatchdog();
+    if (this.foregroundTimer) {
+      clearTimeout(this.foregroundTimer);
+      this.foregroundTimer = null;
+    }
     if (this.appStateSub) {
       this.appStateSub.remove();
       this.appStateSub = null;

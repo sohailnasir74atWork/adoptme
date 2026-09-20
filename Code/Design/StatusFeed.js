@@ -44,6 +44,7 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useLocalState } from '../LocalGlobelStats';
 import { useGlobalState } from '../GlobelStats';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import { useModalTransition } from '../Helper/modalPresentation';
 import CommentModal from './componenets/CommentsModal';
 
 
@@ -260,6 +261,13 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   const [drawerUser, setDrawerUser] = useState(null);  // user for BottomDrawer profile
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [showCreator, setShowCreator] = useState(false);
+
+  // Tell the ad layer when these modals are animating. On iOS a full-screen
+  // ad is presented from the topmost view controller, and UIKit refuses to
+  // present from one that is itself mid-transition — the ad then silently
+  // fails while the manager has already counted it as shown.
+  useModalTransition(!!viewingStatus);
+  useModalTransition(showCreator);
   const [caption, setCaption] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -1573,7 +1581,17 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => { stopStoryTimer(); setViewingStatus(null); setShowCreator(true); }}
+                      onPress={() => {
+                        stopStoryTimer();
+                        setViewingStatus(null);
+                        // Same reason as handleOpenProfileFromStory above: the
+                        // viewer is unmounted rather than hidden, so there is no
+                        // onDismiss to hang the composer off. Presenting it in
+                        // this tick asks iOS to present while the viewer's view
+                        // controller is still animating out, which UIKit refuses
+                        // — leaving a dead transparent controller on top.
+                        setTimeout(() => setShowCreator(true), 400);
+                      }}
                       style={[styles.deleteBtn, { backgroundColor: 'rgba(59,130,246,0.2)' }]}
                     >
                       <FontAwesome name="plus" size={12} color="#3B82F6" solid />
