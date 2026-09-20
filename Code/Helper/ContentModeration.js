@@ -1,154 +1,75 @@
 import Filter from 'leo-profanity';
+import { ACTIVE_BLOCKLIST, ALLOWED_TOKENS } from './blocklist';
+import { moderationTokens, moderationSquash } from './textNormalize';
 
 /**
- * Comprehensive Content Moderation Utility
- * Detects: profanity, spam, inappropriate content, links, scams
+ * Content moderation for chat, posts and comments.
+ * Detects: profanity, slurs, sexual content, grooming, self-harm, threats,
+ * drugs, off-platform contact solicitation, scams and links.
+ *
+ * ---------------------------------------------------------------------
+ * COST
+ * ---------------------------------------------------------------------
+ * Two passes over the message, then O(1) lookups:
+ *
+ *   tokens  -> Set.has()  per token        (~10-30 lookups)
+ *   squash  -> ONE compiled alternation regex
+ *   links   -> 3 + 3 small regexes
+ *
+ * The previous version ran ~125 regexes and ~25 substring scans on every
+ * send: 60 INAPPROPRIATE_PATTERNS + 40 EXTRA_BLOCKED_REGEXES + 25
+ * SPAM_KEYWORDS `includes()`, all of them executed even when the first one
+ * already matched. Both index structures below are built once at import.
+ *
+ * ---------------------------------------------------------------------
+ * WHAT CHANGED, AND WHY IT MATTERED
+ * ---------------------------------------------------------------------
+ * Matching used to be `leo-profanity`'s exact-word lookup, whose sanitiser
+ * only replaces '.' and ',' with spaces. Every one of these reached the room:
+ *
+ *     fuck!   fuck?   oh fuck!   (fuck)   fuck-you   shit!   bitch!
+ *     fuk   fck   f*ck   fuuuck   fucc   phuck   f u c k   sh!t   b1tch
+ *
+ * Normalisation in textNormalize.js closes the punctuation, repetition and
+ * leetspeak families outright; the rest are spelled out as their own rows in
+ * blocklist.js. leo-profanity's dictionary is still folded in below, so its
+ * coverage is kept — it just gets matched properly now.
  */
 
-// ✅ Initialize leo-profanity filter
+// ---------------------------------------------------------------------
+// Index 1 — whole-word terms.
+//
+// leo-profanity's 253-word EN dictionary is merged in rather than called at
+// runtime. Its own `check()` does a linear scan of that array per token; a Set
+// does the same job in O(1), and going through our tokeniser means its words
+// finally survive a trailing '!'.
+// ---------------------------------------------------------------------
 Filter.loadDictionary('en');
 
-// ✅ Custom spam/scam keywords and phrases
-const SPAM_KEYWORDS = [
-  // Spam/Scam phrases
-  'subscribe my channel',
-  'subscribe to my channel',
-  'subscribe to channel',
-  'check out my channel',
-  'visit my channel',
-  // Note: "free", "give away", "giveaway", "free gems" are normal trading-game
-  // talk and are intentionally NOT blocked. Only real scam phrases stay below.
-  'free robux',
-  'click here',
-  'limited time',
-  'act now',
-  'discord.gg',
-  'discord.com',
-  'join discord',
-  'add me on discord',
+const WORD_TERMS = new Set([
+  ...ACTIVE_BLOCKLIST.filter((t) => t.mode === 'word').map((t) => t.term),
+  ...Filter.list().map((w) => String(w).toLowerCase().replace(/[^a-z0-9]/g, '')),
+].filter(Boolean));
 
+// ---------------------------------------------------------------------
+// Index 2 — squash terms (phrases, and long words safe to match inside
+// other text), as a single alternation compiled once.
+//
+// Longest-first so the alternation reports the most specific hit rather than
+// whichever prefix it reached first — 'sendnudes' over 'nudes'.
+// ---------------------------------------------------------------------
+const SQUASH_TERMS = ACTIVE_BLOCKLIST
+  .filter((t) => t.mode === 'squash' && t.term)
+  .map((t) => t.term)
+  .sort((a, b) => b.length - a.length);
 
+const SQUASH_RE = SQUASH_TERMS.length
+  ? new RegExp(SQUASH_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'))
+  : null;
 
-  'exploit',
-  'mod menu',
-  'free account',
-  'selling account',
-  'buy account',
-  'trade account',
-  'account for sale',
-
-  'referral code',
-  'rose toy',
-];
-
-// ✅ Inappropriate content patterns (beyond profanity)
-const INAPPROPRIATE_PATTERNS = [
-  // Core porn/NSFW signals (incl. light obfuscation)
-  /p\W*o\W*r\W*n/i,
-  /p\*rn/i,
-  /\bxxx\b/i,
-  /\bnsfw\b/i,
-  /\badult\s*content\b/i,
-  /\bexplicit\b/i,
-  /\bsex(?:ual|y|ually)?\b/i,
-  /\berotic(?:a)?\b/i,
-  /\bhard\s*core\b/i,
-  /\bsoft\s*core\b/i,
-
-  // Nudity
-  /\bnude(?:s)?\b/i,
-  /\bnaked\b/i,
-  /\bnudity\b/i,
-
-  // Breasts / chest
-  /\bboob(?:s|ies)?\b/i,
-  /\bbreast(?:s)?\b/i,
-  /\btit(?:s|ties|ty)?\b/i,
-  /\bcleavage\b/i,
-  /\bnipple(?:s)?\b/i,
-  /\bareolae?\b/i,
-
-  // Penis terms
-  /\bpenis\b/i,
-  /\bdick\b/i,
-  /\bcock\b/i,
-  /\bschlong\b/i,
-  /\bwang\b/i,
-
-  // Vulva/vagina terms (note: some are strong slurs; include only if you truly want them blocked)
-  /\bvagina\b/i,
-  /\bclit\b/i,
-  /\blabia\b/i,
-  /\bpuss(?:y|ies)\b/i,
-  /\bcunt\b/i,
-
-  // Butt / anus
-  /\bbutt\b/i,
-  /\bbooty\b/i,
-  /\bass(?:hole)?\b/i,
-  /\banus\b/i,
-
-  // Sex acts
-  /\banal\b/i,
-  /\boral\b/i,
-  /\bblow\s*job\b/i,
-  /\bhand\s*job\b/i,
-  /\brim\s*job\b/i,
-  /\bfellatio\b/i,
-  /\bcunnilingus\b/i,
-
-  // Masturbation / fluids
-  /\bmasturbat(?:e|es|ed|ing|ion)\b/i,
-  /\bjerk\s*off\b/i,
-  /\borgasm(?:s|ic)?\b/i,
-  /\bcum(?:shot|ming)?\b/i,
-  /\bejaculat(?:e|es|ed|ing|ion)\b/i,
-
-  // Kink / fetish
-  /\bbdsm\b/i,
-  /\bkink(?:y)?\b/i,
-  /\bfetish(?:es)?\b/i,
-];
-
-// ✅ Extra kid-safety blocked words / phrases.
-// This list is meant to be easy to grow — just add entries below.
-// Single words match as whole words (so "abuse" won't flag "abuses"? it will,
-// because variants are listed); phrases allow flexible spacing.
-// Matching is case-insensitive.
-const EXTRA_BLOCKED_WORDS = [
-  // Abuse / harassment
-  'abuse', 'abusive', 'abuser',
-  // Sexual violence
-  'rape', 'raping', 'rapist', 'molest', 'molester',
-  'pedo', 'pedophile', 'paedophile', 'incest', 'bestiality',
-  // Sexual slurs / acts not already covered by patterns
-  'horny', 'slut', 'whore', 'prostitute', 'hooker',
-  'orgy', 'gangbang', 'creampie', 'deepthroat',
-  'dildo', 'vibrator', 'buttplug',
-  // Self-harm
-  'suicide', 'self harm', 'self-harm', 'kys', 'kill yourself',
-  // Predatory / unsafe requests
-  'send nudes', 'send nude', 'send pics', 'send pic',
-];
-
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// Pre-compile a whole-word, case-insensitive regex per entry. Spaces inside a
-// phrase become \s+ so "send  nudes" / "send\nnudes" still match.
-const EXTRA_BLOCKED_REGEXES = EXTRA_BLOCKED_WORDS.map((w) => {
-  const body = escapeRegExp(w.trim().toLowerCase()).replace(/\s+/g, '\\s+');
-  return new RegExp(`\\b${body}\\b`, 'i');
-});
-
-/**
- * Check if text contains an entry from the extra kid-safety blocklist.
- * @param {string} text - Text to check
- * @returns {boolean} - True if a blocked word/phrase is found
- */
-export const containsExtraBlocked = (text) => {
-  if (!text || typeof text !== 'string') return false;
-  return EXTRA_BLOCKED_REGEXES.some((re) => re.test(text));
-};
+// Category lookup, for callers that want to tailor the message shown or log
+// which kind of rule fired. Built from the same rows, so it cannot drift.
+const TERM_CATEGORY = new Map(ACTIVE_BLOCKLIST.map((t) => [t.term, t.category]));
 
 // ✅ Allowed link domains (YouTube + TikTok)
 const ALLOWED_LINK_PATTERNS = [
@@ -157,7 +78,7 @@ const ALLOWED_LINK_PATTERNS = [
   /(?:https?:\/\/)?vm\.tiktok\.com\//i,
 ];
 
-// ✅ URL patterns (already covered, but included for completeness)
+// ✅ URL patterns
 const URL_PATTERNS = [
   /https?:\/\//i,
   /www\./i,
@@ -165,35 +86,56 @@ const URL_PATTERNS = [
 ];
 
 /**
- * Check if text contains profanity using leo-profanity
- * @param {string} text - Text to check
- * @returns {boolean} - True if profanity detected
+ * Find the first blocked term in a piece of text.
+ * @param {string} text
+ * @returns {{term: string, category: string}|null} - null when clean
  */
-export const containsProfanity = (text) => {
-  if (!text || typeof text !== 'string') return false;
-  return Filter.check(text);
+export const findBlockedTerm = (text) => {
+  if (!text || typeof text !== 'string') return null;
+
+  for (const token of moderationTokens(text, ALLOWED_TOKENS)) {
+    if (WORD_TERMS.has(token)) {
+      return { term: token, category: TERM_CATEGORY.get(token) || 'profanity' };
+    }
+  }
+
+  if (SQUASH_RE) {
+    const hit = SQUASH_RE.exec(moderationSquash(text));
+    if (hit) {
+      return { term: hit[0], category: TERM_CATEGORY.get(hit[0]) || 'profanity' };
+    }
+  }
+
+  return null;
 };
 
 /**
- * Check if text contains spam keywords
+ * Check if text contains profanity or any other blocked content.
+ * @param {string} text - Text to check
+ * @returns {boolean} - True if blocked content detected
+ */
+export const containsProfanity = (text) => findBlockedTerm(text) !== null;
+
+/**
+ * Check if text contains scam/spam terms specifically.
  * @param {string} text - Text to check
  * @returns {boolean} - True if spam detected
  */
-export const containsSpam = (text) => {
-  if (!text || typeof text !== 'string') return false;
-  const lowerText = text.toLowerCase();
-  return SPAM_KEYWORDS.some(keyword => lowerText.includes(keyword.toLowerCase()));
-};
+export const containsSpam = (text) => findBlockedTerm(text)?.category === 'scam';
 
 /**
- * Check if text contains inappropriate patterns
+ * Check if text contains sexual, grooming or other inappropriate content.
+ * Kept as a named export because callers outside chat use it directly.
  * @param {string} text - Text to check
- * @returns {boolean} - True if inappropriate content detected
+ * @returns {boolean}
  */
 export const containsInappropriateContent = (text) => {
-  if (!text || typeof text !== 'string') return false;
-  return INAPPROPRIATE_PATTERNS.some(pattern => pattern.test(text));
+  const hit = findBlockedTerm(text);
+  return !!hit && hit.category !== 'scam';
 };
+
+/** @deprecated Merged into the blocklist. Kept so older imports still resolve. */
+export const containsExtraBlocked = containsInappropriateContent;
 
 /**
  * Check if text contains URLs/links
@@ -202,7 +144,7 @@ export const containsInappropriateContent = (text) => {
  */
 export const containsLink = (text) => {
   if (!text || typeof text !== 'string') return false;
-  return URL_PATTERNS.some(pattern => pattern.test(text));
+  return URL_PATTERNS.some((pattern) => pattern.test(text));
 };
 
 /**
@@ -212,17 +154,26 @@ export const containsLink = (text) => {
  */
 export const isAllowedLink = (text) => {
   if (!text || typeof text !== 'string') return false;
-  return ALLOWED_LINK_PATTERNS.some(pattern => pattern.test(text));
+  return ALLOWED_LINK_PATTERNS.some((pattern) => pattern.test(text));
+};
+
+// Per-category copy. Callers currently show a single translated string, but
+// the category rides along on the result so a more specific message (or a
+// self-harm helpline instead of a scolding) can be wired up without touching
+// the matching code.
+const REASONS = {
+  scam: 'Spam content is not allowed.',
+  selfharm: 'This message cannot be sent. If you need someone to talk to, please reach out to a trusted adult.',
+  grooming: 'This message cannot be sent.',
 };
 
 /**
  * Comprehensive content moderation check
- * Checks for: profanity, spam, inappropriate content, links
  * @param {string} text - Text to check
  * @param {{skipLinkCheck?: boolean, skipAll?: boolean}} [options] - Options
  *   - skipLinkCheck: bypass only the link check
  *   - skipAll: bypass every check (used for admins/full moderators)
- * @returns {{isValid: boolean, reason?: string}} - Validation result
+ * @returns {{isValid: boolean, reason?: string, category?: string}} - Validation result
  */
 export const validateContent = (text, options = {}) => {
   if (!text || typeof text !== 'string') {
@@ -234,27 +185,12 @@ export const validateContent = (text, options = {}) => {
     return { isValid: true };
   }
 
-  // Check profanity
-  if (containsProfanity(text)) {
+  const hit = findBlockedTerm(text);
+  if (hit) {
     return {
       isValid: false,
-      reason: 'Inappropriate language is not allowed.',
-    };
-  }
-
-  // Check spam keywords
-  if (containsSpam(text)) {
-    return {
-      isValid: false,
-      reason: 'Spam content is not allowed.',
-    };
-  }
-
-  // Check inappropriate patterns + extra kid-safety blocklist
-  if (containsInappropriateContent(text) || containsExtraBlocked(text)) {
-    return {
-      isValid: false,
-      reason: 'Inappropriate content is not allowed.',
+      category: hit.category,
+      reason: REASONS[hit.category] || 'Inappropriate language is not allowed.',
     };
   }
 
@@ -262,6 +198,7 @@ export const validateContent = (text, options = {}) => {
   if (!options.skipLinkCheck && containsLink(text)) {
     return {
       isValid: false,
+      category: 'link',
       reason: 'Links are not allowed in messages.',
     };
   }
@@ -272,39 +209,26 @@ export const validateContent = (text, options = {}) => {
 /**
  * Get detailed violation information (for admin/debugging)
  * @param {string} text - Text to check
- * @returns {object} - Detailed violation info
+ * @returns {{hasViolations: boolean, violations: string[], term?: string}}
  */
 export const getContentViolations = (text) => {
-  if (!text || typeof text !== 'string') {
-    return {
-      hasViolations: false,
-      violations: [],
-    };
-  }
-
+  const hit = findBlockedTerm(text);
   const violations = [];
 
-  if (containsProfanity(text)) {
-    violations.push('profanity');
-  }
-  if (containsSpam(text)) {
-    violations.push('spam');
-  }
-  if (containsInappropriateContent(text) || containsExtraBlocked(text)) {
-    violations.push('inappropriate_content');
-  }
-  if (containsLink(text)) {
-    violations.push('link');
-  }
+  if (hit) violations.push(hit.category);
+  if (containsLink(text)) violations.push('link');
 
   return {
     hasViolations: violations.length > 0,
     violations,
+    term: hit?.term,
   };
 };
 
 /**
- * Clean profanity from text (replace with asterisks)
+ * Clean profanity from text (replace with asterisks).
+ * Note: this only masks leo-profanity's dictionary, not the full blocklist,
+ * and nothing in the app calls it — sends are rejected outright instead.
  * @param {string} text - Text to clean
  * @returns {string} - Cleaned text
  */
@@ -312,4 +236,3 @@ export const cleanProfanity = (text) => {
   if (!text || typeof text !== 'string') return text;
   return Filter.clean(text);
 };
-
