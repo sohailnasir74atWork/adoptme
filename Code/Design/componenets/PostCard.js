@@ -17,7 +17,6 @@ import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
-import { banUserwithEmail as banUtils } from '../../ChatScreen/utils';
 import { useTranslation } from 'react-i18next';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
@@ -83,19 +82,6 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
   const getTranslatedTag = (tag) => {
     const tagKey = tag.toLowerCase().replace(/\s+/g, '_').replace(/\.+/g, '');
     return t(`feed.tags.${tagKey}`, { defaultValue: tag });
-  };
-
-  const banUserwithEmail = async (email, targetUserId) => {
-    if (!isAdmin && !user?.isModerator) return;
-    await banUtils(email, true, targetUserId, {
-      id: targetUserId,
-      displayName: item.displayName || 'Unknown User',
-      avatar: item.avatar,
-    }, {
-      id: user?.id,
-      displayName: user?.displayName || user?.userName || 'Moderator',
-      avatar: user?.avatar,
-    });
   };
 
   const closeProfileDrawer = () => setIsDrawerVisible(false);
@@ -325,7 +311,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
               </View>
             )}
           </View>
-          <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />
+          <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} />
         </View>
       )}
 
@@ -337,7 +323,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
       )}
 
       {hasNoImages && (
-        <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} banUserwithEmail={banUserwithEmail} />
+        <ReportModal visible={showReportModal} onClose={() => setShowReportModal(false)} item={item} />
       )}
 
       {/* ── Reaction summary chips ── */}

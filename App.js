@@ -3,7 +3,6 @@ import {
   View,
   StatusBar,
   ActivityIndicator,
-  Appearance,
   TouchableOpacity,
   Platform,
 } from 'react-native';
@@ -23,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 
 import RNBootSplash from "react-native-bootsplash";
 import { requestTrackingPermission, getTrackingStatus } from 'react-native-tracking-transparency';
-import SystemNavigationBar from 'react-native-system-navigation-bar';
+import { setThemedNavBar } from './Code/Helper/systemNavBar';
 import Icon from 'react-native-vector-icons/Ionicons';
 import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
 import AttPrimer from './Code/AppHelper/AttPrimer';
@@ -67,13 +66,7 @@ async function ensureAttRequested(beforePrompt) {
 }
 
 const Stack = createNativeStackNavigator();
-const setNavigationBarAppearance = (theme) => {
-  if (theme === 'dark') {
-    SystemNavigationBar.setNavigationColor('#0f172a', 'light', 'navigation');
-  } else {
-    SystemNavigationBar.setNavigationColor('#FFFFFF', 'dark', 'navigation');
-  }
-};
+
 
 // Wrapper for PrivateChat used from root stack (SocialDashboard → Chat)
 // Manages its own drawer state since it's outside ChatNavigator.
@@ -157,17 +150,11 @@ function App() {
 
 
 
+  // `theme` is already resolved to 'light' | 'dark' by GlobelStats, which owns
+  // the Appearance listener and folds the 'system' preference in, so this just
+  // follows it.
   useEffect(() => {
-    // Set nav bar color on initial load
-    setNavigationBarAppearance(theme === 'dark' ? 'dark' : theme === 'system' ? Appearance.getColorScheme() : 'light');
-
-    const listener = Appearance.addChangeListener(({ colorScheme }) => {
-      if (theme === 'system') {
-        setNavigationBarAppearance(colorScheme);
-      }
-    });
-
-    return () => listener.remove();
+    setThemedNavBar(theme);
   }, [theme]);
 
 

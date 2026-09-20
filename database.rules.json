@@ -165,11 +165,15 @@
         "displayName"
       ],
       ".read": true,
-      ".write": true
+      "$emailKey": {
+        ".write": "(auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true)) || newData.child('userId').val() === null || (root.child('users').child(newData.child('userId').val()).child('admin').val() !== true && root.child('users').child(newData.child('userId').val()).child('isAdmin').val() !== true && root.child('users').child(newData.child('userId').val()).child('isModerator').val() !== true && root.child('users').child(newData.child('userId').val()).child('isBabyMod').val() !== true)"
+      }
     },
     "banned_devices": {
       ".read": true,
-      ".write": true
+      "$deviceId": {
+        ".write": "(auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true)) || newData.child('userId').val() === null || (root.child('users').child(newData.child('userId').val()).child('admin').val() !== true && root.child('users').child(newData.child('userId').val()).child('isAdmin').val() !== true && root.child('users').child(newData.child('userId').val()).child('isModerator').val() !== true && root.child('users').child(newData.child('userId').val()).child('isBabyMod').val() !== true)"
+      }
     },
     "banned_users_by_email_post": {
       ".read": true,

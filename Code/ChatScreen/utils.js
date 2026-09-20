@@ -559,17 +559,86 @@ const mirrorBanToDevice = async (email, userId, banPayload) => {
 export const canStaffBanMute = ({ isAdmin, isModerator, isBabyMod, modControlsEnabled } = {}) =>
   !!isAdmin || ((!!isModerator || !!isBabyMod) && modControlsEnabled !== false);
 
+// ─────────────────────────────────────────────────────────────────────────
+// Target-rank guard (2026-09-20).
+//
+// Until now NOTHING anywhere checked WHO was being sanctioned — every gate
+// looked only at the actor. A full moderator could permanently ban another
+// moderator, an admin, or the owner in three taps. Worse, the auto-ban paths
+// in ReportPopUp/ReportModal meant any two ordinary users could ban a
+// moderator by reporting the same message twice, holding no role at all.
+//
+// Rule: a target holding ANY staff role (admin / isAdmin / isModerator /
+// isBabyMod) can be sanctioned ONLY by an admin.
+//
+// Authority is read from `bannerInfo.role`, which every deliberate staff call
+// site already sets ('admin' | 'moderator' | 'baby_mod'). The automated report
+// paths pass bannerInfo: null and so are never admin — exactly right: an
+// auto-ban must never land on staff.
+//
+// This lives inside ban/strike/mute rather than at the five call sites so that
+// every current AND future caller inherits it.
+//
+// Fails OPEN on a failed role read: a network blip must not stop a mod
+// handling an ordinary spammer. The real boundary is the matching
+// /banned_users_by_email rule in database.rules.json, which has no network
+// dependency — this half is the UI affordance.
+const STAFF_ROLE_FLAGS = ['admin', 'isAdmin', 'isModerator', 'isBabyMod'];
+
+export const isStaffTarget = async (targetUid) => {
+  if (!targetUid || typeof targetUid !== 'string') return false;
+  try {
+    const db = getDatabase();
+    const snaps = await Promise.all(
+      STAFF_ROLE_FLAGS.map((flag) => get(ref(db, `users/${targetUid}/${flag}`)))
+    );
+    return snaps.some((snap) => snap && snap.exists() && snap.val() === true);
+  } catch (e) {
+    console.error('isStaffTarget: role read failed, allowing action:', e);
+    return false; // fail open — see note above
+  }
+};
+
+// `showAlert` is deliberately off by default: the report paths must stay
+// silent (telling a stranger their report hit a moderator leaks who staff
+// are), while the staff-facing screens pass true so the mod learns why.
+export const canSanctionTarget = async ({ targetUid, bannerInfo, showAlert = false } = {}) => {
+  if (bannerInfo?.role === 'admin') return true;
+  if (!(await isStaffTarget(targetUid))) return true;
+  if (showAlert) {
+    Alert.alert(
+      'Not allowed',
+      'This user is a staff member. Only an admin can ban, strike or mute them.'
+    );
+  }
+  return false;
+};
+
 // `source` tags where the action came from ('admin_dashboard' | 'group_chat' |
 // 'report' | 'auto') so the audit log can tell a deliberate staff ban apart
 // from an automatic report-threshold one. Appended last — existing callers
 // that omit it keep working and log as 'unknown'.
-export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null, source = 'unknown') => {
+// `evidenceUrls` (2026-09-19): up to 3 already-uploaded screenshot URLs the
+// acting mod attached as proof. Last parameter on purpose — every existing
+// call site keeps working untouched, and callers that do not attach proof
+// pass nothing. Upload happens BEFORE this is called (see
+// Helper/modEvidenceUpload.js); this function only records what it is given,
+// so a ban is never blocked on bytes reaching a CDN.
+export const banUserwithEmail = async (email, isAdmin = false, senderId = null, userInfo = null, bannerInfo = null, customReason = null, source = 'unknown', evidenceUrls = null) => {
   // ✅ Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for banUserwithEmail');
     if (isAdmin) Alert.alert('Error', 'Invalid email address.');
     return false;
   }
+
+  // Only an admin may ban staff. Checked before any write, so a refusal
+  // leaves no partial record behind.
+  if (!(await canSanctionTarget({
+    targetUid: senderId || userInfo?.id || null,
+    bannerInfo,
+    showAlert: isAdmin,
+  }))) return false;
 
   try {
     const db = getDatabase();
@@ -631,6 +700,7 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
       actorName: bannerInfo?.displayName || null,
       actorRole: bannerInfo?.role || null,
       source,
+      evidenceUrls,
     }).catch(() => {});
 
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
@@ -657,7 +727,7 @@ export const banUserwithEmail = async (email, isAdmin = false, senderId = null, 
 };
 
 // ✅ NEW: Set specific strike count (for Admin Dashboard)
-export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null, customReason = null, source = 'unknown') => {
+export const setUserStrike = async (email, strikeCount, senderId = null, showAlert = true, bannerInfo = null, userInfo = null, customReason = null, source = 'unknown', evidenceUrls = null) => {
   // Safety check
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for setUserStrike');
@@ -670,6 +740,13 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
     if (showAlert) Alert.alert('Error', 'Invalid strike count.');
     return false;
   }
+
+  // Only an admin may strike staff. See canSanctionTarget.
+  if (!(await canSanctionTarget({
+    targetUid: senderId || userInfo?.id || null,
+    bannerInfo,
+    showAlert,
+  }))) return false;
 
   try {
     const db = getDatabase();
@@ -733,6 +810,7 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
       actorName: bannerInfo?.displayName || null,
       actorRole: bannerInfo?.role || null,
       source,
+      evidenceUrls,
     }).catch(() => {});
 
     // ❌ DISABLED: Delete messages if senderId provided (too heavy operation)
@@ -763,7 +841,7 @@ export const setUserStrike = async (email, strikeCount, senderId = null, showAle
  * Does NOT increment strikeCount — mutes are temporary silences, not strikes.
  * Existing useBanStatus/checkBanStatus already handle time-based expiry.
  */
-export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true, customReason = null, source = 'unknown') => {
+export const muteUser = async (email, minutes, userInfo = null, bannerInfo = null, showAlert = true, customReason = null, source = 'unknown', evidenceUrls = null) => {
   if (!email || typeof email !== 'string' || email.trim().length === 0) {
     console.error('❌ Invalid email for muteUser');
     if (showAlert) Alert.alert('Error', 'Invalid email address.');
@@ -774,6 +852,13 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
     if (showAlert) Alert.alert('Error', 'Mute duration must be at least 1 minute.');
     return false;
   }
+
+  // Only an admin may mute staff. See canSanctionTarget.
+  if (!(await canSanctionTarget({
+    targetUid: userInfo?.id || null,
+    bannerInfo,
+    showAlert,
+  }))) return false;
 
   try {
     const db = getDatabase();
@@ -842,6 +927,7 @@ export const muteUser = async (email, minutes, userInfo = null, bannerInfo = nul
       actorName: bannerInfo?.displayName || null,
       actorRole: bannerInfo?.role || null,
       source,
+      evidenceUrls,
     }).catch(() => {});
 
     if (showAlert) {

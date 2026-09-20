@@ -1,10 +1,9 @@
 import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, Platform, Dimensions, Linking, Share, StatusBar, Modal, Animated,
+  Image, Platform, Dimensions, Share, StatusBar, Modal, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
@@ -17,11 +16,6 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 import { getStarStatus } from '../Engagement/starUtils';
 import { getUserXP, getLevelFromXP, getXPProgress, getNextLevel } from '../Engagement/xpUtils';
-
-import DailyQuiz from '../Engagement/DailyQuiz';
-import MemoryMatch from '../Engagement/MemoryMatch';
-import IceBreaker from '../Engagement/IceBreaker';
-import WordScramble from '../Engagement/WordScramble';
 
 import StatusFeed from '../Design/StatusFeed';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -76,31 +70,6 @@ const formatPlain = (v) => {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// World Cup promo card — fixed bright palette (theme-independent, like the WC hero)
-// so it always pops in light and dark mode.
-const wcPromoStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginTop: 14, paddingVertical: 12, paddingHorizontal: 14,
-    borderRadius: 16, overflow: 'hidden',
-    backgroundColor: '#5B21B6', // fallback if the gradient fails to render
-  },
-  lottieWrap: { width: 46, height: 46, marginRight: 10 },
-  titleRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { fontSize: 16, fontWeight: '900', color: '#fff' },
-  newPill: {
-    marginLeft: 7, backgroundColor: '#EF4444', borderRadius: 7,
-    paddingHorizontal: 5, paddingVertical: 1,
-  },
-  newPillText: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.3 },
-  sub: { fontSize: 12, color: 'rgba(255,255,255,0.92)', marginTop: 1, fontWeight: '600' },
-  cta: {
-    marginLeft: 10, backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7,
-  },
-  ctaText: { fontSize: 13, fontWeight: '900', color: '#fff' },
-});
-
 // The owned-pets focus read below (user_profiles/{me} → reviews/{me}) ran on
 // EVERY focus of the Home tab. Serve the last result for 10 min per uid
 // instead; the first focus for a uid (and any uid change) still reads
@@ -109,7 +78,7 @@ const HOME_FOCUS_REFRESH_MS = 10 * 60 * 1000;
 const ownedPetsFocusCache = new Map(); // uid -> { ts, ownedPets }
 
 const HomeTabScreen = ({ selectedTheme }) => {
-  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo, worldCupEnabled } = useGlobalState();
+  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const { localState } = useLocalState();
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
@@ -117,11 +86,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
   const insets = useSafeAreaInsets();
 
   const [canClaimStar, setCanClaimStar] = useState(false);
-  const [showQuiz, setShowQuiz] = useState(false);
-  const [showMemory, setShowMemory] = useState(false);
-  const [showIce, setShowIce] = useState(false);
-  const [showScramble, setShowScramble] = useState(false);
-
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showGuides, setShowGuides] = useState(false);
   const [userXP, setUserXP] = useState(() => {
@@ -265,13 +229,12 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
   // ── Quick Action Items ──
   const quickActions = useMemo(() => [
-    { key: 'values', icon: 'paw', label: t('home_tab.action_pet_values'), color: '#2563EB', onPress: () => navigation.navigate('ValueScreen') },
-    { key: 'topRated', icon: 'medal', label: t('home_tab.action_leaderboard', { defaultValue: 'Leaderboard' }), color: '#F59E0B', onPress: () => navigation.navigate('LeaderboardScreen') },
-    { key: 'stars', icon: 'star', label: t('home_tab.action_badges'), color: '#FB923C', onPress: () => requireSignIn(() => navigation.navigate('BadgesScreen'), t('home_tab.signin_claim_stars')), hasBadge: canClaimStar },
-    { key: 'following', icon: 'heart', label: t('home_tab.action_friends'), color: '#EC4899', onPress: () => requireSignIn(() => navigation.navigate('SocialDashboardScreen'), t('home_tab.signin_friends')) },
-    { key: 'cosmetics', icon: 'wand-magic-sparkles', label: t('home_tab.action_cosmetics'), color: '#A855F7', onPress: () => requireSignIn(() => navigation.navigate('MyCosmeticsScreen'), t('home_tab.signin_cosmetics')) },
-    { key: 'mods', icon: 'shield-halved', label: t('home_tab.action_mods', { defaultValue: 'Mods' }), color: '#0EA5E9', onPress: () => navigation.navigate('ModsScreen') },
-  ], [t, i18n.language, navigation, canClaimStar, user?.id, worldCupEnabled]);
+    { key: 'values', image: require('../../assets/home-actions/pet-values.png'), label: t('home_tab.action_pet_values'), color: '#2563EB', onPress: () => navigation.navigate('ValueScreen') },
+    { key: 'topRated', image: require('../../assets/home-actions/leaderboard.png'), label: t('home_tab.action_leaderboard', { defaultValue: 'Leaderboard' }), color: '#F59E0B', onPress: () => navigation.navigate('LeaderboardScreen') },
+    { key: 'stars', image: require('../../assets/home-actions/badges.png'), label: t('home_tab.action_badges'), color: '#FB923C', onPress: () => requireSignIn(() => navigation.navigate('BadgesScreen'), t('home_tab.signin_claim_stars')), hasBadge: canClaimStar },
+    { key: 'following', image: require('../../assets/home-actions/friends.png'), label: t('home_tab.action_friends'), color: '#EC4899', onPress: () => requireSignIn(() => navigation.navigate('SocialDashboardScreen'), t('home_tab.signin_friends')) },
+    { key: 'mods', image: require('../../assets/home-actions/mods.png'), label: t('home_tab.action_mods', { defaultValue: 'Mods' }), color: '#0EA5E9', onPress: () => navigation.navigate('ModsScreen') },
+  ], [t, i18n.language, navigation, canClaimStar, user?.id]);
 
   // ── XP computed values ──
   const currentLevel = useMemo(() => getLevelFromXP(userXP.total), [userXP.total]);
@@ -580,7 +543,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
               >
                 <View style={{ position: 'relative' }}>
                   <View style={[styles.quickActionIcon, { backgroundColor: action.color + '14' }]}>
-                    <FontAwesome name={action.icon} size={18} color={action.color} solid />
+                    <Image source={action.image} style={styles.quickActionImage} resizeMode="contain" />
                   </View>
                   {action.hasBadge && (
                     <Animated.View style={[styles.starBadge, { transform: [{ scale: starPulse }] }]} />
@@ -613,129 +576,63 @@ const HomeTabScreen = ({ selectedTheme }) => {
           {/* ═══ Pet Aging & Growing Tracker (hidden) ═══ */}
           {/* <HomeTrackerCard isDarkMode={isDarkMode} navigation={navigation} /> */}
 
-          {/* ═══ SECTION 3: Mini Games (moved up!) ═══ */}
+          {/* ═══ SECTION 3: Cosmetics ═══ */}
           <View style={styles.section}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Ionicons name="game-controller" size={22} color={selectedTheme.colors.text} />
-              <Text style={[styles.sectionTitle, { color: selectedTheme.colors.text, marginBottom: 0 }]}>{t('home_tab.mini_games_title')}</Text>
+              <Image source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticsSectionIcon} resizeMode="contain" />
+              <Text style={[styles.sectionTitle, { color: selectedTheme.colors.text, marginBottom: 0 }]}>Cosmetics</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 16 }}>
-              {/* 🥚 Mystery Egg — first card for maximum visibility */}
+            <View style={styles.cosmeticsCards}>
+              {/* 🥚 Hatch eggs to earn cosmetics */}
               <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#EC4899', position: 'relative' }]}
+                style={[
+                  styles.cosmeticCard,
+                  {
+                    backgroundColor: isDarkMode ? 'rgba(236,72,153,0.12)' : '#FDF2F8',
+                    borderColor: isDarkMode ? 'rgba(236,72,153,0.3)' : '#FBCFE8',
+                  },
+                ]}
                 onPress={() => requireSignIn(() => navigation.navigate('MysteryEggScreen'), t('home_tab.signin_mystery_egg'))}
                 activeOpacity={0.85}
               >
-                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontSize: 8, fontWeight: '800', color: '#EC4899' }}>{t('home_tab.new')}</Text>
+                <View style={[styles.cosmeticIcon, { backgroundColor: '#EC4899' }]}>
+                  <Image source={require('../../assets/home-actions/mystery-egg.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
                 </View>
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="egg" size={28} color="#fff" solid />
+                <View style={styles.cosmeticCardContent}>
+                  <View style={styles.cosmeticTitleRow}>
+                    <Text style={[styles.cosmeticCardTitle, { color: selectedTheme.colors.text }]}>
+                      {t('home_tab.game_mystery_egg')}
+                    </Text>
+                    <View style={styles.cosmeticNewBadge}>
+                      <Text style={styles.cosmeticNewBadgeText}>{t('home_tab.new')}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>Hatch eggs to win cosmetics</Text>
                 </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_mystery_egg')}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_mystery_egg_desc')}</Text>
-              </TouchableOpacity>
-
-              {/* 🎯 Arrow Game */}
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#EF4444', position: 'relative' }]}
-                onPress={() => requireSignIn(() => navigation.navigate('ArrowGameScreen'), 'Sign in to play Arrow Game')}
-                activeOpacity={0.85}
-              >
-                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontSize: 8, fontWeight: '900', color: '#EF4444' }}>HOT</Text>
-                </View>
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="location-arrow" size={28} color="#fff" solid />
-                </View>
-                <Text style={styles.gameLabel}>Arrow Game</Text>
-                <Text style={styles.gameDesc}>40 Levels!</Text>
+                <FontAwesome name="chevron-right" size={14} color={isDarkMode ? '#64748B' : '#94A3B8'} solid />
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#F59E0B' }]}
-                onPress={() => requireSignIn(() => setShowScramble(true), t('home_tab.signin_word_scramble', { defaultValue: 'Sign in to play Word Scramble' }))}
+                style={[
+                  styles.cosmeticCard,
+                  {
+                    backgroundColor: isDarkMode ? 'rgba(139,92,246,0.12)' : '#F5F3FF',
+                    borderColor: isDarkMode ? 'rgba(139,92,246,0.3)' : '#DDD6FE',
+                  },
+                ]}
+                onPress={() => requireSignIn(() => navigation.navigate('MyCosmeticsScreen'), t('home_tab.signin_cosmetics'))}
                 activeOpacity={0.85}
               >
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="font" size={28} color="#fff" solid />
+                <View style={[styles.cosmeticIcon, { backgroundColor: '#8B5CF6' }]}>
+                  <Image source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
                 </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_word_scramble', { defaultValue: 'Scramble' })}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_word_scramble_desc', { defaultValue: 'Unscramble names!' })}</Text>
+                <View style={styles.cosmeticCardContent}>
+                  <Text style={[styles.cosmeticCardTitle, { color: selectedTheme.colors.text }]}>{t('home_tab.action_cosmetics')}</Text>
+                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>View and equip your collection</Text>
+                </View>
+                <FontAwesome name="chevron-right" size={14} color={isDarkMode ? '#64748B' : '#94A3B8'} solid />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#0EA5E9', position: 'relative' }]}
-                onPress={() => requireSignIn(() => setShowIce(true), t('home_tab.signin_ice_breaker'))}
-                activeOpacity={0.85}
-              >
-                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontSize: 8, fontWeight: '800', color: '#0EA5E9' }}>{t('home_tab.new')}</Text>
-                </View>
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="snowflake" size={28} color="#fff" />
-                </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_ice_breaker', { defaultValue: 'Ice Breaker' })}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_ice_breaker_desc', { defaultValue: 'Crack & guess!' })}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#8B5CF6' }]}
-                onPress={() => requireSignIn(() => setShowQuiz(true), t('home_tab.signin_pet_quiz'))}
-                activeOpacity={0.85}
-              >
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="brain" size={28} color="#fff" solid />
-                </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_pet_quiz')}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_pet_quiz_desc')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#10B981' }]}
-                onPress={() => requireSignIn(() => setShowMemory(true), t('home_tab.signin_memory'))}
-                activeOpacity={0.85}
-              >
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="clone" size={28} color="#fff" solid />
-                </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_memory')}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_memory_desc')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#3B82F6' }]}
-                onPress={() => requireSignIn(() => navigation.navigate('QuizBattleScreen'), t('home_tab.signin_quiz_battle'))}
-                activeOpacity={0.85}
-              >
-                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 }}>
-                  <Text style={{ fontSize: 8, fontWeight: '800', color: '#3B82F6' }}>{t('home_tab.two_player')}</Text>
-                </View>
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="bolt-lightning" size={28} color="#fff" solid />
-                </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_quiz_battle')}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_quiz_battle_desc')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gameCard, { backgroundColor: '#F97316', position: 'relative' }]}
-                onPress={() => requireSignIn(() => navigation.navigate('TradeShowdownScreen'), t('home_tab.signin_trade_duel'))}
-                activeOpacity={0.85}
-              >
-                <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#fff', borderRadius: 6, paddingHorizontal: 4, paddingVertical: 1 }}>
-                  <Text style={{ fontSize: 8, fontWeight: '800', color: '#F97316' }}>{t('home_tab.two_player')}</Text>
-                </View>
-                <View style={styles.gameIconWrap}>
-                  <FontAwesome name="scale-balanced" size={28} color="#fff" solid />
-                </View>
-                <Text style={styles.gameLabel}>{t('home_tab.game_trade_duel')}</Text>
-                <Text style={styles.gameDesc}>{t('home_tab.game_trade_duel_desc')}</Text>
-              </TouchableOpacity>
-
-
-
-            </ScrollView>
+            </View>
           </View>
 
           {/* ═══ SECTION 4: Share Button ═══ */}
@@ -763,83 +660,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
             </Text>
           </TouchableOpacity>
 
-          {/* ═══ WORLD CUP PROMO CARD (hidden by the kill switch) ═══ */}
-          {worldCupEnabled && (
-            <TouchableOpacity
-              activeOpacity={0.92}
-              onPress={() => navigation.navigate('More')}
-              style={wcPromoStyles.card}
-            >
-              {/* Gradient background (react-native-svg) */}
-              <Svg style={StyleSheet.absoluteFill}>
-                <Defs>
-                  <SvgGradient id="wcGrad" x1="0" y1="0" x2="1" y2="1">
-                    <Stop offset="0" stopColor="#7C3AED" />
-                    <Stop offset="0.55" stopColor="#5B21B6" />
-                    <Stop offset="1" stopColor="#2563EB" />
-                  </SvgGradient>
-                </Defs>
-                <Rect x="0" y="0" width="100%" height="100%" fill="url(#wcGrad)" />
-              </Svg>
-              <View style={wcPromoStyles.lottieWrap}>
-                <SafeLottieView
-                  source={require('../../assets/lottie/footballer.json')}
-                  autoPlay
-                  loop
-                  resizeMode="contain"
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={wcPromoStyles.titleRow}>
-                  <Text style={wcPromoStyles.title}>World Cup 2026</Text>
-                  <View style={wcPromoStyles.newPill}>
-                    <Text style={wcPromoStyles.newPillText}>NEW</Text>
-                  </View>
-                </View>
-                <Text style={wcPromoStyles.sub}>Predict winners & climb the leaderboard! ⚽</Text>
-              </View>
-              <View style={wcPromoStyles.cta}>
-                <Text style={wcPromoStyles.ctaText}>Predict →</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* ═══ Runway App Promo Card ═══ */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => Linking.openURL(
-              Platform.OS === 'ios'
-                ? 'https://apps.apple.com/us/app/runway-dti-outfits-codes/id6763716666'
-                : 'https://play.google.com/store/apps/details?id=com.thesolanalabs.runway'
-            )}
-            style={[styles.promoCard, { backgroundColor: isDarkMode ? '#1a1033' : '#1E1040' }]}
-          >
-            {/* Glow accents */}
-            <View style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(139,92,246,0.15)' }} />
-            <View style={{ position: 'absolute', bottom: -15, left: -15, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(236,72,153,0.1)' }} />
-
-            <View style={styles.promoContent}>
-              <Image
-                source={require('../../assets/runway.webp')}
-                style={styles.promoLogo}
-                resizeMode="cover"
-              />
-              <View style={styles.promoTextWrap}>
-                <View style={styles.promoNewBadge}>
-                  <Text style={styles.promoNewBadgeText}>{t('home_tab.new_app')}</Text>
-                </View>
-                <Text style={styles.promoTitle}>Runway: DTI Outfits & Codes</Text>
-                <Text style={styles.promoSubtitle}>Dress to Impress outfit ideas & codes!</Text>
-              </View>
-            </View>
-            <View style={styles.promoBtn}>
-              <FontAwesome name={Platform.OS === 'ios' ? 'apple' : 'google-play'} size={14} color="#fff" />
-              <Text style={styles.promoBtnText}>{t('home_tab.download_now')}</Text>
-              <FontAwesome name="arrow-right" size={11} color="#fff" />
-            </View>
-          </TouchableOpacity>
-
           {/* ═══ SECTION 5: Footer ═══ */}
           <View style={styles.footer}>
             <Image
@@ -860,19 +680,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
 
 
-
-
-      {/* 🧠 Daily Quiz */}
-      <DailyQuiz visible={showQuiz} onClose={() => setShowQuiz(false)} />
-
-      {/* 🃏 Memory Match */}
-      <MemoryMatch visible={showMemory} onClose={() => setShowMemory(false)} />
-
-      {/* 🧊 Ice Breaker */}
-      <IceBreaker visible={showIce} onClose={() => setShowIce(false)} />
-
-      {/* 🔤 Word Scramble */}
-      <WordScramble visible={showScramble} onClose={() => setShowScramble(false)} />
 
 
       {/* 📖 Guides Modal */}
@@ -936,16 +743,40 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // ── Game Cards ──
-  gameCard: {
-    width: 110, height: 120, borderRadius: 18, padding: 12,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+  // ── Cosmetics Cards ──
+  cosmeticsCards: { gap: 10 },
+  cosmeticsSectionIcon: { width: 24, height: 24 },
+  cosmeticCard: {
+    width: '100%',
+    minHeight: 68,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  gameEmoji: { fontSize: 32, marginBottom: 6 },
-  gameIconWrap: { marginBottom: 6 },
-  gameLabel: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  gameDesc: { color: 'rgba(255,255,255,0.75)', fontSize: 10, marginTop: 2 },
+  cosmeticIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  cosmeticCardImage: { width: 38, height: 38 },
+  cosmeticCardContent: { flex: 1 },
+  cosmeticTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  cosmeticCardTitle: { fontSize: 14, fontWeight: '800' },
+  cosmeticCardDesc: { fontSize: 11, fontWeight: '500', marginTop: 3 },
+  cosmeticNewBadge: {
+    marginLeft: 7,
+    backgroundColor: '#EC4899',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  cosmeticNewBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
 
   // ── Hero Banner (Premium Minimal) ──
   heroBanner: {
@@ -1132,6 +963,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  quickActionImage: { width: 42, height: 42 },
   starBadge: {
     position: 'absolute',
     top: -2,
@@ -1234,74 +1066,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── TradeX Promo Card ──
-  promoCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 8,
-    borderRadius: 20,
-    padding: 16,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  promoContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    zIndex: 2,
-  },
-  promoLogo: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  promoTextWrap: {
-    flex: 1,
-  },
-  promoNewBadge: {
-    backgroundColor: '#8B5CF6',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  promoNewBadgeText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  promoTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  promoSubtitle: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  promoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 11,
-    borderRadius: 12,
-    marginTop: 14,
-    zIndex: 2,
-  },
-  promoBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
 });
 
 export default HomeTabScreen;

@@ -1,139 +1,97 @@
-# Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# in /usr/local/Cellar/android-sdk/24.3.3/tools/proguard/proguard-android.txt
-# You can edit the include path and order by changing the proguardFiles
-# directive in build.gradle.
+# ═══════════════════════════════════════════════════════════════════════════
+# R8 rules for com.adoptmevaluescalc
 #
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# READ THIS BEFORE ADDING A `-keep`.
+#
+# Every `-keep class some.package.** { *; }` is a promise to R8 that it may not
+# rename, inline or remove any of those classes. Play Console grades the DEX of
+# each uploaded bundle and warns when obfuscation drops under 25%; release 157
+# (1.15.31) scored 21%, and the reason was this file. Measured from that
+# build's own mapping.txt: 21,640 of 26,687 classes kept their original names,
+# and ~20,500 of those were held by blanket rules that used to live here —
+# 12,712 by the single `com.google.android.gms.**` line, 2,414 by
+# `com.google.firebase.**`, 1,600 by `com.facebook.react.**`, 430 by
+# okhttp3/okio.
+#
+# None of those rules were ever needed. Every one of those libraries ships its
+# own consumer ProGuard rules inside its AAR; AGP merges them automatically and
+# writes the merged result to build/outputs/mapping/release/configuration.txt.
+# Google's, Square's and Meta's rules are deliberately surgical (SafeParcelable
+# CREATORs, proto fields, @DoNotStrip, native methods) because their SDKs are
+# built to be minified. Re-adding a wholesale keep for a library that ships its
+# own rules buys nothing but a worse Play grade and a bigger DEX.
+#
+# So: only rules the AARs do NOT cover belong below, and each one says why.
+#
+# Measure the obfuscation rate of a build before/after any change here:
+#   awk '/^[^ \t].* -> .*:$/ { l=$0; sub(/:$/,"",l); split(l,a," -> ");
+#     n=split(a[1],p,"."); m=split(a[2],q,".");
+#     t++; if (p[n]!=q[m]) o++ }
+#     END { printf "%d/%d obfuscated (%.1f%%)\n", o, t, 100*o/t }' \
+#     app/build/outputs/mapping/release/mapping.txt
+#
+# And ALWAYS install + launch a release build before uploading. Removing keeps
+# is the change most likely to surface a missing one, and R8 failures show up
+# at runtime, never at build time.
+# ═══════════════════════════════════════════════════════════════════════════
 
-# Add any project specific keep options here:
+# ── Attributes ──────────────────────────────────────────────────────────────
+# proguard-android-optimize.txt already keeps AnnotationDefault, EnclosingMethod,
+# InnerClasses, Signature and the RuntimeVisible* sets. These two are the
+# addition: without them every Crashlytics stack frame loses its file and line
+# number. The Crashlytics gradle plugin uploads mapping.txt automatically, so
+# the traces still deobfuscate.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# ==============================
-# React Native / Hermes
-# ==============================
+# ── React Native / Hermes ───────────────────────────────────────────────────
+# react-android's consumer rules (react-android-<ver>/proguard.txt) already
+# keep: anything annotated @DoNotStrip (both the proguard and the jni variant,
+# with fbcore covering com.facebook.common.internal.DoNotStrip too), every
+# NativeModule and JavaScriptModule implementor, all native <methods>, every
+# @ReactProp/@ReactPropGroup method, and the whole bridge + turbomodule
+# packages. That is the contract RN ships for minified release builds — there
+# is no blanket `com.facebook.react.**` keep here on purpose.
+#
+# The exception: Hermes' unicode helpers are reached from C++ via FindClass on
+# a literal descriptor, which a rename would break.
 -keep class com.facebook.hermes.unicode.** { *; }
--keep class com.facebook.jni.** { *; }
--keep class com.facebook.react.** { *; }
--keep class com.facebook.react.bridge.** { *; }
--keep class com.facebook.react.turbomodule.** { *; }
 
-# Keep all native methods (JNI)
--keepclassmembers class * {
-    native <methods>;
-}
-
-# Don't warn about missing classes from RN internals
 -dontwarn com.facebook.react.**
 -dontwarn com.facebook.hermes.**
 -dontwarn com.facebook.jni.**
 
-# ==============================
-# Reanimated
-# ==============================
--keep class com.swmansion.reanimated.** { *; }
--dontwarn com.swmansion.reanimated.**
-
-# ==============================
-# React Native Gesture Handler
-# ==============================
--keep class com.swmansion.gesturehandler.** { *; }
--dontwarn com.swmansion.gesturehandler.**
-
-# ==============================
-# React Native Screens
-# ==============================
--keep class com.swmansion.rnscreens.** { *; }
--dontwarn com.swmansion.rnscreens.**
-
-# ==============================
-# Firebase
-# ==============================
--keep class com.google.firebase.** { *; }
--dontwarn com.google.firebase.**
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.android.gms.**
-
-# ==============================
-# Google Mobile Ads
-# ==============================
--keep class com.google.android.gms.ads.** { *; }
--dontwarn com.google.android.gms.ads.**
-
-# ==============================
-# RevenueCat
-# ==============================
--keep class com.revenuecat.** { *; }
--dontwarn com.revenuecat.**
-
-# ==============================
-# React Native MMKV
-# ==============================
--keep class com.mrousavy.** { *; }
--dontwarn com.mrousavy.**
-
-# ==============================
-# Nitro Modules
-# ==============================
+# ── Nitro modules / MMKV ────────────────────────────────────────────────────
+# Nitro's generated hybrids are annotated @DoNotStrip + @Keep, so RN's rules
+# would cover them, but the C++ side resolves every hybrid by literal class
+# descriptor (findClassStatic("com/margelo/nitro/...")) and a single missed
+# annotation on a generated file is a hard crash on first storage access.
+# ~60 classes: cheap insurance, unlike the rules above it.
 -keep class com.margelo.nitro.** { *; }
--dontwarn com.margelo.nitro.**
+-keep class com.mrousavy.** { *; }
 
-# ==============================
-# Lottie
-# ==============================
--keep class com.airbnb.lottie.** { *; }
+# ── AdMob mediation adapters ────────────────────────────────────────────────
+# Adapters are instantiated reflectively by class name from the AdMob server
+# config, so the ads SDK's own rules cannot keep them and R8 cannot see the
+# reference. Matches nothing today — the Meta and Unity adapters are commented
+# out of build.gradle pending the RN 0.87 / Kotlin bump — and must stay here
+# for when those lines come back.
+-keep class com.google.ads.mediation.** { *; }
+-dontwarn com.google.ads.mediation.**
+
+# ── Warning suppression only — NO keeps ─────────────────────────────────────
+# These libraries reference classes that are absent at compile time (optional
+# backends, desktop-only APIs, @Nullable annotations). -dontwarn silences R8;
+# it does not stop it from renaming anything.
+-dontwarn com.google.android.gms.**
+-dontwarn com.google.firebase.**
+-dontwarn com.revenuecat.**
+-dontwarn com.swmansion.**
 -dontwarn com.airbnb.lottie.**
-
-# ==============================
-# React Native Compressor
-# ==============================
--keep class com.reactnativecompressor.** { *; }
--dontwarn com.reactnativecompressor.**
-
-# ==============================
-# BootSplash
-# ==============================
--keep class com.zoontek.rnbootsplash.** { *; }
--dontwarn com.zoontek.rnbootsplash.**
-
-# ==============================
-# Notifee
-# ==============================
--keep class io.invertase.notifee.** { *; }
--dontwarn io.invertase.notifee.**
-
-# ==============================
-# Google Sign-In
-# ==============================
--keep class com.google.android.gms.auth.** { *; }
--dontwarn com.google.android.gms.auth.**
-
-# ==============================
-# React Native SVG
-# ==============================
--keep class com.horcrux.svg.** { *; }
 -dontwarn com.horcrux.svg.**
-
-# ==============================
-# Vector Icons
-# ==============================
--keep class com.oblador.vectoricons.** { *; }
--dontwarn com.oblador.vectoricons.**
-
-# ==============================
-# General: Keep annotations & JS interfaces
-# ==============================
--keepattributes *Annotation*
--keepattributes JavascriptInterface
--keepattributes Signature
--keepattributes InnerClasses
--keepattributes EnclosingMethod
-
-# Keep the app's own classes
--keep class com.adoptmevaluescalc.** { *; }
-
-# OkHttp (used by RN networking)
--keep class okhttp3.** { *; }
+-dontwarn com.oblador.**
+-dontwarn com.reactnativecompressor.**
+-dontwarn com.zoontek.**
+-dontwarn io.invertase.**
 -dontwarn okhttp3.**
--keep class okio.** { *; }
 -dontwarn okio.**

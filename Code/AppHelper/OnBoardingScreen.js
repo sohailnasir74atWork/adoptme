@@ -8,9 +8,8 @@ import {
   StatusBar,
   Image,
   Modal,
-  Platform,
 } from 'react-native';
-import SystemNavigationBar from 'react-native-system-navigation-bar';
+import { setNavBarColor } from '../Helper/systemNavBar';
 import { useGlobalState } from '../GlobelStats';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
@@ -38,9 +37,8 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
   // ── Set Android system navigation bar color for dark theme ──
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      SystemNavigationBar.setNavigationColor(isDarkMode ? '#0f172a' : '#f2f2f7', isDarkMode ? 'light' : 'dark');
-    }
+    // #f2f2f7 is this screen's own background, not the app surface.
+    setNavBarColor(isDarkMode ? '#0f172a' : '#f2f2f7', isDarkMode ? 'light' : 'dark');
   }, [isDarkMode]);
 
 

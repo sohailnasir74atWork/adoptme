@@ -13,7 +13,6 @@ import {
   ScrollView,
   Animated,
   StyleSheet,
-  Platform,
   StatusBar,
 } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,26 +25,17 @@ import { useGlobalState } from "../GlobelStats";
 import NewsFeedbackReport from "./AdminReport";
 import ServerScreen from "./ServerScreen";
 import ScammerDatabaseScreen from "./ScammerDatabaseScreen";
-import WorldCupScreen from "../WorldCup/WorldCupScreen";
 
 
 
 const CustomTopTabs = ({ selectedTheme }) => {
   const indicatorX = useRef(new Animated.Value(0)).current;
   const indicatorWidth = useRef(new Animated.Value(0)).current;
-  const { isAdmin, worldCupEnabled } = useGlobalState();
+  const { isAdmin, theme } = useGlobalState();
 
-  // 🔹 Build tabs list dynamically based on isAdmin + the World Cup kill switch
+  // 🔹 Build tabs list dynamically based on admin access.
   const tabs = useMemo(() => {
     const base = [
-      // World Cup tab — present only while the RTDB kill switch is on.
-      ...(worldCupEnabled ? [{
-        label: "World Cup",
-        key: "worldcup",
-        icon: "football-outline",
-        iconActive: "football",
-        isNew: true,
-      }] : []),
       {
         label: "HD Wallpaper",
         key: "wallpaper",
@@ -82,7 +72,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
     }
 
     return base;
-  }, [isAdmin, worldCupEnabled]);
+  }, [isAdmin]);
 
   const [activeKey, setActiveKey] = useState(tabs[0].key);
   const [mountedTabs, setMountedTabs] = useState({ [tabs[0].key]: true });
@@ -159,11 +149,17 @@ const CustomTopTabs = ({ selectedTheme }) => {
   const inactiveText = "grey";
 
   const insets = useSafeAreaInsets();
+  const headerBackground = selectedTheme.colors.background;
 
   return (
-    <View style={[styles.wrapper, { paddingTop: insets.top + 8 }]}>
-      {/* Tabs header */}
-      <View style={styles.container}>
+    <View style={[styles.wrapper, { backgroundColor: headerBackground }]}>
+      <StatusBar
+        barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={headerBackground}
+      />
+      {/* One safe-area-aware header shared by every More sub-screen. */}
+      <View style={[styles.safeHeader, { paddingTop: insets.top + 8, backgroundColor: headerBackground }]}>
+        <View style={styles.container}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -214,30 +210,20 @@ const CustomTopTabs = ({ selectedTheme }) => {
           </View>
         </ScrollView>
 
-        <Animated.View
-          style={[
-            styles.indicator,
-            {
-              left: indicatorX,
-              width: indicatorWidth,
-            },
-          ]}
-        />
+          <Animated.View
+            style={[
+              styles.indicator,
+              {
+                left: indicatorX,
+                width: indicatorWidth,
+              },
+            ]}
+          />
+        </View>
       </View>
 
       {/* Screens */}
       <View style={styles.contentContainer}>
-
-        {worldCupEnabled && mountedTabs.worldcup && (
-          <View
-            style={[
-              styles.screen,
-              activeKey !== "worldcup" && styles.hiddenScreen,
-            ]}
-          >
-            <WorldCupScreen selectedTheme={selectedTheme} />
-          </View>
-        )}
 
         {mountedTabs.server && (
           <View
@@ -305,8 +291,11 @@ const CustomTopTabs = ({ selectedTheme }) => {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    padding: 8,
-    paddingTop: 0, // handled dynamically via useSafeAreaInsets
+  },
+  safeHeader: {
+    paddingHorizontal: 8,
+    zIndex: 10,
+    elevation: 4,
   },
   container: {
     paddingBottom: 8,
@@ -355,6 +344,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     position: "relative",
+    marginHorizontal: 8,
   },
   screen: {
     position: "absolute",

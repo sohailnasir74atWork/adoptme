@@ -67,7 +67,11 @@ const TYPE_LABELS = {
 // role flags against self-escalation but never checks activeItems against
 // ownedItems, so a determined user could already equip cosmetics they do not
 // own. This gate is a UI affordance, not a security boundary.
-const COSMETIC_TEST_UIDS = ['DNvBQC5ySWP8QiJNGpIvqd9DSWB2'];
+//
+// 📅 2026-09-20. Emptied — the one allowlisted uid was a regular user with
+// no roles, and a baked-in uid can only be revoked by shipping a build. Leave
+// the array in place for future one-off grants; [] keeps line 136 correct.
+const COSMETIC_TEST_UIDS = [];
 
 const MyCosmeticsScreen = ({ navigation }) => {
   const { theme, user, appdatabase, isAdmin } = useGlobalState();

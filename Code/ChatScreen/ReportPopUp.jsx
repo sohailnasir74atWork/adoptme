@@ -13,7 +13,6 @@ import { useGlobalState } from "../GlobelStats";
 import config from "../Helper/Environment";
 import { ref, get, update, remove } from "@react-native-firebase/database";
 import { useTranslation } from "react-i18next";
-import { banUserwithEmail } from "./utils";
 import { reportMessage as sbReportMessage } from "../Supabase/chatBackend";
 
 
@@ -50,16 +49,10 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
     // -----------------------------------------------------------------
     if (supabaseRoomId) {
       try {
-        const { action } = await sbReportMessage(message.id, user?.id ?? null);
-        // On second report, ban the sender. Bans stay on RTDB.
-        if (action === "deleted" && message.currentUserEmail) {
-          banUserwithEmail(
-            message.currentUserEmail, false, message.senderId || null, null, null,
-            'Auto-ban: message reported twice', 'report',
-          ).catch((e) => {
-            console.error("Error banning user:", e);
-          });
-        }
+        // 2026-09-20: auto-ban removed. Reports still count and still delete
+        // the message at the backend threshold — they no longer ban the
+        // sender. Banning is now a deliberate staff action only.
+        await sbReportMessage(message.id, user?.id ?? null);
         setLoading(false);
         Alert.alert(t("chat.report_submitted"), t("chat.report_submitted_message"));
         onClose(true);
@@ -108,14 +101,9 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
         const reportCount = Number(data?.reportCount || 0);
 
         if (reportCount >= 1) {
-          if (message.currentUserEmail) {
-            banUserwithEmail(
-              message.currentUserEmail, false, message.senderId || null, null, null,
-              'Auto-ban: message reported twice', 'report',
-            ).catch((error) => {
-              console.error("Error banning user:", error);
-            });
-          }
+          // 2026-09-20: auto-ban removed — see note on the Supabase path
+          // above. The reported message is still deleted on the second
+          // report; only the ban of its sender is gone.
           return remove(messageRef).then(() => ({ action: "deleted" }));
         }
         return update(messageRef, { reportCount: 1 }).then(() => ({ action: "reported" }));

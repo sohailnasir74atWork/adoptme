@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, Animated } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { View, Text, Animated, Image } from 'react-native';
 import { getShimmerValue } from './shimmerDriver';
 
 // Single source of truth for role/badge pill styling across chat lists,
@@ -16,18 +15,18 @@ import { getShimmerValue } from './shimmerDriver';
 // Default: ON for the new 'helper' badge, OFF for everything else.
 
 const TYPES = {
-  admin:    { tier: 'authority', icon: 'shield',             label: 'Admin',   color: '#EF4444' },
-  mod:      { tier: 'authority', icon: 'shield-checkmark',   label: 'Mod',     color: '#8B5CF6' },
-  jmd:      { tier: 'authority', icon: 'paw',                label: 'JMD',     color: '#F59E0B' },
-  trusted:  { tier: 'community', icon: 'checkmark-circle',   label: 'Trusted', color: '#10B981' },
-  cmsr:     { tier: 'community', icon: 'briefcase',          label: 'CMSR',    color: '#F97316' },
-  helper:   { tier: 'community', icon: 'hand-left',          label: 'Helper',  color: '#14B8A6' },
+  admin:   { tier: 'authority', image: require('../../assets/role-badges/admin.png'),   label: 'Admin',   color: '#B91C1C', rim: '#F8D66D' },
+  mod:     { tier: 'authority', image: require('../../assets/role-badges/mod.png'),     label: 'Mod',     color: '#6D28D9', rim: '#C4B5FD' },
+  jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     label: 'JMD',     color: '#D97706', rim: '#FDE68A' },
+  trusted: { tier: 'community', image: require('../../assets/role-badges/trusted.png'), label: 'Trusted', color: '#059669', rim: '#6EE7B7' },
+  cmsr:    { tier: 'community', image: require('../../assets/role-badges/cmsr.png'),    label: 'CMSR',    color: '#EA580C', rim: '#FDBA74' },
+  helper:  { tier: 'community', image: require('../../assets/role-badges/helper.png'),  label: 'Helper',  color: '#0F766E', rim: '#5EEAD4' },
 };
 
 const SIZES = {
-  sm: { fs: 9,  ic: 10, ph: 6,  pv: 2, gap: 3, br: 999 },
-  md: { fs: 10, ic: 12, ph: 8,  pv: 3, gap: 4, br: 999 },
-  lg: { fs: 11, ic: 14, ph: 10, pv: 4, gap: 5, br: 999 },
+  sm: { fs: 9,  ic: 15, ph: 6,  pv: 2, gap: 3, br: 999 },
+  md: { fs: 10, ic: 17, ph: 8,  pv: 3, gap: 4, br: 999 },
+  lg: { fs: 11, ic: 19, ph: 10, pv: 4, gap: 5, br: 999 },
 };
 
 const hexAlpha = (hex, alphaHex) => `${hex}${alphaHex}`;
@@ -90,6 +89,8 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: def.color,
+          borderWidth: 1,
+          borderColor: def.rim,
           paddingHorizontal: s.ph,
           paddingVertical: s.pv,
           borderRadius: s.br,
@@ -97,8 +98,8 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
           overflow: shouldGlow ? 'hidden' : undefined,
         }, style]}
       >
-        <Icon name={def.icon} size={s.ic} color="#fff" />
-        <Text style={{ color: '#fff', fontSize: s.fs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <Image source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
+        <Text style={{ color: '#fff', fontSize: s.fs, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 }}>
           {label}
         </Text>
         {shouldGlow && <ShimmerOverlay isDarkMode={isDarkMode} />}
@@ -124,8 +125,8 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
         overflow: shouldGlow ? 'hidden' : undefined,
       }, style]}
     >
-      <Icon name={def.icon} size={s.ic} color={def.color} />
-      <Text style={{ color: def.color, fontSize: s.fs, fontWeight: '700', letterSpacing: 0.3 }}>
+      <Image source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
+      <Text style={{ color: def.color, fontSize: s.fs, fontWeight: '800', letterSpacing: 0.35 }}>
         {label}
       </Text>
       {shouldGlow && <ShimmerOverlay isDarkMode={isDarkMode} />}

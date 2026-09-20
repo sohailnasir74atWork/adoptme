@@ -122,15 +122,12 @@ const HDWallpaperScreen = () => {
     if (Platform.OS !== 'android') return true;
 
     try {
-      // Android 13+ uses READ_MEDIA_IMAGES
-      if (Platform.Version >= 33) {
-        const res = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-        );
-        return res === PermissionsAndroid.RESULTS.GRANTED;
-      }
+      // Android 10+ saves new images through MediaStore without storage
+      // permission. READ_MEDIA_IMAGES only grants access to existing photos and
+      // must not be used as a prerequisite for adding a wallpaper.
+      if (Platform.Version >= 29) return true;
 
-      // Older Android versions use WRITE_EXTERNAL_STORAGE
+      // Android 9 and older still require legacy external-storage write access.
       const res = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
       );
@@ -151,7 +148,7 @@ const HDWallpaperScreen = () => {
         console.log("Firebase like_counter update error:", e),
       );
     },
-    [appdatabase],
+    [pushCounters],
   );
 
   const toggleReaction = useCallback(
@@ -215,7 +212,7 @@ const HDWallpaperScreen = () => {
         });
       }
     },
-    [pushCounters],
+    [appdatabase],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -316,7 +313,7 @@ const HDWallpaperScreen = () => {
         setDownloadingId(null);
       }
     },
-    [pushCounters],
+    [appdatabase],
   );
 
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet, Platform } from 'react-native';
-import SystemNavigationBar from 'react-native-system-navigation-bar';
+import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet } from 'react-native';
+import { setThemedNavBar } from '../Helper/systemNavBar';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import HomeScreen from '../Homescreen/HomeScreen';
@@ -66,10 +66,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
 
   // ── Set Android system navigation bar color to match theme ──
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      const bg = theme === 'dark' ? '#0f172a' : '#ffffff';
-      SystemNavigationBar.setNavigationColor(bg, theme === 'dark' ? 'light' : 'dark');
-    }
+    setThemedNavBar(theme);
   }, [theme]);
 
 

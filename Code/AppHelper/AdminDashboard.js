@@ -1452,13 +1452,24 @@ const AdminDashboard = () => {
       Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
       return;
     }
+    // Only an admin may sanction staff (2026-09-20). This is the single
+    // funnel every punitive action on this screen passes through, so one
+    // check covers ban/strike/mute. Search rows do not always carry
+    // isBabyMod, so canSanctionTarget in utils.js re-checks against live
+    // RTDB before any write — this is the fast path that keeps the prompt
+    // from opening at all.
+    if (type !== 'unban' && !isAdmin
+        && (userItem?.isModerator || userItem?.isAdmin || userItem?.isBabyMod)) {
+      Alert.alert('Not allowed', 'This user is a staff member. Only an admin can ban, strike or mute them.');
+      return;
+    }
     if (!userItem?.email) {
       Alert.alert('Error', 'User has no email associated — ban records are keyed by email.');
       return;
     }
     setActionReason('');
     setPendingAction({ type, value, user: userItem });
-  }, [canBanMute]);
+  }, [canBanMute, isAdmin]);
 
   const handleUnban = useCallback(async (userItem, reason) => {
     const email = userItem.email || decodeEmail(userItem.encodedEmail);

@@ -54,7 +54,7 @@ import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../..
 const BOTTOM_DRAWER_CACHE_ENABLED = true;
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
-import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute } from '../utils';
+import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute, canSanctionTarget } from '../utils';
 import ModEvidencePicker from '../../AppHelper/ModEvidencePicker';
 import { uploadEvidence } from '../../Helper/modEvidenceUpload';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -1155,6 +1155,24 @@ const ProfileBottomDrawer = ({
       return;
     }
 
+    // Only an admin may sanction staff. utils.js re-checks this inside
+    // ban/strike/mute, but that call only sees whatever uid the caller hands
+    // it — here `selectedUserId` is unambiguous, so check it at the source
+    // and fail before the evidence upload rather than after.
+    if (gatedActions.includes(reasonActionType.type)) {
+      const actorRole = isAdmin ? 'admin' : (user?.isModerator ? 'moderator' : (user?.isBabyMod ? 'baby_mod' : null));
+      const allowed = await canSanctionTarget({
+        targetUid: selectedUserId,
+        bannerInfo: { role: actorRole },
+        showAlert: true,
+      });
+      if (!allowed) {
+        setShowReasonModal(false);
+        setReasonActionType(null);
+        return;
+      }
+    }
+
     setShowReasonModal(false);
 
     const currentUser = auth().currentUser;
@@ -1350,6 +1368,12 @@ const ProfileBottomDrawer = ({
   const canManageModerator = isAdmin || !!canGrantJmd;
   const canManageBadges = isAdmin || !!user?.isModerator;
   const canDeleteUser = isAdmin;
+  // Staff targets are off-limits to everyone but admins (2026-09-20). Drives
+  // the UI only; utils.js/canSanctionTarget and the RTDB rule are what
+  // actually enforce it.
+  const targetIsStaff = !!(mergedUser?.isModerator || mergedUser?.isBabyMod
+    || mergedUser?.isAdmin || mergedUser?.admin);
+  const canSanction = isAdmin || !targetIsStaff;
 
   const handleMakeBabyMod = async () => {
     if (!selectedUserId || !appdatabase) return;
@@ -3443,6 +3467,8 @@ const ProfileBottomDrawer = ({
                         isBabyMod={!!user?.isBabyMod}
                         isModerator={!!user?.isModerator}
                         isStaff={isAdmin || !!user?.isModerator || !!user?.isBabyMod}
+                        canSanction={canSanction}
+                        targetIsStaff={targetIsStaff}
                         canManageBabyMod={canManageBabyMod}
                         canManageModerator={canManageModerator}
                         targetIsBabyMod={!!mergedUser?.isBabyMod}

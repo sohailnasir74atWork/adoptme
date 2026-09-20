@@ -8,7 +8,7 @@ import { getFirestore, collection, doc, runTransaction } from '@react-native-fir
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
 
-const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
+const ReportModal = ({ visible, onClose, item }) => {
   const [reportText, setReportText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { updateLocalState, localState } = useLocalState()
@@ -90,22 +90,18 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
           report: true,
         };
 
-        // prevent double-ban by storing a flag
-        const alreadyBanned = !!snap.get('banned');
-        const shouldBan = !alreadyBanned && nextCount >= REPORT_THRESHOLD;
+        // `banned` flags the POST as hidden — it has never meant the author
+        // is banned, and since 2026-09-20 nothing here bans anyone at all.
+        const alreadyHidden = !!snap.get('banned');
+        const shouldHidePost = !alreadyHidden && nextCount >= REPORT_THRESHOLD;
 
-        if (shouldBan) {
-          updates.banned = true; // mark so future transactions don't re-ban
+        if (shouldHidePost) {
+          updates.banned = true; // mark so future transactions don't re-hide
         }
 
         tx.update(postRef, updates);
 
-        return {
-          status: 'ok',
-          shouldBan,
-          email: snap.get('email') || null,
-          userId: snap.get('userId') || null,
-        };
+        return { status: 'ok', shouldHidePost };
       });
 
       if (txResult.status === 'missing') {
@@ -113,29 +109,13 @@ const ReportModal = ({ visible, onClose, item, banUserwithEmail }) => {
         return;
       }
 
-      // Side-effects OUTSIDE the transaction to avoid retries breaking things
-      if (txResult.shouldBan && txResult.email && txResult.userId) {
-        try {
-          // The userId was being passed into the `isAdmin` slot. Two
-          // consequences: the reporting user got an "User Banned — Strike N
-          // applied" alert (leaking a moderation outcome to a stranger),
-          // and the ban record was written with userId: null because the
-          // real senderId slot was left empty. Correct positions here;
-          // `false` for isAdmin is what suppresses that alert.
-          await banUserwithEmail(
-            txResult.email,
-            false,
-            txResult.userId,
-            null,
-            null,
-            `Auto-ban: post reached ${REPORT_THRESHOLD} reports`,
-            'report',
-          );
-        } catch (err) {
-          console.error('Ban error:', err);
-          // optional: decide if you want to unset 'banned' on the post here
-        }
-      }
+      // 2026-09-20: the auto-ban that used to fire here is gone. Reaching the
+      // report threshold hides the post and nothing more — banning its author
+      // is now a deliberate staff decision, taken from the profile drawer or
+      // the admin dashboard where a reason and evidence are recorded.
+      //
+      // The local `bannedUsers` list below is the reporter's own client-side
+      // block list, unrelated to the ban system; it stays.
       await updateLocalState('bannedUsers', [...localState.bannedUsers, item.userId]);
       setReportText('');
       onClose();
