@@ -896,9 +896,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   fabInner: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    // Same footprint as the scroll-to-top chevron so the two floating
+    // buttons read as one pair instead of two different sizes.
+    width: FLOATING_BUTTON_ICON_SIZE,
+    height: FLOATING_BUTTON_ICON_SIZE,
+    borderRadius: FLOATING_BUTTON_ICON_SIZE / 2,
     backgroundColor: config.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',

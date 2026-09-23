@@ -24,7 +24,6 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -98,21 +97,6 @@ const DailyQuiz = ({ visible, onClose }) => {
   const progressAnim = useRef(new Animated.Value(1)).current;
   const [adLoading, setAdLoading] = useState(false);
   const [hasWatchedAd, setHasWatchedAd] = useState(false);
-  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('quiz'));
-
-  useEffect(() => {
-    if (!visible) return;
-    initGameSounds();
-    return () => releaseGameSounds();
-  }, [visible]);
-
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled('quiz', next);
-    triggerHapticFeedback('selection');
-  };
-
   // Watch ad for extra quiz play
   const handleWatchAd = async () => {
     if (adLoading) return;
@@ -169,7 +153,6 @@ const DailyQuiz = ({ visible, onClose }) => {
     setTimeLeft(TIMER_SECONDS);
     setPhase('playing');
     triggerHapticFeedback('impactLight');
-    playWoosh('quiz');
   };
 
   // Timer countdown
@@ -206,10 +189,8 @@ const DailyQuiz = ({ visible, onClose }) => {
     if (correct) {
       setScore(prev => prev + 1);
       triggerHapticFeedback('notificationSuccess');
-      playWoosh('quiz');
     } else {
       triggerHapticFeedback('notificationError');
-      playPop('quiz');
     }
 
     // Move to next question after 1.5s
@@ -268,9 +249,6 @@ const DailyQuiz = ({ visible, onClose }) => {
           <View style={styles.header}>
             <Text style={[styles.title, { color: textColor }]}>{t('daily_quiz.title')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={toggleSound} style={styles.closeBtn}>
-                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={20} color={subtextColor} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Icon name="close" size={22} color={subtextColor} />
               </TouchableOpacity>

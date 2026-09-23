@@ -1,6 +1,7 @@
 package com.adoptmevaluescalc
 
 import android.app.Application
+import android.os.Build
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -55,7 +56,9 @@ class MainApplication : Application(), ReactApplication {
   private fun tagTamperedDevice() {
     Thread {
       try {
-        FirebaseCrashlytics.getInstance().setCustomKey("is_tampered", isTamperedDevice())
+        val crashlytics = FirebaseCrashlytics.getInstance()
+        crashlytics.setCustomKey("is_tampered", isTamperedDevice())
+        crashlytics.setCustomKey("installer", installerPackage())
       } catch (_: Throwable) {
       }
     }.apply {
@@ -66,6 +69,35 @@ class MainApplication : Application(), ReactApplication {
       isDaemon = true
     }.start()
   }
+
+  // Which store installed us. Added 2026-09-21 to settle Crashlytics issue
+  // 74c5924b (MainApplication.onCreate, SoLoader "couldn't find DSO to load",
+  // 357 crashes / 50 users in a week, 100% in the first second).
+  //
+  // The AAB was proven to contain lib/x86_64 already, so a missing ABI is NOT
+  // the cause. What the crash log does show is DirectApkSoSource listing
+  // language and density splits (split_config.ja.apk, split_config.tvdpi.apk)
+  // all resolving to !/lib/arm64-v8a - which is not how Play delivers splits.
+  // That shape suggests sideloaded or repackaged split-APK sets dropped onto
+  // an x86_64 emulator.
+  //
+  // This key tells the two worlds apart. "com.android.vending" means a real
+  // Play install and the crash is ours to fix; anything else (or "none", the
+  // classic sideload signature) means it is not, and it can be deprioritised.
+  // Without this the two are indistinguishable in the crash report.
+  private fun installerPackage(): String =
+    try {
+      val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        packageManager.getInstallSourceInfo(packageName).installingPackageName
+      } else {
+        @Suppress("DEPRECATION")
+        packageManager.getInstallerPackageName(packageName)
+      }
+      installer ?: "none"
+    } catch (_: Throwable) {
+      // Never let diagnostics crash the app they are meant to diagnose.
+      "error"
+    }
 
   private fun isTamperedDevice(): Boolean {
     val tamperClasses = arrayOf(

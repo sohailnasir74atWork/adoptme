@@ -20,8 +20,8 @@ android {
         applicationId "com.adoptmevaluescalc"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 163
-        versionName "1.15.37"
+        versionCode 165
+        versionName "1.15.39"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
@@ -64,7 +64,21 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             firebaseCrashlytics {
                 nativeSymbolUploadEnabled true
-                unstrippedNativeLibsDir "build/intermediates/merged_native_libs/release/out/lib"
+                // The task name segment ("mergeReleaseNativeLibs") is NOT
+                // optional. AGP 8 moved intermediates from
+                // <type>/out/ to <type>/<taskName>/out/, and this line still
+                // pointed at the old layout - a directory that does not exist.
+                // The Crashlytics plugin does not fail on a missing dir, it
+                // just uploads nothing, so native symbol upload has been a
+                // no-op and every native crash arrived unsymbolicated. That is
+                // why Crashlytics issue 85c581ed ("[libc.so]", SIGABRT, 52
+                // crashes / 41 users a week) has a completely empty stack.
+                //
+                // This path is AGP-version-sensitive and will break silently
+                // again on an upgrade. After bumping AGP, confirm the dir
+                // still exists before trusting any native stack trace:
+                //   ls android/app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib
+                unstrippedNativeLibsDir "build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib"
             }
         }
     }

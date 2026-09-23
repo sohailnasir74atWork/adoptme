@@ -19,6 +19,28 @@ target 'bloxfruitevalues' do
   use_frameworks! :linkage => :static
   $RNFirebaseAsStaticFramework = true
   $RNFirebaseAnalyticsWithoutAdIdSupport = true
+  # Pin the Firebase iOS SDK ahead of what React Native Firebase defaults to.
+  # RNFB 23.8.8 resolves 12.10.0, and even the current RNFB (26.4.0) only ships
+  # 12.18.0 - both predate the fix we need, so upgrading RNFB does NOT get it.
+  #
+  # Firebase iOS 12.19.0 (#16498): "Fixed an issue on iOS 15+ where users were
+  # randomly logged out during prewarming while the device was locked."
+  # That is the "logged out for no reason" report. iOS prewarms the app process
+  # before the user taps the icon, often while locked; the keychain is then
+  # unreadable, Auth cannot restore the session and reports a null user.
+  # Crashlytics 98edaf64: auth_signed_out reason=native-null, 256 events /
+  # 100 users a week, with msSinceLaunch around 100ms - a prewarmed launch,
+  # not a user-initiated one. Every affected device was iOS 26.2-27.0 and this
+  # target is iOS 15.1, so the whole population is in scope.
+  #
+  # This mirrors the Android BoM 34.18.0 pin in android/build.gradle, which
+  # fixed the equivalent persistence bug there. iOS never got that treatment
+  # because the Android fix was a Gradle pin.
+  # 12.19.0 exactly: 12.19.1 and 12.19.2 exist on GitHub but were never
+  # published to the CocoaPods trunk, so pinning them fails to resolve
+  # (CocoaPods misreports this as a deployment-target problem). 12.19.0
+  # is the release that carries the fix, and it targets iOS 15.0.
+  $FirebaseSDKVersion = '12.19.0'
 
   # ── AdMob bidding adapters ────────────────────────────────────────────────
   # iOS ONLY for now. The matching Android adapters were removed on 2026-09-16

@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   AppState,
-  Platform,
   Image,
   StatusBar,
 } from 'react-native';
@@ -18,7 +17,6 @@ import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
-import { useBackgroundMusic } from '../../Helper/useBackgroundMusic';
 import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { fetchAnalyticsData, normalizeName } from '../../Helper/analyticsDataHelper';
@@ -43,7 +41,7 @@ import {
 
 const PetGuessingGameScreen = () => {
   const { appdatabase, firestoreDB, theme, user, setIsInActiveGame, acceptedInviteRoom, setAcceptedInviteRoom } = useGlobalState();
-  const { localState, updateLocalState } = useLocalState();
+  const { localState } = useLocalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
 
@@ -59,8 +57,6 @@ const PetGuessingGameScreen = () => {
   const [roomData, setRoomData] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  // ✅ Use persisted state from LocalGlobelStats.js (defaults to true)
-  const musicEnabled = localState?.gameMusicEnabled ?? true;
   // ✅ Track pending invitations (temporary UI state, not in database)
   const [pendingInvites, setPendingInvites] = useState([]);
 
@@ -77,20 +73,6 @@ const PetGuessingGameScreen = () => {
   const gameEndAdShownRef = useRef(new Set()); // ✅ Track which games already showed an ad per player
   const timeoutCheckIntervalRef = useRef(null); // For timeout checking
   const TURN_TIMEOUT_MS = 60000; // 60 seconds timeout per turn
-
-  // Play background music when game is active (room exists and game is in progress)
-  const shouldPlayMusic = useMemo(() => {
-    return currentRoomId && roomData && roomData.status !== 'finished';
-  }, [currentRoomId, roomData]);
-
-  // Background music - plays in loop when game is active
-  // For react-native-sound on Android: use filename without extension (file is in res/raw/)
-  // For iOS: use string filename with extension (file must be added to Xcode project bundle)
-  useBackgroundMusic(
-    Platform.OS === 'android' ? 'audio' : 'audio.mp3', // Android: no extension, iOS: with extension
-    shouldPlayMusic && musicEnabled, // ✅ Respect sound toggle
-    0.5 // Volume (0.0 to 1.0)
-  );
 
   // Get pet data from localState (only PETS type) — filtered to only pets with demand
   const petData = useMemo(() => {
@@ -619,22 +601,6 @@ const PetGuessingGameScreen = () => {
               <View style={styles.section}>
                 {/* Action buttons - Top Right */}
                 <View style={styles.actionRow}>
-                  {/* Music toggle */}
-                  <TouchableOpacity
-                    style={styles.iconButton}
-                    onPress={() => {
-                      const newValue = !musicEnabled;
-                      updateLocalState('gameMusicEnabled', newValue);
-                      triggerHapticFeedback('impactLight');
-                    }}
-                  >
-                    <Icon
-                      name={musicEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
-                      size={16}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
-
                   {/* Hide invite button when 2 players have joined */}
                   {roomData.status === 'waiting' && roomData.currentPlayers < 2 && (
                     <TouchableOpacity

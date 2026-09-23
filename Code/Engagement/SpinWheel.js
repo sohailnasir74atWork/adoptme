@@ -26,7 +26,6 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -70,21 +69,6 @@ const SpinWheel = ({ visible, onClose }) => {
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
   const uid = user?.id;
-
-  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('spin'));
-
-  useEffect(() => {
-    if (!visible) return;
-    initGameSounds();
-    return () => releaseGameSounds();
-  }, [visible]);
-
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled('spin', next);
-    triggerHapticFeedback('selection');
-  };
 
   const spinValue = useRef(new Animated.Value(0)).current;
   const [isSpinning, setIsSpinning] = useState(false);
@@ -151,7 +135,6 @@ const SpinWheel = ({ visible, onClose }) => {
     setIsSpinning(true);
     setReward(null);
     triggerHapticFeedback('impactMedium');
-    playWoosh('spin');
 
     const spins = 4 + Math.random() * 3;
     const extra = Math.random() * 360;
@@ -175,7 +158,6 @@ const SpinWheel = ({ visible, onClose }) => {
       setReward(won);
       setHasSpunToday(true);
       triggerHapticFeedback('notificationSuccess');
-      playPop('spin');
 
       // Celebrate animation
       celebrateAnim.setValue(0);
@@ -212,9 +194,6 @@ const SpinWheel = ({ visible, onClose }) => {
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.text }]}>{t('spin_wheel.title')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={toggleSound} style={styles.closeBtn}>
-                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={20} color={c.textSecondary} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Icon name="close" size={22} color={c.textSecondary} />
               </TouchableOpacity>

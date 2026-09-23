@@ -33,7 +33,6 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -111,21 +110,6 @@ const WordScramble = ({ visible, onClose }) => {
   const [bestScore, setBestScore] = useState(0);
   const [globalTimeLeft, setGlobalTimeLeft] = useState(GLOBAL_TIMER_SECONDS);
   const [adLoading, setAdLoading] = useState(false);
-  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('scramble'));
-
-  useEffect(() => {
-    if (!visible) return;
-    initGameSounds();
-    return () => releaseGameSounds();
-  }, [visible]);
-
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled('scramble', next);
-    triggerHapticFeedback('selection');
-  };
-
   // Current round state
   const [targetPet, setTargetPet] = useState(null);
   const [targetWord, setTargetWord] = useState('');
@@ -244,7 +228,6 @@ const WordScramble = ({ visible, onClose }) => {
     setShowConfetti(false);
     setGlobalTimeLeft(GLOBAL_TIMER_SECONDS);
     triggerHapticFeedback('impactMedium');
-    playWoosh('scramble');
     setupRound(picked[0]);
     setPhase('playing');
   }, [petPool, triggerHapticFeedback]);
@@ -291,7 +274,6 @@ const WordScramble = ({ visible, onClose }) => {
   const handleGlobalTimeout = useCallback(() => {
     setRoundResult('timeout');
     triggerHapticFeedback('notificationError');
-    playPop('scramble');
     setTimeout(() => {
       // Game over
       finishGame(score);
@@ -311,7 +293,6 @@ const WordScramble = ({ visible, onClose }) => {
   const handleLetterPress = useCallback((letterObj) => {
     if (roundResult !== null) return;
     triggerHapticFeedback('impactLight');
-    playPop('scramble');
 
     const newSelected = [...selectedLetters, letterObj];
     setSelectedLetters(newSelected);
@@ -333,7 +314,6 @@ const WordScramble = ({ visible, onClose }) => {
         setRoundResult('correct');
         setShowConfetti(true);
         triggerHapticFeedback('notificationSuccess');
-        playWoosh('scramble');
 
         // Bounce reveal animation for pet image
         Animated.spring(revealScale, {
@@ -347,7 +327,6 @@ const WordScramble = ({ visible, onClose }) => {
       } else {
         setRoundResult('wrong');
         triggerHapticFeedback('notificationError');
-        playPop('scramble');
         Animated.sequence([
           Animated.timing(shakeAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
           Animated.timing(shakeAnim, { toValue: -1, duration: 50, useNativeDriver: true }),
@@ -443,9 +422,6 @@ const WordScramble = ({ visible, onClose }) => {
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <TouchableOpacity onPress={toggleSound} style={[s.closeBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
-                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={16} color={subtextColor} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={onClose} style={[s.closeBtn, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
                 <Icon name="close" size={18} color={subtextColor} />
               </TouchableOpacity>

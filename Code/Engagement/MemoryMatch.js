@@ -27,7 +27,6 @@ import { getThemeColors } from '../Helper/themeColors';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { initGameSounds, releaseGameSounds, playPop, playWoosh, isSoundEnabled, setSoundEnabled } from '../Helper/GameSoundService';
 import { doc, getDoc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { addXP } from './xpUtils';
 import RewardedAdManager from '../Ads/RewardedAdManager';
@@ -138,21 +137,6 @@ const MemoryMatch = ({ visible, onClose }) => {
   const MAX_PLAYS = 1;
   const [adLoading, setAdLoading] = useState(false);
   const [hasWatchedAd, setHasWatchedAd] = useState(false);
-  const [soundOn, setSoundOn] = useState(() => isSoundEnabled('memory'));
-
-  useEffect(() => {
-    if (!visible) return;
-    initGameSounds();
-    return () => releaseGameSounds();
-  }, [visible]);
-
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled('memory', next);
-    triggerHapticFeedback('selection');
-  };
-
   // Watch ad for extra games
   const handleWatchAd = async () => {
     if (adLoading) return;
@@ -233,7 +217,6 @@ const MemoryMatch = ({ visible, onClose }) => {
     setPeekCountdown(4);
     setPhase('peeking');
     triggerHapticFeedback('impactLight');
-    playWoosh('memory');
   };
 
   // ── Peek phase: show cards for 3 seconds then flip face-down, then shuffle ──
@@ -365,7 +348,6 @@ const MemoryMatch = ({ visible, onClose }) => {
     const newFlipped = [...flipped, index];
     setFlipped(newFlipped);
     triggerHapticFeedback('impactLight');
-    playPop('memory');
 
     if (newFlipped.length === 2) {
       setMoves(prev => prev + 1);
@@ -375,7 +357,6 @@ const MemoryMatch = ({ visible, onClose }) => {
       if (cards[a].pairId === cards[b].pairId) {
         // Match!
         triggerHapticFeedback('notificationSuccess');
-        playWoosh('memory');
         const newMatched = [...matched, cards[a].pairId];
         setMatched(newMatched);
         setFlipped([]);
@@ -388,7 +369,6 @@ const MemoryMatch = ({ visible, onClose }) => {
       } else {
         // No match — flip back
         triggerHapticFeedback('notificationWarning');
-        playPop('memory');
         setTimeout(() => {
           unflipCard(a);
           unflipCard(b);
@@ -401,7 +381,6 @@ const MemoryMatch = ({ visible, onClose }) => {
 
   const finishGame = async (finalMoves) => {
     setPhase('result');
-    playWoosh('memory');
     const newPlays = playsToday + 1;
     setPlaysToday(newPlays);
 
@@ -443,9 +422,6 @@ const MemoryMatch = ({ visible, onClose }) => {
           <View style={styles.header}>
             <Text style={[styles.title, { color: textColor }]}>{t('memory_match.title')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={toggleSound} style={styles.closeBtn}>
-                <Icon name={soundOn ? 'volume-high' : 'volume-mute'} size={20} color={subtextColor} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => {
                 // Reset state on close
                 setPhase('loading');

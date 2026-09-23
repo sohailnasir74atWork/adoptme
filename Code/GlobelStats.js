@@ -11,6 +11,7 @@ import { useColorScheme, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute, log as crashlyticsLog, recordError as crashlyticsRecordError } from '@react-native-firebase/crashlytics';
+import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ensureGoogleSignInConfigured } from './Firebase/googleSignInConfig';
 import {
@@ -37,6 +38,27 @@ const logAuthEvent = (message, record = false) => {
     const c = getCrashlytics();
     crashlyticsLog(c, message);
     if (record) crashlyticsRecordError(c, new Error(message));
+  } catch (_) {}
+};
+
+// Startup timings go to Analytics, NOT just Crashlytics (2026-09-21).
+//
+// crashlyticsLog only writes a breadcrumb, which is attached to a crash report
+// and is visible ONLY if that session later crashes. For "how long does the app
+// take to become usable" that is the worst possible sample: it answers the
+// question for crashing sessions only. Analytics aggregates across every user,
+// which is the distribution we actually want.
+//
+// The breadcrumb is kept as well, because when a session DOES crash, knowing
+// that startup took 9s beforehand is useful context.
+//
+// Analytics limits: event/param names <= 40 chars, string values <= 100.
+const logStartupTiming = (name, params) => {
+  try {
+    crashlyticsLog(getCrashlytics(), `${name} ${JSON.stringify(params)}`);
+  } catch (_) {}
+  try {
+    logEvent(getAnalytics(), name, params);
   } catch (_) {}
 };
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
@@ -326,6 +348,13 @@ export const GlobalStateProvider = ({ children }) => {
       // original leaf keeps country flags exactly correct.
       const RTDB_ONLY = ['userName', 'flage', 'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying', 'chatOffTrade', 'chatOffGeneral'];
 
+      // Startup instrumentation (2026-09-21). These reads gate the boot splash:
+      // 4 Supabase calls + 8 RTDB leaves + xp = 13 round trips, each capped at
+      // 10s by withTimeout. They run in parallel, so the splash costs roughly
+      // the slowest one - but on a bad connection that is the 10s cap, and the
+      // user stares at the logo the whole time. Nobody has ever measured what
+      // this actually costs in the field, so measure it.
+      const _profileReadsAt = Date.now();
       const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap] = await Promise.all([
         getIdentity(userId).catch(() => null),
         getRoles(userId).catch(() => null),
@@ -334,6 +363,12 @@ export const GlobalStateProvider = ({ children }) => {
         Promise.all(RTDB_ONLY.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => null))),
         withTimeout(get(ref(appdatabase, `users/${userId}/xp`))).catch(() => null),
       ]);
+      logStartupTiming('startup_profile_reads', {
+        ms: Date.now() - _profileReadsAt,
+        supabase_ok: [identityRow, rolesRow, cosmeticsRow, robloxRow].filter(Boolean).length,
+        rtdb_ok: rtdbOnlySnaps.filter(Boolean).length,
+        rtdb_total: RTDB_ONLY.length,
+      });
 
       const xpVal = xpSnap && xpSnap.exists() ? xpSnap.val() : undefined;
       const rtdbOnly = {};
@@ -609,6 +644,13 @@ export const GlobalStateProvider = ({ children }) => {
           // end of this callback with two un-caught awaits in front of it —
           // one rejection there and the user was left looking at the logo with
           // no way out but a reinstall.
+          // Time-to-interactive, not time-to-first-draw. `am start -W` stops
+          // when MainActivity draws (~235ms on a release build), which is only
+          // the splash appearing. THIS is the moment the user can actually use
+          // the app, and it sits behind handleUserLogin's 13 network calls.
+          // Pair it with startup_profile_reads above to see how much of the
+          // wait is the network versus everything else.
+          logStartupTiming('startup_ready', { ms: Date.now() - _launchedAt });
           await updateLocalState('isAppReady', true);
         }
 
