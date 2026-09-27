@@ -1025,7 +1025,8 @@
         "inbox": "Bandeja",
         "youAreBlocked": "Un admin te bloqueó.",
         "inappropriateLanguage": "Lenguaje inapropiado.",
-        "messageTooLong": "Mensaje muy largo.",
+        "messageTooLong": "El mensaje no puede exceder los {{max}} caracteres.",
+        "messageTooLongWords": "El mensaje no puede exceder las {{max}} palabras.",
         "sendingTooQuickly": "Estás enviando mensajes muy rápido.",
         "proUsersOnlyLinks": "Solo usuarios Pro pueden enviar enlaces."
     },
@@ -1406,7 +1407,11 @@
             "not_owned_msg_sg": "Vendiste {{names}}, pero no estaba en tu lista.\n\n¡Tu trade se guardó! ✅",
             "trade_saved": "🎉 ¡Trade Guardado!",
             "active_trades_info_title": "⚡ Trades Activos",
-            "active_trades_info_msg": "Estos son trades de la Calculadora.\n\n✅ Toca 'Listo' para completar\n✏️ Toca 'Editar' para cambiar\n🗑️ Toca 'Eliminar' para borrar"
+            "active_trades_info_msg": "Estos son trades de la Calculadora.\n\n✅ Toca 'Listo' para completar\n✏️ Toca 'Editar' para cambiar\n🗑️ Toca 'Eliminar' para borrar",
+            "remove_selected_title_one": "¿Eliminar {{count}} mascota?",
+            "remove_selected_title_other": "¿Eliminar {{count}} mascotas?",
+            "remove_selected_msg_one": "Se quitará de tu inventario. Tu lista de deseos y tu historial de trades no cambian.",
+            "remove_selected_msg_other": "Se quitarán de tu inventario. Tu lista de deseos y tu historial de trades no cambian."
         },
         "my_pets": {
             "worth": "MIS MASCOTAS VALEN",
@@ -1420,7 +1425,17 @@
             "best_assets": "Mejores Mascotas:",
             "add_pet": "+ ¡Agregar Mascota!",
             "empty_title": "¡Sin mascotas!",
-            "empty_sub": "¡Toca + para agregar tu primera mascota! 🐾"
+            "empty_sub": "¡Toca + para agregar tu primera mascota! 🐾",
+            "select": "Seleccionar",
+            "select_cancel": "Cancelar",
+            "select_all": "Todas ({{count}})",
+            "select_other": "Otras",
+            "select_hint": "Toca tus mascotas para seleccionarlas",
+            "selected_count_one": "{{count}} seleccionada",
+            "selected_count_other": "{{count}} seleccionadas",
+            "bulk_for_trade": "Para tradear",
+            "bulk_private": "Privado",
+            "bulk_remove": "Eliminar"
         },
         "goals": {
             "add_dream": "+ ¡Agregar Mascota Soñada!",

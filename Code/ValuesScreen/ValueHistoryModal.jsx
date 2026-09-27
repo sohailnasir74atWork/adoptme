@@ -186,7 +186,7 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose }) => 
               <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.itemMeta} numberOfLines={1}>
                 {t(`categories.${String(item.type || '').toUpperCase()}`, { defaultValue: item.type })}
-                {item.rarity ? ` · ${t(`rarities.${String(item.rarity).toUpperCase()}`, { defaultValue: item.rarity })}` : ''}
+                {item.rarity ? ` · ${t(`rarities.${String(item.rarity).trim().replace(/[\s_]+/g, '-').toUpperCase()}`, { defaultValue: item.rarity })}` : ''}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

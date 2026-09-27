@@ -506,7 +506,8 @@
     "inbox": "Входящие",
     "youAreBlocked": "Вы заблокированы администратором.",
     "inappropriateLanguage": "Ваше сообщение содержит неприемлемый язык.",
-    "messageTooLong": "Сообщение не может превышать 100 слов.",
+    "messageTooLong": "Сообщение не может превышать {{max}} символов.",
+    "messageTooLongWords": "Сообщение не может превышать {{max}} слов.",
     "sendingTooQuickly": "Вы отправляете сообщения слишком быстро. Пожалуйста, подождите немного.",
     "proUsersOnlyLinks": "Только Pro пользователи могут отправлять ссылки."
   },
@@ -607,7 +608,20 @@
       "cancel": "Отмена",
       "error": "Ошибка",
       "delete": "Удалить",
-      "remove": "Удалить"
+      "remove": "Удалить",
+      "remove_selected_title": "Удалить выбранное ({{count}})?",
+      "remove_selected_msg": "Выбранное будет удалено из вашего инвентаря. Список желаний и история обменов не изменятся."
+    },
+    "my_pets": {
+      "select": "Выбрать",
+      "select_cancel": "Отмена",
+      "select_all": "Все ({{count}})",
+      "select_other": "Другие",
+      "select_hint": "Нажмите на питомцев, чтобы выбрать",
+      "selected_count": "Выбрано: {{count}}",
+      "bulk_for_trade": "На обмен",
+      "bulk_private": "Скрыть",
+      "bulk_remove": "Удалить"
     },
     "active": {
       "cancel": "Отмена",

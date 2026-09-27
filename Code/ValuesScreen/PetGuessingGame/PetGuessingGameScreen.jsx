@@ -509,8 +509,6 @@ const PetGuessingGameScreen = () => {
     <>
       <StatusBar
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={containerBgColor}
-        translucent={false}
       />
       <SafeAreaView style={{ flex: 1, backgroundColor: containerBgColor }}>
         <View style={[styles.container, { backgroundColor: containerBgColor }]}>

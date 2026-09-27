@@ -38,6 +38,11 @@ describe('rarity tables', () => {
     expect(normalizeRarity(' Ultra-Rare ')).toBe('ultra-rare');
     expect(tasksForRarity('LEGENDARY')).toBe(275);
   });
+
+  test("the value feeds' 'ultra rare' spelling resolves", () => {
+    expect(normalizeRarity('ultra rare')).toBe('ultra-rare');
+    expect(tasksForRarity('ultra rare')).toBe(tasksForRarity('ultra-rare'));
+  });
 });
 
 describe('goal structure', () => {

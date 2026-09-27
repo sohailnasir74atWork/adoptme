@@ -87,31 +87,99 @@ function diffBoolMap(before, after) {
 // others (Promise.all rejects on first throw).
 // --------------------------------------------------------------------
 
+// ── user_identity_base (round 2, 2026-09) ─────────────────────────────
+// supabase/031_private_identity.sql renames the table to user_identity_base
+// and puts a masking VIEW called user_identity in its place, so every write
+// goes to the base table. Until 031 has run the base name does not exist yet —
+// fall back to the old name (still a table then), so this deploys safely
+// before or after the SQL.
+const isMissingRelation = (error) => {
+  if (!error) return false;
+  if (error.code === 'PGRST205' || error.code === '42P01') return true;
+  const msg = error.message || '';
+  return /user_identity_base/.test(msg) && /does not exist|schema cache/.test(msg);
+};
+
+async function onIdentityTable(supabase, run) {
+  const result = await run(supabase.from('user_identity_base'));
+  if (!isMissingRelation(result.error)) return result;
+  return run(supabase.from('user_identity'));
+}
+
+// Email / decodedEmail / dateOfBirth are NOT identity keys any more: they
+// live in users_private/{uid}, and mirrorUsersPrivateToSupabase (below) owns
+// those three columns. An ordinary identity upsert leaves them out, so it can
+// never null them.
 const IDENTITY_KEYS = [
-  'displayName', 'avatar', 'email', 'decodedEmail', 'flage',
-  'dateOfBirth', 'OS', 'createdAt', 'lastActivity', 'lastProfileEditAt',
+  'displayName', 'avatar', 'flage',
+  'OS', 'createdAt', 'lastActivity', 'lastProfileEditAt',
 ];
-async function mirrorIdentity(uid, before, after, supabase) {
-  if (!anyKeyChanged(before, after, IDENTITY_KEYS)) return;
 
-  const row = {
-    uid,
-    display_name: asString(after.displayName),
-    avatar: asString(after.avatar),
-    email: asString(after.email),
-    decoded_email: asString(after.decodedEmail),
-    flag: asString(after.flage),               // typo fix: flage → flag
-    date_of_birth: asString(after.dateOfBirth),
-    os: asString(after.OS),
-    created_at_ms: asNumber(after.createdAt),
-    last_activity_ms: asNumber(after.lastActivity),
-    last_profile_edit_ms: asNumber(after.lastProfileEditAt),
-    updated_at: nowIso(),
-  };
+const identityColumns = (u) => ({
+  display_name: asString(u.displayName),
+  avatar: asString(u.avatar),
+  flag: asString(u.flage),               // typo fix: flage → flag
+  os: asString(u.OS),
+  created_at_ms: asNumber(u.createdAt),
+  last_activity_ms: asNumber(u.lastActivity),
+  last_profile_edit_ms: asNumber(u.lastProfileEditAt),
+});
 
-  const { error } = await supabase
-    .from('user_identity')
-    .upsert(row, { onConflict: 'uid' });
+// Legacy copies that pre-round-2 builds still write to users/{uid}. Until
+// privatizeUserPII is deployed (cutover) nothing moves them to users_private,
+// and the Supabase safe-chat trigger (028) needs the DOB of every account an
+// old build creates in the meantime — so a legacy value being WRITTEN still
+// reaches the private columns. users_private wins wherever it has the field:
+// its DOB is write-once, and an old build re-entering a different DOB must not
+// overwrite it here.
+const LEGACY_PII_KEYS = ['email', 'decodedEmail', 'dateOfBirth'];
+
+const normalizeEmail = (v) => {
+  if (typeof v !== 'string') return null;
+  const e = v.trim().replace(/\(dot\)/g, '.').replace(/,/g, '.').toLowerCase();
+  return e.includes('@') ? e : null;
+};
+
+// Private columns for an identity upsert: users_private first, then a legacy
+// users/{uid} value for whatever users_private lacks — but only a value the
+// account's owner wrote (users/$userId lets any signed-in user write another
+// user's non-role fields, and a planted DOB or email must never reach the
+// safe-chat trigger or the ban tools). Only columns with a value are returned.
+async function privateColumns(uid, after, byOwner) {
+  let priv = {};
+  try {
+    priv = (await admin.database().ref(`users_private/${uid}`).once('value')).val() || {};
+  } catch (e) {
+    console.error('[mirrorUsers/identity] users_private read failed', uid, e.message);
+  }
+  const cols = {};
+  const legacy = byOwner ? after : {};
+  const email = normalizeEmail(priv.email) || normalizeEmail(legacy.email) || normalizeEmail(legacy.decodedEmail);
+  if (email) {
+    cols.email = email;
+    cols.decoded_email = email;
+  }
+  const dob = asString(priv.dateOfBirth) || asString(legacy.dateOfBirth);
+  if (dob) cols.date_of_birth = dob;
+  return cols;
+}
+
+async function mirrorIdentity(uid, before, after, supabase, isCreate = false, byOwner = false) {
+  const identityChanged = anyKeyChanged(before, after, IDENTITY_KEYS);
+  // Only a legacy value being WRITTEN, by the owner, counts. privatizeUserPII /
+  // the migration REMOVING one must not cost an upsert per user.
+  const legacyPiiChanged = byOwner && LEGACY_PII_KEYS.some(
+    (k) => after?.[k] != null && (before?.[k] ?? null) !== after[k],
+  );
+  if (!identityChanged && !legacyPiiChanged) return;
+
+  const row = { uid, ...identityColumns(after), updated_at: nowIso() };
+  // On account creation users_private may already hold the email (new builds
+  // write both at sign-up, in either order) — mirrorUsersPrivateToSupabase
+  // skips a uid with no users/{uid} yet, so this is where those columns land.
+  if (isCreate || legacyPiiChanged) Object.assign(row, await privateColumns(uid, after, byOwner));
+
+  const { error } = await onIdentityTable(supabase, (t) => t.upsert(row, { onConflict: 'uid' }));
   if (error) console.error('[mirrorUsers/identity]', uid, error.message);
 }
 
@@ -349,8 +417,9 @@ async function mirrorModsRoster(uid, before, after) {
 // On full /users/{uid} delete, drop rows from all 8 tables.
 // Each delete is independent — if one fails, the others still go.
 async function deleteAllForUser(uid, supabase) {
+  const { error: identityError } = await onIdentityTable(supabase, (t) => t.delete().eq('uid', uid));
+  if (identityError) console.error('[mirrorUsers/delete user_identity_base]', uid, identityError.message);
   const tables = [
-    'user_identity',
     'user_roblox',
     'user_roles',
     'user_cosmetics',
@@ -382,11 +451,15 @@ exports.mirrorUsersToSupabase = functions
     const { uid } = context.params;
     const supabase = getSupabaseAdmin();
 
-    // Full delete — propagate to every table + the mods roster.
+    // Full delete — propagate to every table + the mods roster. Account
+    // deletion removes users/{uid}; the email / DOB in users_private/{uid}
+    // (round 2) must go with it — the owner's own client can't delete that
+    // node (rules), so it happens here.
     if (!change.after.exists()) {
       await Promise.all([
         deleteAllForUser(uid, supabase),
         admin.database().ref(`mods/${uid}`).remove().catch(() => {}),
+        admin.database().ref(`users_private/${uid}`).remove().catch(() => {}),
       ]);
       return null;
     }
@@ -394,12 +467,15 @@ exports.mirrorUsersToSupabase = functions
     const isCreate = !change.before.exists();
     const before = change.before.exists() ? change.before.val() : {};
     const after = change.after.val() || {};
+    // The owner's own client or the Admin SDK — not another user writing into
+    // this record (see privateColumns).
+    const byOwner = context.authType === 'ADMIN' || context.auth?.uid === uid;
 
     // Run all per-table mirrors in parallel. Each catches its own errors
     // and logs — wrapping in Promise.allSettled would be belt-and-braces
     // but Promise.all is fine because no mirror function ever throws.
     await Promise.all([
-      mirrorIdentity(uid, before, after, supabase),
+      mirrorIdentity(uid, before, after, supabase, isCreate, byOwner),
       mirrorRoblox(uid, before, after, supabase),
       mirrorRoles(uid, before, after, supabase, isCreate),
       mirrorCosmetics(uid, before, after, supabase),
@@ -410,5 +486,93 @@ exports.mirrorUsersToSupabase = functions
       mirrorModsRoster(uid, change.before.exists() ? before : null, after),
     ]);
 
+    return null;
+  });
+
+// --------------------------------------------------------------------
+// users_private/{uid} → user_identity_base (round 2, 2026-09)
+//
+// users_private holds { email, dateOfBirth } — owner + staff only
+// (database.rules.json). This trigger owns the three private columns of
+// user_identity_base; the user_identity VIEW (031) shows them to the owner
+// and staff only. email and decoded_email both get the canonical form
+// (lowercased, real dots), which is what every reader decodes to anyway.
+//
+// Deployable early, together with 031 and the mirror change above: nothing
+// writes users_private until then except new builds, the website and the
+// migration script.
+//
+// Deployment:
+//   firebase deploy --only functions:mirrorUsersToSupabase,functions:mirrorUsersPrivateToSupabase --project adoptme-7b50c
+// --------------------------------------------------------------------
+
+const PRIVATE_KEYS = ['email', 'dateOfBirth'];
+
+exports.mirrorUsersPrivateToSupabase = functions
+  .runWith({
+    secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'],
+    memory: '128MB',     // two small leaves
+    timeoutSeconds: 30,
+  })
+  .database.ref('/users_private/{uid}')
+  .onWrite(async (change, context) => {
+    const { uid } = context.params;
+    const supabase = getSupabaseAdmin();
+
+    // Node removed (account deletion above, or an admin fix): clear the
+    // columns. update(), not upsert — never create a row for a deleted user.
+    if (!change.after.exists()) {
+      const { error } = await onIdentityTable(supabase, (t) => t
+        .update({ email: null, decoded_email: null, date_of_birth: null, updated_at: nowIso() })
+        .eq('uid', uid));
+      if (error) console.error('[mirrorUsersPrivate/clear]', uid, error.message);
+      return null;
+    }
+
+    const before = change.before.exists() ? change.before.val() || {} : {};
+    const after = change.after.val() || {};
+    if (!anyKeyChanged(before, after, PRIVATE_KEYS)) return null;
+
+    // Only columns with a value: a missing field must not null what the
+    // legacy path (mirrorIdentity) already put there.
+    const cols = {};
+    const email = normalizeEmail(after.email);
+    if (email) {
+      cols.email = email;
+      cols.decoded_email = email;
+    }
+    const dob = asString(after.dateOfBirth);
+    if (dob) cols.date_of_birth = dob;
+    if (!cols.email && !cols.date_of_birth) return null;
+
+    // Update in place. NEVER create a row holding only these columns: the
+    // app's login (every build) treats an existing identity row as the
+    // profile, and one with no display_name / created_at_ms makes it
+    // "self-heal" — renaming the user and overwriting users/{uid}/createdAt.
+    const updated = await onIdentityTable(supabase, (t) => t
+      .update({ ...cols, updated_at: nowIso() })
+      .eq('uid', uid)
+      .select('uid'));
+    if (updated.error) {
+      console.error('[mirrorUsersPrivate]', uid, updated.error.message);
+      return null;
+    }
+    if (updated.data && updated.data.length > 0) return null;
+
+    // No identity row yet: build the whole row from users/{uid}. If that node
+    // doesn't exist yet either (sign-up wrote users_private first),
+    // mirrorIdentity picks these columns up when users/{uid} is created.
+    const leaves = await Promise.all(
+      IDENTITY_KEYS.map((k) => admin.database().ref(`users/${uid}/${k}`).once('value').then((s) => s.val()).catch(() => null)),
+    );
+    if (leaves.every((v) => v == null)) return null;
+    const u = {};
+    IDENTITY_KEYS.forEach((k, i) => { u[k] = leaves[i]; });
+
+    const { error } = await onIdentityTable(supabase, (t) => t.upsert(
+      { uid, ...identityColumns(u), ...cols, updated_at: nowIso() },
+      { onConflict: 'uid' },
+    ));
+    if (error) console.error('[mirrorUsersPrivate/create]', uid, error.message);
     return null;
   });

@@ -51,7 +51,9 @@ const OnlineUsersList = ({
   // mode: 'view' = just view online users and start chats
   // mode: 'select' = select users for group creation/addition
   // mode: 'gameInvite' = select users to invite to game
-  const { theme, user, appdatabase, firestoreDB } = useGlobalState();
+  const { theme, user, appdatabase, firestoreDB, isAdmin } = useGlobalState();
+  // Finding a user by email is a staff tool (round 2: emails are private).
+  const canSearchByEmail = !!isAdmin || !!user?.isModerator || !!user?.isBabyMod;
   const { localState } = useLocalState();
   const navigation = useNavigation();
   const { t } = useTranslation();
@@ -314,7 +316,7 @@ const OnlineUsersList = ({
       if (isIdSearch) {
         const row = await getIdentity(raw);
         if (row) identities = [row];
-      } else if (isEmailSearch) {
+      } else if (isEmailSearch && canSearchByEmail) {
         identities = await searchIdentityByEmail(raw);
       } else {
         identities = await searchIdentityByName(raw);
@@ -361,7 +363,7 @@ const OnlineUsersList = ({
     } finally {
       setSearching(false);
     }
-  }, [user?.id, allOnlineUserIds, t]);
+  }, [user?.id, allOnlineUserIds, t, canSearchByEmail]);
 
   // ✅ Handle manual search (triggered by button)
   const handleSearch = useCallback(() => {

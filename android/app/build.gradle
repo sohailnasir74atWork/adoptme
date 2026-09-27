@@ -34,6 +34,14 @@ android {
         }
     }
 
+    // Replaces android:extractNativeLibs="true" from the manifest, which AGP 9
+    // (React Native 0.87) rejects. Same behaviour: native libs stay compressed.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     signingConfigs {
         release {
             storeFile file('solanalab.keystore')

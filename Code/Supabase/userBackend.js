@@ -66,6 +66,26 @@ export async function setLastActivity() {
 }
 
 // -----------------------------------------------------------------
+// Safe-chat mode for a private thread with `partnerUid`: 'both' | 'me' |
+// 'them' | null, worked out server-side from both participants' dates of
+// birth (public.safe_chat_mode, supabase/031_private_identity.sql). The
+// partner's DOB is private since round 2 (2026-09), so this is how the chat
+// screen learns whether they are under 13 — and all it learns.
+//
+// Returns undefined when the call fails (RPC not deployed yet, offline) so
+// the caller can tell "unknown" from "unrestricted".
+// -----------------------------------------------------------------
+export async function getSafeChatMode(partnerUid) {
+  if (!partnerUid) return undefined;
+  const { data, error } = await supabase.rpc('safe_chat_mode', { p_partner: partnerUid });
+  if (error) {
+    console.warn('[userBackend] getSafeChatMode error:', error.message);
+    return undefined;
+  }
+  return data === 'both' || data === 'me' || data === 'them' ? data : null;
+}
+
+// -----------------------------------------------------------------
 // Single-uid identity read.
 //
 // Returns null on not-found OR on Supabase error — callers must treat

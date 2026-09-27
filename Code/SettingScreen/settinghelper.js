@@ -145,14 +145,21 @@ export const handleBloxFruit = () => {
   };
 
   export const handleOpenPrivacy = () => {
-    const websiteUrl = 'https://adoptmevalues.app/privacy-policy/';
+    const websiteUrl = 'https://www.adoptmevalues.app/privacy';
+    Linking.openURL(websiteUrl).catch(() =>
+      Alert.alert('Error', 'Unable to open the website. Please try again later.')
+    );
+  };
+
+  export const handleOpenTerms = () => {
+    const websiteUrl = 'https://www.adoptmevalues.app/terms';
     Linking.openURL(websiteUrl).catch(() =>
       Alert.alert('Error', 'Unable to open the website. Please try again later.')
     );
   };
 
   export const handleOpenChild = () => {
-    const websiteUrl = 'https://adoptmevalues.app/child-safety-standards-policy/';
+    const websiteUrl = 'https://www.adoptmevalues.app/child-safety-standards-policy';
     Linking.openURL(websiteUrl).catch(() =>
       Alert.alert('Error', 'Unable to open the website. Please try again later.')
     );

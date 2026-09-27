@@ -49,6 +49,7 @@ import {
 import { ref, get, set, update, remove } from '@react-native-firebase/database';
 import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
 import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
+import { getUserEmail, getPrivateProfile } from '../../Helper/privateProfile';
 
 // Kill-switch: set to false to revert to the original 16-get fetch path.
 const BOTTOM_DRAWER_CACHE_ENABLED = true;
@@ -238,6 +239,9 @@ const ProfileBottomDrawer = ({
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
+  // Only staff load another user's email / date of birth, and with them the
+  // ban status (round 2, 2026-09: both are private to the owner and staff).
+  const isStaffViewer = !!isAdmin || !!user?.isModerator || !!user?.isBabyMod;
 
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
@@ -394,14 +398,12 @@ const ProfileBottomDrawer = ({
         isModerator: valOrNull('isModerator'),
         // RTDB field is `admin`, exposed to consumers as `isAdmin` (legacy name).
         isAdmin: valOrNull('admin'),
-        email: valOrNull('email'),
-        decodedEmail: valOrNull('decodedEmail'),
+        // email / dateOfBirth are loaded separately, for staff only (below).
         topBadge: valOrNull('topBadge'),
         isBabyMod: valOrNull('isBabyMod'),
         isTrusted: valOrNull('isTrusted'),
         isCMSR: valOrNull('isCMSR'),
         isHelper: valOrNull('isHelper'),
-        dateOfBirth: valOrNull('dateOfBirth'),
       };
     };
 
@@ -409,7 +411,6 @@ const ProfileBottomDrawer = ({
       try {
         let newUserData;
         let badgesValue;
-        let emailToCheck;
 
         if (BOTTOM_DRAWER_CACHE_ENABLED) {
           // Fetch migrated fields from Supabase (5 tables in one round-trip set).
@@ -463,9 +464,9 @@ const ProfileBottomDrawer = ({
 
             newUserData = {
               avatar:                  identityRow?.avatar               ?? null,
-              email:                   identityRow?.email                ?? null,
-              decodedEmail:            identityRow?.decodedEmail         ?? null,
-              dateOfBirth:             identityRow?.dateOfBirth          ?? null,
+              // The user_identity view returns these only to staff (031).
+              email:                   isStaffViewer ? (identityRow?.email ?? null) : null,
+              dateOfBirth:             isStaffViewer ? (identityRow?.dateOfBirth ?? null) : null,
               isPro:                   cosmeticsRow?.isPro               ?? false,
               topBadge:                cosmeticsRow?.topBadge            ?? null,
               isAdmin:                 rolesRow?.isAdmin                 ?? roleFb?.isAdmin     ?? null,
@@ -479,13 +480,11 @@ const ProfileBottomDrawer = ({
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
               lastGameWinAt:           cached?.lastGameWinAt ?? null,
             };
-            emailToCheck = identityRow?.email || selectedUser?.email;
           } else {
             // Full RTDB fallback — mirror lag or brand-new user.
             rtdbRecord = await getOrFetchFullProfile(appdatabase, selectedUserId);
             if (!isMounted) return;
             newUserData = buildFromRecord(rtdbRecord);
-            emailToCheck = rtdbRecord?.email || selectedUser?.email;
           }
 
           if (badgesMap && badgesMap.size > 0) {
@@ -504,14 +503,13 @@ const ProfileBottomDrawer = ({
             badgesValue = badgesSnap?.exists?.() ? badgesSnap.val() : null;
           }
         } else {
-          // Original 16-get fallback (kill-switch path).
+          // Original 16-get fallback (kill-switch path). email / decodedEmail /
+          // dateOfBirth are no longer read here — staff get them below.
           const [
             isProSnap,
             lastGameWinAtSnap,
             isModeratorSnap,
             isAdminSnap,
-            emailSnap,
-            decodedEmailSnap,
             badgesSnap,
             avatarSnap,
             topBadgeSnap,
@@ -519,7 +517,6 @@ const ProfileBottomDrawer = ({
             isTrustedSnap,
             isCMSRSnap,
             isHelperSnap,
-            dateOfBirthSnap,
             supaBadgesMap,
             supaRobloxRow,
           ] = await Promise.all([
@@ -527,8 +524,6 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/email`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/decodedEmail`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/badges`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/avatar`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/topBadge`)).catch(() => null),
@@ -536,7 +531,6 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/dateOfBirth`)).catch(() => null),
             getBadges(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
           ]);
@@ -553,14 +547,11 @@ const ProfileBottomDrawer = ({
             lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
             isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
             isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : null,
-            email: emailSnap?.exists() ? emailSnap.val() : null,
-            decodedEmail: decodedEmailSnap?.exists() ? decodedEmailSnap.val() : null,
             topBadge: topBadgeSnap?.exists() ? topBadgeSnap.val() : null,
             isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
             isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
             isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
             isHelper: isHelperSnap?.exists() ? isHelperSnap.val() : null,
-            dateOfBirth: dateOfBirthSnap?.exists() ? dateOfBirthSnap.val() : null,
           };
           if (supaBadgesMap && supaBadgesMap.size > 0) {
             const flat = {};
@@ -569,13 +560,24 @@ const ProfileBottomDrawer = ({
           } else {
             badgesValue = badgesSnap?.exists() ? (badgesSnap.val() || null) : null;
           }
-          emailToCheck = emailSnap?.exists() ? emailSnap.val() : selectedUser?.email;
         }
 
         // Load saved badges
         setSavedBadges(badgesValue || {});
 
-        // Check ban status (email comes from record/snap or fallback to selectedUser)
+        // Email + date of birth, and the ban status keyed by that email: staff
+        // only (round 2). users_private is unreadable to everyone else, and the
+        // ban chip is a moderation aid, so non-staff skip all of it.
+        let emailToCheck = null;
+        if (isStaffViewer) {
+          if (!newUserData.email || !newUserData.dateOfBirth) {
+            const priv = await getPrivateProfile(appdatabase, selectedUserId);
+            if (!isMounted) return;
+            newUserData.email = newUserData.email || priv.email;
+            newUserData.dateOfBirth = newUserData.dateOfBirth || priv.dateOfBirth;
+          }
+          emailToCheck = newUserData.email || selectedUser?.email || null;
+        }
         if (emailToCheck) {
           const banStatus = await checkBanStatus(emailToCheck);
           if (isMounted) setIsBanned(banStatus.isBanned);
@@ -633,7 +635,7 @@ const ProfileBottomDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [selectedUserId, selectedUser, appdatabase]);
+  }, [selectedUserId, selectedUser, appdatabase, isStaffViewer]);
 
   // ✅ Merge selectedUser (message data) with fetched userData (RTDB)
   // userData wins for fresh data, selectedUser provides instant preview
@@ -902,13 +904,13 @@ const ProfileBottomDrawer = ({
   // Moderator Actions
   const handleApplyStrike = async (strikeCount) => {
     if (!mergedUser?.email) {
-      // Try to fetch email from RTDB as fallback
+      // Try users_private (staff-readable), then the legacy users/{uid} leaf
       if (selectedUserId && appdatabase) {
         try {
-          const emailSnap = await get(ref(appdatabase, `users/${selectedUserId}/email`));
-          if (emailSnap.exists() && emailSnap.val()) {
+          const fallbackEmail = await getUserEmail(appdatabase, selectedUserId);
+          if (fallbackEmail) {
             // Update mergedUser isn't possible from here, so use it directly
-            setReasonActionType({ type: 'strike', value: strikeCount, email: emailSnap.val() });
+            setReasonActionType({ type: 'strike', value: strikeCount, email: fallbackEmail });
             setAdminReason('');
             handoff(toggleModal, () => setShowReasonModal(true));
             return;
@@ -929,9 +931,9 @@ const ProfileBottomDrawer = ({
     if (!mergedUser?.email) {
       if (selectedUserId && appdatabase) {
         try {
-          const emailSnap = await get(ref(appdatabase, `users/${selectedUserId}/email`));
-          if (emailSnap.exists() && emailSnap.val()) {
-            setReasonActionType({ type: 'mute', value: minutes, email: emailSnap.val() });
+          const fallbackEmail = await getUserEmail(appdatabase, selectedUserId);
+          if (fallbackEmail) {
+            setReasonActionType({ type: 'mute', value: minutes, email: fallbackEmail });
             setAdminReason('');
             handoff(toggleModal, () => setShowReasonModal(true));
             return;
@@ -1129,9 +1131,9 @@ const ProfileBottomDrawer = ({
     if (!mergedUser?.email) {
       if (selectedUserId && appdatabase) {
         try {
-          const emailSnap = await get(ref(appdatabase, `users/${selectedUserId}/email`));
-          if (emailSnap.exists() && emailSnap.val()) {
-            setReasonActionType({ type: 'ban', email: emailSnap.val() });
+          const fallbackEmail = await getUserEmail(appdatabase, selectedUserId);
+          if (fallbackEmail) {
+            setReasonActionType({ type: 'ban', email: fallbackEmail });
             setAdminReason('');
             handoff(toggleModal, () => setShowReasonModal(true));
             return;

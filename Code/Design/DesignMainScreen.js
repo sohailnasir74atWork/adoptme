@@ -620,7 +620,9 @@ const DesignFeedScreen = ({ route }) => {
         selectedTags: Array.isArray(selectedTags) && selectedTags.length > 0
           ? selectedTags
           : (selectedTags ? [selectedTags] : ['Discussion']),
-        email: currentUserEmail || null,
+        // No author email (round 2, 2026-09): designPosts are world-readable
+        // and nothing reads it. privatizePostEmail strips it from posts that
+        // older builds still send.
         report: false,
         // ✅ Only include truthy profile fields (saves storage)
         ...(user?.avatar ? { avatar: user.avatar } : {}),

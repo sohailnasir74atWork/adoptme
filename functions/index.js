@@ -23,7 +23,17 @@
 
 // ── RTDB → Supabase mirrors ────────────────────────────────────────────
 exports.mirrorUsersToSupabase = require('./mirrorUsersToSupabase').mirrorUsersToSupabase;
+exports.mirrorUsersPrivateToSupabase = require('./mirrorUsersToSupabase').mirrorUsersPrivateToSupabase;
 exports.mirrorGroupMetaToSupabase = require('./mirrorGroupMetaToSupabase').mirrorGroupMetaToSupabase;
+
+// ── Private email / date of birth (round 2, 2026-09) ──────────────────
+// privatizeUserPII is a group (…-email, …-decodedEmail, …-dateOfBirth):
+// deploy it at CUTOVER only. privatizePostEmail too: some older builds ban a
+// post's author from the admin menu using the email stored on the post.
+// See functions/privatizeUserPII.js.
+const privatize = require('./privatizeUserPII');
+exports.privatizeUserPII = privatize.privatizeUserPII;
+exports.privatizePostEmail = privatize.privatizePostEmail;
 
 // ── Supabase auth bridge ───────────────────────────────────────────────
 exports.setSupabaseRoleClaim = require('./setSupabaseRoleClaim').setSupabaseRoleClaim;

@@ -22,8 +22,9 @@ export const RARITIES = ['common', 'uncommon', 'rare', 'ultra-rare', 'legendary'
 export const GOALS = ['fullgrown', 'neon', 'mega'];
 export const FULL_GROWN_STAGE = 5;
 
+// The value feeds spell it 'ultra rare'; the tables here use 'ultra-rare'.
 export const normalizeRarity = (rarity) => {
-  const key = String(rarity || '').toLowerCase().trim();
+  const key = String(rarity || '').toLowerCase().trim().replace(/[\s_]+/g, '-');
   return RARITIES.includes(key) ? key : null;
 };
 

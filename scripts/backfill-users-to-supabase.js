@@ -82,15 +82,17 @@ const asJsonb = (v) => (v && typeof v === 'object' ? v : null);
 // columns are OK and we want the uid present for join consistency).
 // --------------------------------------------------------------------
 
+// No email / decoded_email / date_of_birth (round 2, 2026-09): those columns
+// belong to users_private/{uid} and mirrorUsersPrivateToSupabase, and after
+// scripts/migrate-user-pii.js users/{uid} no longer has them — copying them
+// from here would null every row's email and DOB. Leaving them out of the
+// upsert leaves them untouched.
 function identityRow(uid, u) {
   return {
     uid,
     display_name: asString(u.displayName),
     avatar: asString(u.avatar),
-    email: asString(u.email),
-    decoded_email: asString(u.decodedEmail),
     flag: asString(u.flage),
-    date_of_birth: asString(u.dateOfBirth),
     os: asString(u.OS),
     created_at_ms: asNumber(u.createdAt),
     last_activity_ms: asNumber(u.lastActivity),
@@ -264,7 +266,8 @@ async function backfillUsers() {
     const tasks = [];
     if (force || bufIdentity.length >= FLUSH_AT) {
       const slice = bufIdentity; bufIdentity = [];
-      tasks.push(upsertSlice('user_identity', slice, { onConflict: 'uid' }).then(() => totals.identity += slice.length));
+      // user_identity is a masking view since supabase/031; write the base table.
+      tasks.push(upsertSlice('user_identity_base', slice, { onConflict: 'uid' }).then(() => totals.identity += slice.length));
     }
     if (force || bufRoblox.length >= FLUSH_AT) {
       const slice = bufRoblox; bufRoblox = [];

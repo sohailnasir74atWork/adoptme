@@ -32,6 +32,7 @@ import { getThemeColors } from '../Helper/themeColors';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import BannerAdComponent from '../Ads/bannerAds';
+import { RARITY_COLORS } from '../PetTracker/trackerShared';
 import {
   VALUE_SOURCE,
   VALUE_UNIT,
@@ -78,6 +79,17 @@ const TABS = [
 // Trade history pages 5 at a time (server-side, RTDB)
 const PAGE_SIZE = 5;
 
+// Select-by-rarity chips on My Pets. Both value feeds spell it 'ultra rare';
+// RARITY_COLORS and the `rarities.*` translation keys use 'ultra-rare', so
+// spaces/underscores become hyphens. Elvebredd's 'none' (21 items) and any
+// unexpected value fall into the "Other" group.
+const RARITY_ORDER = ['legendary', 'ultra-rare', 'rare', 'uncommon', 'common'];
+const OTHER_RARITY = 'other';
+const normalizeRarityKey = (rarity) => {
+  const key = String(rarity || '').toLowerCase().trim().replace(/[\s_]+/g, '-');
+  return RARITY_ORDER.includes(key) ? key : null;
+};
+
 const TradeJournal = ({
   firestoreDB, db, uid, isDarkMode,
 }) => {
@@ -100,7 +112,26 @@ const TradeJournal = ({
   const [petSearch, setPetSearch] = useState('');
   const [petSort, setPetSort] = useState('recent'); // 'recent' | 'value-desc' | 'value-asc' | 'name'
   const [showMyProfile, setShowMyProfile] = useState(false);
+  // Bulk select on the My Pets grid. Holds ORIGINAL indices into ownedPets
+  // (not display positions), so it survives search and sort changes.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(() => new Set());
   const { user } = useGlobalState();
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIdx(prev => (prev.size ? new Set() : prev));
+  }, []);
+
+  // Leave select mode on tab switch or when the screen loses focus.
+  useEffect(() => { exitSelectMode(); }, [tab, visible, exitSelectMode]);
+
+  // Any change to the owned list (add, remove, re-sync on focus) can shift
+  // indices, so a stale selection could point at different pets.
+  useEffect(() => {
+    setSelectedIdx(prev => (prev.size ? new Set() : prev));
+    if (ownedPets.length === 0) setSelectMode(false);
+  }, [ownedPets]);
 
   // Sync tab when navigating from notification
   useEffect(() => {
@@ -523,6 +554,119 @@ const TradeJournal = ({
     return sorted;
   }, [ownedPets, petSearch, petSort, lookupPetValue]);
 
+  // ── Bulk select ──
+  // Owned rows don't store rarity, and parsedPetData may be the GG feed, so
+  // rarity comes from Elvebredd (`data`) first, with GG filling only names
+  // Elvebredd lacks. Keyed by `name|type` as well as `name`: a dozen names
+  // repeat across item types with different rarities. Built only while
+  // select mode is open — the grid never needs it otherwise.
+  const rarityByName = useMemo(() => {
+    const map = new Map();
+    if (!selectMode) return map;
+    const addFeed = (raw) => {
+      if (!raw) return;
+      let list;
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        list = parsed && typeof parsed === 'object' ? Object.values(parsed) : [];
+      } catch { return; }
+      list.forEach(item => {
+        const rarity = normalizeRarityKey(item?.rarity);
+        if (!rarity || !item?.name) return;
+        const name = String(item.name).toLowerCase().trim();
+        const typed = `${name}|${String(item.type || '').toLowerCase().trim()}`;
+        if (!map.has(typed)) map.set(typed, rarity);
+        if (!map.has(name)) map.set(name, rarity);
+      });
+    };
+    addFeed(localState?.data);
+    addFeed(localState?.ggData);
+    return map;
+  }, [selectMode, localState?.data, localState?.ggData]);
+
+  const getPetRarity = useCallback((pet) => {
+    const name = String(pet?.name || '').toLowerCase().trim();
+    const type = String(pet?.category || '').toLowerCase().trim();
+    return rarityByName.get(`${name}|${type}`)
+      || rarityByName.get(name)
+      || normalizeRarityKey(pet?.rarity)
+      || OTHER_RARITY;
+  }, [rarityByName]);
+
+  const displayedIndices = useMemo(
+    () => displayedPets.map(d => d.originalIndex),
+    [displayedPets]
+  );
+
+  // Displayed pets grouped by rarity, in chip order (legendary → common, Other last).
+  const rarityGroups = useMemo(() => {
+    if (!selectMode) return [];
+    const groups = new Map();
+    displayedPets.forEach(({ pet, originalIndex }) => {
+      const r = getPetRarity(pet);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(originalIndex);
+    });
+    return [...RARITY_ORDER, OTHER_RARITY]
+      .filter(r => groups.has(r))
+      .map(r => ({ key: r, indices: groups.get(r) }));
+  }, [selectMode, displayedPets, getPetRarity]);
+
+  const toggleSelected = useCallback((originalIndex) => {
+    setSelectedIdx(prev => {
+      const next = new Set(prev);
+      if (next.has(originalIndex)) next.delete(originalIndex);
+      else next.add(originalIndex);
+      return next;
+    });
+  }, []);
+
+  // If the whole group is already selected, drop it; otherwise add the
+  // missing ones — so Legendary + Ultra-Rare can be combined.
+  const toggleGroup = useCallback((indices) => {
+    setSelectedIdx(prev => {
+      const allIn = indices.length > 0 && indices.every(i => prev.has(i));
+      const next = new Set(prev);
+      indices.forEach(i => { if (allIn) next.delete(i); else next.add(i); });
+      return next;
+    });
+  }, []);
+
+  const bulkSetForTrade = useCallback((available) => {
+    if (selectedIdx.size === 0) return;
+    const newOwned = ownedPets.map((pet, i) =>
+      selectedIdx.has(i) ? { ...pet, availableForTrade: available } : pet
+    );
+    setOwnedPets(newOwned);
+    savePets(newOwned, wishlistPets);
+    exitSelectMode();
+  }, [selectedIdx, ownedPets, wishlistPets, savePets, exitSelectMode]);
+
+  const bulkRemove = useCallback(() => {
+    const count = selectedIdx.size;
+    if (count === 0) return;
+    Alert.alert(
+      t('trade_journal.alerts.remove_selected_title', { count, defaultValue: 'Remove {{count}} pets?' }),
+      t('trade_journal.alerts.remove_selected_msg', {
+        count,
+        defaultValue: "They'll be removed from your inventory. Your wishlist and trade history are not affected.",
+      }),
+      [
+        { text: t('trade_journal.alerts.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('trade_journal.alerts.remove', { defaultValue: 'Remove' }),
+          style: 'destructive',
+          onPress: () => {
+            const newOwned = ownedPets.filter((_, i) => !selectedIdx.has(i));
+            setOwnedPets(newOwned);
+            savePets(newOwned, wishlistPets);
+            exitSelectMode();
+          },
+        },
+      ]
+    );
+  }, [selectedIdx, ownedPets, wishlistPets, savePets, exitSelectMode, t]);
+
   // Colors
   const c = getThemeColors(isDarkMode);
   const bg = c.bg;
@@ -689,7 +833,63 @@ const TradeJournal = ({
                 </TouchableOpacity>
               );
             })}
+            {/* Bulk select toggle — outlined so it doesn't read as a sort option */}
+            <TouchableOpacity
+              onPress={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              style={[styles.selectToggle, selectMode && styles.selectToggleActive]}
+            >
+              <FontAwesome
+                name={selectMode ? 'xmark' : 'list-check'}
+                size={10}
+                color={selectMode ? '#fff' : '#3B82F6'}
+              />
+              <Text style={[styles.selectToggleText, selectMode && styles.selectToggleTextActive]}>
+                {selectMode
+                  ? t('trade_journal.my_pets.select_cancel', { defaultValue: 'Cancel' })
+                  : t('trade_journal.my_pets.select', { defaultValue: 'Select' })}
+              </Text>
+            </TouchableOpacity>
           </View>
+        </View>
+      )}
+
+      {/* Select mode: pick everything shown, or whole rarity groups */}
+      {selectMode && displayedPets.length > 0 && (
+        <View style={styles.selectChipRow}>
+          {[
+            {
+              key: 'all',
+              label: t('trade_journal.my_pets.select_all', { count: displayedIndices.length, defaultValue: 'All ({{count}})' }),
+              color: '#3B82F6',
+              indices: displayedIndices,
+            },
+            ...rarityGroups.map(g => ({
+              key: g.key,
+              label: `${g.key === OTHER_RARITY
+                ? t('trade_journal.my_pets.select_other', { defaultValue: 'Other' })
+                : t(`rarities.${g.key.toUpperCase()}`, {
+                  defaultValue: g.key.replace(/(^|-)[a-z]/g, s => s.toUpperCase()),
+                })} (${g.indices.length})`,
+              color: RARITY_COLORS[g.key] || '#888',
+              indices: g.indices,
+            })),
+          ].map(chip => {
+            const active = chip.indices.length > 0 && chip.indices.every(i => selectedIdx.has(i));
+            const chipBg = active ? chip.color : chip.color + '20';
+            const chipFg = active ? '#fff' : chip.color;
+            return (
+              <TouchableOpacity
+                key={chip.key}
+                onPress={() => toggleGroup(chip.indices)}
+                style={[styles.selectChip, { borderColor: chip.color, backgroundColor: chipBg }]}
+              >
+                {active && <FontAwesome name="check" size={9} color="#fff" />}
+                <Text style={[styles.selectChipText, { color: chipFg }]}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
@@ -714,14 +914,42 @@ const TradeJournal = ({
         </View>
       ) : (
         <View style={styles.petsGrid}>
-          {displayedPets.map(({ pet, originalIndex }) => (
-            <View
+          {displayedPets.map(({ pet, originalIndex }) => {
+            const isSelected = selectMode && selectedIdx.has(originalIndex);
+            const selectedTint = isDarkMode ? '#1e3a5f' : '#EFF6FF';
+            return (
+            // Always a touchable so toggling select mode doesn't remount the
+            // grid; outside select mode it's disabled and not an a11y group,
+            // so the ✕ and pill behave exactly as before.
+            <TouchableOpacity
               key={`${pet.name}-${originalIndex}`}
-              style={[styles.petCard, { backgroundColor: cardBg }]}
+              disabled={!selectMode}
+              accessible={selectMode}
+              accessibilityRole={selectMode ? 'checkbox' : undefined}
+              accessibilityState={selectMode ? { checked: isSelected } : undefined}
+              activeOpacity={0.7}
+              onPress={() => toggleSelected(originalIndex)}
+              style={[
+                styles.petCard,
+                { backgroundColor: cardBg },
+                selectMode && styles.petCardSelectable,
+                isSelected && [styles.petCardSelected, { backgroundColor: selectedTint }],
+              ]}
             >
-              <TouchableOpacity style={styles.petRemoveBtn} onPress={() => removePet(originalIndex)}>
-                <Text style={styles.petRemoveText}>✕</Text>
-              </TouchableOpacity>
+              {selectMode ? (
+                <View style={styles.petSelectBadge}>
+                  <FontAwesome
+                    name={isSelected ? 'circle-check' : 'circle'}
+                    solid={isSelected}
+                    size={16}
+                    color={isSelected ? '#3B82F6' : subtextColor}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.petRemoveBtn} onPress={() => removePet(originalIndex)}>
+                  <Text style={styles.petRemoveText}>✕</Text>
+                </TouchableOpacity>
+              )}
               <Image
                 source={{ uri: getImgUrl(pet.imageUrl || pet.image) }}
                 style={styles.petImage}
@@ -751,11 +979,15 @@ const TradeJournal = ({
                 return null;
               })()}
               {pet.addedVia === 'trade' && (
-                <View style={styles.tradeBadge}>
+                // Select mode puts the check badge top-left, so 🔄 moves to
+                // the corner the hidden ✕ vacated.
+                <View style={selectMode ? styles.tradeBadgeRight : styles.tradeBadge}>
                   <Text style={styles.tradeBadgeText}>🔄</Text>
                 </View>
               )}
+              {/* Disabled in select mode: the tap falls through to the card */}
               <TouchableOpacity
+                disabled={selectMode}
                 onPress={() => toggleAvailableForTrade(originalIndex, 'owned')}
                 style={{
                   marginTop: 4,
@@ -778,12 +1010,14 @@ const TradeJournal = ({
                   {pet.availableForTrade ? '✅ For Trade' : '🔒 Private'}
                 </Text>
               </TouchableOpacity>
-            </View>
-          ))}
+            </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
-      {ownedPets.length > 0 && (
+      {/* Hidden in select mode — the action bar's Remove covers it there */}
+      {ownedPets.length > 0 && !selectMode && (
         <TouchableOpacity style={styles.clearHistoryBtn} onPress={clearOwnedPets}>
           <Text style={styles.clearHistoryText}>
             {t('trade_journal.my_pets.clear_inventory', { defaultValue: '🗑 Clear inventory' })}
@@ -1401,6 +1635,76 @@ const TradeJournal = ({
           </>
         )}
 
+        {/* Bulk action bar — outside the ScrollView so it's always visible */}
+        {!loading && tab === 'pets' && selectMode && (() => {
+          const count = selectedIdx.size;
+          const none = count === 0;
+          const barBorder = isDarkMode ? '#1e293b' : '#e2e8f0';
+          // With no banner below, the bar itself must clear the system nav.
+          const barPadBottom = localState?.isPro ? 10 + insets.bottom : 10;
+          const actions = [
+            {
+              key: 'trade',
+              icon: 'circle-check',
+              label: t('trade_journal.my_pets.bulk_for_trade', { defaultValue: 'For Trade' }),
+              color: '#10B981',
+              bg: '#10B98120',
+              fg: '#10B981',
+              onPress: () => bulkSetForTrade(true),
+            },
+            {
+              key: 'private',
+              icon: 'lock',
+              label: t('trade_journal.my_pets.bulk_private', { defaultValue: 'Private' }),
+              color: '#D97706',
+              bg: '#D9770620',
+              fg: '#D97706',
+              onPress: () => bulkSetForTrade(false),
+            },
+            {
+              key: 'remove',
+              icon: 'trash-can',
+              label: t('trade_journal.my_pets.bulk_remove', { defaultValue: 'Remove' }),
+              color: '#EF4444',
+              bg: '#EF4444',
+              fg: '#fff',
+              onPress: bulkRemove,
+            },
+          ];
+          return (
+            <View style={[
+              styles.selectBar,
+              { backgroundColor: cardBg, borderTopColor: barBorder, paddingBottom: barPadBottom },
+            ]}>
+              <Text style={[styles.selectBarCount, { color: none ? subtextColor : textColor }]} numberOfLines={1}>
+                {none
+                  ? t('trade_journal.my_pets.select_hint', { defaultValue: 'Tap pets to select them' })
+                  : t('trade_journal.my_pets.selected_count', { count, defaultValue: '{{count}} selected' })}
+              </Text>
+              <View style={styles.selectBarActions}>
+                {actions.map(a => (
+                  <TouchableOpacity
+                    key={a.key}
+                    disabled={none}
+                    onPress={a.onPress}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.selectBarBtn,
+                      { borderColor: a.color, backgroundColor: a.bg },
+                      none && styles.selectBarBtnDisabled,
+                    ]}
+                  >
+                    <FontAwesome name={a.icon} solid size={11} color={a.fg} />
+                    <Text style={[styles.selectBarBtnText, { color: a.fg }]} numberOfLines={1}>
+                      {a.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Sticky Banner Ad (outside tab content) — pad bottom for system nav */}
         {!localState?.isPro && (
           <View style={{ paddingBottom: insets.bottom }}>
@@ -1489,7 +1793,37 @@ const styles = StyleSheet.create({
   petName: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
   petValue: { fontSize: 9, fontWeight: '500', marginTop: 1 },
   tradeBadge: { position: 'absolute', top: 4, left: 4 },
+  tradeBadgeRight: { position: 'absolute', top: 4, right: 4 },
   tradeBadgeText: { fontSize: 10 },
+  // Bulk select
+  selectToggle: {
+    marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14,
+    borderWidth: 1, borderColor: '#3B82F6',
+  },
+  selectToggleActive: { backgroundColor: '#3B82F6' },
+  selectToggleText: { fontSize: 11, fontWeight: '700', color: '#3B82F6' },
+  selectToggleTextActive: { color: '#fff' },
+  selectChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  selectChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1,
+  },
+  selectChipText: { fontSize: 11, fontWeight: '700' },
+  petCardSelectable: { borderWidth: 2, borderColor: 'transparent' },
+  petCardSelected: { borderColor: '#3B82F6' },
+  petSelectBadge: { position: 'absolute', top: 4, left: 4, zIndex: 1 },
+  selectBar: {
+    paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1,
+  },
+  selectBarCount: { fontSize: 12, fontWeight: '700', marginBottom: 8 },
+  selectBarActions: { flexDirection: 'row', gap: 8 },
+  selectBarBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    paddingVertical: 9, paddingHorizontal: 6, borderRadius: 10, borderWidth: 1,
+  },
+  selectBarBtnText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  selectBarBtnDisabled: { opacity: 0.4 },
   // Goals
   goalCard: { borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   goalHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },

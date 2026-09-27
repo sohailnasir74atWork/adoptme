@@ -70,7 +70,8 @@ import EvidenceViewer from './EvidenceViewer';
 import { uploadEvidence } from '../Helper/modEvidenceUpload';
 import { adminListUserChats, adminDeleteChatPair } from '../Supabase/chatMetaBackend';
 import { adminLoadPrivateMessages, adminDeletePrivateChat } from '../Supabase/privateMessagesBackend';
-import { searchIdentityByName, searchIdentityByEmail, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
+import { searchIdentityByName, searchIdentityByEmail, getIdentityBatch, getRolesBatch, getRobloxBatch } from '../Supabase/userBackend';
+import { getUserEmail, findUsersByEmail } from '../Helper/privateProfile';
 import {
   fetchUserModHistory,
   fetchUserModCounts,
@@ -645,6 +646,9 @@ const AdminDashboard = () => {
 
   // Modal
   const [selectedUser, setSelectedUser] = useState(null);
+  // Which user the open panel belongs to — an email lookup that returns after
+  // the admin picked someone else must not fill that user's panels.
+  const selectedUserIdRef = React.useRef(null);
 
   // User Details
   const [userDetails, setUserDetails] = useState(null);
@@ -827,7 +831,8 @@ const AdminDashboard = () => {
           results.push({
             isBanned: false, id,
             displayName: u.displayName || u.userName || 'Unknown',
-            email: u.email, avatar: getAvatarSafe(u),
+            // Email is off users/{uid} since round 2 — users_private (staff-read).
+            email: await getUserEmail(db, id), avatar: getAvatarSafe(u),
             robloxUsername: u.robloxUsername,
             isAdmin: u.admin || false, isModerator: u.isModerator || false,
           });
@@ -837,10 +842,37 @@ const AdminDashboard = () => {
         const email = raw.toLowerCase().trim();
         const encodedEmail = email.replace(/\./g, '(dot)');
 
-        // Direct key lookup first (fastest)
+        // users_private first (round 2): every account's email lives there,
+        // indexed, readable by staff only. Profile fields come from the
+        // Supabase mirror in the same three batched calls the name search uses.
+        const privateHits = await findUsersByEmail(db, raw, 10);
+        const privateIds = privateHits.map((h) => h.uid).filter((id) => id && !BAD_KEYS.has(id));
+        if (privateIds.length > 0) {
+          const [identityMap, rolesMap, rbxMap] = await Promise.all([
+            getIdentityBatch(privateIds).catch(() => new Map()),
+            getRolesBatch(privateIds).catch(() => new Map()),
+            getRobloxBatch(privateIds).catch(() => new Map()),
+          ]);
+          for (const hit of privateHits) {
+            const id = hit.uid;
+            if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
+            seen.add(id);
+            const ident = identityMap.get(id);
+            const roles = rolesMap.get(id);
+            results.push({
+              isBanned: false, id,
+              displayName: ident?.displayName || 'Unknown',
+              email: hit.email, avatar: getAvatarSafe(ident || {}),
+              robloxUsername: rbxMap.get(id)?.robloxUsername,
+              isAdmin: roles?.isAdmin || false, isModerator: roles?.isModerator || false,
+            });
+          }
+        }
+
+        // Legacy records keyed by the encoded email itself (left as they are)
         const directRef = ref(db, `users/${encodedEmail}`);
         const directSnap = await get(directRef);
-        if (directSnap.exists()) {
+        if (directSnap.exists() && !seen.has(directSnap.val()?.id || encodedEmail)) {
           const u = directSnap.val();
           const id = u.id || encodedEmail;
           seen.add(id);
@@ -856,7 +888,9 @@ const AdminDashboard = () => {
         // Fallback: Supabase identity lookup by email / decoded email.
         // (The old RTDB orderByChild('email') query had NO .indexOn
         // backing it, so the server streamed the ENTIRE /users node and
-        // filtered client-side on every admin email search.)
+        // filtered client-side on every admin email search.) Still needed
+        // until scripts/migrate-user-pii.js has filled users_private; the
+        // user_identity view shows these columns to staff only.
         if (results.length === 0) {
           const rows = await searchIdentityByEmail(raw, 10);
           const ids = rows.map(r => r?.uid).filter(id => id && !BAD_KEYS.has(id) && !seen.has(id));
@@ -1007,7 +1041,6 @@ const AdminDashboard = () => {
             id,
             displayName: u.displayName || u.userName || 'Unknown',
             avatar: getAvatarSafe(u),
-            email: u.email,
             isModerator: !!u.isModerator,
             isAdmin: !!u.admin,
           });
@@ -1036,7 +1069,6 @@ const AdminDashboard = () => {
               id,
               displayName: u.displayName || u.userName || 'Unknown',
               avatar: getAvatarSafe(u),
-              email: u.email,
               isModerator: !!u.isModerator,
               isAdmin: !!u.admin,
             });
@@ -1396,6 +1428,7 @@ const AdminDashboard = () => {
   }, [selectedUser, fetchUserDetails, isAdmin, isModerator, db]);
 
   const handleSelectUser = useCallback(async (userItem) => {
+    selectedUserIdRef.current = userItem?.id ?? null;
     setSelectedUser(userItem);
     setUserDetails(null);
     setReviews([]);
@@ -1412,15 +1445,24 @@ const AdminDashboard = () => {
       fetchUserDetails(userItem.id);
       fetchReviews(userItem.id, true);
     }
-    if (userItem.email) {
-      fetchCurrentSanction(userItem.email);
+    // Rows from a uid / name / chat search can arrive without an email — it
+    // is off users/{uid} since round 2. Resolve it from users_private
+    // (staff-read) so the sanction lookup and the ban buttons still work.
+    let email = userItem.email;
+    if (!email && userItem.id) {
+      email = await getUserEmail(db, userItem.id);
+      if (selectedUserIdRef.current !== userItem.id) return; // admin moved on
+      if (email) setSelectedUser((prev) => (prev?.id === userItem.id ? { ...prev, email } : prev));
+    }
+    if (email) {
+      fetchCurrentSanction(email);
     }
     // The audit log is keyed by email but matches on uid too, so a record
     // written before the user had a uid on file still resolves.
-    if (userItem.email || userItem.id) {
-      fetchModRecord(userItem.email, userItem.id, true);
+    if (email || userItem.id) {
+      fetchModRecord(email, userItem.id, true);
     }
-  }, [fetchUserDetails, fetchReviews, fetchCurrentSanction, fetchModRecord]);
+  }, [db, fetchUserDetails, fetchReviews, fetchCurrentSanction, fetchModRecord]);
 
   // Re-read both sides after an action so the open profile reflects the
   // write without the admin having to close and reopen it.
@@ -1447,7 +1489,7 @@ const AdminDashboard = () => {
   // previously never collected on this screen, which is why the banned
   // list is full of records reading "Strike 1" and nothing else — and why
   // nobody could answer "what did they actually do?" a week later.
-  const requestAction = useCallback((type, value, userItem) => {
+  const requestAction = useCallback(async (type, value, userItem) => {
     if (type !== 'unban' && !canBanMute) {
       Alert.alert('Disabled', 'Moderator ban & mute are currently turned off by an admin.');
       return;
@@ -1463,13 +1505,19 @@ const AdminDashboard = () => {
       Alert.alert('Not allowed', 'This user is a staff member. Only an admin can ban, strike or mute them.');
       return;
     }
-    if (!userItem?.email) {
+    // Search rows no longer carry the email from users/{uid} (round 2).
+    let target = userItem;
+    if (!target?.email && target?.id) {
+      const email = await getUserEmail(db, target.id);
+      if (email) target = { ...target, email };
+    }
+    if (!target?.email) {
       Alert.alert('Error', 'User has no email associated — ban records are keyed by email.');
       return;
     }
     setActionReason('');
-    setPendingAction({ type, value, user: userItem });
-  }, [canBanMute, isAdmin]);
+    setPendingAction({ type, value, user: target });
+  }, [canBanMute, isAdmin, db]);
 
   const handleUnban = useCallback(async (userItem, reason) => {
     const email = userItem.email || decodeEmail(userItem.encodedEmail);
@@ -1648,11 +1696,13 @@ const AdminDashboard = () => {
         const snap = await get(ref(db, `users/${text}`));
         if (snap.exists()) {
           const u = snap.val() || {};
+          const id = u.id || text;
           return [{
-            id: u.id || text,
+            id,
             displayName: u.displayName || u.userName || 'Unknown',
             avatar: getAvatarSafe(u),
-            email: u.email || null,
+            // Off users/{uid} since round 2 — users_private (staff-read).
+            email: await getUserEmail(db, id),
           }];
         }
       } catch { /* fall through to name search */ }
@@ -1660,12 +1710,35 @@ const AdminDashboard = () => {
     }
 
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+    const seen = new Set();
+    const out = [];
+
+    // Email: users_private first (round 2) — exact, indexed, staff-read.
+    // Profile fields come from the Supabase mirror in one batched call.
+    if (isEmail) {
+      const hits = await findUsersByEmail(db, text, 10);
+      const ids = hits.map((h) => h.uid).filter((id) => id && !BAD_KEYS.has(id));
+      const identityMap = ids.length ? await getIdentityBatch(ids).catch(() => new Map()) : new Map();
+      for (const hit of hits) {
+        if (!hit.uid || BAD_KEYS.has(hit.uid) || seen.has(hit.uid)) continue;
+        seen.add(hit.uid);
+        const ident = identityMap.get(hit.uid);
+        out.push({
+          id: hit.uid,
+          displayName: ident?.displayName || 'Unknown',
+          avatar: getAvatarSafe(ident || {}),
+          email: hit.email,
+        });
+      }
+      if (out.length > 0) return out;
+    }
+
+    // Name search, or the Supabase email fallback until migrate-user-pii has
+    // filled users_private (the user_identity view shows emails to staff only).
     const rows = isEmail
       ? await searchIdentityByEmail(text, 10).catch(() => [])
       : await searchIdentityByName(text, 10).catch(() => []);
 
-    const seen = new Set();
-    const out = [];
     for (const r of rows || []) {
       const id = r?.uid;
       if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;

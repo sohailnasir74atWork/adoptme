@@ -205,7 +205,9 @@
         "general_chat_on": "General Chat On",
         "general_chat_off": "General Chat Off",
         "trade_chat_on": "Trade Chat On",
-        "trade_chat_off": "Trade Chat Off"
+        "trade_chat_off": "Trade Chat Off",
+        "reward_granted_message": "You earned 100 points!",
+        "success_deleted": "Your account and all associated data have been permanently deleted."
     },
     "profile": {
         "display_name": "Display Name",
@@ -256,7 +258,10 @@
         "confirm_change_message": "You won't be able to change your display name for {{days}} days after this. Are you sure?",
         "confirm_save": "Yes, Save Changes",
         "rating": "Rating",
-        "badges_title": "Badges"
+        "badges_title": "Badges",
+        "active_frame": "Active Frame",
+        "bio_default": "Hi there, I am new here",
+        "no_trading_pets": "No pets listed for trade."
     },
     "home": {
         "you": "You",
@@ -413,7 +418,12 @@
             "stat_current": "Current",
             "footnote": "{{count}} recorded prices. The latest point is the current live value.",
             "hint": "Tap any item to see how its value changed over time"
-        }
+        },
+        "blox_fruits_values": "Blox Fruit Values",
+        "mm2_values": "MM2 Values",
+        "try_other_app": "Try our other app",
+        "download": "Download",
+        "failed_reload": "Failed to reload values. Please try again."
     },
     "stock": {
         "description": "Disclaimer: Stock updates may sometimes be delayed as data is updated manually. We appreciate your patience and recommend checking back periodically for the latest updates.",
@@ -635,7 +645,8 @@
         "update_success": "Review updated successfully!",
         "update_error": "Failed to update review",
         "rating_count_one": "{{count}} rating",
-        "rating_count_other": "{{count}} ratings"
+        "rating_count_other": "{{count}} ratings",
+        "edited": "(Edited)"
     },
     "signin": {
         "title_signin": "Sign In",
@@ -688,7 +699,8 @@
         "error_reset_password": "Failed to send password reset email. Please try again.",
         "email_not_verified_title": "📩 Email Not Verified",
         "email_not_verified_message": "A new verification link has been sent to your email. Please check your inbox or spam folder before signing in.",
-        "access_all_features": "Sign in to access all features"
+        "access_all_features": "Sign in to access all features",
+        "error_too_many_requests": "Too many attempts. Please wait a few minutes and try again."
     },
     "tabs": {
         "home": "Home",
@@ -940,12 +952,18 @@
         "disabled_banner_them_general": "This user has disabled chat. You cannot message them right now.",
         "disabled_banner_them_trade": "This user has disabled trade chat. You cannot message them from a trade.",
         "disabled_banner_me_general": "You have disabled chat. Turn it back on in Settings to send messages.",
-        "disabled_banner_me_trade": "You have disabled trade chat. Turn it back on in Settings to message from trades."
+        "disabled_banner_me_trade": "You have disabled trade chat. Turn it back on in Settings to message from trades.",
+        "delete_error": "Failed to delete message",
+        "limit_reached": "Limit Reached",
+        "max_pets_allowed": "You can only send up to 18 pets in a message.",
+        "message_placeholder": "a message"
     },
     "first": {
         "continue_guest": "Continue as Guest",
         "try_values": "Try the value calculator",
         "utility_note": "Compare item values and check trades. This companion app does not grant in-game items.",
+        "welcome_to": "Welcome to Petfolio",
+        "track_pets": "Track pets values & optimize your trades.",
         "welcome_title": "Welcome to Fruit Values",
         "welcome_text": "Track fruit values & optimize your trades.",
         "signin_or_guest": "Signin or Continue as Guest",
@@ -981,7 +999,8 @@
         "inbox": "Inbox",
         "youAreBlocked": "You are blocked by an Admin.",
         "inappropriateLanguage": "Your message contains inappropriate language.",
-        "messageTooLong": "Message cannot exceed 100 words.",
+        "messageTooLong": "Message cannot exceed {{max}} characters.",
+        "messageTooLongWords": "Message cannot exceed {{max}} words.",
         "sendingTooQuickly": "You are sending messages too quickly. Please wait a moment.",
         "proUsersOnlyLinks": "Only Pro users can send links."
     },
@@ -1172,7 +1191,8 @@
         "show_more": "Show More ({{count}} remaining)",
         "search_pro_title": "Pro Feature",
         "search_pro_message": "You need to get Pro to make search work for you!",
-        "maybe_later": "Maybe Later"
+        "maybe_later": "Maybe Later",
+        "yesterday": "Yesterday"
     },
     "comments": {
         "replying_to": "Replying to",
@@ -1354,7 +1374,11 @@
             "not_owned_msg_sg": "You sold {{names}}, but it was not in your My Stuff list, so we couldn't remove it from the list.\n\nHowever, your trade was saved successfully! ✅",
             "trade_saved": "🎉 Trade Saved!",
             "active_trades_info_title": "⚡ Active Trades",
-            "active_trades_info_msg": "These are trades you set up in the Calculator.\n\n✅ Tap 'Done!' to complete a trade & add it to your History\n✏️ Tap 'Edit' to change items before completing\n🗑️ Tap 'Delete' to remove a trade\n\nCompleted trades auto-update your pet inventory!"
+            "active_trades_info_msg": "These are trades you set up in the Calculator.\n\n✅ Tap 'Done!' to complete a trade & add it to your History\n✏️ Tap 'Edit' to change items before completing\n🗑️ Tap 'Delete' to remove a trade\n\nCompleted trades auto-update your pet inventory!",
+            "remove_selected_title_one": "Remove {{count}} pet?",
+            "remove_selected_title_other": "Remove {{count}} pets?",
+            "remove_selected_msg_one": "It'll be removed from your inventory. Your wishlist and trade history are not affected.",
+            "remove_selected_msg_other": "They'll be removed from your inventory. Your wishlist and trade history are not affected."
         },
         "my_pets": {
             "worth": "MY PETS ARE WORTH",
@@ -1368,7 +1392,16 @@
             "best_assets": "Best Assets:",
             "add_pet": "+ Add a Pet!",
             "empty_title": "No pets yet!",
-            "empty_sub": "Tap + to add your first pet! 🐾"
+            "empty_sub": "Tap + to add your first pet! 🐾",
+            "select": "Select",
+            "select_cancel": "Cancel",
+            "select_all": "All ({{count}})",
+            "select_other": "Other",
+            "select_hint": "Tap pets to select them",
+            "selected_count": "{{count}} selected",
+            "bulk_for_trade": "For Trade",
+            "bulk_private": "Private",
+            "bulk_remove": "Remove"
         },
         "goals": {
             "add_dream": "+ Add Dream Pet!",
@@ -1783,5 +1816,9 @@
         "unavailable": "Values could not be loaded. Check your connection and try again.",
         "loading": "Trying again…",
         "retry": "Retry loading values"
+    },
+    "alert": {
+        "error": "Error",
+        "success": "Success"
     }
 }

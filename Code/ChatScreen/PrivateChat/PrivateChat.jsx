@@ -207,12 +207,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
   // Safe chat — 'me' | 'them' | 'both' | null. Turns on as soon as EITHER
   // participant is under 13, and then applies to BOTH of them: vetted
-  // templates only, no free text, no photos. The partner's DOB rides along on
-  // the availability read, so this costs no extra round trip. See
-  // Helper/ageGate.js; the Postgres trigger is what actually enforces it.
+  // templates only, no free text, no photos. The partner's side comes from
+  // the server (their DOB is private) and rides along on the availability
+  // read, so this costs no extra round trip. See Helper/ageGate.js; the
+  // Postgres trigger is what actually enforces it.
   const rawSafeChatMode = useMemo(
-    () => resolveSafeChat(user?.dateOfBirth, theirAvailability?.dateOfBirth),
-    [user?.dateOfBirth, theirAvailability?.dateOfBirth]
+    () => resolveSafeChat(user?.dateOfBirth, theirAvailability?.safeChatMode),
+    [user?.dateOfBirth, theirAvailability?.safeChatMode]
   );
   // Admins and full moderators keep a normal keyboard so support and
   // enforcement messages still work — the same two roles the profanity filter

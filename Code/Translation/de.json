@@ -960,7 +960,8 @@
         "inbox": "Posteingang",
         "youAreBlocked": "Du wurdest von einem Admin blockiert.",
         "inappropriateLanguage": "Deine Nachricht enthält unangemessene Sprache.",
-        "messageTooLong": "Die Nachricht darf 100 Wörter nicht überschreiten.",
+        "messageTooLong": "Die Nachricht darf {{max}} Zeichen nicht überschreiten.",
+        "messageTooLongWords": "Die Nachricht darf {{max}} Wörter nicht überschreiten.",
         "sendingTooQuickly": "Du sendest Nachrichten zu schnell. Bitte warte einen Moment.",
         "proUsersOnlyLinks": "Nur Pro-Nutzer können Links senden."
     },
@@ -1333,7 +1334,11 @@
             "not_owned_msg_sg": "Du hast {{names}} verkauft, aber es war nicht in deiner Liste.\n\nDein Trade wurde gespeichert! ✅",
             "trade_saved": "🎉 Trade Gespeichert!",
             "active_trades_info_title": "⚡ Aktive Trades",
-            "active_trades_info_msg": "Das sind Trades aus dem Rechner.\n\n✅ 'Fertig' zum Abschließen\n✏️ 'Bearbeiten' zum Ändern\n🗑️ 'Löschen' zum Entfernen"
+            "active_trades_info_msg": "Das sind Trades aus dem Rechner.\n\n✅ 'Fertig' zum Abschließen\n✏️ 'Bearbeiten' zum Ändern\n🗑️ 'Löschen' zum Entfernen",
+            "remove_selected_title_one": "{{count}} Pet entfernen?",
+            "remove_selected_title_other": "{{count}} Pets entfernen?",
+            "remove_selected_msg_one": "Es wird aus deinem Inventar entfernt. Deine Wunschliste und dein Trade-Verlauf bleiben unverändert.",
+            "remove_selected_msg_other": "Sie werden aus deinem Inventar entfernt. Deine Wunschliste und dein Trade-Verlauf bleiben unverändert."
         },
         "my_pets": {
             "worth": "MEINE PETS SIND WERT",
@@ -1347,7 +1352,16 @@
             "best_assets": "Beste Haustiere:",
             "add_pet": "+ Pet Hinzufügen!",
             "empty_title": "Keine Pets!",
-            "empty_sub": "Tippe + zum Hinzufügen! 🐾"
+            "empty_sub": "Tippe + zum Hinzufügen! 🐾",
+            "select": "Auswählen",
+            "select_cancel": "Abbrechen",
+            "select_all": "Alle ({{count}})",
+            "select_other": "Sonstige",
+            "select_hint": "Tippe Pets an, um sie auszuwählen",
+            "selected_count": "{{count}} ausgewählt",
+            "bulk_for_trade": "Zum Traden",
+            "bulk_private": "Privat",
+            "bulk_remove": "Entfernen"
         },
         "goals": {
             "add_dream": "+ Traum-Pet!",

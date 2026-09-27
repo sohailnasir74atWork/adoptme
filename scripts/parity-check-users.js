@@ -84,14 +84,32 @@ async function pickRandomUids(n) {
   return keys.slice(0, n);
 }
 
+const normalizeEmail = (v) => {
+  if (typeof v !== 'string') return null;
+  const e = v.trim().replace(/\(dot\)/g, '.').replace(/,/g, '.').toLowerCase();
+  return e.includes('@') ? e : null;
+};
+
+// Round 2 (2026-09): email / dateOfBirth live in users_private/{uid}; the
+// users/{uid} copies only exist until scripts/migrate-user-pii.js has run.
+// mirrorUsersPrivateToSupabase writes the canonical email (lowercased, real
+// dots) to BOTH email and decoded_email, so that is what is expected here.
 async function readRtdbUser(uid) {
-  const snap = await rtdb.ref(`/users/${uid}`).once('value');
-  return snap.exists() ? snap.val() : null;
+  const [snap, privSnap] = await Promise.all([
+    rtdb.ref(`/users/${uid}`).once('value'),
+    rtdb.ref(`/users_private/${uid}`).once('value'),
+  ]);
+  if (!snap.exists()) return null;
+  const u = snap.val() || {};
+  const p = privSnap.val() || {};
+  const email = normalizeEmail(p.email) || normalizeEmail(u.email) || normalizeEmail(u.decodedEmail);
+  return { ...u, email, decodedEmail: email, dateOfBirth: p.dateOfBirth || u.dateOfBirth || null };
 }
 
 async function readSupabaseUser(uid) {
   const [identity, roblox, roles, cosmetics] = await Promise.all([
-    supabase.from('user_identity').select('*').eq('uid', uid).maybeSingle(),
+    // Base table: the user_identity view (031) masks email / DOB.
+    supabase.from('user_identity_base').select('*').eq('uid', uid).maybeSingle(),
     supabase.from('user_roblox').select('*').eq('uid', uid).maybeSingle(),
     supabase.from('user_roles').select('*').eq('uid', uid).maybeSingle(),
     supabase.from('user_cosmetics').select('*').eq('uid', uid).maybeSingle(),

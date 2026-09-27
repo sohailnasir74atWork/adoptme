@@ -933,6 +933,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
 
     const MAX_CHARACTERS = 250;
+    // Staff write the pinned announcements, which run long. They get a word
+    // budget instead of the 250-char cap; the char ceiling only stops a
+    // pasted blob with no spaces from counting as one word.
+    const MOD_MAX_WORDS = 300;
+    const MOD_MAX_CHARACTERS = 2000;
+    const isStaffSender = !!isAdmin || !!user?.isModerator;
     const MESSAGE_COOLDOWN = 100; // ms
     const LINK_REGEX = /(https?:\/\/[^\s]+)/i; // no "g" flag
 
@@ -1018,8 +1024,14 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
 
     // Length check
-    if (trimmedInput.length > MAX_CHARACTERS) {
-      Alert.alert(t('home.alert.error'), t('misc.messageTooLong'));
+    if (isStaffSender) {
+      const wordCount = trimmedInput ? trimmedInput.split(/\s+/).length : 0;
+      if (wordCount > MOD_MAX_WORDS || trimmedInput.length > MOD_MAX_CHARACTERS) {
+        Alert.alert(t('home.alert.error'), t('misc.messageTooLongWords', { max: MOD_MAX_WORDS }));
+        return;
+      }
+    } else if (trimmedInput.length > MAX_CHARACTERS) {
+      Alert.alert(t('home.alert.error'), t('misc.messageTooLong', { max: MAX_CHARACTERS }));
       return;
     }
 

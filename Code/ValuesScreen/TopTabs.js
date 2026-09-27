@@ -155,7 +155,6 @@ const CustomTopTabs = ({ selectedTheme }) => {
     <View style={[styles.wrapper, { backgroundColor: headerBackground }]}>
       <StatusBar
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
-        backgroundColor={headerBackground}
       />
       {/* One safe-area-aware header shared by every More sub-screen. */}
       <View style={[styles.safeHeader, { paddingTop: insets.top + 8, backgroundColor: headerBackground }]}>

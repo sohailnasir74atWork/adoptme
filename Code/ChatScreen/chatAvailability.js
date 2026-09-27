@@ -11,12 +11,15 @@
 // A switch blocks both directions — nobody can message you through that door,
 // and you can't message anyone through it either.
 //
-// This module also carries the partner's dateOfBirth back to the chat screen.
-// It is read here rather than in its own effect because RTDB multiplexes these
-// leaf gets over the one open socket — folding it into the Promise.all below
-// makes it a third tiny read in an existing round trip instead of a new one.
-// See Helper/ageGate.js for what the screen does with it.
+// This module also carries the thread's safe-chat mode back to the chat
+// screen. It used to read the partner's users/{uid}/dateOfBirth; since round 2
+// (2026-09) that DOB is private, so the answer comes from Supabase
+// safe_chat_mode(), which compares both DOBs server-side and returns only
+// 'both' | 'me' | 'them' | null. It runs in the same Promise.all as the two
+// leaf reads, so it adds no round trip. See Helper/ageGate.js for what the
+// screen does with it.
 import { ref, get } from '@react-native-firebase/database';
+import { getSafeChatMode } from '../Supabase/userBackend';
 
 export const CHAT_TYPE_TRADE = 'trade';
 export const CHAT_TYPE_GENERAL = 'general';
@@ -31,24 +34,26 @@ export const chatTypeForRoute = (routeName) =>
 export const unavailableFieldFor = (chatType) =>
   chatType === CHAT_TYPE_TRADE ? 'chatOffTrade' : 'chatOffGeneral';
 
-const OPEN = { chatOffTrade: false, chatOffGeneral: false, dateOfBirth: null };
+// safeChatMode undefined = unknown (not asked yet, or the RPC failed).
+const OPEN = { chatOffTrade: false, chatOffGeneral: false, safeChatMode: undefined };
 
-// Three tiny leaf reads instead of pulling the whole users/{uid} node, which is
+// Two tiny leaf reads instead of pulling the whole users/{uid} node, which is
 // large and would cost real bandwidth on every chat open.
 export const fetchChatAvailability = async (db, uid) => {
   if (!db || !uid) return { ...OPEN };
   try {
-    const [tradeSnap, generalSnap, dobSnap] = await Promise.all([
+    const [tradeSnap, generalSnap, safeChatMode] = await Promise.all([
       get(ref(db, `users/${uid}/chatOffTrade`)),
       get(ref(db, `users/${uid}/chatOffGeneral`)),
-      get(ref(db, `users/${uid}/dateOfBirth`)),
+      // undefined when the RPC is unavailable — ageGate then decides from the
+      // viewer's own DOB alone, and the server trigger is the gate that
+      // actually matters.
+      getSafeChatMode(uid).catch(() => undefined),
     ]);
     return {
       chatOffTrade: tradeSnap.exists() ? !!tradeSnap.val() : false,
       chatOffGeneral: generalSnap.exists() ? !!generalSnap.val() : false,
-      // null when absent — ageGate treats that as not-a-minor, and the server
-      // trigger is the gate that actually matters.
-      dateOfBirth: dobSnap.exists() ? dobSnap.val() : null,
+      safeChatMode,
     };
   } catch (e) {
     // Fail OPEN — a network hiccup must never silently block messaging.

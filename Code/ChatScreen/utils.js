@@ -139,7 +139,7 @@ export const rulesen = [
   "Moderators reserve the right to monitor and take action on any violations, including warnings or bans.",
   "Content should be suitable for all approved age groups, adhering to app age requirements.",
   "Do not share links to harmful sites, malware, or malicious content.",
-  "By using the chat feature, you agree to the app’s Terms of Service and Privacy Policy.https://bloxfruitscalc.com/privacy-policy/",
+  "By using the chat feature, you agree to the app’s Terms of Service and Privacy Policy.https://www.adoptmevalues.app/privacy",
 ];
 
 export const rulesde = [
@@ -154,7 +154,7 @@ export const rulesde = [
   "Moderatoren behalten sich das Recht vor, Verstöße zu überwachen und Maßnahmen zu ergreifen, einschließlich Verwarnungen oder Sperren.",
   "Inhalte sollten für alle genehmigten Altersgruppen geeignet sein und den Altersanforderungen der App entsprechen.",
   "Teilen Sie keine Links zu schädlichen Websites, Malware oder bösartigen Inhalten.",
-  "Durch die Nutzung der Chat-Funktion stimmen Sie den Nutzungsbedingungen und der Datenschutzrichtlinie der App zu. https://bloxfruitscalc.com/privacy-policy/"
+  "Durch die Nutzung der Chat-Funktion stimmen Sie den Nutzungsbedingungen und der Datenschutzrichtlinie der App zu. https://www.adoptmevalues.app/privacy"
 ]
 
 
@@ -170,7 +170,7 @@ export const rulesvi = [
   "Người điều hành có quyền giám sát và thực hiện hành động đối với bất kỳ vi phạm nào, bao gồm cảnh báo hoặc cấm.",
   "Nội dung phải phù hợp với tất cả các nhóm tuổi được phê duyệt, tuân theo yêu cầu về độ tuổi của ứng dụng.",
   "Không chia sẻ liên kết đến các trang web độc hại, phần mềm độc hại hoặc nội dung độc hại.",
-  "Bằng cách sử dụng tính năng trò chuyện, bạn đồng ý với Điều khoản dịch vụ và Chính sách quyền riêng tư của ứng dụng. https://bloxfruitscalc.com/privacy-policy/"
+  "Bằng cách sử dụng tính năng trò chuyện, bạn đồng ý với Điều khoản dịch vụ và Chính sách quyền riêng tư của ứng dụng. https://www.adoptmevalues.app/privacy"
 ]
 
 export const rulesid = [
@@ -185,7 +185,7 @@ export const rulesid = [
   "Moderator berhak untuk memantau dan mengambil tindakan terhadap pelanggaran, termasuk peringatan atau larangan.",
   "Konten harus sesuai untuk semua kelompok umur yang disetujui, sesuai dengan persyaratan usia aplikasi.",
   "Jangan bagikan tautan ke situs berbahaya, malware, atau konten berbahaya.",
-  "Dengan menggunakan fitur obrolan, Anda menyetujui Ketentuan Layanan dan Kebijakan Privasi aplikasi. https://bloxfruitscalc.com/privacy-policy/"
+  "Dengan menggunakan fitur obrolan, Anda menyetujui Ketentuan Layanan dan Kebijakan Privasi aplikasi. https://www.adoptmevalues.app/privacy"
 ]
 
 export const rulesfr = [
@@ -200,7 +200,7 @@ export const rulesfr = [
   "Les modérateurs se réservent le droit de surveiller et de prendre des mesures contre toute violation, y compris des avertissements ou des interdictions.",
   "Le contenu doit être adapté à tous les groupes d’âge approuvés, conformément aux exigences d’âge de l’application.",
   "Ne partagez pas de liens vers des sites nuisibles, des logiciels malveillants ou du contenu malveillant.",
-  "En utilisant la fonction de chat, vous acceptez les Conditions d’utilisation et la Politique de confidentialité de l’application. https://bloxfruitscalc.com/privacy-policy/"
+  "En utilisant la fonction de chat, vous acceptez les Conditions d’utilisation et la Politique de confidentialité de l’application. https://www.adoptmevalues.app/privacy"
 ]
 
 export const rulesfil = [
@@ -215,7 +215,7 @@ export const rulesfil = [
   "Ang mga moderator ay may karapatang subaybayan at gumawa ng aksyon laban sa anumang paglabag, kabilang ang mga babala o pagbabawal.",
   "Ang nilalaman ay dapat na angkop para sa lahat ng pinapayagang pangkat ng edad, alinsunod sa mga kinakailangan sa edad ng app.",
   "Huwag magbahagi ng mga link sa nakakapinsalang mga site, malware, o mapanirang nilalaman.",
-  "Sa paggamit ng tampok na chat, sumasang-ayon ka sa Mga Tuntunin ng Serbisyo at Patakaran sa Privacy ng app. https://bloxfruitscalc.com/privacy-policy/"
+  "Sa paggamit ng tampok na chat, sumasang-ayon ka sa Mga Tuntunin ng Serbisyo at Patakaran sa Privacy ng app. https://www.adoptmevalues.app/privacy"
 ]
 
 export const rulesru = [
@@ -230,7 +230,7 @@ export const rulesru = [
   "Модераторы имеют право контролировать и применять меры против нарушений, включая предупреждения или блокировки.",
   "Контент должен быть подходящим для всех одобренных возрастных групп, соответствуя требованиям приложения по возрасту.",
   "Не делитесь ссылками на вредоносные сайты, вредоносное ПО или вредоносный контент.",
-  "Используя чат, вы соглашаетесь с Условиями использования и Политикой конфиденциальности приложения. https://bloxfruitscalc.com/privacy-policy/"
+  "Используя чат, вы соглашаетесь с Условиями использования и Политикой конфиденциальности приложения. https://www.adoptmevalues.app/privacy"
 ]
 export const rulespt = [
   "Comunique-se sempre com respeito. Discursos de ódio, discriminação e assédio são estritamente proibidos.",
@@ -244,7 +244,7 @@ export const rulespt = [
   "Os moderadores têm o direito de monitorar e tomar medidas contra qualquer violação, incluindo advertências ou banimentos.",
   "O conteúdo deve ser adequado para todas as faixas etárias aprovadas, de acordo com os requisitos de idade do aplicativo.",
   "Não compartilhe links para sites prejudiciais, malware ou conteúdos maliciosos.",
-  "Ao usar o recurso de chat, você concorda com os Termos de Serviço e a Política de Privacidade do aplicativo. https://bloxfruitscalc.com/privacy-policy/"
+  "Ao usar o recurso de chat, você concorda com os Termos de Serviço e a Política de Privacidade do aplicativo. https://www.adoptmevalues.app/privacy"
 ]
 
 

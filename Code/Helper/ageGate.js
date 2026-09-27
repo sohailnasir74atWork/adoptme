@@ -1,8 +1,10 @@
 // Age gating for kid-safety features.
 //
 // Every logged-in account must supply a date of birth before the app opens
-// (DateOfBirthModal, gated in App.js), so `users/{uid}/dateOfBirth` exists for
-// anyone active. It is stored as the string 'YYYY-MM-DD'.
+// (DateOfBirthModal, gated in App.js), so a DOB exists for anyone active. It
+// is stored as the string 'YYYY-MM-DD' in users_private/{uid}/dateOfBirth
+// (owner + staff only since round 2, 2026-09; older accounts still have it on
+// users/{uid}/dateOfBirth until scripts/migrate-user-pii.js runs).
 //
 // Accounts under MINOR_AGE_THRESHOLD get "safe chat": private threads still
 // open normally, but as soon as EITHER participant is under age both sides may
@@ -11,8 +13,8 @@
 //
 // The client-side checks here are UX only. The authority is the Postgres
 // BEFORE INSERT trigger in supabase/028_safe_chat_minors.sql, which re-derives
-// both ages from user_identity.date_of_birth and rejects anything else — so an
-// old or modified build cannot slip free text to a child.
+// both ages from user_identity_base.date_of_birth (031) and rejects anything
+// else — so an old or modified build cannot slip free text to a child.
 
 export const MINOR_AGE_THRESHOLD = 13;
 
@@ -55,11 +57,15 @@ export const isMinorDob = (dob) => {
 };
 
 // Who forced safe mode on this thread — 'both', 'me', 'them', or null when
-// the conversation is unrestricted. `null`/unknown DOB on either side reads as
+// the conversation is unrestricted. The partner's DOB is private, so their
+// side comes from `serverMode` — Supabase safe_chat_mode()'s answer ('both' |
+// 'me' | 'them' | null), or undefined when it couldn't be asked. The viewer's
+// own DOB is checked locally too, so a brand-new account is restricted from
+// the first render, before its DOB has reached Supabase. Unknown reads as
 // not-a-minor, per isMinorDob above.
-export const resolveSafeChat = (myDob, theirDob) => {
-  const meMinor = isMinorDob(myDob);
-  const themMinor = isMinorDob(theirDob);
+export const resolveSafeChat = (myDob, serverMode) => {
+  const meMinor = isMinorDob(myDob) || serverMode === 'me' || serverMode === 'both';
+  const themMinor = serverMode === 'them' || serverMode === 'both';
   if (meMinor && themMinor) return 'both';
   if (meMinor) return 'me';
   if (themMinor) return 'them';

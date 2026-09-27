@@ -26,6 +26,8 @@ import { setThemedNavBar } from './Code/Helper/systemNavBar';
 import Icon from 'react-native-vector-icons/Ionicons';
 import DateOfBirthModal from './Code/AppHelper/DateOfBirthModal';
 import AttPrimer from './Code/AppHelper/AttPrimer';
+import EmailOptInGate from './Code/AppHelper/EmailOptInGate';
+import { saveOwnPrivateProfile, getPrivateProfile } from './Code/Helper/privateProfile';
 import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/database';
 
 // Heavy screens stay out of the eager-import graph and are loaded on first
@@ -95,10 +97,28 @@ function App() {
   const handleDobSubmit = useCallback(async (dobString) => {
     if (!user?.id || !appdatabase) return;
     try {
-      await dbUpdate(dbRef(appdatabase, `users/${user.id}`), { dateOfBirth: dobString });
-      setUser((prev) => ({ ...prev, dateOfBirth: dobString }));
+      // users_private/{uid}, not the publicly readable users/{uid} (round 2).
+      // The rules make it write-once: if a DOB is already on file (the login
+      // read timed out, say) the write is refused and that one is kept.
+      const saved = await saveOwnPrivateProfile(appdatabase, user.id, { dateOfBirth: dobString });
+      let dob = saved ? dobString : (await getPrivateProfile(appdatabase, user.id)).dateOfBirth;
+      if (!dob) {
+        // users_private refused AND holds nothing — the rules for it aren't
+        // live (app shipped before the server step) or the write failed. Never
+        // leave the user stuck behind a gate with no way out: fall back to the
+        // pre-round-2 location, which the owner can always write. The mirror
+        // still gets it to Supabase for safe chat, and privatizeUserPII moves
+        // it into users_private at cutover.
+        await dbUpdate(dbRef(appdatabase, `users/${user.id}`), { dateOfBirth: dobString }).catch((e) => {
+          console.error('Error saving DOB (fallback):', e);
+        });
+        dob = dobString;
+      }
+      setUser((prev) => ({ ...prev, dateOfBirth: dob }));
     } catch (err) {
       console.error('Error saving DOB:', err);
+      // Same rule: an error must not trap the user behind the gate.
+      setUser((prev) => ({ ...prev, dateOfBirth: dobString }));
     }
   }, [user?.id, appdatabase, setUser]);
 
@@ -394,6 +414,17 @@ function App() {
         visible={showDobModal}
         onSubmit={handleDobSubmit}
         isDarkMode={theme === 'dark'}
+      />
+
+      {/* Email news-and-updates opt-in: applies the sign-in checkbox, asks
+          undecided users once, and backs the Settings switch. Waits for the
+          DOB gate, which it relies on for the 13+ check. */}
+      <EmailOptInGate
+        user={user}
+        appdatabase={appdatabase}
+        isDarkMode={theme === 'dark'}
+        knownDob={user?.dateOfBirth || null}
+        blocked={showDobModal || attPrimerVisible}
       />
 
       {/* ATT priming pre-prompt (iOS) — shown once before Apple's system

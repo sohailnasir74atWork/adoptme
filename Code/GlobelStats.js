@@ -6,6 +6,7 @@ import { getAuth, onAuthStateChanged, signOut, signInWithCredential, GoogleAuthP
 import { ref, set, update, get, onDisconnect, getDatabase, onValue, remove, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { getFirestore, doc, onSnapshot } from '@react-native-firebase/firestore';
 import { createNewUser, registerForNotifications } from './Globelhelper';
+import { saveOwnPrivateProfile } from './Helper/privateProfile';
 import { getBlocks, getRoblox, getIdentity, getRoles, getCosmetics, setLastActivity } from './Supabase/userBackend';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
@@ -338,8 +339,11 @@ export const GlobalStateProvider = ({ children }) => {
       // path where the mirror already has the row. A partial mirror (identity
       // present but roles/cosmetics missing) selectively re-reads just those
       // leaves from RTDB so isPro / role flags can never be transiently lost.
+      // No email / decodedEmail (round 2, 2026-09): the own email comes from
+      // Firebase Auth and lives in users_private/{uid}, not users/{uid}.
+      // `dateOfBirth` stays as the pre-migration fallback for the own DOB.
       const PROJECTION = [
-        'email', 'decodedEmail', 'createdAt',
+        'createdAt',
         'displayName', 'avatar', 'userName',
         'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
@@ -358,13 +362,15 @@ export const GlobalStateProvider = ({ children }) => {
       // user stares at the logo the whole time. Nobody has ever measured what
       // this actually costs in the field, so measure it.
       const _profileReadsAt = Date.now();
-      const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap] = await Promise.all([
+      const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap, privateSnap] = await Promise.all([
         getIdentity(userId).catch(() => null),
         getRoles(userId).catch(() => null),
         getCosmetics(userId).catch(() => null),
         getRoblox(userId).catch(() => null),
         Promise.all(RTDB_ONLY.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => null))),
         withTimeout(get(ref(appdatabase, `users/${userId}/xp`))).catch(() => null),
+        // Own users_private/{uid} ({ email, dateOfBirth }) — owner-readable only.
+        withTimeout(get(ref(appdatabase, `users_private/${userId}`))).catch(() => null),
       ]);
       logStartupTiming('startup_profile_reads', {
         ms: Date.now() - _profileReadsAt,
@@ -386,8 +392,6 @@ export const GlobalStateProvider = ({ children }) => {
         // this function (and the app) consume. Only present keys are set,
         // matching how the old per-snapshot rebuild behaved.
         existing = { ...rtdbOnly };
-        if (identityRow.email != null)             existing.email = identityRow.email;
-        if (identityRow.decodedEmail != null)      existing.decodedEmail = identityRow.decodedEmail;
         if (identityRow.createdAt != null)         existing.createdAt = identityRow.createdAt;
         if (identityRow.displayName != null)       existing.displayName = identityRow.displayName;
         if (identityRow.avatar != null)            existing.avatar = identityRow.avatar;
@@ -471,17 +475,8 @@ export const GlobalStateProvider = ({ children }) => {
 
       if (exists) {
         // ⏳ USER EXISTS → existing built above (Supabase mirror or RTDB fallback)
-
-        // ✅ SELF-HEALING: Update email if missing or changed
-        if (loggedInUser.email && (!existing.email || existing.email !== loggedInUser.email)) {
-          const emailUpdates = {
-            email: loggedInUser.email,
-            decodedEmail: loggedInUser.email.replace(/\./g, '(dot)'),
-          };
-          await update(userRef, emailUpdates).catch(err => console.log("Email update error:", err));
-          // Merge updates into existing object so local state is correct immediately
-          Object.assign(existing, emailUpdates);
-        }
+        // (The old email "self-heal" into users/{uid} is gone — see the
+        // users_private block below.)
 
         userData = {
           ...existing,
@@ -516,6 +511,24 @@ export const GlobalStateProvider = ({ children }) => {
         // of wiping fields the projection does not carry (roles, coins, shop…).
         await update(userRef, userData);
       }
+
+      // Round 2 (2026-09): email and date of birth live in users_private/{uid}
+      // (owner + staff only), never on the publicly readable users/{uid}. The
+      // own email is whatever Firebase Auth says. The DOB is the private copy,
+      // else the pre-migration one (own Supabase row / users/{uid}/dateOfBirth).
+      // Whatever the private node lacks is written there — fire-and-forget,
+      // sign-in never waits on it.
+      const privateData = privateSnap && privateSnap.exists() ? (privateSnap.val() || {}) : {};
+      const authEmail = loggedInUser.email ? loggedInUser.email.trim().toLowerCase() : null;
+      const dateOfBirth = privateData.dateOfBirth || userData.dateOfBirth || null;
+      const privateUpdates = {};
+      if (authEmail && privateData.email !== authEmail) privateUpdates.email = authEmail;
+      if (dateOfBirth && !privateData.dateOfBirth) privateUpdates.dateOfBirth = dateOfBirth;
+      if (Object.keys(privateUpdates).length) saveOwnPrivateProfile(appdatabase, userId, privateUpdates);
+      // Local state only (News feedback, email opt-in, DOB gate) — set after
+      // the users/{uid} write above so neither ever lands there.
+      userData.email = loggedInUser.email || null;
+      userData.dateOfBirth = dateOfBirth;
 
       // Merge Supabase roblox fields. Supabase wins; fall back to whatever
       // PROJECTION returned (brand-new user: robloxUsernameRef from signup).

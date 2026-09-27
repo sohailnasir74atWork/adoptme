@@ -960,7 +960,8 @@
         "inbox": "Boîte de réception",
         "youAreBlocked": "Vous êtes bloqué(e) par un admin.",
         "inappropriateLanguage": "Votre message contient un langage inapproprié.",
-        "messageTooLong": "Le message ne peut pas dépasser 100 mots.",
+        "messageTooLong": "Le message ne peut pas dépasser {{max}} caractères.",
+        "messageTooLongWords": "Le message ne peut pas dépasser {{max}} mots.",
         "sendingTooQuickly": "Vous envoyez des messages trop rapidement. Veuillez patienter un instant.",
         "proUsersOnlyLinks": "Seuls les utilisateurs Pro peuvent envoyer des liens."
     },
@@ -1333,7 +1334,11 @@
             "not_owned_msg_sg": "Tu as vendu {{names}}, mais il n'était pas dans ta liste.\n\nTon trade a été sauvegardé ! ✅",
             "trade_saved": "🎉 Trade Sauvegardé !",
             "active_trades_info_title": "⚡ Trades Actifs",
-            "active_trades_info_msg": "Ce sont des trades de la Calculatrice.\n\n✅ 'Terminé' pour compléter\n✏️ 'Modifier' pour changer\n🗑️ 'Supprimer' pour retirer"
+            "active_trades_info_msg": "Ce sont des trades de la Calculatrice.\n\n✅ 'Terminé' pour compléter\n✏️ 'Modifier' pour changer\n🗑️ 'Supprimer' pour retirer",
+            "remove_selected_title_one": "Retirer {{count}} pet ?",
+            "remove_selected_title_other": "Retirer {{count}} pets ?",
+            "remove_selected_msg_one": "Il sera retiré de ton inventaire. Ta liste de souhaits et ton historique de trades ne changent pas.",
+            "remove_selected_msg_other": "Ils seront retirés de ton inventaire. Ta liste de souhaits et ton historique de trades ne changent pas."
         },
         "my_pets": {
             "worth": "MES PETS VALENT",
@@ -1347,7 +1352,17 @@
             "best_assets": "Meilleurs Animaux :",
             "add_pet": "+ Ajouter un Pet !",
             "empty_title": "Pas de pets !",
-            "empty_sub": "Touche + pour ajouter ! 🐾"
+            "empty_sub": "Touche + pour ajouter ! 🐾",
+            "select": "Sélectionner",
+            "select_cancel": "Annuler",
+            "select_all": "Tous ({{count}})",
+            "select_other": "Autres",
+            "select_hint": "Touche tes pets pour les sélectionner",
+            "selected_count_one": "{{count}} sélectionné",
+            "selected_count_other": "{{count}} sélectionnés",
+            "bulk_for_trade": "À échanger",
+            "bulk_private": "Privé",
+            "bulk_remove": "Retirer"
         },
         "goals": {
             "add_dream": "+ Ajouter Pet de Rêve !",

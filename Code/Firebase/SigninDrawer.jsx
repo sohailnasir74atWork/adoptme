@@ -23,6 +23,8 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage, showWarningMessage } from '../Helper/MessageHelper';
 import { requestPermission } from '../Helper/PermissionCheck';
+import { setPendingSigninChoice, clearPendingSigninChoice } from '../Helper/emailOptIn';
+import { handleOpenPrivacy, handleOpenTerms } from '../SettingScreen/settinghelper';
 // import { showMessage } from 'react-native-flash-message';
 
 import { getApp } from '@react-native-firebase/app';
@@ -72,6 +74,13 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   const [robloxUsernameError, setRobloxUsernameError] = useState('');
   const [robloxUsernamelocal, setRobloxUsernamelocal] = useState();
   const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
+  // Email news-and-updates opt-in. Must start unticked: a pre-ticked box is
+  // not valid consent under GDPR/UK law. Applied by EmailOptInGate after
+  // sign-in, which also runs the 13+ check.
+  const [emailUpdates, setEmailUpdates] = useState(false);
+  // Consent is per sign-in: a tick left from an earlier, abandoned attempt
+  // must not carry over, so the box resets whenever the drawer closes.
+  useEffect(() => { if (!visible) setEmailUpdates(false); }, [visible]);
 
   const { triggerHapticFeedback } = useHaptic();
   const { theme, robloxUsernameRef } = useGlobalState();
@@ -141,6 +150,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
   const onAppleButtonPress = useCallback(async () => {
     triggerHapticFeedback('impactLight');
+    setPendingSigninChoice(emailUpdates);
 
     try {
       const { identityToken, nonce } = await appleAuth.performRequest({
@@ -157,13 +167,16 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       setTimeout(onClose, 200);
       await requestPermission();
     } catch (error) {
+      // Keep the choice if sign-in itself went through and only a later
+      // step (the notification permission request) threw.
+      if (!auth.currentUser) clearPendingSigninChoice();
       if (isUserCancellation(error)) return; // user dismissed sheet — don't toast
       showErrorMessage(
         t('home.alert.error'),
         getFirebaseAuthErrorMessage(error, t)
       );
     }
-  }, [auth, t, triggerHapticFeedback, onClose, screen]);
+  }, [auth, t, triggerHapticFeedback, onClose, screen, emailUpdates]);
 
   const handleSignInOrRegister = async () => {
     triggerHapticFeedback('impactLight');
@@ -213,6 +226,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     try {
       if (isRegisterMode) {
+        // Registration signs straight back out; the choice applies at sign-in.
+        clearPendingSigninChoice();
         // 🔐 Register new user
         const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
         const user = userCredential.user;
@@ -230,10 +245,12 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         return;
       } else {
         // 🔐 Login existing user
+        setPendingSigninChoice(emailUpdates);
         const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
         const user = userCredential.user;
 
         if (!user.emailVerified) {
+          clearPendingSigninChoice();
           await user.sendEmailVerification();
           await signOut(auth);
 
@@ -250,6 +267,9 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         setTimeout(onClose, 200);
       }
     } catch (error) {
+      // Keep the choice if sign-in itself went through and only a later
+      // step (the notification permission request) threw.
+      if (!auth.currentUser) clearPendingSigninChoice();
       console.error(t('signin.auth_error'), error);
       showErrorMessage(
         t('home.alert.error'),
@@ -263,6 +283,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   const handleGoogleSignIn = useCallback(async () => {
     triggerHapticFeedback('impactLight');
 
+    setPendingSigninChoice(emailUpdates);
     try {
       setIsLoading(true);
       ensureGoogleSignInConfigured();
@@ -273,7 +294,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       // "invalid credentials" until the user cleared app data.
       await GoogleSignin.signOut().catch(() => {});
       const signInResult = await GoogleSignin.signIn();
-      if (signInResult?.type === 'cancelled') return; // user dismissed the sheet
+      if (signInResult?.type === 'cancelled') { clearPendingSigninChoice(); return; } // user dismissed the sheet
       const idToken = signInResult?.idToken || signInResult?.data?.idToken;
       if (!idToken) throw new Error(t('signin.error_signin_message'));
 
@@ -284,6 +305,9 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       setTimeout(onClose, 200);
       await requestPermission();
     } catch (error) {
+      // Keep the choice if sign-in itself went through and only a later
+      // step (the notification permission request) threw.
+      if (!auth.currentUser) clearPendingSigninChoice();
       if (isUserCancellation(error)) return; // user dismissed sheet — don't toast
       showErrorMessage(
         t('home.alert.error'),
@@ -292,7 +316,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [auth, t, triggerHapticFeedback, onClose, screen]);
+  }, [auth, t, triggerHapticFeedback, onClose, screen, emailUpdates]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -356,6 +380,23 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                 {isForgotPasswordMode ? t('signin.mode_signin') : t('signin.mode_forget_password')}
               </Text>
             </TouchableOpacity>
+
+            {!isForgotPasswordMode && (
+              <TouchableOpacity
+                style={styles.optInRow}
+                onPress={() => setEmailUpdates((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: emailUpdates }}
+              >
+                <View style={[styles.checkbox, emailUpdates && styles.checkboxChecked]}>
+                  {emailUpdates && <Icon name="check" size={12} color="white" />}
+                </View>
+                <Text style={[styles.optInText, { color: selectedTheme.colors.text }]}>
+                  {t('signin.email_updates_optin', { defaultValue: 'Email me news and updates (optional)' })}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {isForgotPasswordMode ? (
               <TouchableOpacity
@@ -437,6 +478,18 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
                   : t('signin.button_switch_register')}
               </Text>
             </TouchableOpacity>
+
+            <Text style={[styles.legalText, { color: selectedTheme.colors.text }]}>
+              {t('signin.legal_prefix', { defaultValue: 'By continuing, you agree to our ' })}
+              <Text style={styles.legalLink} onPress={handleOpenTerms}>
+                {t('signin.legal_terms', { defaultValue: 'Terms' })}
+              </Text>
+              {t('signin.legal_and', { defaultValue: ' and ' })}
+              <Text style={styles.legalLink} onPress={handleOpenPrivacy}>
+                {t('signin.legal_privacy', { defaultValue: 'Privacy Policy' })}
+              </Text>
+              .
+            </Text>
           </SwipeableBottomDrawer>
         </Pressable>
       </ConditionalKeyboardWrapper>
@@ -445,6 +498,40 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 };
 
 const styles = StyleSheet.create({
+  optInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: 'grey',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  checkboxChecked: {
+    backgroundColor: '#007BFF',
+    borderColor: '#007BFF',
+  },
+  optInText: {
+    flex: 1,
+    fontSize: 13,
+  },
+  legalText: {
+    fontSize: 11,
+    textAlign: 'center',
+    opacity: 0.7,
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  legalLink: {
+    textDecorationLine: 'underline',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

@@ -60,9 +60,12 @@ const RARITY_COLORS = {
   premium: '#e74c3c',
   event: '#e91e63',
 };
+// Both value feeds spell it 'ultra rare'; the palette and the `rarities.*`
+// translation keys use 'ultra-rare'.
+const rarityKey = (rarity) => String(rarity || '').toLowerCase().trim().replace(/[\s_]+/g, '-');
 const getRarityColor = (rarity) => {
   if (!rarity) return '#888';
-  return RARITY_COLORS[rarity.toLowerCase()] || '#888';
+  return RARITY_COLORS[rarityKey(rarity)] || '#888';
 };
 
 const ItemBadge = React.memo(({ type, style, styles }) => (
@@ -231,7 +234,7 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
             <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(item.rarity) + '20' }]}>
               <View style={[styles.rarityDot, { backgroundColor: getRarityColor(item.rarity) }]} />
               <Text style={[styles.rarityText, { color: getRarityColor(item.rarity) }]}>
-                {t(`rarities.${item.rarity?.toUpperCase()}`, { defaultValue: item.rarity })}
+                {t(`rarities.${rarityKey(item.rarity).toUpperCase()}`, { defaultValue: item.rarity })}
               </Text>
             </View>
           )}

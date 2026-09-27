@@ -100,7 +100,9 @@ const gridStyles = StyleSheet.create({
   itemText: { fontSize: 15, fontWeight: '700' },
 });
 
-const DateOfBirthModal = ({ visible, onSubmit, isDarkMode }) => {
+// `subtitle` / `onCancel` are optional: the mandatory DOB gate uses neither;
+// the email opt-in flow passes both so the user can back out.
+const DateOfBirthModal = ({ visible, onSubmit, isDarkMode, subtitle, onCancel }) => {
   const [month, setMonth] = useState(null);
   const [day, setDay] = useState(null);
   const [year, setYear] = useState(null);
@@ -193,7 +195,7 @@ const DateOfBirthModal = ({ visible, onSubmit, isDarkMode }) => {
           <Text style={styles.icon}>🎂</Text>
           <Text style={[styles.title, { color: textColor }]}>When's your birthday?</Text>
           <Text style={[styles.subtitle, { color: subColor }]}>
-            We need this to keep everyone safe. You only do this once!
+            {subtitle || 'We need this to keep everyone safe. You only do this once!'}
           </Text>
 
           <StepDots current={step} total={3} />
@@ -256,6 +258,12 @@ const DateOfBirthModal = ({ visible, onSubmit, isDarkMode }) => {
           {year && month && day && (
             <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.8}>
               <Text style={styles.submitText}>Let's Go! 🚀</Text>
+            </TouchableOpacity>
+          )}
+
+          {!!onCancel && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.6}>
+              <Text style={[styles.cancelText, { color: subColor }]}>Not now</Text>
             </TouchableOpacity>
           )}
 
@@ -368,6 +376,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 17,
     fontWeight: '800',
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   disclaimer: {
     fontSize: 12,

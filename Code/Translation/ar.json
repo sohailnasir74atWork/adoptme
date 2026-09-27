@@ -962,7 +962,8 @@
         "inbox": "الوارد",
         "youAreBlocked": "تم حظرك بواسطة المشرف.",
         "inappropriateLanguage": "رسالتك تحتوي على لغة غير لائقة.",
-        "messageTooLong": "لا يمكن أن تتجاوز الرسالة 100 كلمة.",
+        "messageTooLong": "لا يمكن أن تتجاوز الرسالة {{max}} حرفًا.",
+        "messageTooLongWords": "لا يمكن أن تتجاوز الرسالة {{max}} كلمة.",
         "sendingTooQuickly": "أنت ترسل الرسائل بسرعة كبيرة. يرجى الانتظار لحظة.",
         "proUsersOnlyLinks": "يمكن لمستخدمي Pro فقط إرسال الروابط.",
         "guest_user": "ضيف"
@@ -1336,7 +1337,9 @@
             "not_owned_msg_sg": "بعت {{names}} لكنه لم يكن في قائمتك.\n\nتم حفظ التبادل! ✅",
             "trade_saved": "🎉 تم حفظ التبادل!",
             "active_trades_info_title": "⚡ تبادلات نشطة",
-            "active_trades_info_msg": "هذه تبادلات من الآلة الحاسبة.\n\n✅ 'تم' للإنهاء\n✏️ 'تعديل' للتغيير\n🗑️ 'حذف' للإزالة"
+            "active_trades_info_msg": "هذه تبادلات من الآلة الحاسبة.\n\n✅ 'تم' للإنهاء\n✏️ 'تعديل' للتغيير\n🗑️ 'حذف' للإزالة",
+            "remove_selected_title": "إزالة المحدد ({{count}})؟",
+            "remove_selected_msg": "ستتم إزالة ما حددته من مخزونك. قائمة الأمنيات وسجل التبادلات لن يتأثرا."
         },
         "my_pets": {
             "worth": "قيمة حيواناتي",
@@ -1350,7 +1353,16 @@
             "best_assets": "أفضل الحيوانات:",
             "add_pet": "+ أضف حيوان!",
             "empty_title": "لا حيوانات!",
-            "empty_sub": "اضغط + للإضافة! 🐾"
+            "empty_sub": "اضغط + للإضافة! 🐾",
+            "select": "تحديد",
+            "select_cancel": "إلغاء",
+            "select_all": "الكل ({{count}})",
+            "select_other": "أخرى",
+            "select_hint": "اضغط على الحيوانات لتحديدها",
+            "selected_count": "تم تحديد {{count}}",
+            "bulk_for_trade": "للتبادل",
+            "bulk_private": "خاص",
+            "bulk_remove": "إزالة"
         },
         "goals": {
             "add_dream": "+ أضف حيوان أحلامك!",
