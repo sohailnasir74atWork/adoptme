@@ -1,3 +1,5 @@
+import {trackGrowthEvent} from './Helper/growthAnalytics';
+import { fetchCatalog, refreshCatalog, usableCatalog, withDeadline } from './Helper/catalogNetwork';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithCredential, GoogleAuthProvider } from '@react-native-firebase/auth';
@@ -127,6 +129,7 @@ export const GlobalStateProvider = ({ children }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [catalogStatus, setCatalogStatus] = useState('ready');
   const [isRTDBConnected, setIsRTDBConnected] = useState(true); // optimistic — avoids blocking sends before first Firebase handshake
 
   // Ban state — email-keyed and device-keyed are tracked separately so a
@@ -888,6 +891,7 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ FIXED: Memoize fetchStockData to prevent contextValue from changing every render
   // This was causing ALL 80+ useGlobalState consumers to re-render on every cycle
   const fetchStockData = useCallback(async (refresh) => {
+    let catalogRefreshed = true;
     try {
       setLoading(true);
 
@@ -918,6 +922,7 @@ export const GlobalStateProvider = ({ children }) => {
         isStale ||
         !ls.data ||
         !Object.keys(ls.data).length ||
+        !usableCatalog(ls.ggData) ||
         !ls.imgurl;
 
 
@@ -932,63 +937,34 @@ export const GlobalStateProvider = ({ children }) => {
         const elvebreddUrl = `${SOURCE_URL[VALUE_SOURCE.ELVEBREDD]}${bust}`;
         const ggUrl = `${SOURCE_URL[VALUE_SOURCE.GG]}${bust}`;
 
-        const loadFromCdn = async (url) => {
-          const res = await fetch(url, { method: 'GET', cache: refresh ? 'no-store' : 'default' });
-          // Bunny answers a missing file with a 200-looking HTML error page on
-          // some zones and a 404 on others, so check the status before parsing.
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const json = await res.json();
-          if (!json || typeof json !== 'object' || json.error || !Object.keys(json).length) {
-            throw new Error('CDN returned invalid or error data');
-          }
-          return json;
-        };
-
-        // Fetched independently, and that matters. Sharing one try block would
-        // let a GG failure discard a good Elvebredd response — the exact bug
-        // the MM2 app hit when its second feed 404'd.
-        const [elvebreddResult, ggResult] = await Promise.allSettled([
-          loadFromCdn(elvebreddUrl),
-          loadFromCdn(ggUrl),
+        const catalogStartedAt = Date.now();
+        const results = await Promise.all([
+          refreshCatalog({
+            load: () => fetchCatalog(elvebreddUrl), cached: ls.data,
+            save: value => updateLocalStateRef.current('data', value),
+          }),
+          refreshCatalog({
+            load: () => fetchCatalog(ggUrl), cached: ls.ggData,
+            save: value => updateLocalStateRef.current('ggData', value),
+          }),
         ]);
-
-        // 🔹 Elvebredd — the primary catalogue. 16 screens read it.
-        if (elvebreddResult.status === 'fulfilled') {
-          await updateLocalStateRef.current('data', elvebreddResult.value);
-        } else {
-          console.warn('⚠️ Elvebredd CDN failed, using cached data:', elvebreddResult.reason?.message);
-          // ✅ OPTIMIZED: Use cached data instead of downloading from Firebase xlsData
-          // This prevents downloading 12.43 MB from Firebase RTDB
-          const localDataObj = typeof ls.data === 'string' ? JSON.parse(ls.data) : ls.data;
-          const hasLocalData = localDataObj && Object.keys(localDataObj || {}).length > 0;
-
-          if (!hasLocalData) {
-            console.error('❌ No CDN data and no cached data available. App may not function correctly.');
-          } else {
-            console.log('✅ Using cached data instead of downloading from Firebase xlsData');
-          }
-        }
-
-        // 🔹 GG — the second source. Optional: if it fails the app keeps
-        // working on Elvebredd, and the source toggle falls back to it.
-        if (ggResult.status === 'fulfilled') {
-          await updateLocalStateRef.current('ggData', ggResult.value);
-        } else {
-          console.warn('⚠️ GG CDN failed, keeping cached GG data:', ggResult.reason?.message);
-        }
-
-        // Stamp the cache only when at least one catalogue actually arrived.
-        // Stamping unconditionally would start the 24h clock on a failed
-        // fetch, leaving the app on stale data for a day because the network
-        // happened to be down at launch. A total failure leaves the old
-        // timestamp in place, so the next launch retries immediately.
-        if (elvebreddResult.status === 'fulfilled' || ggResult.status === 'fulfilled') {
+        catalogRefreshed = results.every(r => r.fresh);
+        trackGrowthEvent('catalog_load_result', {
+          duration_ms: Date.now() - catalogStartedAt,
+          fresh_feeds: results.filter(r => r.fresh).length,
+          available_feeds: results.filter(r => r.available).length,
+          manual_refresh: refresh ? 1 : 0,
+        });
+        setCatalogStatus(results.every(r => r.fresh) ? 'ready' :
+          results[0].available ? 'cached' : 'unavailable');
+        // Do not mark a failed secondary feed fresh for another 24 hours.
+        if (results.every(r => r.fresh)) {
           await updateLocalStateRef.current('fetchDataTime', now);
         }
 
         // 🔹 Fetch shared image_url only if missing (essentially static config)
         if (!ls.imgurl) {
-          const imageSnapShot = await get(ref(appdatabase, 'image_url'));
+          const imageSnapShot = await withDeadline(() => get(ref(appdatabase, 'image_url')));
           if (imageSnapShot.exists()) {
             await updateLocalStateRef.current('imgurl', imageSnapShot.val());
           }
@@ -996,10 +972,12 @@ export const GlobalStateProvider = ({ children }) => {
         // console.log('updated everything')
       }
     } catch (error) {
+      catalogRefreshed = false;
       // console.error("❌ Error fetching stock data:", error);
     } finally {
       setLoading(false);
     }
+    return catalogRefreshed;
   }, [appdatabase]); // ✅ Stable — only changes if appdatabase changes (once)
 
   // ✅ Run the function only if needed
@@ -1012,7 +990,7 @@ export const GlobalStateProvider = ({ children }) => {
   }, [fetchStockData]);
 
   const reload = useCallback(() => {
-    fetchStockData(true);
+    return fetchStockData(true);
   }, [fetchStockData]);
 
   /**
@@ -1405,6 +1383,7 @@ export const GlobalStateProvider = ({ children }) => {
       updateLocalStateAndDatabase,
       fetchStockData,
       loading,
+      catalogStatus,
       freeTranslation,
       isAdmin,
       reload,
@@ -1421,7 +1400,7 @@ export const GlobalStateProvider = ({ children }) => {
       modControlsEnabled, // moderator ban/mute kill switch (RTDB /mod_controls_enabled)
       canGrantJmd, // delegated "can make Junior Mods" grant (RTDB /jmd_granters/{uid})
     }),
-    [user, theme, loading, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, canGrantJmd]
+    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, canGrantJmd]
   );
 
   return (

@@ -943,6 +943,9 @@
         "disabled_banner_me_trade": "You have disabled trade chat. Turn it back on in Settings to message from trades."
     },
     "first": {
+        "continue_guest": "Continue as Guest",
+        "try_values": "Try the value calculator",
+        "utility_note": "Compare item values and check trades. This companion app does not grant in-game items.",
         "welcome_title": "Welcome to Fruit Values",
         "welcome_text": "Track fruit values & optimize your trades.",
         "signin_or_guest": "Signin or Continue as Guest",
@@ -1773,5 +1776,12 @@
         "trial_weeks_other": "{{count}} weeks",
         "trial_months_one": "{{count}} month",
         "trial_months_other": "{{count}} months"
+    },
+    "catalog": {
+        "updated": "Catalog downloaded: {{date}}",
+        "cached": "Some values could not be refreshed. Available saved values are shown; they may be out of date.",
+        "unavailable": "Values could not be loaded. Check your connection and try again.",
+        "loading": "Trying again…",
+        "retry": "Retry loading values"
     }
 }

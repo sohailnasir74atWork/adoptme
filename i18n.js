@@ -1,3 +1,4 @@
+import {trackGrowthEvent} from './Code/Helper/growthAnalytics';
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import * as RNLocalize from "react-native-localize";
@@ -5,6 +6,7 @@ import * as RNLocalize from "react-native-localize";
 
 // ✅ Only import English at startup (fallback language)
 import en from "./Code/Translation/en.json";
+import ru from "./Code/Translation/ru.json";
 
 // Initialize MMKV storage
 let storage;
@@ -35,12 +37,13 @@ const countryToLanguage = {
   AR: "ar",
 };
 
-// Supported languages for validation (5 premium high-eCPM languages)
-const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'de', 'ar'];
+// Languages supported by the app, independent of subscription status.
+const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'de', 'ar', 'ru'];
 
 // ✅ Available languages with display names (for language selector UI)
 export const AVAILABLE_LANGUAGES = [
   { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
   { code: 'es', name: 'Español', flag: '🇪🇸' },
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
   { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
@@ -59,7 +62,10 @@ export const getDeviceLanguage = () => {
 };
 
 // Determine initial language
-const initialLanguage = getStoredLanguage() || 'en';
+const savedLanguage = getStoredLanguage();
+const deviceLanguage = getDeviceLanguage();
+const initialLanguage = SUPPORTED_LANGUAGES.includes(savedLanguage) ? savedLanguage
+  : SUPPORTED_LANGUAGES.includes(deviceLanguage) ? deviceLanguage : 'en';
 
 // Initialize i18next with only English
 i18n
@@ -68,6 +74,7 @@ i18n
     compatibilityJSON: "v3",
     resources: {
       en: { translation: en },
+      ru: { translation: ru },
     },
     lng: initialLanguage,
     fallbackLng: "en",
@@ -110,16 +117,19 @@ export const loadLanguage = async (langCode) => {
 // ✅ Function to update language with lazy-loading
 export const setAppLanguage = async (languageCode) => {
   // Load language bundle if not already loaded
-  await loadLanguage(languageCode);
+  if (!await loadLanguage(languageCode)) return false;
 
   // Change language
   i18n.changeLanguage(languageCode);
   storage.set("appLanguage", languageCode);
+  trackGrowthEvent("app_language_selected", {language: languageCode});
 };
 
 // ✅ Load initial language if not English
 if (initialLanguage !== 'en') {
-  loadLanguage(initialLanguage);
+  loadLanguage(initialLanguage).then(loaded => {
+    if (loaded && i18n.language === initialLanguage) i18n.changeLanguage(initialLanguage);
+  });
 }
 
 export default i18n;

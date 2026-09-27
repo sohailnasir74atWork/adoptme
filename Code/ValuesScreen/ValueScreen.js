@@ -1,3 +1,5 @@
+import useValueSearchTelemetry from '../Helper/useValueSearchTelemetry';
+import CatalogStatus from '../Helper/CatalogStatus';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
@@ -30,7 +32,6 @@ import {
 } from '../Helper/valueSources';
 import { useTranslation } from 'react-i18next';
 import { ref, update } from '@react-native-firebase/database';
-import { mixpanel } from '../AppHelper/MixPenel';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
@@ -607,6 +608,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
 
   // Catalog lookup so "My Pets" can re-price each owned pet at the CURRENT value
   // using its saved variant (D/N/M + F/R), instead of the possibly-stale stored value.
+  useValueSearchTelemetry(searchText, filteredData.length, parsedValuesData.length);
+
   const catalogIndex = useMemo(() => {
     const byId = {}, byName = {};
     (parsedValuesData || []).forEach(it => {
@@ -872,7 +875,8 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     setRefreshing(true);
 
     try {
-      await reload(); // Re-fetch stock data
+      const refreshed = await reload();
+      if (refreshed === false) throw new Error('Catalog refresh incomplete'); // Re-fetch stock data
       if (!isMountedRef.current) return;
       // ✅ Show success message when values are reloaded
       showSuccessMessage(t('chat.success'), t('value.values_reloaded'));
@@ -905,7 +909,6 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
         setIsDrawerVisible(prev => !prev);
       }
     }
-    mixpanel.track("Code Drawer Open");
   }, [triggerHapticFeedback, hasAdBeenShown, localState.isPro]); // ✅ Removed isDrawerVisible - using functional update
 
 
@@ -954,6 +957,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     <>
       <GestureHandlerRootView>
         <View style={styles.container}>
+          <CatalogStatus />
           {(fromChat || fromSetting) && selectedList?.length > 0 && (
             <View style={styles.selectedPetsSection}>
               <View style={styles.selectedPetsHeader}>
