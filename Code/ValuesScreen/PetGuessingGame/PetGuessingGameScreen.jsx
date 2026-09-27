@@ -17,7 +17,6 @@ import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import InterstitialAdManager from '../../Ads/IntAd';
 import { fetchAnalyticsData, normalizeName } from '../../Helper/analyticsDataHelper';
 import OnlineUsersList from '../../ChatScreen/GroupChat/OnlineUsersList';
@@ -199,15 +198,6 @@ const PetGuessingGameScreen = () => {
           awardGameWin(appdatabase, firestoreDB, user.id)
             .then((result) => {
               if (result) {
-                // Track game win in Mixpanel
-                mixpanel.track('Game Won', {
-                  gameType: 'Pet Guessing Game',
-                  roomId: gameId,
-                  pointsAwarded: 100,
-                  totalPoints: result.points,
-                  totalWins: result.wins,
-                  winnerScore: data.gameData?.winner?.score || 0,
-                });
                 // ✅ Simple victory toast (ad is handled separately for all players)
                 showSuccessMessage(
                   'Victory! 🎉',
@@ -376,12 +366,6 @@ const PetGuessingGameScreen = () => {
       const success = await startGame(firestoreDB, currentRoomId, user.id);
 
       if (success) {
-        // Track game start in Mixpanel
-        mixpanel.track('Game Started', {
-          gameType: 'Pet Guessing Game',
-          roomId: currentRoomId,
-          playerCount: roomData?.currentPlayers || 0,
-        });
         showSuccessMessage('Game Started!', 'Take turns spinning the wheel!');
       } else {
         showErrorMessage('Error', 'Failed to start game');

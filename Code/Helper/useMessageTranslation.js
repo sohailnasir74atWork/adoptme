@@ -29,7 +29,6 @@ import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { FRUIT_KEYWORDS } from './filter';
 import { getDeviceLanguage } from '../../i18n';
-import { mixpanel } from '../AppHelper/MixPenel';
 
 export const useMessageTranslation = () => {
   const { t } = useTranslation();
@@ -86,7 +85,6 @@ export const useMessageTranslation = () => {
           translated = translated.replace(new RegExp(placeholder, 'g'), word);
         });
 
-        mixpanel.track('Translation', { lang: targetLang });
 
         return translated;
       } catch (err) {

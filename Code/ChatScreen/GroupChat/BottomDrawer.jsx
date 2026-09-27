@@ -26,7 +26,6 @@ import { getStyles } from '../../SettingScreen/settingstyle';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage } from '../../Helper/MessageHelper';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
@@ -746,7 +745,6 @@ const ProfileBottomDrawer = ({
     triggerHapticFeedback('impactLight');
     Clipboard.setString(code);
     showSuccessMessage(t('value.copy'), t('value.copy_success'));
-    mixpanel.track('Code UserName', { UserName: code });
   };
 
   // ─────────────────────────────────────────────

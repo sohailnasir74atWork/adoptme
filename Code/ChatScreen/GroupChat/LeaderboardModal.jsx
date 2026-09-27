@@ -21,7 +21,6 @@ import { collection, getDocs, query, orderBy, limit, doc, getDoc } from '@react-
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
@@ -160,7 +159,6 @@ const LeaderboardModal = ({
     setSelectedUser(selectedUserData);
 
     setIsDrawerVisible(true);
-    mixpanel.track("Leaderboard User Click");
   }, [triggerHapticFeedback]);
 
   // ✅ Handle start chat from BottomDrawer
@@ -180,7 +178,6 @@ const LeaderboardModal = ({
           },
         });
       }
-      mixpanel.track("Leaderboard Start Chat");
     };
 
     // ✅ Removed navigation ad - exit ads are shown when leaving chat instead

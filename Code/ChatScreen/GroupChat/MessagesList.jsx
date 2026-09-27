@@ -29,7 +29,6 @@ import { showSuccessMessage } from '../../Helper/MessageHelper';
 import axios from 'axios';
 import { useLocalState } from '../../LocalGlobelStats';
 import { getDeviceLanguage } from '../../../i18n';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { useMessageTranslation } from '../../Helper/useMessageTranslation';
 import MessageActionDrawer from './MessageActionDrawer';

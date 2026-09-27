@@ -21,7 +21,6 @@ import { ref, get, query, orderByValue, equalTo } from '@react-native-firebase/d
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import FramedAvatar from './FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
@@ -550,7 +549,6 @@ const OnlineUsersList = ({
           },
         });
       }
-      mixpanel.track("Online Users Chat");
     };
 
     // ✅ Removed navigation ad - exit ads are shown when leaving chat instead

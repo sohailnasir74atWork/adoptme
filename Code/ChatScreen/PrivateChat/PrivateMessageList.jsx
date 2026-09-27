@@ -26,7 +26,6 @@ import { showSuccessMessage } from '../../Helper/MessageHelper';
 import { useLocalState } from '../../LocalGlobelStats';
 import axios from 'axios';
 import { getDeviceLanguage } from '../../../i18n';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { TEMPLATE_BY_ID, TEMPLATE_ID_BY_TEXT, GAME_ID_TEMPLATE_ID } from '../safeTemplates';
 import { useMessageTranslation } from '../../Helper/useMessageTranslation';

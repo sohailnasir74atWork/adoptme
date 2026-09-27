@@ -19,7 +19,6 @@ import { ref, get } from '@react-native-firebase/database';
 import { getTrustedRoster, getCmsrRoster, getHelperRoster } from '../../Supabase/userBackend';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import ProfileBottomDrawer from './BottomDrawer';
@@ -304,7 +303,6 @@ const LeaderboardScreen = () => {
       avatar: item.avatar,
     });
     setIsDrawerVisible(true);
-    mixpanel.track('Leaderboard User Click', { tab: activeTab });
   }, [triggerHapticFeedback, activeTab]);
 
   const handleStartChat = useCallback(() => {
@@ -320,7 +318,6 @@ const LeaderboardScreen = () => {
           },
         });
       }
-      mixpanel.track('Leaderboard Start Chat');
     }, 300);
   }, [selectedUser, navigation]);
 

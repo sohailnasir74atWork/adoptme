@@ -802,13 +802,13 @@ const s = StyleSheet.create({
     width: ICE_SIZE - 24, height: ICE_SIZE - 24,
   },
   iceOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center', justifyContent: 'center',
     borderRadius: 28,
   },
   frostText: { fontSize: 24, opacity: 0.5 },
   revealGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 28,
   },
 

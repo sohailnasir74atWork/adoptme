@@ -1,7 +1,7 @@
 // Code/Firebase/FrontendNotificationHandling.js
 
 import { useEffect } from 'react';
-import { Platform, InteractionManager } from 'react-native';
+import { Platform } from 'react-native';
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { useLocalState } from '../LocalGlobelStats';
@@ -82,7 +82,7 @@ const NotificationHandler = () => {
         }
 
         // ✅ Display notification after current interactions finish to avoid blocking UI
-        InteractionManager.runAfterInteractions(async () => {
+        requestIdleCallback(async () => {
           await notifee.displayNotification({
             title: notificationTitle,
             body: notificationBody,
@@ -93,7 +93,7 @@ const NotificationHandler = () => {
               pressAction: { id: 'default' },
             },
           });
-        });
+        }, { timeout: 1000 });
       } catch (error) {
         // console.error('[Notification] Error processing notification:', error);
       } finally {

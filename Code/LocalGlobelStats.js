@@ -3,7 +3,6 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import Purchases from 'react-native-purchases';
 import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
-import { mixpanel } from './AppHelper/MixPenel';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
 import { serverNowMs } from './Helper/serverTime';
@@ -370,11 +369,6 @@ export const LocalStateProvider = ({ children }) => {
       );
 
       if (track) {
-        mixpanel.track('Purchase Completed', {
-          package: packageToPurchase.identifier,
-          price: packageToPurchase.product.price,
-          currency: packageToPurchase.product.currencyCode,
-        });
       }
 
       showSuccessMessage('Success', 'Purchase completed successfully!');

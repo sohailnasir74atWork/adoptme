@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ChatScreen from './GroupChat/Trader';
 import PrivateChatScreen from './PrivateChat/PrivateChat';
@@ -88,7 +87,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
       if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
       unreadDebounceRef.current = setTimeout(() => {
-        InteractionManager.runAfterInteractions(() => setunreadcount(totalUnread));
+        requestIdleCallback(() => setunreadcount(totalUnread), { timeout: 1000 });
       }, 500);
     };
 
@@ -149,14 +148,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     const recalcAndSetState = () => {
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
       groupDebounceRef.current = setTimeout(() => {
-        InteractionManager.runAfterInteractions(() => {
+        requestIdleCallback(() => {
           const sortedGroups = Array.from(groupsMap.values()).sort(
             (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
           );
           setGroups(sortedGroups);
           const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
           setGroupUnreadCount(totalGroupUnread);
-        });
+        }, { timeout: 1000 });
       }, 300);
     };
 

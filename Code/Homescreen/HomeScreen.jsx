@@ -19,7 +19,6 @@ import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
-import { mixpanel } from '../AppHelper/MixPenel';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
@@ -1395,7 +1394,6 @@ const HomeScreen = ({ selectedTheme }) => {
       if (isMountedRef.current) {
         setLastTradeTime(now); // ✅ Use Date.now() for cooldown tracking
       }
-      mixpanel.track("Trade Created", { user: user?.id });
 
       // ✅ Store timeout and animation frame IDs for cleanup
       const rafKey1 = `createTrade_raf_${Date.now()}_1`;

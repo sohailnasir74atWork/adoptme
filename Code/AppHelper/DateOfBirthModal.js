@@ -271,7 +271,7 @@ const screenHeight = Dimensions.get('window').height;
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15, 10, 30, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',

@@ -28,14 +28,13 @@ const config = {
 
   supportEmail: isNoman ? 'support@thesolanalabs.com' : 'mindfusionio.help@gmail.com',
   andriodShareLink: isNoman ? 'https://play.google.com/store/apps/details?id=com.adoptmevaluescalc' : 'https://play.google.com/store/apps/details?id=com.bloxfruitstock',
-  IOsShareLink: isNoman ? 'https://apps.apple.com/us/app/app-name/id6745400111' : '',
-  IOsShareLink: isNoman ? 'https://apps.apple.com/us/app/app-name/id6745400111' : '',
+  IOsShareLink: isNoman ? 'https://apps.apple.com/app/id6745400111' : '',
   webSite: isNoman ? 'https://adoptmevalues.app/' : 'https://bloxfruitvalue.today',
 
   isNoman: isNoman ? true : false,
 
-  otherapplink: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.bloxfruitevalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
-  otherapplink2: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.mm2tradesvalues' : 'https://apps.apple.com/us/app/app-name/id6737775801',
+  otherapplink: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.bloxfruitevalues' : 'https://apps.apple.com/app/id6737775801',
+  otherapplink2: Platform.OS == 'android' ? 'https://play.google.com/store/apps/details?id=com.mm2tradesvalues' : 'https://apps.apple.com/app/id6747306748',
   // Cloud Functions URL (update with your actual region)
   cloudFunctionsUrl: 'https://us-central1-adoptme-7b50c.cloudfunctions.net',
 

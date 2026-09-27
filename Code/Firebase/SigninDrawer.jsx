@@ -22,7 +22,6 @@ import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage, showWarningMessage } from '../Helper/MessageHelper';
-import { mixpanel } from '../AppHelper/MixPenel';
 import { requestPermission } from '../Helper/PermissionCheck';
 // import { showMessage } from 'react-native-flash-message';
 
@@ -156,7 +155,6 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
       showSuccessMessage(t('home.alert.success'), t('signin.success_signin'));
       setTimeout(onClose, 200);
-      mixpanel.track(`Login with apple from ${screen}`);
       await requestPermission();
     } catch (error) {
       if (isUserCancellation(error)) return; // user dismissed sheet — don't toast
@@ -247,7 +245,6 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
           return;
         }
 
-        mixpanel.track(`Login with email from ${screen}`);
         showSuccessMessage(t('signin.alert_welcome_back'), t('signin.success_signin'));
         await requestPermission();
         setTimeout(onClose, 200);
@@ -285,7 +282,6 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
       showSuccessMessage(t('signin.alert_welcome_back'), t('signin.success_signin'));
       setTimeout(onClose, 200);
-      mixpanel.track(`Login with google from ${screen}`);
       await requestPermission();
     } catch (error) {
       if (isUserCancellation(error)) return; // user dismissed sheet — don't toast

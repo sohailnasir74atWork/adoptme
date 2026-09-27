@@ -261,7 +261,7 @@ const getStyles = (c) =>
       backgroundColor: c.overlay,
     },
     backdropTap: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     sheet: {
       backgroundColor: c.bgElevated,

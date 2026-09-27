@@ -126,15 +126,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
   useFocusEffect(
     useCallback(() => {
       StatusBar.setBarStyle('light-content', true);
-      if (Platform.OS === 'android') {
-        StatusBar.setBackgroundColor(isDarkMode ? config.darkColors.surface : config.colors.primary, true);
-      }
       return () => {
         // Reset status bar when leaving Home tab
         StatusBar.setBarStyle(isDarkMode ? 'light-content' : 'dark-content', true);
-        if (Platform.OS === 'android') {
-          StatusBar.setBackgroundColor(isDarkMode ? config.darkColors.bg : '#FFFFFF', true);
-        }
       };
     }, [isDarkMode])
   );

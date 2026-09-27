@@ -5,7 +5,6 @@ import {
 import Icon from 'react-native-vector-icons/FontAwesome';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import { useNavigation } from '@react-navigation/native';
 import CommentModal from './CommentsModal';
 import config from '../../Helper/Environment';
@@ -108,7 +107,6 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
       showMessage({ message: t('feed.signin_message'), type: 'warning' });
       return;
     }
-    mixpanel.track('Design Screen');
     navigation.navigate('PrivateChatDesign', { selectedUser, item });
   }, [userId, item, navigation]);
 
@@ -609,7 +607,7 @@ const getStyles = (isDark) =>
       resizeMode: 'cover',
     },
     moreOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0,0,0,0.55)',
       justifyContent: 'center',
       alignItems: 'center',

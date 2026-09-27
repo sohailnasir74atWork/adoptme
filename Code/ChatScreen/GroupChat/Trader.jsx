@@ -47,7 +47,6 @@ import {
 } from '../../Supabase/chatBackend';
 import { uuidv4 } from '../../Supabase/uuid';
 import { useTranslation } from 'react-i18next';
-import { mixpanel } from '../../AppHelper/MixPenel';
 import BannerAdComponent from '../../Ads/bannerAds';
 import { showMessage } from 'react-native-flash-message';
 import PetModal from '../PrivateChat/PetsModel';
@@ -302,7 +301,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       if (navigation && typeof navigation.navigate === 'function') {
         navigation.navigate('PrivateChat', { selectedUser, selectedTheme });
       }
-      mixpanel.track("Inbox Chat");
     };
     // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
     callbackfunction();

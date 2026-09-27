@@ -18,7 +18,6 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useLocalState } from '../LocalGlobelStats';
 import BannerAdComponent from '../Ads/bannerAds';
 import InterstitialAdManager from '../Ads/IntAd';
-import { mixpanel } from '../AppHelper/MixPenel';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 
@@ -184,7 +183,6 @@ const ServerScreen = () => {
             InterstitialAdManager.showAd(openLink);
         } else {
             openLink();
-            mixpanel.track("Server Open");
         }
     };
 

@@ -31,7 +31,6 @@ import { useTranslation } from 'react-i18next';
 import SafeLottieView from '../Helper/SafeLottieView';
 import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { mixpanel } from '../AppHelper/MixPenel';
 import { useGlobalState } from '../GlobelStats';
 import { setNavBarColor, setThemedNavBar } from '../Helper/systemNavBar';
 
@@ -307,34 +306,17 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (visible) mixpanel.track('custom_paywall_presented', { source: track || 'unknown' });
-  }, [visible, track]);
-
   const handleSelect = useCallback((pkg) => {
     triggerHapticFeedback('impactLight');
     setSelectedPkg(pkg);
-    mixpanel.track('custom_paywall_plan_select', {
-      source: track || 'unknown',
-      package: pkg.identifier,
-    });
   }, [triggerHapticFeedback, track]);
 
   const handlePurchase = useCallback(async () => {
     if (!selectedPkg || loading) return;
     triggerHapticFeedback('impactMedium');
-    mixpanel.track('custom_paywall_purchase_tap', {
-      source: track || 'unknown',
-      package: selectedPkg.identifier,
-      price: selectedPkg.product?.price,
-    });
     await purchaseProduct(selectedPkg, setLoading, track);
     setTimeout(() => {
       if (localState?.isPro) {
-        mixpanel.track('custom_paywall_purchase_success', {
-          source: track || 'unknown',
-          package: selectedPkg.identifier,
-        });
         onClose?.();
       }
     }, 500);
@@ -368,7 +350,7 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
 
   const content = (
     <View style={s.container}>
-      <StatusBar barStyle="light-content" backgroundColor={INK} translucent={false} />
+      <StatusBar barStyle="light-content" />
       <Backdrop />
 
       {/* ══ TOP: what you get ══ */}
