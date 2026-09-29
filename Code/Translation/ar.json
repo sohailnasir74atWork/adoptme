@@ -1648,10 +1648,6 @@
     },
     "tracker": {
         "title": "حيواناتي",
-        "home_promo_title": "كبّر حيواناتي",
-        "home_promo_sub": "شوف كم بقي على حيوانك ليصبح Full Grown أو Neon أو Mega",
-        "continue_grind": "أكمل",
-        "today_short": "اليوم {{done}}/{{goal}}",
         "today_grind": "لعبت اليوم!",
         "tasks": "مهام",
         "your_pace": "تنجز حوالي {{count}} مهمة كل يوم",

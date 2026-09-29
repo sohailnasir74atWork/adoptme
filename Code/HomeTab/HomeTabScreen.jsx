@@ -20,7 +20,6 @@ import { getUserXP, getLevelFromXP, getXPProgress, getNextLevel } from '../Engag
 import StatusFeed from '../Design/StatusFeed';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import TrendingPets from './TrendingPets';
-// import HomeTrackerCard from '../PetTracker/HomeTrackerCard'; // hidden
 import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
@@ -566,9 +565,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
           {/* ═══ SECTION: Trending Pets ═══ */}
           <TrendingPets isDarkMode={isDarkMode} navigation={navigation} />
-
-          {/* ═══ Pet Aging & Growing Tracker (hidden) ═══ */}
-          {/* <HomeTrackerCard isDarkMode={isDarkMode} navigation={navigation} /> */}
 
           {/* ═══ SECTION 3: Cosmetics ═══ */}
           <View style={styles.section}>

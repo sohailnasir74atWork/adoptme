@@ -1689,10 +1689,6 @@
     },
     "tracker": {
         "title": "My Pets",
-        "home_promo_title": "Grow My Pets",
-        "home_promo_sub": "See how long until your pet is Full Grown, Neon or Mega",
-        "continue_grind": "Keep going",
-        "today_short": "Today {{done}}/{{goal}}",
         "today_grind": "You played today!",
         "tasks": "tasks",
         "your_pace": "You do about {{count}} tasks a day",

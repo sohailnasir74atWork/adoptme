@@ -1648,10 +1648,6 @@
     },
     "tracker": {
         "title": "Mes Pets",
-        "home_promo_title": "Fais grandir tes Pets",
-        "home_promo_sub": "Vois le temps qu'il faut pour avoir un pet Full Grown, Neon ou Mega",
-        "continue_grind": "Continue",
-        "today_short": "Aujourd'hui {{done}}/{{goal}}",
         "today_grind": "Tu as joué aujourd'hui !",
         "tasks": "tâches",
         "your_pace": "Tu fais environ {{count}} tâches par jour",

@@ -1721,10 +1721,6 @@
     },
     "tracker": {
         "title": "Mis Mascotas",
-        "home_promo_title": "Haz Crecer Tus Mascotas",
-        "home_promo_sub": "Mira cuánto falta para que tu mascota sea Full Grown, Neon o Mega",
-        "continue_grind": "Seguir",
-        "today_short": "Hoy {{done}}/{{goal}}",
         "today_grind": "¡Hoy jugaste!",
         "tasks": "tareas",
         "your_pace": "Haces como {{count}} tareas al día",

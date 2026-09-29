@@ -19,7 +19,6 @@ import { getThemeColors } from '../Helper/themeColors';
 import DailyQuiz from './DailyQuiz';
 import MemoryMatch from './MemoryMatch';
 import IceBreaker from './IceBreaker';
-import WordScramble from './WordScramble';
 import RewardedAdManager from '../Ads/RewardedAdManager';
 
 
@@ -29,7 +28,6 @@ const GameHub = ({ navigation }) => {
   const [showQuiz, setShowQuiz] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [showIce, setShowIce] = useState(false);
-  const [showScramble, setShowScramble] = useState(false);
 
   // Warm the rewarded ad when the hub opens — every game reachable from here
   // has a "watch ad" flow, and a cold load at tap-time used to time out as
@@ -75,13 +73,6 @@ const GameHub = ({ navigation }) => {
           <Text style={styles.gameName}>Pet Quiz</Text>
           <Text style={styles.gameInfo}>5 trivia questions</Text>
           <View style={styles.gameTag}><Text style={styles.gameTagText}>1x / day</Text></View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.gameCard, { backgroundColor: '#F59E0B' }]} onPress={() => setShowScramble(true)} activeOpacity={0.85}>
-          <Text style={styles.gameEmoji}>🔤</Text>
-          <Text style={styles.gameName}>Word Scramble</Text>
-          <Text style={styles.gameInfo}>Unscramble pet names</Text>
-          <View style={styles.gameTag}><Text style={styles.gameTagText}>1+ / day</Text></View>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.gameCard, { backgroundColor: '#10B981' }]} onPress={() => setShowMemory(true)} activeOpacity={0.85}>
@@ -169,7 +160,6 @@ const GameHub = ({ navigation }) => {
       <DailyQuiz visible={showQuiz} onClose={() => setShowQuiz(false)} />
       <MemoryMatch visible={showMemory} onClose={() => setShowMemory(false)} />
       <IceBreaker visible={showIce} onClose={() => setShowIce(false)} />
-      <WordScramble visible={showScramble} onClose={() => setShowScramble(false)} />
 
     </ScrollView>
   );
