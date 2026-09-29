@@ -6,6 +6,7 @@ import {
 } from '@react-native-firebase/auth';
 import { clearMyCosmetics } from '../Helper/cosmeticsCache';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { markSignOutIntent } from './signOutIntent';
 
 /**
  * Log out the current user and reset local user state.
@@ -15,6 +16,7 @@ export const logoutUser = async (setUser) => {
     const app = getApp();              // get the default Firebase app
     const auth = getAuth(app);         // get Auth instance for that app
 
+    markSignOutIntent('user-logout');
     await signOut(auth);               // modular signOut
 
     // 2026-09-04: also clear the cached Google account, otherwise the next
@@ -52,6 +54,7 @@ export const deleteUser = async () => {
     const user = auth.currentUser;
 
     if (user) {
+      markSignOutIntent('account-deleted');
       await fbDeleteUser(user);        // modular deleteUser(user)
     } else {
       console.warn('No user is currently logged in.');

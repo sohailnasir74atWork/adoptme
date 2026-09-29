@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { ensureGoogleSignInConfigured } from './googleSignInConfig';
+import { markSignOutIntent } from './signOutIntent';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import appleAuth, { AppleButton } from '@invertase/react-native-apple-authentication';
 import { useHaptic } from '../Helper/HepticFeedBack';
@@ -92,6 +93,21 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
   const isDarkMode = theme === 'dark';
 
+  // Signs out an email/password user who has not verified yet. GlobelStats'
+  // backstop also signs such users out if they are still signed in 3 s after
+  // signing in, which a slow email send can outlast, and RNFB's signOut()
+  // rejects with auth/no-current-user when nobody is signed in. Uncaught, that
+  // swapped the "check your inbox" modal for "Failed to sign in" (2026-09-29).
+  const signOutUnverified = async (reason) => {
+    if (!auth.currentUser) return;
+    markSignOutIntent(reason);
+    try {
+      await signOut(auth);
+    } catch (e) {
+      if (e?.code !== 'auth/no-current-user') throw e;
+    }
+  };
+
   useEffect(() => {
     robloxUsernameRef.current = robloxUsernamelocal;
   }, [robloxUsernamelocal, robloxUsernameRef]);
@@ -106,6 +122,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     return appleAuth.onCredentialRevoked(async () => {
       try {
+        markSignOutIntent('apple-revoked');
         await signOut(auth);
         showWarningMessage(t('signin.session_expired_title'), t('signin.session_expired_message'));
       } catch (e) {
@@ -234,7 +251,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
         // Send verification email then sign out
         await user.sendEmailVerification();
-        await signOut(auth);
+        await signOutUnverified('register-verify-email');
 
         // Blocking modal — user must acknowledge to know they need to
         // check their inbox before signing in.
@@ -252,7 +269,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         if (!user.emailVerified) {
           clearPendingSigninChoice();
           await user.sendEmailVerification();
-          await signOut(auth);
+          await signOutUnverified('login-unverified');
 
           // Blocking modal — user must acknowledge they need to verify.
           Alert.alert(

@@ -17,6 +17,7 @@ import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setC
 import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ensureGoogleSignInConfigured } from './Firebase/googleSignInConfig';
+import { markSignOutIntent, takeSignOutIntent } from './Firebase/signOutIntent';
 import {
   VALUE_SOURCE,
   SOURCE_URL,
@@ -36,11 +37,16 @@ import {
 const _launchedAt = Date.now();
 let _silentReloginTried = false;
 let _lastAuthUid = null;
-const logAuthEvent = (message, record = false) => {
+// `issue` also records the message as a Crashlytics non-fatal, grouped under
+// that name. RNFB inserts the name as the top stack frame, which is what
+// Crashlytics groups by; without it every recorded auth event shared
+// logAuthEvent's frame and landed in ONE issue, titled after whichever message
+// was sampled (2026-09-29: reads-unreachable and native-null, 443 events).
+const logAuthEvent = (message, issue) => {
   try {
     const c = getCrashlytics();
     crashlyticsLog(c, message);
-    if (record) crashlyticsRecordError(c, new Error(message));
+    if (issue) crashlyticsRecordError(c, new Error(message), issue);
   } catch (_) {}
 };
 
@@ -301,6 +307,33 @@ export const GlobalStateProvider = ({ children }) => {
     setIsAdmin(false);
   }, []); // No dependencies, so it never re-creates
 
+  // Minimal-profile recovery (2026-09-29). When no login read gets through,
+  // handleUserLogin keeps the user signed in on a minimal profile (no roles,
+  // no profile fields). Its comment said a reconnect would re-run it, but
+  // nothing did before the next auth change, so the stripped profile lasted
+  // the whole session. This waits for RTDB to report connected (at once if it
+  // already is) and re-runs it for the same user; at most 3 times a launch,
+  // in case the connection drops again mid-read every time.
+  const handleUserLoginRef = useRef(null);
+  const profileReloadRef = useRef({ unsub: null, runs: 0 });
+  const cancelProfileReload = useCallback(() => {
+    const pending = profileReloadRef.current;
+    if (pending.unsub) {
+      pending.unsub();
+      pending.unsub = null;
+    }
+  }, []);
+  const reloadProfileWhenConnected = useCallback((uid) => {
+    const pending = profileReloadRef.current;
+    if (pending.unsub || pending.runs >= 3) return;
+    pending.unsub = onValue(ref(appdatabase, '.info/connected'), (snap) => {
+      if (snap.val() !== true) return;
+      cancelProfileReload();
+      pending.runs += 1;
+      if (auth.currentUser?.uid === uid) handleUserLoginRef.current?.(auth.currentUser);
+    });
+  }, [cancelProfileReload]);
+
   // ✅ Memoize handleUserLogin
   const handleUserLogin = useCallback(async (loggedInUser) => {
     if (!loggedInUser) {
@@ -315,13 +348,13 @@ export const GlobalStateProvider = ({ children }) => {
       // 2026-09-04: a read that FAILS (offline, denied, hung socket) must never
       // look like "this user has no record" — that path used to run the
       // new-user branch and could overwrite a real profile, or hang forever
-      // leaving Firebase signed in while the UI stayed logged out. Every RTDB
-      // read below is capped at 10 s and failures are tagged READ_FAILED.
+      // leaving Firebase signed in while the UI stayed logged out. Every read
+      // below is capped at 10 s and failures are tagged READ_FAILED.
       const READ_FAILED = Symbol('read-failed');
       let readsUnreachable = false;
       const withTimeout = (p, ms = 10000) => Promise.race([
         p,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('rtdb-timeout')), ms)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('read-timeout')), ms)),
       ]);
 
       // ── RTDB-read reduction (login is the #1 RTDB read source) ─────────
@@ -361,12 +394,15 @@ export const GlobalStateProvider = ({ children }) => {
       // the slowest one - but on a bad connection that is the 10s cap, and the
       // user stares at the logo the whole time. Nobody has ever measured what
       // this actually costs in the field, so measure it.
+      // 2026-09-29: the Supabase calls had no cap, so one hung request held the
+      // splash far past 10 s (p90 43 s on logins where every read failed). A
+      // capped call that gives up is a miss, which the RTDB fallbacks handle.
       const _profileReadsAt = Date.now();
       const [identityRow, rolesRow, cosmeticsRow, robloxRow, rtdbOnlySnaps, xpSnap, privateSnap] = await Promise.all([
-        getIdentity(userId).catch(() => null),
-        getRoles(userId).catch(() => null),
-        getCosmetics(userId).catch(() => null),
-        getRoblox(userId).catch(() => null),
+        withTimeout(getIdentity(userId)).catch(() => null),
+        withTimeout(getRoles(userId)).catch(() => null),
+        withTimeout(getCosmetics(userId)).catch(() => null),
+        withTimeout(getRoblox(userId)).catch(() => null),
         Promise.all(RTDB_ONLY.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => null))),
         withTimeout(get(ref(appdatabase, `users/${userId}/xp`))).catch(() => null),
         // Own users_private/{uid} ({ email, dateOfBirth }) — owner-readable only.
@@ -415,13 +451,18 @@ export const GlobalStateProvider = ({ children }) => {
         if (!rolesRow) missing.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper');
         if (missing.length) {
           const snaps = await Promise.all(
-            missing.map((p) => get(ref(appdatabase, `users/${userId}/${p}`)).catch(() => null))
+            missing.map((p) => withTimeout(get(ref(appdatabase, `users/${userId}/${p}`))).catch(() => null))
           );
           missing.forEach((p, i) => {
             if (snaps[i] && snaps[i].exists()) existing[p] = snaps[i].val();
           });
         }
         if (xpVal !== undefined) existing.xp = xpVal;
+      } else if (rtdbOnlySnaps.every((s) => !s) && !xpSnap && !privateSnap) {
+        // Every RTDB read above already failed (in the field: at the 10 s cap),
+        // so the full projection below would fail the same way; it only added
+        // a second 10 s of splash (2026-09-29: these users waited a median 22 s).
+        readsUnreachable = true;
       } else {
         // Supabase identity miss → authoritative full RTDB projection (the
         // original path). Disambiguates brand-new vs mirror-lag so we never
@@ -444,9 +485,9 @@ export const GlobalStateProvider = ({ children }) => {
 
       if (existing === null && readsUnreachable) {
         // Backend unreachable: keep the user SIGNED IN with a minimal profile
-        // (no RTDB writes — never treat an existing user as new here). The next
-        // launch / reconnect re-runs this handler and loads the full record.
-        logAuthEvent(`auth_login_reads_unreachable uid=${userId}`, true);
+        // (no RTDB writes — never treat an existing user as new here). The full
+        // record loads as soon as RTDB reconnects (reloadProfileWhenConnected).
+        logAuthEvent(`auth_login_reads_unreachable uid=${userId}`, 'auth_login_reads_unreachable');
         const minimal = {
           id: userId,
           email: loggedInUser.email || null,
@@ -456,6 +497,7 @@ export const GlobalStateProvider = ({ children }) => {
         };
         setCurrentuserEmail(loggedInUser.email);
         setUser(minimal);
+        reloadProfileWhenConnected(userId);
         return;
       }
 
@@ -585,7 +627,10 @@ export const GlobalStateProvider = ({ children }) => {
     } catch (error) {
       // console.error("❌ Auth state change error:", error);
     }
-  }, [appdatabase, resetUserState]); // ✅ Uses memoized resetUserState
+  }, [appdatabase, resetUserState, reloadProfileWhenConnected]); // ✅ Uses memoized resetUserState
+  useEffect(() => {
+    handleUserLoginRef.current = handleUserLogin;
+  }, [handleUserLogin]);
   // ✅ PERF FIX #10: Removed duplicate registerForNotifications useEffect.
   // FCM registration is already called in handleUserLogin (line 277) and
   // onAuthStateChanged (line 312). This extra useEffect was a 3rd redundant call.
@@ -594,11 +639,20 @@ export const GlobalStateProvider = ({ children }) => {
   // ✅ Ensure useEffect runs only when necessary
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (loggedInUser) => {
+      // A new auth state supersedes any profile reload queued for the old one.
+      cancelProfileReload();
       // ── Silent sign-out attribution + one silent Google re-login per launch ──
       if (!loggedInUser) {
         const prevUid = _lastAuthUid;
         _lastAuthUid = null;
-        if (!_silentReloginTried) {
+        // The app's own sign-outs (Settings logout, account deletion, the
+        // unverified-email checks) are not drops: log the reason as a
+        // breadcrumb only, and never silently sign that user back in.
+        const intent = takeSignOutIntent();
+        if (intent && prevUid) {
+          logAuthEvent(`auth_signed_out reason=${intent} prevUid=${prevUid} msSinceLaunch=${Date.now() - _launchedAt}`);
+        }
+        if (!intent && !_silentReloginTried) {
           _silentReloginTried = true;
           try {
             ensureGoogleSignInConfigured();
@@ -618,8 +672,8 @@ export const GlobalStateProvider = ({ children }) => {
             logAuthEvent(`auth_silent_relogin_failed code=${e?.code || ''} msg=${String(e?.message || '').slice(0, 80)}`);
           }
         }
-        if (prevUid) {
-          logAuthEvent(`auth_signed_out reason=native-null prevUid=${prevUid} msSinceLaunch=${Date.now() - _launchedAt}`, true);
+        if (!intent && prevUid) {
+          logAuthEvent(`auth_signed_out reason=native-null prevUid=${prevUid} msSinceLaunch=${Date.now() - _launchedAt}`, 'auth_signed_out_native_null');
         }
       } else {
         _lastAuthUid = loggedInUser.uid;
@@ -633,10 +687,22 @@ export const GlobalStateProvider = ({ children }) => {
       // verification is already enforced at sign-in (SigninDrawer register +
       // login both sign the user out until verified), so this is just a
       // backstop for that one provider; trusted social providers pass through.
+      // 2026-09-29: in practice it was almost never a backstop — 190 of 191 of
+      // these sign-outs in a week came mid-session, i.e. while the drawer was
+      // still sending the verification email. Signing out under it either
+      // stopped the email (no current user to send it for) or made the
+      // drawer's own signOut fail, which swapped its "check your inbox" modal
+      // for "Failed to sign in". So give the drawer a few seconds, and only
+      // sign out a user who is still here: a restored session, or a drawer
+      // flow that failed part-way.
       const isPasswordUser = !!loggedInUser?.providerData?.some(p => p?.providerId === 'password');
       if (loggedInUser && isPasswordUser && !loggedInUser.emailVerified) {
-        logAuthEvent(`auth_signed_out reason=password-unverified uid=${loggedInUser.uid}`);
-        await signOut(auth);
+        const uid = loggedInUser.uid;
+        setTimeout(() => {
+          if (auth.currentUser?.uid !== uid) return; // the drawer already signed out
+          markSignOutIntent('password-unverified'); // logged when the null arrives
+          signOut(auth).catch(() => {});
+        }, 3000);
         return;
       }
 

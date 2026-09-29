@@ -26,6 +26,9 @@ import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRate
 import EmailUpdatesRow from './EmailUpdatesRow';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
+import { ensureGoogleSignInConfigured } from '../Firebase/googleSignInConfig';
+import { markSignOutIntent } from '../Firebase/signOutIntent';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { resetUserState, registerForNotifications } from '../Globelhelper';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
@@ -2675,7 +2678,13 @@ export default function SettingsScreen({ selectedTheme }) {
       // Step 4: Delete from Firebase Auth
       const currentUser = auth().currentUser;
       if (currentUser) {
+        markSignOutIntent('account-deleted');
         await currentUser.delete(); // 🔐 Requires recent login
+        // Drop the cached Google account as well. Left in place, GlobelStats'
+        // silent re-login found it (this session, or on the next launch) and
+        // signed the user straight back in — recreating the account.
+        ensureGoogleSignInConfigured();
+        try { await GoogleSignin.signOut(); } catch (_) {}
       } else {
         showErrorMessage(t("home.alert.error"), t("settings.user_not_found"));
         return;
