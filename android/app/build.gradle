@@ -3,6 +3,13 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: 'com.google.gms.google-services'
 apply plugin: 'com.google.firebase.crashlytics'
+// Ship only the icon fonts the app renders (react-native-vector-icons copies
+// all 19 by default). FontAwesome6 needs Regular AND Solid: icons without the
+// `solid` prop that Regular lacks fall back to Solid. Importing another family
+// (e.g. MaterialIcons) means adding its .ttf here, or it renders as blanks.
+project.ext.vectoricons = [
+    iconFontNames: [ "Ionicons.ttf", "FontAwesome.ttf", "FontAwesome6_Regular.ttf", "FontAwesome6_Solid.ttf" ]
+]
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
 react { autolinkLibrariesWithApp() }
@@ -66,7 +73,7 @@ android {
             //
             // Safe here because proguard-rules.pro already -keeps every
             // reflection-sensitive library wholesale (RN, Firebase, GMS, Ads,
-            // RevenueCat, Nitro, Reanimated, and the app's own package). Still
+            // RevenueCat, Nitro, and the app's own package). Still
             // SMOKE-TEST A RELEASE BUILD before shipping — optimisation is the
             // R8 stage most likely to surface a missing keep rule.
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
