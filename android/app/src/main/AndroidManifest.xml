@@ -47,5 +47,22 @@
         <meta-data
             android:name="com.google.android.gms.auth.api.signin.v2"
             android:value="true" />
+
+        <!-- 2026-09-29: React Native Firebase's receiver starts this headless
+             service for EVERY push that arrives while the app is closed, which
+             cold-starts the whole React Native runtime in the background only
+             to run index.js's setBackgroundMessageHandler. That handler cannot
+             affect what the user sees (every push we send carries a
+             notification payload, which Android displays itself), and on slow
+             phones the cold start overruns the service-start limit: 106 of the
+             112 ANRs in the week to 2026-09-29 were in the background, most
+             right after a push. Without this service the receiver's
+             startService() returns null and nothing starts. Foreground
+             onMessage (the receiver's foreground branch), notification display
+             (the Firebase SDK) and tap handling (launch intent + the receiver's
+             message store) do not use it. -->
+        <service
+            android:name="io.invertase.firebase.messaging.ReactNativeFirebaseMessagingHeadlessService"
+            tools:node="remove" />
     </application>
 </manifest>

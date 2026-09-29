@@ -33,6 +33,12 @@ const safeParseJSON = (key, defaultValue) => {
   }
 };
 
+// 2026-09-29: this never runs on Android any more. The headless service that
+// would invoke it is removed in AndroidManifest.xml (see the comment there):
+// starting React Native in the background for every push caused most of the
+// app's ANRs, and this handler could not hide a notification anyway, since
+// every push we send carries a notification payload that Android displays
+// itself. It stays for iOS, which only calls it for content-available pushes.
 setBackgroundMessageHandler(messaging, async (remoteMessage) => {
   try {
     const senderId = remoteMessage?.data?.senderId;
