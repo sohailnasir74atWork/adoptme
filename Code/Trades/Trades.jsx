@@ -9,6 +9,8 @@ import { getThemeColors } from '../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../Helper/UserBadgePill';
 import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
+import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
+import { adviseTrade, VERDICT_STYLE } from '../Helper/tradeAdvice';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -49,6 +51,8 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { getCachedProfile, warmProfileCache } from '../Helper/profileCache';
+import { rankFor as squadRankFor } from '../Helper/squad';
+import SquadBadge from '../Squad/SquadBadge';
 import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { saveTrade, unsaveTrade, fetchSavedTradeRefs, variantFilterToken, tradeMatchesVariants, tradeMatchesSearchWithVariants } from './tradeHelpers';
@@ -117,6 +121,13 @@ const TradeList = ({ route }) => {
   const { selectedTheme } = route.params
   const { user, analytics, updateLocalStateAndDatabase, appdatabase } = useGlobalState()
   const [trades, setTrades] = useState([]);
+  // Demand / value-move maps for the "If you accept" line (CDN file, cached 1 h).
+  const [analyticsMaps, setAnalyticsMaps] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetchAnalyticsData().then((m) => { if (alive) setAnalyticsMaps(m); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const [filteredTrades, setFilteredTrades] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -722,7 +733,7 @@ const TradeList = ({ route }) => {
         [
           { text: t("trade.cancel"), style: "cancel" },
           {
-            text: t("feature"),
+            text: t("trade.feature_button"),
             onPress: async () => {
               try {
                 await updateDoc(
@@ -1639,7 +1650,7 @@ const TradeList = ({ route }) => {
     if (item?.__type === 'ad') {
       return <NativeAdCard adKey={item.id} isDarkMode={isDarkMode} />;
     }
-    const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : "Unknown";
+    const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : t('trade.time_unknown');
     // Function to group items and count duplicates
     const groupItems = (items) => {
       const grouped = {};
@@ -1690,7 +1701,7 @@ const TradeList = ({ route }) => {
         }
         return null;
       })(), item.isFeatured && styles.featuredCard]}>
-        {item.isFeatured && <View style={styles.tag}><Text style={styles.tagTextFeatured}>Featured</Text></View>}
+        {item.isFeatured && <View style={styles.tag}><Text style={styles.tagTextFeatured}>{t('trade.featured_tag')}</Text></View>}
 
         {/* ✅ Header — Feed-style */}
         <View style={styles.cardHeader}>
@@ -1712,10 +1723,6 @@ const TradeList = ({ route }) => {
                 <Text style={styles.cardName} numberOfLines={1}>{item.traderName}</Text>
                 {item.isPro && <Image source={require('../../assets/pro.png')} style={badgeStyles.inlineIcon} />}
                 {item.robloxUsernameVerified && <Image source={require('../../assets/verification.png')} style={badgeStyles.inlineIcon} />}
-                {(() => {
-                  const hasRecentWin = !!item?.hasRecentGameWin || (typeof item?.lastGameWinAt === 'number' && Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
-                  return hasRecentWin ? <Image source={require('../../assets/trophy.webp')} style={badgeStyles.inlineIcon} /> : null;
-                })()}
                 {item.rating ? (
                   <View style={badgeStyles.ratingBadge}>
                     <Icon name="star" size={7} color="white" />
@@ -1724,7 +1731,7 @@ const TradeList = ({ route }) => {
                 ) : (
                   <View style={[badgeStyles.ratingBadge, { backgroundColor: '#888' }]}>
                     <Icon name="star-outline" size={7} color="white" />
-                    <Text style={badgeStyles.ratingText}>N/A</Text>
+                    <Text style={badgeStyles.ratingText}>{t('trade.rating_na')}</Text>
                   </View>
                 )}
                 {(() => {
@@ -1746,6 +1753,16 @@ const TradeList = ({ route }) => {
                       {pIsTrusted && <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />}
                       {pIsCMSR && <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />}
                       {pIsHelper && <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />}
+                      {/* Squad rank (3+ friends) — from the cached cosmetics row, no extra read. */}
+                      {(() => {
+                        const r = squadRankFor(p.squadCount);
+                        return r ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: r.color + '22', borderRadius: 999, paddingLeft: 2, paddingRight: 6, paddingVertical: 1 }}>
+                            <SquadBadge rankKey={r.key} size={13} />
+                            <Text style={{ fontSize: 9, fontWeight: '800', color: r.color }}>{p.squadCount}</Text>
+                          </View>
+                        ) : null;
+                      })()}
                     </>
                   );
                 })()}
@@ -1885,7 +1902,7 @@ const TradeList = ({ route }) => {
         <View style={styles.tradeTotals}>
           {item.hasItems && item.hasItems.length > 0 && (
             <Text style={[styles.priceText, styles.hasBackground]}>
-              {t('trade.me')}: {formatValue(item.hasTotal)}
+              {t('profile.trade_me_total', { value: formatValue(item.hasTotal) })}
             </Text>
           )}
           <View style={styles.transfer}>
@@ -1918,10 +1935,39 @@ const TradeList = ({ route }) => {
           </View>
           {item.wantsItems && item.wantsItems.length > 0 && (
             <Text style={[styles.priceText, styles.wantBackground]}>
-              {t('trade.you')}: {formatValue(item.wantsTotal)}
+              {t('profile.trade_you_total', { value: formatValue(item.wantsTotal) })}
             </Text>
           )}
         </View>
+
+        {/* If you accept: the viewer gives the poster's wants and gets the poster's has */}
+        {item.userId !== user?.id && (() => {
+          const gg = sourceOfTrade(item) === VALUE_SOURCE.GG;
+          const advice = adviseTrade({
+            give: item.wantsItems || [],
+            receive: item.hasItems || [],
+            giveTotal: item.wantsTotal,
+            getTotal: item.hasTotal,
+            // Value moves are Elvebredd's; a GG-priced trade only gets the
+            // value + how-easily-it-trades parts.
+            maps: gg ? { marketMap: analyticsMaps?.marketMap } : (analyticsMaps || {}),
+          });
+          if (!advice) return null;
+          const vs = VERDICT_STYLE[advice.verdict];
+          const reason = advice.reasons.find((r) => !r.key.startsWith('value_')) || advice.reasons[0];
+          return (
+            <View style={[styles.adviceRow, { backgroundColor: vs.color + '14' }]}>
+              <Text style={[styles.adviceVerdict, { color: vs.color }]} numberOfLines={1}>
+                {vs.emoji} {t('trade_advice.if_you_accept')}: {t(`trade_advice.verdict_${advice.verdict}`)}
+              </Text>
+              {reason && (
+                <Text style={styles.adviceReason} numberOfLines={1}>
+                  {t(`trade_advice.${reason.key}`, reason.params)}
+                </Text>
+              )}
+            </View>
+          );
+        })()}
 
         {/* Description */}
         {item.description && <Text style={styles.description}>{renderTextWithUsername(item.description)}</Text>}
@@ -2005,7 +2051,7 @@ const TradeList = ({ route }) => {
                       setSavedTradeRefs(prev => { const n = { ...prev }; delete n[tradeId]; return n; });
                       showSuccessMessage(t('trade.removed', { defaultValue: 'Removed' }), t('trade.trade_unsaved', { defaultValue: 'Trade removed from saved' }));
                     } catch (e) {
-                      showErrorMessage(t('home.alert.error'), e?.message || 'Error');
+                      showErrorMessage(t('home.alert.error'), t('trade.unsave_failed'));
                     }
                   } else {
                     try {
@@ -2016,7 +2062,7 @@ const TradeList = ({ route }) => {
                         t('trade.saved_guide', { defaultValue: 'Tap the Saved filter at the top to view your saved trades anytime.' })
                       );
                     } catch (e) {
-                      showErrorMessage(t('home.alert.error'), e?.message || 'Error');
+                      showErrorMessage(t('home.alert.error'), e?.isSaveLimit ? e.message : t('trade.save_failed'));
                     }
                   }
                 }}
@@ -2172,7 +2218,7 @@ const TradeList = ({ route }) => {
             }}
           >
             <Icon name="close-circle" size={14} color={config.colors.primary} style={{ marginRight: 4 }} />
-            <Text style={{ color: config.colors.primary, fontSize: 11, fontWeight: '600' }}>Clear</Text>
+            <Text style={{ color: config.colors.primary, fontSize: 11, fontWeight: '600' }}>{t('trade.search_clear')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -2206,12 +2252,13 @@ const TradeList = ({ route }) => {
         ref={flatListRef}
         data={tradesWithAds}
         renderItem={renderTrade}
+        extraData={analyticsMaps}
         keyExtractor={(item) => item.__type === 'ad' ? item.id : item.isFeatured ? `featured-${item.id}` : item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={filteredTrades.length === 0 ? { flexGrow: 1, paddingBottom: 20 } : { paddingBottom: 20 }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.2}
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         updateCellsBatchingPeriod={50}
@@ -2585,6 +2632,22 @@ const getStyles = (isDarkMode, c) => {
       // marginRight: 5,
       borderRadius: 5,
       // width:'4%',
+    },
+    adviceRow: {
+      marginTop: 6,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    adviceVerdict: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    adviceReason: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: isDarkMode ? '#94a3b8' : '#64748b',
+      marginTop: 1,
     },
     tradeTotals: {
       flexDirection: 'row',

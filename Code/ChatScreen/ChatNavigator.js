@@ -163,9 +163,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       if (!g || !g.groupId) return;
       groupsMap.set(g.groupId, {
         groupId: g.groupId,
-        groupName: g.groupName || 'Group',
+        // Missing name / preview are filled with translated labels where
+        // GroupsScreen renders them, not stored here as English text.
+        groupName: g.groupName || null,
         groupAvatar: g.groupAvatar || null,
-        lastMessage: g.lastMessage || 'No messages yet',
+        lastMessage: g.lastMessage || null,
         lastMessageTimestamp: g.lastMessageTimestamp || 0,
         unreadCount: g.unreadCount || 0,
         memberCount: g.memberCount || 0,
@@ -254,14 +256,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       {/* ✅ Optimized: Pass `chats` & `setChats` via `screenProps` instead of inline function */}
       <Stack.Screen
         name="Inbox"
-        options={{ title: 'Inbox' }}
+        options={{ title: t('misc.inbox') }}
       >
         {props => <InboxScreen {...props} bannedUsers={bannedUsers} />}
       </Stack.Screen>
 
       <Stack.Screen
         name="Groups"
-        options={{ title: 'Groups' }}
+        options={{ title: t('chat.groups') }}
       >
         {props => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} />}
       </Stack.Screen>
@@ -285,7 +287,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
       <Stack.Screen
         name="BlockedUsers"
-        options={{ title: 'Blocked Users' }} >
+        options={{ title: t('chat.blocked_users') }} >
         {props => <BlockedUsersScreen {...props} bannedUsers={bannedUsers} />}
       </Stack.Screen>
 
@@ -315,7 +317,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       <Stack.Screen
         name="ImageViewerScreenChat"
         component={ImageViewerScreenChat}
-        options={{ title: 'Image' }}
+        options={{ title: t('inbox.image_viewer_title') }}
       />
 
 

@@ -514,8 +514,11 @@ export const SOURCE_NAME = {
  * The sentence shown above a shared item list, e.g. in chat:
  * "Based on Elvebredd values" / "Based on GG values".
  */
-export const sourceStatement = (source) =>
-  `Based on ${SOURCE_NAME[source] || SOURCE_NAME[VALUE_SOURCE.ELVEBREDD]} values`;
+export const sourceStatement = (source, t) => {
+  const name = SOURCE_NAME[source] || SOURCE_NAME[VALUE_SOURCE.ELVEBREDD];
+  // Pass the screen's `t` to get the sentence in the app language.
+  return t ? t('shared.based_on_source_values', { source: name }) : `Based on ${name} values`;
+};
 
 // ── Artwork ───────────────────────────────────────────────────────────────
 

@@ -22,6 +22,7 @@ import { setActiveChat, clearActiveChat, setActiveGroupChat, clearActiveGroupCha
 import { resetGroupUnreadCount } from '../../Supabase/groupMetaBackend';
 import {
   loadGroupMessages,
+  loadGroupMessagesSince,
   subscribeToGroupMessages,
   softDeleteGroupMessage,
   softDeleteGroupMessagesBySender,
@@ -59,6 +60,49 @@ const MEMBER_STATUS_BATCH_SIZE = 5; // ✅ Load 5 member statuses at a time
 // Scrolling past this re-fetches older pages from Supabase.
 const MAX_LIVE = 150;
 
+// Last messages seen per group, in memory for this app session, so reopening a
+// group paints instantly while the fresh page loads (same scheme as
+// PrivateChat). Keyed by viewer + group; only read after membership is
+// confirmed (loadMessages bails for non-members).
+const CACHE_MAX_GROUPS = 20;
+const CACHE_PER_GROUP = 50;
+const groupMessageCache = new Map(); // `${uid}:${groupId}` -> messages, newest first
+
+const writeCachedGroupMessages = (key, msgs) => {
+  if (!key || !Array.isArray(msgs) || msgs.length === 0) return;
+  groupMessageCache.delete(key);
+  groupMessageCache.set(key, msgs.slice(0, CACHE_PER_GROUP));
+  if (groupMessageCache.size > CACHE_MAX_GROUPS) {
+    groupMessageCache.delete(groupMessageCache.keys().next().value);
+  }
+};
+
+const cursorOf = (m) => (m
+  ? { createdAt: m.createdAt || new Date(m.timestamp).toISOString(), id: m.id }
+  : null);
+
+// Merge incoming rows into a newest-first list, skipping ones already present
+// (by id or client_msg_id), and cap the live list.
+const mergeIncoming = (prev, incoming) => {
+  const list = Array.isArray(prev) ? prev : [];
+  const ids = new Set();
+  const clientIds = new Set();
+  list.forEach((m) => {
+    ids.add(String(m?.id));
+    if (m?.clientMsgId) clientIds.add(String(m.clientMsgId));
+  });
+  const fresh = incoming.filter((m) => m
+    && !ids.has(String(m.id))
+    && !(m.clientMsgId && clientIds.has(String(m.clientMsgId))));
+  if (fresh.length === 0) return list;
+  const sorted = [...fresh, ...list].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+  return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
+};
+
+// A first page fetched while the membership check runs is used only if it is
+// this fresh; anything older (e.g. the user joined much later) is refetched.
+const PREFETCH_MAX_AGE_MS = 10000;
+
 const GroupChatScreen = () => {
   const insets = useSafeAreaInsets();
   const route = useRoute();
@@ -93,6 +137,12 @@ const GroupChatScreen = () => {
   // message currently in `messages`. null when no older page known yet OR
   // end-of-history reached (handleLoadMore returns early when null).
   const oldestCursorRef = useRef(null);
+  const messagesRef = useRef([]);
+  const initialLoadDoneRef = useRef(false);
+  const paginatingRef = useRef(false);
+  // First page requested in parallel with the Firestore membership check —
+  // { groupId, at, promise }. Saves a full round trip on every open.
+  const prefetchRef = useRef(null);
   const previousGroupIdRef = useRef(null);
   const hasSentMessageRef = useRef(0); // ✅ Track number of messages sent (for exit ad)
   const chatEnterTimeRef = useRef(null); // ✅ Track when user entered chat (for exit ad)
@@ -122,6 +172,18 @@ const GroupChatScreen = () => {
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+
+  // Start the first message page now instead of after the membership check.
+  // Non-members never see it: loadMessages only consumes it once isMember is
+  // true, and the group_messages RLS returns nothing to non-members anyway.
+  useEffect(() => {
+    if (!groupId || !user?.id) return;
+    prefetchRef.current = {
+      groupId,
+      at: Date.now(),
+      promise: loadGroupMessages(groupId, { limit: INITIAL_PAGE_SIZE }).catch(() => null),
+    };
+  }, [groupId, user?.id]);
 
   // Load group data from Firestore and check access
   useEffect(() => {
@@ -156,14 +218,14 @@ const GroupChatScreen = () => {
             setPendingInvite(null);
           }
         } else {
-          Alert.alert('Error', 'Group not found');
+          Alert.alert(t('chat.error'), t('chat.group_not_found'));
           setGroupData(null);
         }
         setCheckingAccess(false);
       },
       (error) => {
         console.error('Error loading group data:', error);
-        showErrorMessage('Error', 'Failed to load group');
+        showErrorMessage(t('chat.error'), t('chat.group_load_failed'));
         setCheckingAccess(false);
       }
     );
@@ -360,11 +422,23 @@ const GroupChatScreen = () => {
     async (reset = false) => {
       if (!groupId || !isMember) return;
 
+      const cacheKey = user?.id ? `${user.id}:${groupId}` : null;
       if (reset) {
-        setLoading(true);
-        setMessages([]);
-        oldestCursorRef.current = null;
+        initialLoadDoneRef.current = false;
+        const cached = cacheKey ? groupMessageCache.get(cacheKey) : null;
+        if (cached?.length) {
+          // Paint the last-seen messages now; the fresh page merges in below.
+          setMessages(cached);
+          setLoading(false);
+          oldestCursorRef.current = cursorOf(cached[cached.length - 1]);
+        } else {
+          setLoading(true);
+          setMessages([]);
+          oldestCursorRef.current = null;
+        }
       } else {
+        if (paginatingRef.current) return;
+        paginatingRef.current = true;
         setIsPaginating(true);
       }
 
@@ -372,10 +446,37 @@ const GroupChatScreen = () => {
         const limitSize = reset ? INITIAL_PAGE_SIZE : PAGE_SIZE;
         const before = reset ? null : oldestCursorRef.current;
 
-        const parsedMessages = await loadGroupMessages(groupId, { limit: limitSize, before });
+        let parsedMessages = null;
+        const pre = prefetchRef.current;
+        if (reset && pre && pre.groupId === groupId && Date.now() - pre.at < PREFETCH_MAX_AGE_MS) {
+          prefetchRef.current = null;
+          parsedMessages = await pre.promise;
+        }
+        if (!parsedMessages) {
+          parsedMessages = await loadGroupMessages(groupId, { limit: limitSize, before });
+        }
 
         if (parsedMessages.length === 0) {
           if (!reset) oldestCursorRef.current = null;
+          return;
+        }
+
+        if (reset) {
+          // Fresh newest page wins; rows outside its time range survive
+          // (older cached history, newer realtime inserts). A row inside the
+          // range but missing from it was deleted.
+          const newestFresh = parsedMessages[0]?.timestamp || 0;
+          const oldestFresh = parsedMessages[parsedMessages.length - 1]?.timestamp || 0;
+          const freshIds = new Set(parsedMessages.map((m) => String(m?.id)));
+          setMessages((prev) => {
+            const keep = (Array.isArray(prev) ? prev : []).filter((m) => m
+              && !freshIds.has(String(m.id))
+              && ((m.timestamp || 0) < oldestFresh || (m.timestamp || 0) > newestFresh));
+            const merged = [...parsedMessages, ...keep]
+              .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            oldestCursorRef.current = cursorOf(merged[merged.length - 1]);
+            return merged;
+          });
           return;
         }
 
@@ -383,27 +484,24 @@ const GroupChatScreen = () => {
           if (!Array.isArray(prev)) return parsedMessages;
           const existingIds = new Set(prev.map((m) => String(m?.id)));
           const onlyNew = parsedMessages.filter((m) => !existingIds.has(String(m?.id)));
-
-          if (reset) return parsedMessages;
           const combined = [...prev, ...onlyNew];
           return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
         });
 
-        const oldest = parsedMessages[parsedMessages.length - 1];
-        if (oldest) {
-          oldestCursorRef.current = {
-            createdAt: new Date(oldest.timestamp).toISOString(),
-            id: oldest.id,
-          };
-        }
+        oldestCursorRef.current = cursorOf(parsedMessages[parsedMessages.length - 1]);
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
-        if (reset) setLoading(false);
-        setIsPaginating(false);
+        if (reset) {
+          setLoading(false);
+          initialLoadDoneRef.current = true;
+        } else {
+          paginatingRef.current = false;
+          setIsPaginating(false);
+        }
       }
     },
-    [groupId, isMember],
+    [groupId, isMember, user?.id],
   );
 
   // Load messages when groupId changes (only if user is a member)
@@ -428,11 +526,32 @@ const GroupChatScreen = () => {
   // reactions jsonb edits (toggle_group_reaction touches the row), so
   // cross-user reactions sync automatically without a second subscription.
   // Hard DELETE is rare; remove by id when it fires.
+  //
+  // Realtime never replays what it missed: every SUBSCRIBED (re-focus, or the
+  // rejoin after a background disconnect) fetches only rows newer than the
+  // newest on screen. Without it, messages sent during the gap never showed
+  // until the group was closed and reopened.
   useFocusEffect(
     useCallback(() => {
       if (!groupId || !isMember) return undefined;
 
+      let active = true;
+      let gapFillInFlight = false;
+      const gapFill = () => {
+        if (!active || gapFillInFlight || !initialLoadDoneRef.current) return;
+        gapFillInFlight = true;
+        loadGroupMessagesSince(groupId, cursorOf(messagesRef.current[0]), { limit: 50 })
+          .then((rows) => {
+            if (active && rows.length > 0) setMessages((prev) => mergeIncoming(prev, rows));
+          })
+          .catch((e) => console.warn('[GroupChat] gap-fill failed:', e?.message))
+          .finally(() => { gapFillInFlight = false; });
+      };
+
       const unsubscribe = subscribeToGroupMessages(groupId, {
+        onStatus: (status) => {
+          if (status === 'SUBSCRIBED') gapFill();
+        },
         onInsert: (newMessage) => {
           if (!newMessage) return;
           // Another member's message bumped our unread_count server-side while
@@ -440,17 +559,7 @@ const GroupChatScreen = () => {
           if (newMessage.senderId && newMessage.senderId !== user?.id) {
             unreadWhileFocusedRef.current = true;
           }
-          setMessages((prev) => {
-            if (!Array.isArray(prev) || prev.length === 0) return [newMessage];
-            const exists = prev.some((m) =>
-              String(m?.id) === String(newMessage.id)
-              || (newMessage.clientMsgId && String(m?.clientMsgId) === String(newMessage.clientMsgId)),
-            );
-            if (exists) return prev;
-            const sorted = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-            // Cap the live list (newest-first, so trim the oldest tail).
-            return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
-          });
+          setMessages((prev) => mergeIncoming(prev, [newMessage]));
         },
         onUpdate: (updated) => {
           if (!updated) return;
@@ -470,7 +579,10 @@ const GroupChatScreen = () => {
         },
       });
 
-      return () => unsubscribe();
+      return () => {
+        active = false;
+        unsubscribe();
+      };
     }, [groupId, isMember, user?.id]),
   );
 
@@ -524,13 +636,20 @@ const GroupChatScreen = () => {
     setRefreshing(false);
   }, [loadMessages]);
 
+  // Keep the session cache and the gap-fill ref in step with what's on screen.
+  useEffect(() => {
+    messagesRef.current = messages;
+    if (user?.id && groupId && isMember) writeCachedGroupMessages(`${user.id}:${groupId}`, messages);
+  }, [messages, user?.id, groupId, isMember]);
+
   // Handle load more
   const handleLoadMore = useCallback(() => {
-    if (isPaginating || !oldestCursorRef.current || !isMember) {
+    // Ref guard: onEndReached can fire twice before isPaginating re-renders.
+    if (paginatingRef.current || !oldestCursorRef.current || !isMember) {
       return;
     }
     loadMessages(false);
-  }, [loadMessages, isPaginating, isMember]);
+  }, [loadMessages, isMember]);
 
   // Scroll to message function (for reply navigation)
   const scrollToMessage = useCallback(
@@ -601,7 +720,7 @@ const GroupChatScreen = () => {
 
       // Validate fruits count - maximum 18 fruits allowed
       if (hasFruits && fruits.length > 18) {
-        showErrorMessage(t('home.alert.error'), 'You can only send up to 18 pets in a message.');
+        showErrorMessage(t('home.alert.error'), t('chat.max_items_per_message', { max: 18 }));
         return;
       }
 
@@ -624,8 +743,8 @@ const GroupChatScreen = () => {
         // Permanent ban
         if (bannedUntil === 'permanent') {
           showMessage({
-            message: '⛔ Permanently Banned',
-            description: 'You are permanently banned from sending messages.',
+            message: t('chat.permanently_banned_title'),
+            description: t('chat.permanently_banned_message'),
             type: 'danger',
           });
           return;
@@ -636,11 +755,13 @@ const GroupChatScreen = () => {
           const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
           const hours = Math.floor(totalMinutes / 60);
           const minutes = totalMinutes % 60;
-          const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+          const timeLeftText = hours > 0
+            ? t('chat.duration_hours_minutes', { hours, minutes })
+            : t('chat.duration_minutes', { minutes });
 
           showMessage({
-            message: `⚠️ Strike ${strikeCount}`,
-            description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+            message: t('chat.strike_title', { count: strikeCount }),
+            description: t('chat.strike_time_left', { time: timeLeftText }),
             type: 'warning',
             duration: 5000,
           });
@@ -656,7 +777,7 @@ const GroupChatScreen = () => {
 
       // Safety checks
       if (!user?.id || !groupId || !appdatabase || !firestoreDB) {
-        showErrorMessage(t('home.alert.error'), 'Missing required data. Please try again.');
+        showErrorMessage(t('home.alert.error'), t('chat.rating_missing_data'));
         return;
       }
 
@@ -676,7 +797,7 @@ const GroupChatScreen = () => {
       // Without this, the message silently queues in the local RTDB buffer, appears sent
       // to the sender, but never reaches Firebase servers or other users.
       if (!isRTDBConnected) {
-        showErrorMessage('No Connection', 'Unable to reach chat server. Try switching to mobile data or a different network.');
+        showErrorMessage(t('chat.no_connection_title'), t('chat.no_connection_message'));
         return;
       }
 
@@ -686,21 +807,15 @@ const GroupChatScreen = () => {
         const isMuted = groupData.members?.[user.id]?.muted;
 
         if (!isMember && !isAdmin && !user?.isModerator) {
-          showErrorMessage('Error', 'You are not a member of this group');
+          showErrorMessage(t('chat.error'), t('chat.not_group_member'));
           return;
         }
 
         if (isMuted) {
-          showErrorMessage('Error', 'You are muted in this group');
+          showErrorMessage(t('chat.error'), t('chat.muted_in_group'));
           return;
         }
       }
-
-      // Check if user has recent game win
-      const now = Date.now();
-      const hasRecentWin =
-        typeof user?.lastGameWinAt === 'number' &&
-        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000;
 
       // Check if user is creator
       const isCreator = groupData?.createdBy === user.id;
@@ -714,8 +829,6 @@ const GroupChatScreen = () => {
         timestamp: Date.now(),
         isPro: !!localState?.isPro,
         robloxUsernameVerified: user?.robloxUsernameVerified || false,
-        hasRecentGameWin: hasRecentWin,
-        lastGameWinAt: user?.lastGameWinAt || null,
         isCreator: isCreator,
       };
 
@@ -761,7 +874,7 @@ const GroupChatScreen = () => {
         );
 
         if (!result.success) {
-          showErrorMessage('Error', result.error || 'Failed to send message');
+          showErrorMessage(t('chat.error'), result.error || t('chat.send_error'));
         } else {
           // No optimistic insert — Supabase realtime UPDATE/INSERT feeds
           // own message back into state (same pattern as PrivateChat).
@@ -770,7 +883,7 @@ const GroupChatScreen = () => {
         }
       } catch (error) {
         console.error('Error sending message:', error);
-        Alert.alert('Error', 'Could not send your message. Please try again.');
+        Alert.alert(t('chat.error'), t('chat.send_error'));
       }
     },
     [user, groupId, appdatabase, firestoreDB, groupData, t, localState?.isPro, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, isAdmin]
@@ -782,26 +895,26 @@ const GroupChatScreen = () => {
   const handleDeleteMessage = useCallback((messageId) => {
     if (!messageId) return;
     Alert.alert(
-      'Delete Message',
-      'Are you sure you want to delete this message?',
+      t('chat.delete_message_title'),
+      t('chat.delete_message_prompt'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('chat.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await softDeleteGroupMessage(messageId, user?.id || null);
-              showSuccessMessage('Success', 'Message deleted');
+              showSuccessMessage(t('chat.success'), t('chat.message_deleted'));
             } catch (error) {
               console.error('Error deleting message:', error);
-              showErrorMessage('Error', 'Failed to delete message');
+              showErrorMessage(t('chat.error'), t('chat.delete_error'));
             }
           },
         },
       ]
     );
-  }, [user?.id]);
+  }, [user?.id, t]);
 
   // Soft-delete the last N non-deleted messages from a sender. Limit 300
   // matches the old RTDB scan window so the moderation UX is identical.
@@ -869,12 +982,14 @@ const GroupChatScreen = () => {
     if (!user?.id || !groupId) return;
 
     Alert.alert(
-      'Remove Member',
-      `Are you sure you want to remove ${memberName || 'this member'} from the group?`,
+      t('chat.remove_member_title'),
+      memberName
+        ? t('chat.remove_member_confirm', { name: memberName })
+        : t('chat.remove_member_confirm_unnamed'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('chat.remove'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -887,19 +1002,19 @@ const GroupChatScreen = () => {
               );
 
               if (result.success) {
-                showSuccessMessage('Success', 'Member removed successfully');
+                showSuccessMessage(t('chat.success'), t('chat.member_removed'));
               } else {
-                showErrorMessage('Error', result.error || 'Failed to remove member');
+                showErrorMessage(t('chat.error'), result.error || t('chat.remove_member_failed'));
               }
             } catch (error) {
               console.error('Error removing member:', error);
-              showErrorMessage('Error', 'Failed to remove member. Please try again.');
+              showErrorMessage(t('chat.error'), t('chat.remove_member_failed'));
             }
           },
         },
       ]
     );
-  }, [user?.id, groupId, firestoreDB, appdatabase]);
+  }, [user?.id, groupId, firestoreDB, appdatabase, t]);
 
   // ✅ Handle making a member creator (with warning)
   // ✅ iOS Fix: Close members modal first, then show Alert (nested modals cause freezing on iOS)
@@ -909,19 +1024,20 @@ const GroupChatScreen = () => {
 
     // Use setTimeout to ensure modal closes before showing alert
     setTimeout(() => {
+      const displayMemberName = memberName || t('chat.anonymous');
       Alert.alert(
-        '⚠️ Transfer Creator Status',
-        `You are about to make ${memberName} the creator of this group.\n\nThis action is IRREVERSIBLE.\n\nYou will lose all creator privileges and become a regular member. You will no longer be able to remove members, add members, or transfer creator status.`,
+        t('chat.transfer_creator_title'),
+        t('chat.transfer_creator_message', { name: displayMemberName }),
         [
           {
-            text: 'Cancel',
+            text: t('chat.cancel'),
             style: 'cancel',
             onPress: () => {
               setMemberToMakeCreator(null);
             },
           },
           {
-            text: 'Transfer Creator',
+            text: t('chat.transfer_creator_button'),
             style: 'destructive',
             onPress: async () => {
               if (!groupId || !firestoreDB || !appdatabase || !user?.id) {
@@ -938,14 +1054,14 @@ const GroupChatScreen = () => {
                 );
 
                 if (result.success) {
-                  showSuccessMessage('Success', `${memberName} is now the creator.`);
+                  showSuccessMessage(t('chat.success'), t('chat.transfer_creator_success', { name: displayMemberName }));
                   setMemberToMakeCreator(null);
                 } else {
-                  showErrorMessage('Error', result.error || 'Failed to transfer creator status.');
+                  showErrorMessage(t('chat.error'), result.error || t('chat.transfer_creator_failed'));
                 }
               } catch (error) {
                 console.error('Error making member creator:', error);
-                showErrorMessage('Error', 'Failed to transfer creator status. Please try again.');
+                showErrorMessage(t('chat.error'), t('chat.transfer_creator_failed'));
               }
             },
           },
@@ -953,7 +1069,7 @@ const GroupChatScreen = () => {
         { cancelable: true }
       );
     }, 300); // Small delay to ensure modal closes
-  }, [groupId, firestoreDB, appdatabase, user?.id]);
+  }, [groupId, firestoreDB, appdatabase, user?.id, t]);
 
 
   const memberCount = groupData?.memberCount || 0;
@@ -976,7 +1092,7 @@ const GroupChatScreen = () => {
       );
 
       if (result.success) {
-        showSuccessMessage('Success', 'You joined the group!');
+        showSuccessMessage(t('chat.success'), t('chat.joined_group'));
         setPendingInvite(null);
         setIsMember(true);
 
@@ -986,76 +1102,76 @@ const GroupChatScreen = () => {
           incrementAndCheckBadge(appdatabase, user.id, 'groupJoinCount', GROUP_CHAT_BADGE_THRESHOLDS);
         } catch (e) {}
       } else {
-        showErrorMessage('Error', result.error || 'Failed to accept invitation');
+        showErrorMessage(t('chat.error'), result.error || t('chat.accept_invite_failed'));
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      showErrorMessage('Error', 'Failed to accept invitation. Please try again.');
+      showErrorMessage(t('chat.error'), t('chat.accept_invite_failed'));
     }
-  }, [pendingInvite, user, firestoreDB, appdatabase]);
+  }, [pendingInvite, user, firestoreDB, appdatabase, t]);
 
   // Handle decline invitation
   const handleDeclineInvite = useCallback(async () => {
     if (!pendingInvite || !user?.id) return;
 
     Alert.alert(
-      'Decline Invitation',
-      'Are you sure you want to decline this invitation?',
+      t('chat.decline_invite_title'),
+      t('chat.decline_invite_confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Decline',
+          text: t('chat.decline'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await declineGroupInvite(firestoreDB, pendingInvite.id, user.id);
               if (result.success) {
-                showSuccessMessage('Success', 'Invitation declined');
+                showSuccessMessage(t('chat.success'), t('chat.invite_declined'));
                 setPendingInvite(null);
                 navigation.goBack();
               } else {
-                showErrorMessage('Error', result.error || 'Failed to decline invitation');
+                showErrorMessage(t('chat.error'), result.error || t('chat.decline_invite_failed'));
               }
             } catch (error) {
               console.error('Error declining invitation:', error);
-              showErrorMessage('Error', 'Failed to decline invitation. Please try again.');
+              showErrorMessage(t('chat.error'), t('chat.decline_invite_failed'));
             }
           },
         },
       ]
     );
-  }, [pendingInvite, user, firestoreDB, navigation]);
+  }, [pendingInvite, user, firestoreDB, navigation, t]);
 
   // Handle leave group
   const handleLeaveGroup = useCallback(() => {
     if (!groupId || !user?.id) return;
 
     Alert.alert(
-      'Leave Group',
-      'Are you sure you want to leave this group?',
+      t('chat.leave_group_title'),
+      t('chat.leave_group_confirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Leave',
+          text: t('chat.leave'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await leaveGroup(firestoreDB, appdatabase, groupId, user.id);
               if (result.success) {
-                showSuccessMessage('Success', 'You left the group');
+                showSuccessMessage(t('chat.success'), t('chat.left_group'));
                 navigation.goBack();
               } else {
-                showErrorMessage('Error', result.error || 'Failed to leave group');
+                showErrorMessage(t('chat.error'), result.error || t('chat.leave_group_failed'));
               }
             } catch (error) {
               console.error('Error leaving group:', error);
-              showErrorMessage('Error', 'Failed to leave group. Please try again.');
+              showErrorMessage(t('chat.error'), t('chat.leave_group_failed'));
             }
           },
         },
       ]
     );
-  }, [groupId, user?.id, firestoreDB, appdatabase, navigation]);
+  }, [groupId, user?.id, firestoreDB, appdatabase, navigation, t]);
 
   // Handle user press to open profile drawer
   const handleUserPress = useCallback(async (userData) => {
@@ -1108,7 +1224,7 @@ const GroupChatScreen = () => {
     const isCreator = groupData?.createdBy === user?.id;
 
     // Truncate group name for header (max 30 characters)
-    const groupName = groupData.name || 'Group Chat';
+    const groupName = groupData.name || t('chat.group_chat_fallback');
     const truncatedGroupName = groupName.length > 30 ? groupName.substring(0, 30).trim() + '...' : groupName;
 
     navigation.setOptions({
@@ -1140,12 +1256,12 @@ const GroupChatScreen = () => {
         </TouchableOpacity>
       ),
     });
-  }, [groupData, memberCount, isDarkMode, navigation, isMember, handleLeaveGroup, user?.id]);
+  }, [groupData, memberCount, isDarkMode, navigation, isMember, handleLeaveGroup, user?.id, t]);
 
   if (!groupId) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.text}>Group ID not provided</Text>
+        <Text style={styles.text}>{t('chat.group_id_missing')}</Text>
       </View>
     );
   }
@@ -1154,7 +1270,7 @@ const GroupChatScreen = () => {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#8B5CF6" />
-        <Text style={[styles.text, { marginTop: 16 }]}>Loading...</Text>
+        <Text style={[styles.text, { marginTop: 16 }]}>{t('chat.loading')}</Text>
       </View>
     );
   }
@@ -1165,10 +1281,14 @@ const GroupChatScreen = () => {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
         <Icon name="mail-outline" size={64} color={isDarkMode ? '#8B5CF6' : '#8B5CF6'} />
         <Text style={[styles.text, { fontSize: 24, fontWeight: 'bold', marginTop: 20, marginBottom: 10 }]}>
-          Group Invitation
+          {t('chat.group_invitation_title')}
         </Text>
         <Text style={[styles.text, { fontSize: 16, textAlign: 'center', marginBottom: 30, opacity: 0.7 }]} numberOfLines={2} ellipsizeMode="tail">
-          You've been invited to join "{groupData?.name ? (groupData.name.length > 25 ? groupData.name.substring(0, 25).trim() + '...' : groupData.name) : 'this group'}"
+          {groupData?.name
+            ? t('chat.group_invite_message', {
+              name: groupData.name.length > 25 ? groupData.name.substring(0, 25).trim() + '...' : groupData.name,
+            })
+            : t('chat.group_invite_message_unnamed')}
         </Text>
         <View style={{ flexDirection: 'row', gap: 15 }}>
           <TouchableOpacity
@@ -1180,7 +1300,7 @@ const GroupChatScreen = () => {
               backgroundColor: c.border,
             }}
           >
-            <Text style={{ color: c.text, fontWeight: '500', }}>Decline</Text>
+            <Text style={{ color: c.text, fontWeight: '500', }}>{t('chat.decline')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleAcceptInvite}
@@ -1191,7 +1311,7 @@ const GroupChatScreen = () => {
               backgroundColor: '#8B5CF6',
             }}
           >
-            <Text style={{ color: '#fff', fontWeight: '500', }}>Accept</Text>
+            <Text style={{ color: '#fff', fontWeight: '500', }}>{t('chat.accept')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1204,10 +1324,10 @@ const GroupChatScreen = () => {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
         <Icon name="lock-closed-outline" size={64} color={c.textSecondary} />
         <Text style={[styles.text, { fontSize: 24, fontWeight: 'bold', marginTop: 20, marginBottom: 10 }]}>
-          Access Denied
+          {t('chat.access_denied')}
         </Text>
         <Text style={[styles.text, { fontSize: 16, textAlign: 'center', marginBottom: 30, opacity: 0.7 }]}>
-          You are not a member of this group. Please wait for an invitation.
+          {t('chat.not_member_wait_invite')}
         </Text>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -1218,7 +1338,7 @@ const GroupChatScreen = () => {
             backgroundColor: '#8B5CF6',
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '500', }}>Go Back</Text>
+          <Text style={{ color: '#fff', fontWeight: '500', }}>{t('chat.go_back')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1228,7 +1348,7 @@ const GroupChatScreen = () => {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#8B5CF6" />
-        <Text style={[styles.text, { marginTop: 16 }]}>Loading messages...</Text>
+        <Text style={[styles.text, { marginTop: 16 }]}>{t('chat.loading_messages')}</Text>
       </View>
     );
   }
@@ -1240,7 +1360,7 @@ const GroupChatScreen = () => {
           {messages.length === 0 && !loading ? (
             // No messages yet - show empty state but keep input visible
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptyText}>{t('chat.no_messages_yet')}</Text>
             </View>
           ) : (
             <GroupMessageList
@@ -1291,7 +1411,7 @@ const GroupChatScreen = () => {
           <View style={{ backgroundColor: isDarkMode ? '#1F2937' : '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', overflow: 'hidden', paddingBottom: insets.bottom }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: c.border }}>
               <Text style={{ fontSize: 20, fontWeight: 'bold', color: c.text }}>
-                Members ({memberCount})
+                {t('chat.members_with_count', { number: memberCount })}
               </Text>
               <TouchableOpacity onPress={() => setShowMembersModal(false)}>
                 <Icon name="close" size={24} color={c.text} />
@@ -1347,10 +1467,12 @@ const GroupChatScreen = () => {
                       />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: '500', color: c.text }}>
-                          {inviteData.displayName || 'Anonymous'}
+                          {inviteData.displayName && inviteData.displayName !== 'Anonymous'
+                            ? inviteData.displayName
+                            : t('chat.anonymous')}
                         </Text>
                         <Text style={{ fontSize: 12, color: c.textSecondary, marginTop: 2 }}>
-                          Pending to Join
+                          {t('chat.invite_pending')}
                         </Text>
                       </View>
                     </View>
@@ -1375,15 +1497,16 @@ const GroupChatScreen = () => {
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={{ fontSize: 16, fontWeight: '500', color: c.text }}>
-                          {member.displayName || 'Anonymous'}
+                          {member.displayName || t('chat.anonymous')}
                         </Text>
                         {isOnline && (
                           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', marginLeft: 8 }} />
                         )}
                       </View>
                       <Text style={{ fontSize: 12, color: c.textSecondary, marginTop: 2 }}>
-                        {isMemberCreator ? 'Creator' : 'Member'}
-                        {isOnline && ' · Online'}
+                        {isMemberCreator
+                          ? (isOnline ? t('chat.role_creator_online') : t('chat.role_creator'))
+                          : (isOnline ? t('chat.role_member_online') : t('chat.role_member'))}
                       </Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1409,7 +1532,7 @@ const GroupChatScreen = () => {
               }}
               ListEmptyComponent={
                 <View style={{ padding: 40, alignItems: 'center' }}>
-                  <Text style={{ color: c.textSecondary }}>No members found</Text>
+                  <Text style={{ color: c.textSecondary }}>{t('chat.no_members_found')}</Text>
                 </View>
               }
             />

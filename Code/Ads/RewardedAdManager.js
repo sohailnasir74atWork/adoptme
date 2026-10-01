@@ -125,7 +125,7 @@ class RewardedAdManager {
   }
 
   // ── Proximity preload: call from screens that render a rewarded button ──
-  // (GameHub, MysteryEgg, WorldCup, quiz/showdown games) so the ad is warm
+  // (MysteryEgg and other reward screens) so the ad is warm
   // BEFORE the user taps. Idempotent; also un-sticks a manager whose bounded
   // retries ran out.
   static prepare() {

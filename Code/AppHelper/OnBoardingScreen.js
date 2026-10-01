@@ -127,7 +127,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <View style={styles.sliderContainer}>{renderSlider(translateX3, thirdSliderImages)}</View></View> */}
             <View>
               {/* <View style={styles.spacer}></View> */}
-              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>{t('first.welcome_to')}</Text>
+              <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>{t('first.welcome_to', { app: config.appName })}</Text>
               <Text style={[styles.text, { color: isDarkMode ? '#ccc' : '#666' }]}>{t('first.track_pets')}</Text>
               <Text style={[styles.text, {color: isDarkMode ? '#ccc' : '#666'}]}>
                 {t('first.utility_note')}
@@ -151,10 +151,12 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               </View> */}
             {/* <View style={styles.spacer}></View> */}
             <View>
-              {!user.id && <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>{t("first.signin_or_guest")}</Text>}
+              {!user.id && <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>{t("onboarding.signin_or_guest")}</Text>}
               {user?.id && (
                 <Text style={[styles.title, { color: isDarkMode ? '#fff' : '#000' }]}>
-                  {`Welcome ${user?.displayName || 'Anonymous'}`}
+                  {user?.displayName
+                    ? t('onboarding.welcome_name', { name: user.displayName })
+                    : t('onboarding.welcome')}
 
                 </Text>
               )}
@@ -188,7 +190,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
 
           <TouchableOpacity style={styles.button} onPress={screenIndex === 1 && user?.id ? handleGuest : handleNext}>
-            <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("first.signin") : t("first.continue")}</Text>
+            <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("signin.button_signin") : t("first.continue")}</Text>
           </TouchableOpacity>
           {screenIndex === 1 && !user?.id && (
             <TouchableOpacity style={styles.buttonOutline} onPress={handleGuest}>

@@ -138,7 +138,7 @@ const CompactPortfolio = ({
                     </Text>
                     <View style={styles.badge}>
                         <Text style={styles.badgeText}>
-                            {portfolio.totalItems} {t('settings.portfolio.items')}
+                            {t('settings.portfolio.item_count', { count: portfolio.totalItems })}
                         </Text>
                     </View>
                     <Icon
@@ -240,7 +240,9 @@ const CompactPortfolio = ({
                                 <View key={c.name} style={styles.legendItem}>
                                     <View style={[styles.legendDot, { backgroundColor: c.color }]} />
                                     <Text style={styles.legendLabel}>
-                                        {c.name.charAt(0).toUpperCase() + c.name.slice(1)}
+                                        {t(`categories.${c.name.toUpperCase()}`, {
+                                            defaultValue: c.name.charAt(0).toUpperCase() + c.name.slice(1),
+                                        })}
                                     </Text>
                                     <Text style={styles.legendPct}>
                                         {formatValue(c.value)} ({Math.round(c.pct)}%)

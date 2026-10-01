@@ -37,7 +37,9 @@ const looksLikeUserId = (val) => {
 };
 
 // ✅ Memoized User Card to prevent re-renders
-const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
+const UserCard = memo(({ item, isDark, isFollowing, onPress }) => {
+    const { t } = useTranslation();
+    return (
     <TouchableOpacity
         activeOpacity={0.7}
         onPress={onPress}
@@ -58,17 +60,18 @@ const UserCard = memo(({ item, isDark, isFollowing, onPress }) => (
         <View style={styles.actionContainer}>
             {isFollowing ? (
                 <View style={styles.followingBadge}>
-                    <Text style={styles.followingText}>Following</Text>
+                    <Text style={styles.followingText}>{t('social.following')}</Text>
                 </View>
             ) : (
                 <View style={styles.notFollowingBadge}>
-                    <Text style={styles.notFollowingText}>Not Following</Text>
+                    <Text style={styles.notFollowingText}>{t('social.not_following')}</Text>
                 </View>
             )}
             <Ionicons name="chevron-forward" size={20} color={isDark ? '#555' : '#CCC'} style={{ marginLeft: 8 }} />
         </View>
     </TouchableOpacity>
-));
+    );
+});
 
 
 
@@ -358,13 +361,13 @@ const SocialDashboard = () => {
             setFriendSearchResults(results);
         } catch (err) {
             console.error("Friend Search error:", err);
-            Alert.alert("Search Failed", "Could not search friends.");
+            Alert.alert(t('social.search_failed'), t('social.search_friends_error'));
         } finally {
             if (isMounted.current) {
                 setLoadingFriendSearch(false);
             }
         }
-    }, [db, searchQuery, friendIdSet]);
+    }, [db, searchQuery, friendIdSet, t]);
 
     // ─────────────────────────────────────────────
     // ✅ Search Users (Find Users tab) — robust: symbols, case-insensitive
@@ -447,13 +450,13 @@ const SocialDashboard = () => {
             setSearchResults(results.slice(0, 50));
         } catch (err) {
             console.error("Search error:", err);
-            Alert.alert("Search Failed", err.message || "Could not search users.");
+            Alert.alert(t('social.search_failed'), t('social.search_users_error'));
         } finally {
             if (isMounted.current) {
                 setLoadingSearch(false);
             }
         }
-    }, [db, searchQuery, currentUser?.id]);
+    }, [db, searchQuery, currentUser?.id, t]);
 
     // ─────────────────────────────────────────────
     // Open Profile Drawer
@@ -517,7 +520,7 @@ const SocialDashboard = () => {
                     }}
                 >
                     <Text style={[styles.tabText, { color: activeTab === 'friends' ? config.colors.primary : (isDark ? '#888' : '#666') }]}>
-                        💛 Following
+                        {t('social.tab_following')}
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -528,7 +531,7 @@ const SocialDashboard = () => {
                     }}
                 >
                     <Text style={[styles.tabText, { color: activeTab === 'search' ? config.colors.primary : (isDark ? '#888' : '#666') }]}>
-                        🔍 Discover
+                        {t('social.tab_discover')}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -546,7 +549,7 @@ const SocialDashboard = () => {
                                     setIsFriendSearchActive(false); // Reset to pagination when empty
                                 }
                             }}
-                            placeholder="Search friends..."
+                            placeholder={t('social.search_friends_placeholder')}
                             placeholderTextColor={isDark ? '#666' : '#999'}
                             style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
                             returnKeyType="search"
@@ -560,6 +563,7 @@ const SocialDashboard = () => {
                         <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
                     ) : (
                         <FlatList
+                            removeClippedSubviews={false}
                             data={isFriendSearchActive ? friendSearchResults : friends} // ✅ Toggle Data Source
                             keyExtractor={keyExtractor}
                             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? '#FFF' : '#000'} />}
@@ -575,7 +579,7 @@ const SocialDashboard = () => {
                                 <View style={styles.emptyState}>
                                     <Ionicons name="people-outline" size={48} color={isDark ? '#333' : '#CCC'} />
                                     <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>
-                                        {isFriendSearchActive ? 'No friends found with that name' : (searchQuery ? 'No matching friends' : 'No friends yet. Find users to follow!')}
+                                        {isFriendSearchActive ? t('social.no_friends_with_name') : (searchQuery ? t('social.no_matching_friends') : t('social.no_friends'))}
                                     </Text>
                                 </View>
                             }
@@ -591,7 +595,7 @@ const SocialDashboard = () => {
                         <TextInput
                             value={searchQuery}
                             onChangeText={setSearchQuery}
-                            placeholder="Search users..."
+                            placeholder={t('social.search_placeholder')}
                             placeholderTextColor={isDark ? '#666' : '#999'}
                             style={[styles.searchInput, { backgroundColor: isDark ? '#1C1C1E' : '#FFF', color: isDark ? '#FFF' : '#000' }]}
                             returnKeyType="search"
@@ -605,6 +609,7 @@ const SocialDashboard = () => {
                         <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
                     ) : (
                         <FlatList
+                            removeClippedSubviews={false}
                             data={searchResults}
                             keyExtractor={keyExtractor}
                             contentContainerStyle={styles.listContent}
@@ -615,12 +620,12 @@ const SocialDashboard = () => {
                             ListEmptyComponent={
                                 hasSearched ? (
                                     <View style={styles.emptyState}>
-                                        <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>No users found.</Text>
+                                        <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>{t('social.no_users_found')}</Text>
                                     </View>
                                 ) : (
                                     <View style={styles.emptyState}>
                                         <Ionicons name="search-outline" size={48} color={isDark ? '#333' : '#CCC'} />
-                                        <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>Search for users to follow</Text>
+                                        <Text style={[styles.emptyText, { color: isDark ? '#666' : '#999' }]}>{t('social.search_users')}</Text>
                                     </View>
                                 )
                             }

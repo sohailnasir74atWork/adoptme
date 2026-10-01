@@ -25,19 +25,21 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
   const isDarkMode = theme === "dark";
   const { t } = useTranslation();
 
-  // ✅ Memoize reason options array
+  // Reason options: `value` is the stable English identifier (what
+  // selectedReason holds, so it never depends on the UI language); `labelKey`
+  // is translated only when rendered.
   const reasonOptions = useMemo(() => [
-    t("chat.spam"),
-    t("chat.religious"),
-    t("chat.hate_speech")
-  ], [t]);
+    { value: "Spam", labelKey: "chat.spam" },
+    { value: "Religious", labelKey: "chat.religious" },
+    { value: "Hate Speech", labelKey: "chat.hate_speech" },
+  ], []);
 
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const handleSubmit = async () => {
     if (!message || !message.id) {
-      Alert.alert("Error", "Invalid message. Unable to report.");
+      Alert.alert(t("chat.error"), t("chat.report_invalid_message"));
       return;
     }
 
@@ -59,7 +61,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
       } catch (error) {
         console.error("Error reporting message (supabase):", error);
         setLoading(false);
-        Alert.alert("Error", "Failed to submit the report. Please try again.");
+        Alert.alert(t("chat.error"), t("chat.report_failed"));
       }
       return;
     }
@@ -70,7 +72,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
     // -----------------------------------------------------------------
     if (!appdatabase) {
       setLoading(false);
-      Alert.alert("Error", "Database not available. Please try again.");
+      Alert.alert(t("chat.error"), t("chat.report_connection_error"));
       return;
     }
 
@@ -81,7 +83,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
 
     if (!sanitizedId || sanitizedId.trim().length === 0) {
       setLoading(false);
-      Alert.alert("Error", "Invalid message. Unable to report.");
+      Alert.alert(t("chat.error"), t("chat.report_invalid_message"));
       return;
     }
 
@@ -116,7 +118,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
       .catch((error) => {
         console.error("Error reporting message:", error);
         setLoading(false);
-        Alert.alert("Error", "Failed to submit the report. Please try again.");
+        Alert.alert(t("chat.error"), t("chat.report_failed"));
       });
   };
 
@@ -129,31 +131,31 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.popup}>
-          <Text style={styles.title}>Report Message</Text>
-          <Text style={styles.messageText}>{`Message: "${message?.text}"`}</Text>
-          <Text style={styles.messageText}>{`Sender: ${message?.sender || "Anonymous"}`}</Text>
+          <Text style={styles.title}>{t("chat.report_message_title")}</Text>
+          <Text style={styles.messageText}>{t("chat.report_message_quote", { text: message?.text || "" })}</Text>
+          <Text style={styles.messageText}>{t("chat.report_sender", { name: message?.sender || t("chat.anonymous") })}</Text>
 
           {/* Standard Reasons */}
           <View style={styles.optionsContainer}>
             {reasonOptions.map((reason) => (
               <TouchableOpacity
-                key={reason}
+                key={reason.value}
                 style={[
                   styles.option,
-                  selectedReason === reason && styles.selectedOption,
+                  selectedReason === reason.value && styles.selectedOption,
                 ]}
                 onPress={() => {
-                  setSelectedReason(reason);
+                  setSelectedReason(reason.value);
                   setShowCustomInput(false);
                 }}
               >
                 <Text
                   style={[
                     styles.optionText,
-                    selectedReason === reason && styles.selectedOptionText,
+                    selectedReason === reason.value && styles.selectedOptionText,
                   ]}
                 >
-                  {reason}
+                  {t(reason.labelKey)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -181,7 +183,7 @@ const ReportPopup = ({ visible, message, onClose, messagePath, supabaseRoomId })
           {showCustomInput && (
             <TextInput
               style={styles.input}
-              placeholder="Enter custom reason"
+              placeholder={t("chat.custom_reason_placeholder")}
               placeholderTextColor="#888"
               value={customReason}
               onChangeText={setCustomReason}

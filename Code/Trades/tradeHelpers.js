@@ -4,6 +4,7 @@ import { Text, View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { ref, set, remove, get, serverTimestamp as rtdbTimestamp } from '@react-native-firebase/database';
 import { collection, addDoc, serverTimestamp as fsTimestamp } from '@react-native-firebase/firestore';
 
@@ -22,9 +23,9 @@ export const FilterMenu = ({ selectedFilters, setSelectedFilters, analytics, pla
   // Filter options: My Trades and Status filters
   const filterOptions = [
     { key: "myTrades", label: t("trade.filter_my_trades") },
-    { key: "win", label: "Win" },
-    { key: "lose", label: "Lose" },
-    { key: "fair", label: "Fair" },
+    { key: "win", label: t("trade.status_win") },
+    { key: "lose", label: t("trade.status_lose") },
+    { key: "fair", label: t("trade.status_fair") },
   ];
 
   return (
@@ -95,7 +96,9 @@ export const saveTrade = async (appdatabase, myUid, trade) => {
   // ✅ Enforce max limit
   const count = await _countByType(appdatabase, myUid, 'saved');
   if (count >= MAX_SAVED) {
-    throw new Error(`You can only save ${MAX_SAVED} trades at a time. Remove some first.`);
+    const limitError = new Error(i18n.t('trade.save_limit', { count: MAX_SAVED }));
+    limitError.isSaveLimit = true;
+    throw limitError;
   }
 
   const tradeId = trade.id;
@@ -143,11 +146,13 @@ export const pingTrader = async (appdatabase, firestoreDB, myUid, myName, trade)
         const elapsed = Date.now() - lastPing;
         if (elapsed < PING_COOLDOWN_MS) {
           const remainingMins = Math.ceil((PING_COOLDOWN_MS - elapsed) / 60000);
-          throw new Error(`Please wait ${remainingMins} more minute${remainingMins > 1 ? 's' : ''} before pinging again.`);
+          const cooldownError = new Error(i18n.t('trade.ping_cooldown', { count: remainingMins }));
+          cooldownError.isCooldown = true;
+          throw cooldownError;
         }
       }
     } catch (e) {
-      if (e.message?.includes('Please wait')) throw e; // re-throw cooldown error
+      if (e?.isCooldown) throw e; // re-throw cooldown error
       // Other DB errors — skip cooldown check, allow ping
     }
   }

@@ -70,7 +70,12 @@ const logStartupTiming = (name, params) => {
     logEvent(getAnalytics(), name, params);
   } catch (_) {}
 };
+
+// Back-off between profile reloads after a failed login read (see
+// reloadProfileWhenConnected); its length is the per-launch reload cap.
+const PROFILE_RELOAD_DELAYS = [2000, 8000, 20000, 45000, 90000];
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
+import { setSquadUser } from './Helper/squad';
 import { getServerTime, warmServerTime } from './Helper/serverTime';
 
 
@@ -312,32 +317,54 @@ export const GlobalStateProvider = ({ children }) => {
   // no profile fields). Its comment said a reconnect would re-run it, but
   // nothing did before the next auth change, so the stripped profile lasted
   // the whole session. This waits for RTDB to report connected (at once if it
-  // already is) and re-runs it for the same user; at most 3 times a launch,
-  // in case the connection drops again mid-read every time.
+  // already is) and re-runs it for the same user.
+  //
+  // 2026-10-01: a connected socket is not a fast one. On a slow phone, reads
+  // pass the 10 s cap with RTDB still connected, so the reload fired at once,
+  // timed out the same way three times in ~30 s and gave up. The profile
+  // then stayed stripped all session (Lv.1, 0 XP, no Pro). It also never ran
+  // at all when only SOME reads failed. Now: any failed read schedules a
+  // reload, each run waits for connected and then backs off, and the
+  // reloads (which no longer gate the splash) get a longer cap.
   const handleUserLoginRef = useRef(null);
-  const profileReloadRef = useRef({ unsub: null, runs: 0 });
+  const profileReloadRef = useRef({ uid: null, unsub: null, timer: null, runs: 0 });
+  // What the user state currently holds for whom: 'minimal' | 'partial' | 'full'.
+  // A reload that gets less than that must not replace it.
+  const profileLevelRef = useRef({ uid: null, level: null });
   const cancelProfileReload = useCallback(() => {
     const pending = profileReloadRef.current;
     if (pending.unsub) {
       pending.unsub();
       pending.unsub = null;
     }
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+      pending.timer = null;
+    }
   }, []);
   const reloadProfileWhenConnected = useCallback((uid) => {
     const pending = profileReloadRef.current;
-    if (pending.unsub || pending.runs >= 3) return;
+    if (pending.uid !== uid) {
+      pending.uid = uid;
+      pending.runs = 0;
+    }
+    if (pending.unsub || pending.timer || pending.runs >= PROFILE_RELOAD_DELAYS.length) return;
     pending.unsub = onValue(ref(appdatabase, '.info/connected'), (snap) => {
       if (snap.val() !== true) return;
       cancelProfileReload();
-      pending.runs += 1;
-      if (auth.currentUser?.uid === uid) handleUserLoginRef.current?.(auth.currentUser);
+      pending.timer = setTimeout(() => {
+        pending.timer = null;
+        pending.runs += 1;
+        if (auth.currentUser?.uid === uid) handleUserLoginRef.current?.(auth.currentUser, { reload: true });
+      }, PROFILE_RELOAD_DELAYS[pending.runs]);
     });
   }, [cancelProfileReload]);
 
   // ✅ Memoize handleUserLogin
-  const handleUserLogin = useCallback(async (loggedInUser) => {
+  const handleUserLogin = useCallback(async (loggedInUser, { reload = false } = {}) => {
     if (!loggedInUser) {
       lastKnownIsProRef.current = { uid: null, value: undefined };
+      setSquadUser(null); // signed out: Squad Pro stops counting on this phone
       resetUserState(); // No longer recreates resetUserState
       return;
     }
@@ -352,7 +379,14 @@ export const GlobalStateProvider = ({ children }) => {
       // below is capped at 10 s and failures are tagged READ_FAILED.
       const READ_FAILED = Symbol('read-failed');
       let readsUnreachable = false;
-      const withTimeout = (p, ms = 10000) => Promise.race([
+      // Some read failed, so `existing` may lack fields the user really has:
+      // show what we got, and reload (see reloadProfileWhenConnected).
+      let readsPartial = false;
+      // Projection fields whose read FAILED, as opposed to coming back empty.
+      // The self-heal writes below must never treat these as missing.
+      const failedFields = new Set();
+      // Reloads run behind the UI, not the splash, so they can wait longer.
+      const withTimeout = (p, ms = reload ? 20000 : 10000) => Promise.race([
         p,
         new Promise((_, reject) => setTimeout(() => reject(new Error('read-timeout')), ms)),
       ]);
@@ -380,16 +414,16 @@ export const GlobalStateProvider = ({ children }) => {
         'displayName', 'avatar', 'userName',
         'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
-        'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying',
+        'rewardPoints', 'isPlaying',
         'chatOffTrade', 'chatOffGeneral',
       ];
       // Leaves not yet mirrored to Supabase — still authoritative on RTDB.
       // `flage` stays here too: the mirror renames it to `flag`, so reading the
       // original leaf keeps country flags exactly correct.
-      const RTDB_ONLY = ['userName', 'flage', 'lastGameWinAt', 'hasRecentGameWin', 'rewardPoints', 'isPlaying', 'chatOffTrade', 'chatOffGeneral'];
+      const RTDB_ONLY = ['userName', 'flage', 'rewardPoints', 'isPlaying', 'chatOffTrade', 'chatOffGeneral'];
 
       // Startup instrumentation (2026-09-21). These reads gate the boot splash:
-      // 4 Supabase calls + 8 RTDB leaves + xp = 13 round trips, each capped at
+      // 4 Supabase calls + 6 RTDB leaves + xp = 11 round trips, each capped at
       // 10s by withTimeout. They run in parallel, so the splash costs roughly
       // the slowest one - but on a bad connection that is the 10s cap, and the
       // user stares at the logo the whole time. Nobody has ever measured what
@@ -414,6 +448,10 @@ export const GlobalStateProvider = ({ children }) => {
         rtdb_ok: rtdbOnlySnaps.filter(Boolean).length,
         rtdb_total: RTDB_ONLY.length,
       });
+
+      // A failed RTDB read is null here; a successful one is a snapshot even
+      // when the leaf does not exist.
+      if (rtdbOnlySnaps.some((s) => !s) || !xpSnap || !privateSnap) readsPartial = true;
 
       const xpVal = xpSnap && xpSnap.exists() ? xpSnap.val() : undefined;
       const rtdbOnly = {};
@@ -454,7 +492,8 @@ export const GlobalStateProvider = ({ children }) => {
             missing.map((p) => withTimeout(get(ref(appdatabase, `users/${userId}/${p}`))).catch(() => null))
           );
           missing.forEach((p, i) => {
-            if (snaps[i] && snaps[i].exists()) existing[p] = snaps[i].val();
+            if (!snaps[i]) readsPartial = true;
+            else if (snaps[i].exists()) existing[p] = snaps[i].val();
           });
         }
         if (xpVal !== undefined) existing.xp = xpVal;
@@ -471,14 +510,19 @@ export const GlobalStateProvider = ({ children }) => {
           PROJECTION.map((f) => withTimeout(get(ref(appdatabase, `users/${userId}/${f}`))).catch(() => READ_FAILED))
         );
         const anyExists = fieldSnaps.some((s) => s && s !== READ_FAILED && s.exists()) || xpVal !== undefined;
+        PROJECTION.forEach((f, i) => { if (fieldSnaps[i] === READ_FAILED) failedFields.add(f); });
+        if (failedFields.size) readsPartial = true;
         if (anyExists) {
           existing = {};
           PROJECTION.forEach((f, i) => {
             if (fieldSnaps[i] && fieldSnaps[i] !== READ_FAILED && fieldSnaps[i].exists()) existing[f] = fieldSnaps[i].val();
           });
           if (xpVal !== undefined) existing.xp = xpVal;
-        } else if (fieldSnaps.every((s) => s === READ_FAILED)) {
-          // Nothing could be read at all → we cannot tell new from existing.
+        } else if (failedFields.size) {
+          // Nothing found, but some reads failed → we cannot tell new from
+          // existing. (This used to require EVERY read to fail; with only
+          // some failing, an existing user ran the new-user branch below and
+          // had createNewUser's defaults merged over their real record.)
           readsUnreachable = true;
         }
       }
@@ -487,16 +531,23 @@ export const GlobalStateProvider = ({ children }) => {
         // Backend unreachable: keep the user SIGNED IN with a minimal profile
         // (no RTDB writes — never treat an existing user as new here). The full
         // record loads as soon as RTDB reconnects (reloadProfileWhenConnected).
-        logAuthEvent(`auth_login_reads_unreachable uid=${userId}`, 'auth_login_reads_unreachable');
-        const minimal = {
-          id: userId,
-          email: loggedInUser.email || null,
-          displayName: loggedInUser.displayName || 'Anonymous',
-          avatar: loggedInUser.photoURL || null,
-          createdAt: Date.now(),
-        };
-        setCurrentuserEmail(loggedInUser.email);
-        setUser(minimal);
+        logAuthEvent(`auth_login_reads_unreachable uid=${userId} reload=${reload ? 1 : 0}`, 'auth_login_reads_unreachable');
+        // A failed reload keeps whatever profile is already on screen.
+        if (profileLevelRef.current.uid !== userId) {
+          const minimal = {
+            id: userId,
+            email: loggedInUser.email || null,
+            displayName: loggedInUser.displayName || 'Anonymous',
+            avatar: loggedInUser.photoURL || null,
+            createdAt: Date.now(),
+            // Fields are missing because they weren't read, not because the
+            // user lacks them: gates like the DOB prompt must wait (App.js).
+            profileIncomplete: true,
+          };
+          setCurrentuserEmail(loggedInUser.email);
+          setUser(minimal);
+          profileLevelRef.current = { uid: userId, level: 'minimal' };
+        }
         reloadProfileWhenConnected(userId);
         return;
       }
@@ -528,12 +579,12 @@ export const GlobalStateProvider = ({ children }) => {
 
         // ✅ SELF-HEALING: Persist createdAt to RTDB if it was missing
         // so other users (e.g. BottomDrawer) can see the joined date
-        if (!existing.createdAt && userData.createdAt) {
+        if (!existing.createdAt && userData.createdAt && !failedFields.has('createdAt')) {
           update(userRef, { createdAt: userData.createdAt }).catch(() => {});
         }
 
         // ✅ SELF-HEALING: Fix users stuck with 'Anonymous' or empty displayName
-        if (!userData.displayName || userData.displayName === 'Anonymous') {
+        if ((!userData.displayName || userData.displayName === 'Anonymous') && !failedFields.has('displayName')) {
           const newName = generateOnePieceUsername();
           if (newName) {
             userData.displayName = newName;
@@ -584,7 +635,18 @@ export const GlobalStateProvider = ({ children }) => {
         uid: userId,
         value: typeof userData?.isPro === 'boolean' ? userData.isPro : undefined,
       };
-      setUser(userData);
+      // A reload that is itself partial merges over the profile on screen, so
+      // a field it failed to read keeps the value an earlier run got.
+      if (readsPartial) userData.profileIncomplete = true;
+      const keepEarlier = reload && readsPartial && profileLevelRef.current.uid === userId;
+      setUser(keepEarlier ? (prev) => ({ ...prev, ...userData }) : userData);
+      profileLevelRef.current = { uid: userId, level: readsPartial ? 'partial' : 'full' };
+      if (readsPartial) {
+        logStartupTiming('profile_reads_partial', { reload: reload ? 1 : 0 });
+        reloadProfileWhenConnected(userId);
+      } else if (reload) {
+        logStartupTiming('profile_reload_ok', { runs: profileReloadRef.current.runs });
+      }
 
       // 🔥 Crashlytics: tag this user so crash reports show who was affected
       try {

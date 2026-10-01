@@ -12,10 +12,11 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useHaptic } from '../Helper/HepticFeedBack';
-import { t } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { showSuccessMessage } from '../Helper/MessageHelper';
 
 const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
+  const { t } = useTranslation();
   // Flatten codes if necessary
   const { theme, analytics } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -40,7 +41,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
     <View style={styles.codeItem}>
       <Text style={styles.codeText}>[{item.code}]</Text>
       <View style={styles.rewardContainer}>
-        <Text style={styles.rewardText}>Reward: {item.reward}</Text>
+        <Text style={styles.rewardText}>{t('codes.reward', { reward: item.reward })}</Text>
         <TouchableOpacity
           onPress={() => copyToClipboard(item.code)}
           style={styles.copyButton}
@@ -66,6 +67,7 @@ const CodesDrawer = ({ isVisible, toggleModal, codes }) => {
       {/* Drawer */}
       <View style={styles.drawer}>
         <FlatList
+          removeClippedSubviews={false}
           data={normalizedCodes}
           keyExtractor={(item, index) => index.toString()}
           renderItem={renderCodeItem}

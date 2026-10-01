@@ -2,9 +2,9 @@ import React, { useMemo } from 'react';
 import { getThemeColors } from '../../Helper/themeColors';
 import { View, Text, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES } from './badgeUtils';
+import { BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES, listedBadgeIds } from './badgeUtils';
 import FramedAvatar from './FramedAvatar';
-import { FRAMES, RARITY_CONFIG } from '../../Engagement/shopItems';
+import { FRAMES, RARITY_CONFIG, getCosmeticName } from '../../Engagement/shopItems';
 
 /**
  * Badge Showcase — shows earned badge pills on profile
@@ -40,7 +40,7 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {}, activeFrame, avatarUr
           fontSize: 12, fontWeight: '700',
           color: c.text,
         }}>
-          {t('profile.badges_title') || 'Badges'}
+          {t('profile.badges_title')}
         </Text>
         <View style={{
           backgroundColor: c.border,
@@ -48,7 +48,7 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {}, activeFrame, avatarUr
           marginLeft: 4,
         }}>
           <Text style={{ fontSize: 9, fontWeight: '700', color: c.textSecondary }}>
-            {earnedCount}/{BADGE_DISPLAY_ORDER.length}
+            {earnedCount}/{listedBadgeIds(earnedBadges).length}
           </Text>
         </View>
       </View>
@@ -92,7 +92,7 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {}, activeFrame, avatarUr
               <Icon name="sparkles" size={12} color="#a855f7" />
             </View>
             <Text style={{ fontSize: 12, fontWeight: '700', color: c.text }}>
-              {t('profile.active_frame') || 'Active Frame'}
+              {t('profile.active_frame')}
             </Text>
           </View>
           <View style={{ alignItems: 'center', gap: 8 }}>
@@ -103,7 +103,7 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {}, activeFrame, avatarUr
               avatarSize={96}
             />
             <Text style={{ fontSize: 11, fontWeight: '700', color: FRAMES[activeFrame].borderColors?.[0] || c.text }}>
-              {FRAMES[activeFrame].name}
+              {getCosmeticName(FRAMES[activeFrame])}
             </Text>
             <View style={{
               paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,

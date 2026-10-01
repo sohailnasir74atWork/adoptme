@@ -22,7 +22,7 @@ import { getUserXP } from './xpUtils';
 import { getStarBalance } from './starUtils';
 import { purchaseEgg, formatTimeRemaining, getShopStats, getInventory } from './shopUtils';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, setCachedEggXP, setCachedEggStats, setCachedEggInventory } from '../Helper/cosmeticsCache';
-import { EGG_LIST, RARITY_CONFIG, COSMETIC_TYPE, ALL_ITEMS } from './shopItems';
+import { EGG_LIST, RARITY_CONFIG, COSMETIC_TYPE, ALL_ITEMS, getCosmeticName } from './shopItems';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import RewardedAdManager from '../Ads/RewardedAdManager';
 
@@ -123,7 +123,7 @@ const EggCard = ({ egg, starBalance, isDark, onPress, index }) => {
                 <View key={rarity} style={s.dropRateItem}>
                   <View style={[s.dropDot, { backgroundColor: RARITY_CONFIG[rarity]?.color || '#94a3b8' }]} />
                   <Text style={[s.dropText, { color: canAfford ? '#6b4c4a' : (isDark ? '#94a3b8' : '#64748b') }]}>
-                    {RARITY_CONFIG[rarity]?.label || rarity} {weight}%
+                    {t('mystery_egg.eggs.drop_rate', { rarity: RARITY_CONFIG[rarity]?.label || rarity, percent: weight })}
                   </Text>
                 </View>
               ))}
@@ -291,7 +291,7 @@ const RewardReveal = ({ reward, isDark }) => {
       </View>
 
       {/* Item name */}
-      <Text style={[s.rewardName, { color: rarityConfig.color }]}>{reward.name}</Text>
+      <Text style={[s.rewardName, { color: rarityConfig.color }]}>{getCosmeticName(reward)}</Text>
       <Text style={[s.rewardType, { color: isDark ? '#94a3b8' : '#64748b' }]}>
         {isFrame ? t('mystery_egg.rewards.reward_type_frame') : isTextColor ? t('mystery_egg.rewards.reward_type_text_color') : isTradeBg ? t('mystery_egg.rewards.reward_type_trade_bg') : isBanner ? t('mystery_egg.rewards.reward_type_banner') : isChatBg ? t('mystery_egg.rewards.reward_type_chat_bg') : t('mystery_egg.rewards.reward_type_cosmetic')}
       </Text>
@@ -300,7 +300,7 @@ const RewardReveal = ({ reward, isDark }) => {
       <View style={[s.durationBadge, { backgroundColor: isDark ? '#0f172a' : '#f8fafc' }]}>
         <Icon name="time-outline" size={14} color={isDark ? '#94a3b8' : '#64748b'} />
         <Text style={[s.durationText, { color: isDark ? '#94a3b8' : '#64748b' }]}>
-          {reward.duration === -1 ? t('mystery_egg.rewards.permanent') : t(reward.duration > 1 ? 'mystery_egg.rewards.active_for_days_plural' : 'mystery_egg.rewards.active_for_days', { count: reward.duration })}
+          {reward.duration === -1 ? t('mystery_egg.rewards.permanent') : t('mystery_egg.rewards.active_days', { count: reward.duration })}
         </Text>
       </View>
 
@@ -337,11 +337,11 @@ const RewardCatalog = ({ isDark }) => {
               {previewFn(item, rc, isHidden, isDark)}
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={[s.rewardItemName, { color: isHidden ? rc?.color : (isDark ? '#e2e8f0' : '#334155') }]}>
-                  {isHidden ? t('mystery_egg.catalog.hidden_reward', { rarity: rc?.label }) : item.name}
+                  {isHidden ? t('mystery_egg.catalog.hidden_reward', { rarity: rc?.label }) : getCosmeticName(item)}
                 </Text>
                 {item.duration && !isHidden && (
                   <Text style={{ fontSize: 9, color: isDark ? '#64748b' : '#94a3b8', marginTop: 1 }}>
-                    {item.duration === -1 ? t('mystery_egg.rewards.permanent') : t(item.duration > 1 ? 'mystery_egg.rewards.active_for_days_plural' : 'mystery_egg.rewards.active_for_days', { count: item.duration })}
+                    {item.duration === -1 ? t('mystery_egg.rewards.permanent') : t('mystery_egg.rewards.active_days', { count: item.duration })}
                   </Text>
                 )}
               </View>
@@ -553,7 +553,7 @@ const MysteryEggScreen = ({ navigation }) => {
                   setInventory(inv);
                   setCachedEggInventory(inv);
                 } else {
-                  Alert.alert(t('mystery_egg.alerts.oops'), result.error || t('mystery_egg.alerts.failed_hatch'));
+                  Alert.alert(t('mystery_egg.alerts.oops'), result.currentBalance != null ? t('mystery_egg.alerts.not_enough_stars') : t('mystery_egg.alerts.failed_hatch'));
                   setPhase('select');
                   setLoading(false);
                 }
@@ -720,7 +720,7 @@ const MysteryEggScreen = ({ navigation }) => {
                           await dbUpdate(dbRef(appdatabase, `users/${user.id}/dailyStars`), {
                             starBalance: dbIncrement(-cheapestEgg.cost),
                           });
-                          Alert.alert(t('mystery_egg.alerts.oops'), result.error || t('mystery_egg.alerts.failed_hatch'));
+                          Alert.alert(t('mystery_egg.alerts.oops'), result.currentBalance != null ? t('mystery_egg.alerts.not_enough_stars') : t('mystery_egg.alerts.failed_hatch'));
                           setPhase('select'); setLoading(false);
                         }
                       } catch { setPhase('select'); setLoading(false); }
@@ -860,7 +860,7 @@ const MysteryEggScreen = ({ navigation }) => {
                             await dbUpdate(dbRef(appdatabase, `users/${user.id}/dailyStars`), {
                               starBalance: dbIncrement(-cheapestEgg.cost),
                             });
-                            Alert.alert(t('mystery_egg.alerts.oops'), result.error || t('mystery_egg.alerts.failed_hatch'));
+                            Alert.alert(t('mystery_egg.alerts.oops'), result.currentBalance != null ? t('mystery_egg.alerts.not_enough_stars') : t('mystery_egg.alerts.failed_hatch'));
                             setPhase('select');
                             setLoading(false);
                           }

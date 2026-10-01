@@ -1,6 +1,7 @@
 import Filter from 'leo-profanity';
 import { ACTIVE_BLOCKLIST, ALLOWED_TOKENS } from './blocklist';
 import { moderationTokens, moderationSquash } from './textNormalize';
+import i18n from '../../i18n';
 
 /**
  * Content moderation for chat, posts and comments.
@@ -161,10 +162,10 @@ export const isAllowedLink = (text) => {
 // the category rides along on the result so a more specific message (or a
 // self-harm helpline instead of a scolding) can be wired up without touching
 // the matching code.
-const REASONS = {
-  scam: 'Spam content is not allowed.',
-  selfharm: 'This message cannot be sent. If you need someone to talk to, please reach out to a trusted adult.',
-  grooming: 'This message cannot be sent.',
+const REASON_KEYS = {
+  scam: 'moderation.reason_spam',
+  selfharm: 'moderation.reason_selfharm',
+  grooming: 'moderation.reason_blocked',
 };
 
 /**
@@ -190,7 +191,7 @@ export const validateContent = (text, options = {}) => {
     return {
       isValid: false,
       category: hit.category,
-      reason: REASONS[hit.category] || 'Inappropriate language is not allowed.',
+      reason: i18n.t(REASON_KEYS[hit.category] || 'moderation.reason_language'),
     };
   }
 
@@ -199,7 +200,7 @@ export const validateContent = (text, options = {}) => {
     return {
       isValid: false,
       category: 'link',
-      reason: 'Links are not allowed in messages.',
+      reason: i18n.t('moderation.reason_links'),
     };
   }
 

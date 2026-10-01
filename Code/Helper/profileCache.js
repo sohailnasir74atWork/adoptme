@@ -20,9 +20,8 @@
  *     /isTrusted/isCMSR/isHelper       → user_roles
  *   - isPro, topBadge                  → user_cosmetics
  *   RTDB falls back per-field if Supabase has no row (mirror lag, brand-new
- *   user, or backfill miss). Game state (hasRecentGameWin, lastGameWinAt,
- *   robloxUsernameVerified) and shop subtree still read from RTDB —
- *   they migrate in later waves (or stay on RTDB; shop deferred).
+ *   user, or backfill miss). The two game-win leaf reads per cold profile
+ *   were removed with the mini-games (2026-09-29).
  */
 
 
@@ -41,7 +40,7 @@ try {
   cache = {
     getString: () => undefined,
     set: () => {},
-    delete: () => {},
+    remove: () => {},
   };
 }
 const TTL = 30 * 60 * 1000; // 30 minutes
@@ -56,7 +55,7 @@ export const getCachedProfile = (uid) => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Date.now() - parsed.t > TTL) {
-      cache.delete(`p_${uid}`);
+      cache.remove(`p_${uid}`);
       return null;
     }
     return parsed.d;
@@ -92,7 +91,6 @@ export const getOrFetchProfile = async (db, uid) => {
   //   - identity / roles / cosmetics / roblox  → Supabase (always)
   //   - cosmetics row also carries active shop items (profileFrame, etc.)
   //     since 016_user_cosmetics_active migration — was 1 RTDB read here
-  //   - hasRecentGameWin + lastGameWinAt       → RTDB (not mirrored)
   //   - RTDB fallback for mirrored fields fires ONLY if the corresponding
   //     Supabase table returned null (mirror lag / not-yet-backfilled user).
   //     Common case: 0 RTDB reads for the mirrored fields.
@@ -108,19 +106,12 @@ export const getOrFetchProfile = async (db, uid) => {
 // Assemble + cache a profile from pre-fetched Supabase rows. Shared by
 // getOrFetchProfile (single, 4 point queries) and warmProfileCache
 // (bulk, 4 batch queries for the whole set) so the two paths can't
-// drift. Does the RTDB game-win leaf reads + per-field RTDB fallback
-// for whichever Supabase rows came back null.
+// drift. Does the per-field RTDB fallback for whichever Supabase rows
+// came back null.
 const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeticsRow, robloxRow }) => {
   try {
     const base = `users/${uid}`;
 
-    const [hasRecentGameWinSnap, lastGameWinAtSnap] = await Promise.all([
-      get(ref(db, `${base}/hasRecentGameWin`)),
-      get(ref(db, `${base}/lastGameWinAt`)),
-    ]);
-
-    const hasRecentGameWin = hasRecentGameWinSnap.exists() ? hasRecentGameWinSnap.val() : null;
-    const lastGameWinAt    = lastGameWinAtSnap.exists()    ? lastGameWinAtSnap.val()    : null;
     // Build a shopItems-shaped object from cosmeticsRow so the existing
     // expiresAt filter below works without a code shape change. Cold
     // cosmeticsRow (mirror lag) → null → no frame/bubble until mirror
@@ -169,7 +160,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
 
     if (
       identityRow == null && rolesRow == null && cosmeticsRow == null && robloxRow == null &&
-      hasRecentGameWin == null && lastGameWinAt == null && shopItems == null &&
+      shopItems == null &&
       (!fb || Object.keys(fb).length === 0)
     ) {
       return null;
@@ -200,8 +191,6 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
       avatar: avatar || null,
       isPro: !!isPro,
       robloxUsernameVerified: !!robloxUsernameVerified,
-      hasRecentGameWin: !!hasRecentGameWin,
-      lastGameWinAt: lastGameWinAt || null,
       isAdmin: !!isAdmin,
       isModerator: !!isModerator,
       isBabyMod: !!isBabyMod,
@@ -213,6 +202,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
       tradeCardBg,
       chatBubbleBg: chatBubbleBg || null,
       topBadge: topBadge || null,
+      squadCount: cosmeticsRow?.squadCount || 0,
     };
     setCachedProfile(uid, profile);
     return profile;
@@ -244,9 +234,8 @@ export const warmProfileCache = async (db, uids) => {
     getRobloxBatch(uncached).catch(() => new Map()),
   ]);
 
-  // Assembly still runs in waves — it does 2 RTDB game-win leaf reads
-  // per uid (plus fallback reads for rows missing above), and 10-wide
-  // keeps that RTDB concurrency bounded.
+  // Assembly still runs in waves — it does RTDB fallback reads for rows
+  // missing above, and 10-wide keeps that RTDB concurrency bounded.
   const WAVE = 10;
   for (let i = 0; i < uncached.length; i += WAVE) {
     const wave = uncached.slice(i, i + WAVE);
@@ -278,8 +267,6 @@ export const seedFromMessage = (msg) => {
     avatar: msg.avatar || null,
     isPro: !!msg.isPro,
     robloxUsernameVerified: !!msg.robloxUsernameVerified,
-    hasRecentGameWin: !!msg.hasRecentGameWin,
-    lastGameWinAt: msg.lastGameWinAt || null,
     isAdmin: !!msg.isAdmin,
     isModerator: !!msg.isModerator,
     isBabyMod: !!msg.isBabyMod,
@@ -298,7 +285,7 @@ export const seedFromMessage = (msg) => {
 //  This is the key "backwards compatible" resolver
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
-  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, hasRecentGameWin: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isHelper: false };
+  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isHelper: false };
 
   const cached = getCachedProfile(msg.senderId);
 
@@ -307,10 +294,6 @@ export const resolveProfile = (msg) => {
     avatar: msg.avatar || cached?.avatar || null,
     isPro: msg.isPro ?? cached?.isPro ?? false,
     robloxUsernameVerified: msg.robloxUsernameVerified ?? cached?.robloxUsernameVerified ?? false,
-    hasRecentGameWin: msg.hasRecentGameWin ?? cached?.hasRecentGameWin ?? (
-      typeof (msg.lastGameWinAt || cached?.lastGameWinAt) === 'number' &&
-      Date.now() - (msg.lastGameWinAt || cached?.lastGameWinAt) <= 24 * 60 * 60 * 1000
-    ),
     isAdmin: msg.isAdmin ?? cached?.isAdmin ?? false,
     isModerator: msg.isModerator ?? cached?.isModerator ?? false,
     isBabyMod: msg.isBabyMod ?? cached?.isBabyMod ?? false,
@@ -340,7 +323,7 @@ export const getCachedFullProfile = (uid) => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Date.now() - parsed.t > TTL) {
-      cache.delete(FULL_KEY(uid));
+      cache.remove(FULL_KEY(uid));
       return null;
     }
     return parsed.d;
@@ -393,11 +376,11 @@ export const getRoleOverride = (uid) => {
 
 export const invalidateFullProfile = (uid) => {
   if (!uid) return;
-  try { cache.delete(FULL_KEY(uid)); } catch {}
+  try { cache.remove(FULL_KEY(uid)); } catch {}
   // Also drop the slim chat/online-list profile (p_<uid>, 30-min TTL) so the
   // admin's own message list and online list stop showing a removed role badge
   // immediately instead of up to 30 minutes later.
-  try { cache.delete(`p_${uid}`); } catch {}
+  try { cache.remove(`p_${uid}`); } catch {}
 };
 
 // Read the raw /users/{uid} once, cache it, return it. Returns null on missing.
@@ -429,8 +412,6 @@ export const seedCurrentUser = async (user, localState, db) => {
     avatar: user.avatar || null,
     isPro: !!localState?.isPro,
     robloxUsernameVerified: !!user.robloxUsernameVerified,
-    hasRecentGameWin: !!user.hasRecentGameWin || (user.lastGameWinAt && Date.now() - user.lastGameWinAt <= 24 * 60 * 60 * 1000) || false,
-    lastGameWinAt: user.lastGameWinAt || null,
     isAdmin: !!user.isAdmin,
     isModerator: !!user.isModerator,
     isTrusted: !!user.isTrusted,

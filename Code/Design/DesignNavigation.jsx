@@ -5,6 +5,7 @@ import config from '../Helper/Environment';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import DesignFeedScreen from './DesignMainScreen';
 import PrivateChatScreen from '../ChatScreen/PrivateChat/PrivateChat';
@@ -21,6 +22,7 @@ export const DesignStack = ({ selectedTheme }) => {
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
   const { theme } = useGlobalState();
+  const { t } = useTranslation();
   const isDarkMode = theme === 'dark';
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
@@ -73,7 +75,7 @@ export const DesignStack = ({ selectedTheme }) => {
         name="DesignScreen"
         component={DesignFeedScreen}
         initialParams={sharedParams}
-        options={{ title: 'Feed' }}
+        options={{ title: t('tabs.feed') }}
       />
 
       <Stack.Screen name="PrivateChatDesign" options={getPrivateChatOptions}>
@@ -91,7 +93,7 @@ export const DesignStack = ({ selectedTheme }) => {
       <Stack.Screen
         name="ImageViewerScreen"
         component={ImageViewerScreen}
-        options={{ title: 'Image' }}
+        options={{ title: t('nav.image') }}
       />
     </Stack.Navigator>
   );

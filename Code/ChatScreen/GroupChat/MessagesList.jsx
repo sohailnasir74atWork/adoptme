@@ -136,7 +136,7 @@ const MessagesList = ({
     Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
     showSuccessMessage(t('chat.success'), t('chat.message_copied'));
-  }, [triggerHapticFeedback]);
+  }, [triggerHapticFeedback, t]);
   // useEffect(() => {
   //   if (!messages || messages.length === 0) return;
   //   if (!isAtBottom) return; // only when user is at bottom
@@ -300,11 +300,25 @@ const MessagesList = ({
     if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
       const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
       return count > 0
-        ? t('chat.pets_message_count', { count })
-        : t('chat.pets_message_placeholder');
+        ? t('chat.reply_preview_items', { count })
+        : t('chat.reply_preview_items_none');
     }
 
     return t('chat.deleted_message_placeholder');
+  }, [t]);
+
+  // Date header label: Today / Yesterday / a localised date. The comparison
+  // below still uses toDateString() (a stable key); only the display changes —
+  // toDateString() itself always renders in English ("Tue Sep 29 2026").
+  const getDateLabel = useCallback((timestamp) => {
+    if (!timestamp) return '';
+    const msgDate = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (msgDate.toDateString() === today.toDateString()) return t('chat.today');
+    if (msgDate.toDateString() === yesterday.toDateString()) return t('chat.yesterday');
+    return msgDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }, [t]);
 
   const renderMessage = useCallback(({ item, index }) => {
@@ -334,14 +348,12 @@ const MessagesList = ({
     const profile = resolveProfile(item);
     seedFromMessage(item); // Free cache population from old-format messages
 
-    const hasRecentWin = profile.hasRecentGameWin;
-
     return (
       <View>
         {/* Display the date header if it's a new day */}
         {shouldShowDateHeader && currentDate && (
           <View>
-            <Text style={styles.dateSeparator}>{currentDate}</Text>
+            <Text style={styles.dateSeparator}>{getDateLabel(item.timestamp)}</Text>
           </View>
         )}
 
@@ -412,9 +424,6 @@ const MessagesList = ({
                     )}
                     {profile.robloxUsernameVerified && (
                       <Image source={require('../../../assets/verification.png')} style={styles.icon} />
-                    )}
-                    {hasRecentWin && (
-                      <Image source={require('../../../assets/trophy.webp')} style={styles.icon} />
                     )}
 
                     {(() => {
@@ -604,7 +613,7 @@ const MessagesList = ({
                     carry no valueSource, and Elvebredd is the honest answer for
                     those: it was the only catalogue then. */}
                   <Text style={[fruitStyles.sourceStatement, { color: c?.text || '#888' }]}>
-                    {sourceStatement(sourceOfItems(fruits))}
+                    {sourceStatement(sourceOfItems(fruits), t)}
                   </Text>
                   </View>
                 )}
@@ -679,7 +688,7 @@ const MessagesList = ({
         )}
       </View>
     );
-  }, [highlightedMessageId, user?.id, styles, getReplyPreview, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onReaction, isDarkMode]);
+  }, [highlightedMessageId, user?.id, styles, getReplyPreview, getDateLabel, handleCopy, handleTranslate, handleReport, handleLongPress, handleProfileClick, scrollToMessage, isAdmin, isAdminOrMod, t, fruitColors, onReply, onDeleteMessage, onDeleteAllMessage, onReaction, isDarkMode]);
 
   return (
     <>
@@ -708,7 +717,7 @@ const MessagesList = ({
         // Detach off-screen rows from the native view tree to keep memory
         // bounded as the user scrolls back through long histories.
         // PrivateMessageList already enables this; group chat was missing it.
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
 
         refreshControl={
           <RefreshControl

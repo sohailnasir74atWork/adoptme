@@ -9,7 +9,7 @@ import AppWrapper from './App';
 import { GlobalStateProvider } from './Code/GlobelStats';
 import { LocalStateProvider } from './Code/LocalGlobelStats';
 import { MenuProvider } from 'react-native-popup-menu';
-import './i18n';
+import i18n from './i18n';
 
 import FlashMessage from 'react-native-flash-message';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,10 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 const NotificationHandler = React.lazy(() =>
   import('./Code/Firebase/FrontendNotificationHandling'),
 );
-
-const GlobalInviteToast = React.lazy(() =>
-  import('./Code/ValuesScreen/PetGuessingGame/components/GlobalInviteToast'),
-);
+const SquadBootstrap = React.lazy(() => import('./Code/Squad/SquadBootstrap'));
 
 const STATUS_BAR_HEIGHT =
   Platform.OS === 'android' ? StatusBar.currentHeight || 18 : 44;
@@ -44,7 +41,7 @@ class ErrorBoundary extends React.Component {
 
   render() {
     return this.state.hasError ? (
-      <Text>Something went wrong.</Text>
+      <Text>{i18n.t('misc.app_crashed')}</Text>
     ) : (
       this.props.children
     );
@@ -68,7 +65,7 @@ const App = React.memo(() => (
 
           <React.Suspense fallback={null}>
             <NotificationHandler />
-            <GlobalInviteToast />
+            <SquadBootstrap />
           </React.Suspense>
         </GlobalStateProvider>
       </LocalStateProvider>

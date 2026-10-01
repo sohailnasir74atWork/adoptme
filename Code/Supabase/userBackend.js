@@ -259,6 +259,8 @@ export function fromCosmeticsRow(row) {
     tradeCardBg:   row.trade_card_bg   ?? null,
     profileBanner: row.profile_banner  ?? null,
     chatBubbleBg:  row.chat_bubble_bg  ?? null,
+    // Qualified squad friends (supabase/034_squad.sql keeps it in step).
+    squadCount:    Number(row.squad_count) || 0,
   };
 }
 

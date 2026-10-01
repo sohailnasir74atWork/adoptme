@@ -39,7 +39,7 @@ const ProfilePostsSection = ({
           fontSize: 12, fontWeight: '700',
           color: c.text,
         }}>
-          {t('feed.recent_posts') || 'Recent Posts'}
+          {t('feed.recent_posts')}
         </Text>
         <Text style={{
           fontSize: 10, fontWeight: '600',
@@ -60,7 +60,7 @@ const ProfilePostsSection = ({
         <View style={{ alignItems: 'center', paddingVertical: 16, gap: 6 }}>
           <Icon name="document-outline" size={24} color={isDarkMode ? '#334155' : '#d1d5db'} />
           <Text style={{ fontSize: 11, color: isDarkMode ? '#64748b' : '#9ca3af' }}>
-            {t('feed.no_posts_found') || 'No posts yet'}
+            {t('profile.no_posts_yet')}
           </Text>
         </View>
       ) : (
@@ -81,7 +81,7 @@ const ProfilePostsSection = ({
             >
               <Icon name="chevron-down" size={12} color={c.textSecondary} />
               <Text style={{ fontSize: 11, fontWeight: '600', color: c.textSecondary }}>
-                {t('feed.load_more') || 'Load More'}
+                {t('feed.load_more')}
               </Text>
             </TouchableOpacity>
           )}

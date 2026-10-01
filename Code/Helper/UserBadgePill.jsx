@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { View, Text, Animated, Image } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { getShimmerValue } from './shimmerDriver';
 
 // Single source of truth for role/badge pill styling across chat lists,
@@ -14,13 +15,14 @@ import { getShimmerValue } from './shimmerDriver';
 // the same as adding it to one. JS thread is idle during animation.
 // Default: ON for the new 'helper' badge, OFF for everything else.
 
+// labelKey is translated at render time (see UserBadgePill).
 const TYPES = {
-  admin:   { tier: 'authority', image: require('../../assets/role-badges/admin.png'),   label: 'Admin',   color: '#B91C1C', rim: '#F8D66D' },
-  mod:     { tier: 'authority', image: require('../../assets/role-badges/mod.png'),     label: 'Mod',     color: '#6D28D9', rim: '#C4B5FD' },
-  jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     label: 'JMD',     color: '#D97706', rim: '#FDE68A' },
-  trusted: { tier: 'community', image: require('../../assets/role-badges/trusted.png'), label: 'Trusted', color: '#059669', rim: '#6EE7B7' },
-  cmsr:    { tier: 'community', image: require('../../assets/role-badges/cmsr.png'),    label: 'CMSR',    color: '#EA580C', rim: '#FDBA74' },
-  helper:  { tier: 'community', image: require('../../assets/role-badges/helper.png'),  label: 'Helper',  color: '#0F766E', rim: '#5EEAD4' },
+  admin:   { tier: 'authority', image: require('../../assets/role-badges/admin.png'),   labelKey: 'chat.admin',            color: '#B91C1C', rim: '#F8D66D' },
+  mod:     { tier: 'authority', image: require('../../assets/role-badges/mod.png'),     labelKey: 'chat.mod',              color: '#6D28D9', rim: '#C4B5FD' },
+  jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     labelKey: 'badges.roles.jmd',      color: '#D97706', rim: '#FDE68A' },
+  trusted: { tier: 'community', image: require('../../assets/role-badges/trusted.png'), labelKey: 'badges.roles.trusted',  color: '#059669', rim: '#6EE7B7' },
+  cmsr:    { tier: 'community', image: require('../../assets/role-badges/cmsr.png'),    labelKey: 'badges.roles.cmsr',     color: '#EA580C', rim: '#FDBA74' },
+  helper:  { tier: 'community', image: require('../../assets/role-badges/helper.png'),  labelKey: 'badges.roles.helper',   color: '#0F766E', rim: '#5EEAD4' },
 };
 
 const SIZES = {
@@ -73,10 +75,11 @@ const ShimmerOverlay = React.memo(({ isDarkMode }) => {
 });
 
 const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, style, glow }) => {
+  const { t } = useTranslation();
   const def = TYPES[type];
   if (!def) return null;
   const s = SIZES[size] || SIZES.md;
-  const label = labelOverride || def.label;
+  const label = labelOverride || t(def.labelKey);
   // Glow is opt-in per pill. Call sites pass glow={firstBadge === '<type>'}
   // so only the first/highest-priority badge a user owns flashes; the rest
   // stay static. This avoids visual noise when a user wears multiple pills.

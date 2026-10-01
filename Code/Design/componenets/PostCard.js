@@ -164,15 +164,6 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
               <Image source={require('../../../assets/verification.png')} style={s.badge} />
             )}
             {(() => {
-              const hasRecentWin =
-                !!item?.hasRecentGameWin ||
-                (typeof item?.lastGameWinAt === 'number' &&
-                  Date.now() - item.lastGameWinAt <= 24 * 60 * 60 * 1000);
-              return hasRecentWin ? (
-                <Image source={require('../../../assets/trophy.webp')} style={s.badge} />
-              ) : null;
-            })()}
-            {(() => {
               const p = getCachedProfile(item.userId) || {};
               const pIsAdmin = p.isAdmin ?? item.isAdmin;
               const pIsMod = p.isModerator ?? item.isModerator;
@@ -215,18 +206,18 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
             {(userId === item.userId || isAdmin || user?.isModerator) && (
               <MenuOption onSelect={() => Alert.alert(t('feed.delete_post'), t('feed.delete_confirmation'), [
                 { text: t('feed.cancel'), style: 'cancel' },
-                { text: t('feed.submit'), onPress: () => onDelete(item.id), style: 'destructive' },
+                { text: t('feed.delete'), onPress: () => onDelete(item.id), style: 'destructive' },
               ])}>
                 <View style={[s.menuItem, { borderTopWidth: 1, borderTopColor: isDark ? '#334155' : '#f1f5f9' }]}>
                   <FontAwesome6 name="trash" size={12} color="#EF4444" solid />
-                  <Text style={[s.menuItemText, { color: '#EF4444' }]}>{t('feed.submit', { defaultValue: 'Delete' })}</Text>
+                  <Text style={[s.menuItemText, { color: '#EF4444' }]}>{t('feed.delete')}</Text>
                 </View>
               </MenuOption>
             )}
             {(isAdmin || user?.isModerator) && (
               <MenuOption onSelect={() => Alert.alert(t('feed.delete_post'), t('feed.delete_confirmation'), [
                 { text: t('feed.cancel'), style: 'cancel' },
-                { text: t('feed.submit'), onPress: () => onDeleteAll(item.userId), style: 'destructive' },
+                { text: t('feed.delete'), onPress: () => onDeleteAll(item.userId), style: 'destructive' },
               ])}>
                 <View style={[s.menuItem, { borderTopWidth: 1, borderTopColor: isDark ? '#334155' : '#f1f5f9' }]}>
                   <FontAwesome6 name="trash-can" size={12} color="#EF4444" solid />
@@ -334,7 +325,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
             </View>
           ))}
           {totalReactions > 0 && (
-            <Text style={s.totalReactionsText}>{totalReactions} {totalReactions === 1 ? 'reaction' : 'reactions'}</Text>
+            <Text style={s.totalReactionsText}>{t('feed.reaction_count', { count: totalReactions })}</Text>
           )}
         </View>
       )}
@@ -359,7 +350,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         <TouchableOpacity style={s.actionBtn} onPress={() => setShowComments(true)} activeOpacity={0.75}>
           <Icon name="comment-o" size={14} color={isDark ? '#94a3b8' : '#64748b'} />
           <Text style={s.actionBtnLabel}>
-            {item.commentCount ? t('feed.comments_count', { count: item.commentCount }) : t('feed.no_comments')}
+            {item.commentCount ? t('feed.comment_count', { count: item.commentCount }) : t('feed.no_comments')}
           </Text>
         </TouchableOpacity>
 

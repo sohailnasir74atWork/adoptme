@@ -80,6 +80,7 @@ import PortfolioValuation from './PortfolioValuation';
 import GuidesScreen from './GuidesScreen';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { syncTradeInventory } from '../Helper/tradeMatch';
 // Bunny avatar upload (same zone/keys as your post uploader)
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -88,6 +89,10 @@ const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 // ~500 KB max for avatar (small, DP-friendly)
 const MAX_AVATAR_SIZE_BYTES = 500 * 1024;
+
+// Saved as the bio when a user leaves it empty. Stored in English, so the
+// editor starts empty for it and the profile shows the translated default.
+const DEFAULT_BIO_EN = 'Hi there, I am new here';
 
 // Helper function to format item names
 const formatTradeName = (name) => {
@@ -353,6 +358,7 @@ const EditProfileDrawerContent = ({
 
         {/* Avatar Grid - Minimal */}
         <FlatList
+          removeClippedSubviews={false}
           data={filteredAvatarOptions}
           keyExtractor={(item, index) => `${item.url}-${index}`}
           horizontal
@@ -708,8 +714,8 @@ export default function SettingsScreen({ selectedTheme }) {
       // 🔹 Reject heavy images
       if (stat.size > MAX_AVATAR_SIZE_BYTES) {
         Alert.alert(
-          'Image too large',
-          'Please choose a smaller image (max ~500 KB) or crop it before uploading.'
+          t('settings.profile.image_too_large_title'),
+          t('settings.profile.image_too_large_message')
         );
         setUploadingAvatar(false);
         return;
@@ -751,7 +757,7 @@ export default function SettingsScreen({ selectedTheme }) {
     } finally {
       setUploadingAvatar(false);
     }
-  }, [user?.id]);
+  }, [user?.id, t]);
 
 
 
@@ -803,7 +809,7 @@ export default function SettingsScreen({ selectedTheme }) {
   // ✅ Verify Roblox username exists and get user ID
   const verifyRobloxUsername = async (username) => {
     if (!username || username.trim().length < 3) {
-      return { valid: false, error: 'Username must be at least 3 characters' };
+      return { valid: false, error: t('settings.roblox.username_too_short') };
     }
 
     try {
@@ -998,7 +1004,7 @@ export default function SettingsScreen({ selectedTheme }) {
   // Load bio from Firestore and rating from user_ratings_summary (single source of truth)
   useEffect(() => {
     if (!user?.id || !appdatabase || !firestoreDB) {
-      setBio('Hi there, I am new here');
+      setBio('');
       setRatingSummary(null);
       setCreatedAtText(null);
       setLoadingRating(false);
@@ -1021,7 +1027,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
         // 📅 2026-03-13: Bio migrated from reviews/{userId} → user_profiles/{userId}.
         //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fallback below.
-        let loadedBio = 'Hi there, I am new here';
+        let loadedBio = '';
         if (profileDocSnap.exists()) {
           const profileData = profileDocSnap.data();
           if (profileData && profileData.bio && typeof profileData.bio === 'string' && profileData.bio.trim()) {
@@ -1034,7 +1040,8 @@ export default function SettingsScreen({ selectedTheme }) {
             loadedBio = reviewData.bio.trim();
           }
         }
-        setBio(loadedBio);
+        // The stored English default reads as "no bio" (see DEFAULT_BIO_EN).
+        setBio(loadedBio === DEFAULT_BIO_EN ? '' : loadedBio);
 
         // ✅ FIRESTORE ONLY: Load rating summary from user_ratings_summary
         if (summaryDocSnap.exists()) {
@@ -1163,7 +1170,7 @@ export default function SettingsScreen({ selectedTheme }) {
         }
       } catch (error) {
         console.error('Error loading bio and rating:', error);
-        setBio('Hi there, I am new here');
+        setBio('');
         setRatingSummary(null);
         setCreatedAtText(null);
       } finally {
@@ -1368,7 +1375,7 @@ export default function SettingsScreen({ selectedTheme }) {
       // Bio can be changed anytime (no cooldown restriction)
       if (user?.id && firestoreDB) {
         const trimmedBio = bio.trim();
-        const bioToSave = trimmedBio || 'Hi there, I am new here';
+        const bioToSave = trimmedBio || DEFAULT_BIO_EN;
         const bioPayload = {
           bio: bioToSave,
           updatedAt: serverTimestamp(),
@@ -1778,7 +1785,7 @@ export default function SettingsScreen({ selectedTheme }) {
           const cached = getCachedProfile(followerId);
           return {
             id: followerId,
-            displayName: cached?.displayName || 'Unknown',
+            displayName: cached?.displayName || null, // translated fallback at render
             avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
           };
         });
@@ -1834,7 +1841,7 @@ export default function SettingsScreen({ selectedTheme }) {
         const cached = getCachedProfile(followerId);
         return {
           id: followerId,
-          displayName: cached?.displayName || 'Unknown',
+          displayName: cached?.displayName || null, // translated fallback at render
           avatar: cached?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
         };
       });
@@ -1855,12 +1862,12 @@ export default function SettingsScreen({ selectedTheme }) {
     if (!user?.id || !firestoreDB) return;
 
     Alert.alert(
-      t("trade.delete_confirmation_title") || "Delete Trade",
-      t("trade.delete_confirmation_message") || "Are you sure you want to delete this trade?",
+      t("trade.delete_confirmation_title"),
+      t("trade.delete_confirmation_message"),
       [
-        { text: t("trade.cancel") || "Cancel", style: "cancel" },
+        { text: t("trade.cancel"), style: "cancel" },
         {
-          text: t("trade.delete") || "Delete",
+          text: t("trade.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -1879,14 +1886,14 @@ export default function SettingsScreen({ selectedTheme }) {
 
               setModalMyTrades((prev) => prev.filter((trade) => trade.id !== tradeId));
               showSuccessMessage(
-                t("trade.delete_success") || "Success",
-                t("trade.delete_success_message") || "Trade deleted successfully"
+                t("trade.delete_success"),
+                t("trade.delete_success_message")
               );
             } catch (error) {
               console.error("Error deleting trade:", error);
               showErrorMessage(
-                t("trade.delete_error") || "Error",
-                t("trade.delete_error_message") || "Failed to delete trade"
+                t("trade.delete_error"),
+                t("trade.delete_error_message")
               );
             } finally {
               setDeletingTradeId(null);
@@ -1965,7 +1972,7 @@ export default function SettingsScreen({ selectedTheme }) {
     const tradePercentage = Math.abs(((tradeRatio - 1) * 100).toFixed(0));
     const isProfit = tradeRatio > 1;
     const neutral = tradeRatio === 1;
-    const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : "Unknown";
+    const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : t('profile.time_unknown');
 
     const groupedHasItems = groupTradeItems(trade.hasItems || []);
     const groupedWantsItems = groupTradeItems(trade.wantsItems || []);
@@ -2268,7 +2275,7 @@ export default function SettingsScreen({ selectedTheme }) {
               borderRadius: 6,
               backgroundColor: config.colors.hasBlockGreen
             }}>
-              {t('trade.me')}: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
+              {t('profile.trade_me_total', { value: formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0) })}
             </Text>
           )}
           <View style={{ justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}>
@@ -2315,7 +2322,7 @@ export default function SettingsScreen({ selectedTheme }) {
               borderRadius: 6,
               backgroundColor: config.colors.wantBlockRed
             }}>
-              {t('trade.you')}: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
+              {t('profile.trade_you_total', { value: formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0) })}
             </Text>
           )}
         </View>
@@ -2609,6 +2616,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
     setOwnedPets(newOwned);
     setWishlistPets(newWishlist);
+    syncTradeInventory(user.id, newOwned, newWishlist);
   };
 
 
@@ -2760,18 +2768,18 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   const formatPlanName = (plan) => {
-    if (!plan) return 'PRO';
+    if (!plan) return t('settings.plans.pro');
     const p = plan.toLowerCase();
 
     // Match by keywords in the product ID (covers all RevenueCat naming patterns)
-    if (p.includes('week'))  return '1 WEEK';
-    if (p.includes('1m') || p.includes('month'))  return '1 MONTH';
-    if (p.includes('3m') || p.includes('quarter')) return '3 MONTHS';
-    if (p.includes('6m'))  return '6 MONTHS';
-    if (p.includes('1y') || p.includes('year') || p.includes('annual')) return '1 YEAR';
-    if (p.includes('lifetime')) return 'LIFETIME';
+    if (p.includes('week'))  return t('settings.plans.one_week');
+    if (p.includes('1m') || p.includes('month'))  return t('settings.plans.one_month');
+    if (p.includes('3m') || p.includes('quarter')) return t('settings.plans.three_months');
+    if (p.includes('6m'))  return t('settings.plans.six_months');
+    if (p.includes('1y') || p.includes('year') || p.includes('annual')) return t('settings.plans.one_year');
+    if (p.includes('lifetime')) return t('settings.plans.lifetime');
 
-    return 'PRO';
+    return t('settings.plans.pro');
   };
 
 
@@ -2870,11 +2878,15 @@ export default function SettingsScreen({ selectedTheme }) {
                             await update(ref(appdatabase, `users/${user.id}`), { rewardPoints: 0 });
                             updateLocalStateAndDatabase('rewardPoints', 0);
                             showSuccessMessage(
-                              '🎉 Converted!',
-                              `${pts.toLocaleString()} points → ${xpToAdd.toLocaleString()} XP`
+                              t('settings.points.converted_title'),
+                              t('settings.points.converted_message', {
+                                count: pts,
+                                points: pts.toLocaleString(),
+                                xp: xpToAdd.toLocaleString(),
+                              })
                             );
                           } catch (e) {
-                            showErrorMessage('Error', 'Could not convert points');
+                            showErrorMessage(t('alert.error'), t('settings.points.convert_error'));
                           }
                         }}
                         activeOpacity={0.8}
@@ -2886,14 +2898,17 @@ export default function SettingsScreen({ selectedTheme }) {
                       >
                         <Text style={{ fontSize: 10 }}>💎</Text>
                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#fff' }}>
-                          {(user?.rewardPoints || 0).toLocaleString()} pts → Convert to {Math.floor((user?.rewardPoints || 0) / 4).toLocaleString()} XP
+                          {t('settings.points.convert_button', {
+                            points: (user?.rewardPoints || 0).toLocaleString(),
+                            xp: Math.floor((user?.rewardPoints || 0) / 4).toLocaleString(),
+                          })}
                         </Text>
                       </TouchableOpacity>
                     ) : (
                       /* No points — show XP & stars */
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={[styles.reward, { fontSize: 10 }]}>⚡ XP: {(user?.xp?.total || 0).toLocaleString()}</Text>
-                        <Text style={[styles.reward, { fontSize: 10 }]}>⭐ Stars: {realStarBalance.toLocaleString()}</Text>
+                        <Text style={[styles.reward, { fontSize: 10 }]}>{t('settings.xp_balance', { xp: (user?.xp?.total || 0).toLocaleString() })}</Text>
+                        <Text style={[styles.reward, { fontSize: 10 }]}>{t('settings.stars_balance', { stars: realStarBalance.toLocaleString() })}</Text>
                       </View>
                     )}
                   </View>
@@ -2938,9 +2953,10 @@ export default function SettingsScreen({ selectedTheme }) {
                       color: c.textSecondary,
                     }}
                   >
-                    {ratingSummary.value.toFixed(1)} / 5 ·{' '}
-                    {ratingSummary.count} rating
-                    {ratingSummary.count === 1 ? '' : 's'}
+                    {t('settings.rating_summary', {
+                      count: ratingSummary.count,
+                      value: ratingSummary.value.toFixed(1),
+                    })}
                   </Text>
                 </>
               ) : (
@@ -3136,7 +3152,7 @@ export default function SettingsScreen({ selectedTheme }) {
                       borderRadius: 4
                     }}>
                       <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
-                        ✓ Verified
+                        {t('settings.roblox.verified_badge')}
                       </Text>
                     </View>
                   )}
@@ -3368,16 +3384,17 @@ export default function SettingsScreen({ selectedTheme }) {
             }}>
               <Icon name="prism-outline" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
               <Text style={[styles.optionText, { color: isDarkMode ? '#FFD93D' : '#8B6914' }]}>
-                {t('settings.active_plan')} : {localState.isPro ? t('settings.paid') : t('settings.free')}
+                {t('settings.active_plan_value', { plan: localState.isPro ? t('settings.paid') : t('settings.free') })}
               </Text>
             </TouchableOpacity>
             {localState.isPro && (
               <View style={styles.subscriptionContainer}>
                 <Text style={styles.subscriptionText}>
-                  {t('settings.active_plan')} -
-                  {mySubscriptions.length === 0
-                    ? t('settings.paid')
-                    : mySubscriptions.map(sub => formatPlanName(sub.plan)).join(', ')}
+                  {t('settings.active_plan_value', {
+                    plan: mySubscriptions.length === 0
+                      ? t('settings.paid')
+                      : mySubscriptions.map(sub => formatPlanName(sub.plan)).join(', '),
+                  })}
                 </Text>
 
                 <TouchableOpacity onPress={manageSubscription} style={styles.manageButton}>
@@ -3987,7 +4004,7 @@ export default function SettingsScreen({ selectedTheme }) {
                         style={{ width: 44, height: 44, borderRadius: 22 }}
                       />
                       <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: '600', color: c.text }} numberOfLines={1}>
-                        {follower.displayName}
+                        {follower.displayName || t('profile.unknown_user')}
                       </Text>
                     </TouchableOpacity>
                   ))}

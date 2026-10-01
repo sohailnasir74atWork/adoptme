@@ -116,7 +116,7 @@ const GroupMessageInput = ({
     const remainingSlots = maxImages - currentCount;
 
     if (remainingSlots <= 0) {
-      Alert.alert('Limit Reached', 'You can only select up to 3 images per message.');
+      Alert.alert(t('chat.limit_reached'), t('chat.image_limit_reached'));
       return;
     }
 
@@ -194,8 +194,8 @@ const GroupMessageInput = ({
 
         if (rejectedCount.length > 0) {
           Alert.alert(
-            'Image Processing Failed',
-            `${rejectedCount.length} image(s) could not be processed.`
+            t('chat.image_processing_failed_title'),
+            t('chat.images_not_processed', { count: rejectedCount.length })
           );
         }
 
@@ -209,7 +209,7 @@ const GroupMessageInput = ({
     } catch (callbackError) {
       console.warn('Image picker callback error:', callbackError);
     }
-  }, [isBanned, imageUris.length]);
+  }, [isBanned, imageUris.length, t]);
 
   const handleSend = useCallback(async () => {
     if (isSending) return;
@@ -225,13 +225,13 @@ const GroupMessageInput = ({
     if (textToSend) {
       // If message contains a link, only allow YouTube and TikTok for everyone; block everything else
       if (containsLink(textToSend) && !isAllowedLink(textToSend) && !canBypassModeration) {
-        showMessage({ message: 'Only YouTube and TikTok links are allowed.', type: 'danger', duration: 3000 });
+        showMessage({ message: t('chat.only_youtube_tiktok_links'), type: 'danger', duration: 3000 });
         return;
       }
       // Run other content checks (profanity, spam, etc.) — link check handled above
       const validation = validateContent(textToSend, { skipLinkCheck: true, skipAll: canBypassModeration });
       if (!validation.isValid) {
-        showMessage({ message: validation.reason || 'Message not allowed.', type: 'danger', duration: 3000 });
+        showMessage({ message: validation.reason || t('chat.message_not_allowed'), type: 'danger', duration: 3000 });
         return;
       }
     }
@@ -274,11 +274,12 @@ const GroupMessageInput = ({
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message.');
+      Alert.alert(t('chat.error'), t('chat.send_error'));
     } finally {
       setIsSending(false);
     }
   }, [
+    t,
     input,
     imageUris,
     selectedFruits,
@@ -303,18 +304,18 @@ const GroupMessageInput = ({
 
   // Get reply preview text
   const getReplyPreview = (replyTo) => {
-    if (!replyTo) return '[Deleted message]';
+    if (!replyTo) return t('chat.deleted_message_placeholder');
     if (replyTo.text && replyTo.text.trim().length > 0) {
       return replyTo.text;
     }
     if (replyTo.imageUrl) {
-      return '[Image]';
+      return t('chat.reply_preview_image');
     }
     if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
       const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
-      return count > 0 ? `[${count} pet(s) message]` : '[Pets message]';
+      return count > 0 ? t('chat.reply_preview_items', { count }) : t('chat.reply_preview_items_none');
     }
-    return '[Deleted message]';
+    return t('chat.deleted_message_placeholder');
   };
 
   return (
@@ -328,7 +329,7 @@ const GroupMessageInput = ({
           justifyContent: 'space-between',
         }]}>
           <Text style={[styles.replyText, { color: isDark ? '#9CA3AF' : '#6B7280', flex: 1 }]} numberOfLines={1}>
-            {t('chat.replying_to')}: {getReplyPreview(replyTo)}
+            {t('chat.replying_to_text', { text: getReplyPreview(replyTo) })}
           </Text>
           <TouchableOpacity
             onPress={onCancelReply}
@@ -401,7 +402,7 @@ const GroupMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12, marginRight: 8 }}>
-            {imageUris.length} image{imageUris.length > 1 ? 's' : ''} attached
+            {t('chat.images_attached', { count: imageUris.length })}
           </Text>
           {imageUris.map((uri, index) => (
             <TouchableOpacity
@@ -428,7 +429,7 @@ const GroupMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>
-            {selectedFruits.length} pet(s) selected
+            {t('chat.items_selected', { count: selectedFruits.length })}
           </Text>
           <TouchableOpacity
             onPress={() => {

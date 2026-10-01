@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from "react-native-vector-icons/Ionicons";
+import { useTranslation } from "react-i18next";
 
 import config from "../Helper/Environment";
 import HDWallpaperScreen from "./HDwallpaper";
@@ -32,30 +33,32 @@ const CustomTopTabs = ({ selectedTheme }) => {
   const indicatorX = useRef(new Animated.Value(0)).current;
   const indicatorWidth = useRef(new Animated.Value(0)).current;
   const { isAdmin, theme } = useGlobalState();
+  const { t } = useTranslation();
 
   // 🔹 Build tabs list dynamically based on admin access.
+  // `labelKey` is translated at render; `key` is the tab id.
   const tabs = useMemo(() => {
     const base = [
       {
-        label: "HD Wallpaper",
+        labelKey: "tabs.hd_wallpaper",
         key: "wallpaper",
         icon: "image-outline",
         iconActive: "image",
       },
       {
-        label: "Server",
+        labelKey: "tabs.server",
         key: "server",
         icon: "server-outline",
         iconActive: "server",
       },
       {
-        label: "Scammer DB",
+        labelKey: "tabs.scammer_db",
         key: "scammer",
         icon: "shield-outline",
         iconActive: "shield",
       },
       {
-        label: "News",
+        labelKey: "tabs.news",
         key: "News",
         icon: "newspaper-outline",
         iconActive: "newspaper",
@@ -64,7 +67,7 @@ const CustomTopTabs = ({ selectedTheme }) => {
 
     if (isAdmin) {
       base.push({
-        label: "Admin",
+        label: "Admin", // staff-only tab, left in English
         key: "Admin",
         icon: "analytics-outline",
         iconActive: "analytics",
@@ -196,11 +199,11 @@ const CustomTopTabs = ({ selectedTheme }) => {
                       { color: isActive ? "#ffffff" : inactiveText },
                     ]}
                   >
-                    {tab.label}
+                    {tab.labelKey ? t(tab.labelKey) : tab.label}
                   </Text>
                   {tab.isNew && (
                     <View style={styles.newPill}>
-                      <Text style={styles.newPillText}>NEW</Text>
+                      <Text style={styles.newPillText}>{t('home_tab.new')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>

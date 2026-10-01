@@ -214,14 +214,13 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
   // Handle submit (create or update)
   const handleSubmit = async () => {
     if (!user?.id || !firestoreDB || !appdatabase) {
-      showErrorMessage(t('chat.error'), t('chat.error'));
+      showErrorMessage(t('chat.error'), t('groups.errors.generic'));
       return;
     }
 
     // ✅ Ban check
     if (isMeBanned) {
-      const reason = myBanDetails?.reason || 'Access Denied';
-      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      showErrorMessage(t('chat.access_denied'), t('chat.banned_message'));
       return;
     }
 
@@ -279,11 +278,13 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
       }
 
       // ✅ Build user data map from selectedUsers to avoid extra Firestore read
+      // Names are saved to Firestore, so the fallback stays the fixed data
+      // value 'Anonymous' (never a translated label).
       const invitedUsersMap = {};
       displayUsers.forEach((u) => {
         if (u.id && selectedMemberIds.includes(u.id)) {
           invitedUsersMap[u.id] = {
-            displayName: u.displayName || t('chat.anonymous'),
+            displayName: u.displayName || 'Anonymous',
             avatar: u.avatar || null,
           };
         }
@@ -294,7 +295,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
         appdatabase,
         {
           id: user.id,
-          displayName: user.displayName || t('chat.anonymous'),
+          displayName: user.displayName || 'Anonymous',
           avatar: user.avatar || null,
         },
         selectedMemberIds,
@@ -496,7 +497,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
             {/* Group Description Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>
-                Description {!isEditMode && <Text style={{ color: '#EF4444' }}>*</Text>}
+                {t('chat.description_label')}{!isEditMode && <Text style={{ color: '#EF4444' }}>*</Text>}
                 {isEditMode && <Text style={{ fontSize: 12, color: c.textSecondary }}>{t('chat.group_desc_max_chars')}</Text>}
               </Text>
               <TextInput
@@ -523,7 +524,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
               <>
                 <View style={styles.memberCountContainer}>
                   <Text style={styles.memberCountText}>
-                    {t('chat.group_members_selected', { count: selectedMemberIds.length, suffix: selectedMemberIds.length !== 1 ? 's' : '' })}
+                    {t('groups.members_selected', { count: selectedMemberIds.length })}
                     {totalMembers >= MAX_GROUP_MEMBERS && (
                       <Text style={styles.maxReachedText}>{t('chat.max_reached')}</Text>
                     )}
@@ -532,6 +533,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
 
                 {/* Selected Members List */}
                 <FlatList
+                  removeClippedSubviews={false}
                   data={displayUsers.filter((u) => selectedMemberIds.includes(u.id))}
                   keyExtractor={(item) => item.id}
                   renderItem={({ item }) => (

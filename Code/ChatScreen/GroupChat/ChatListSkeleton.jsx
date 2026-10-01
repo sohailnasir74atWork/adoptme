@@ -12,6 +12,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Text, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export const ChatListSkeleton = ({ count = 6, isDarkMode = false }) => {
   const opacity = useRef(new Animated.Value(0.4)).current;
@@ -56,13 +57,15 @@ export const ChatListSkeleton = ({ count = 6, isDarkMode = false }) => {
 };
 
 export const SyncBanner = ({ visible, isDarkMode }) => {
+  // Hook must run before the early return so hook order stays stable.
+  const { t } = useTranslation();
   if (!visible) return null;
   const fg = isDarkMode ? '#fbbf24' : '#92400e';
   const bg = isDarkMode ? '#1e293b' : '#fef3c7';
   return (
     <View style={[styles.banner, { backgroundColor: bg }]}>
       <ActivityIndicator size="small" color={fg} />
-      <Text style={[styles.bannerText, { color: fg }]}>Reconnecting…</Text>
+      <Text style={[styles.bannerText, { color: fg }]}>{t('inbox.reconnecting')}</Text>
     </View>
   );
 };

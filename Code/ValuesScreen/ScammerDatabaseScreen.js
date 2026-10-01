@@ -91,6 +91,14 @@ const base64ToBytes = (base64) => {
 
 const PAGE_SIZE = 15;
 const SCAM_TYPES = ['Trust trade', 'Switch scam', 'Fail trade', 'Other'];
+// Stored scam type (English, saved to Firestore) → translated label key
+const SCAM_TYPE_LABEL_KEYS = {
+    'Trust trade': 'scammer.scam_types.trust_trade',
+    'Switch scam': 'scammer.scam_types.switch_scam',
+    'Fail trade': 'scammer.scam_types.fail_trade',
+    'Other': 'scammer.scam_types.other',
+};
+const scamTypeLabel = (type, t) => (SCAM_TYPE_LABEL_KEYS[type] ? t(SCAM_TYPE_LABEL_KEYS[type]) : type);
 const PERSONAL_INFO_REGEX = /(\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b|\b\d{7,15}\b|discord|instagram|snapchat|whatsapp|telegram|tiktok)/i;
 
 // ── Helper: format date ──
@@ -385,6 +393,7 @@ const ScammerDatabaseScreen = () => {
                     'YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY',
                     'D/M/YYYY', 'M/D/YYYY',
                     'DD-MM-YYYY', 'MM-DD-YYYY',
+                    'DD.MM.YYYY', 'D.M.YYYY',
                     'MMM D, YYYY', 'MMMM D, YYYY',
                     'D MMM YYYY', 'D MMMM YYYY',
                     'MMM D YYYY', 'MMMM D YYYY',
@@ -557,7 +566,7 @@ const ScammerDatabaseScreen = () => {
         Alert.alert(t('scammer.delete_report_title'), t('scammer.delete_report_msg'), [
             { text: t('scammer.cancel'), style: 'cancel' },
             {
-                text: 'Delete', style: 'destructive', onPress: async () => {
+                text: t('scammer.delete_btn'), style: 'destructive', onPress: async () => {
                     setModAction('reject');
                     try {
                         const summaryRef = doc(db, 'scammerSummaries', reportId);
@@ -614,7 +623,7 @@ const ScammerDatabaseScreen = () => {
                             {item.reportedUsername}
                             {(item.reportCount || 1) > 1 && (
                                 <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '700' }}>
-                                    {' '}({t('scammer.reports_count', { count: item.reportCount })})
+                                    {' '}({t('scammer.report_count', { count: item.reportCount })})
                                 </Text>
                             )}
                         </Text>
@@ -723,6 +732,7 @@ const ScammerDatabaseScreen = () => {
 
             {/* ── List ── */}
             <FlatList
+                removeClippedSubviews={false}
                 data={summaries}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
@@ -789,7 +799,7 @@ const ScammerDatabaseScreen = () => {
                                 <View>
                                     <View style={[s.detailField, { borderColor: C.border }]}>
                                         <Text style={[s.detailLabel, { color: C.sub }]}>{t('scammer.scam_type')}</Text>
-                                        <Text style={[s.detailValue, { color: C.text }]}>{detailData.scamType || t('scammer.na')}</Text>
+                                        <Text style={[s.detailValue, { color: C.text }]}>{detailData.scamType ? scamTypeLabel(detailData.scamType, t) : t('scammer.na')}</Text>
                                     </View>
 
                                     <View style={[s.detailField, { borderColor: C.border }]}>
@@ -934,7 +944,7 @@ const ScammerDatabaseScreen = () => {
                                             },
                                         ]}
                                     >
-                                        <Text style={{ color: reportScamType === type ? '#FFF' : C.text, fontSize: 12, fontWeight: '600' }}>{type}</Text>
+                                        <Text style={{ color: reportScamType === type ? '#FFF' : C.text, fontSize: 12, fontWeight: '600' }}>{scamTypeLabel(type, t)}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>

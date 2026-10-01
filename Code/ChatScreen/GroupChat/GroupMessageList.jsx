@@ -94,12 +94,12 @@ const GroupMessageList = ({
     if (!message || !message.text) return;
     Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
-    showSuccessMessage('Success', 'Message Copied');
-  }, [triggerHapticFeedback]);
+    showSuccessMessage(t('chat.success'), t('chat.message_copied'));
+  }, [triggerHapticFeedback, t]);
 
   // Get reply preview text
   const getReplyPreview = useCallback((replyTo) => {
-    if (!replyTo || typeof replyTo !== 'object') return '[Deleted message]';
+    if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
 
     if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
       return replyTo.text;
@@ -107,18 +107,20 @@ const GroupMessageList = ({
 
     if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
       const imageCount = Array.isArray(replyTo.imageUrls) ? replyTo.imageUrls.length : (replyTo.imageUrl ? 1 : 0);
-      return imageCount > 1 ? `[${imageCount} Images]` : '[Image]';
+      return imageCount > 1
+        ? t('chat.reply_preview_images', { count: imageCount })
+        : t('chat.reply_preview_image');
     }
 
     if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
       const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
       return count > 0
-        ? `[${count} pet(s) message]`
-        : '[Pets message]';
+        ? t('chat.reply_preview_items', { count })
+        : t('chat.reply_preview_items_none');
     }
 
-    return '[Deleted message]';
-  }, []);
+    return t('chat.deleted_message_placeholder');
+  }, [t]);
 
   // Filtered messages (sorted descending for inverted FlatList).
   // Dedup-by-id guards against duplicate keys reaching the FlatList — can
@@ -199,9 +201,6 @@ const GroupMessageList = ({
         ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
         : 0;
 
-      // Check for recent win — from resolved profile
-      const hasRecentWin = profile.hasRecentGameWin;
-
       const msgBubble = (
         <View
           style={{
@@ -252,7 +251,7 @@ const GroupMessageList = ({
                 onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
               >
                 <Text style={[styles.replyText, { color: c.textSecondary }]} numberOfLines={2}>
-                  Replying to: {'\n'}
+                  {t('chat.replying_to')} {'\n'}
                   {getReplyPreview(item.replyTo)}
                 </Text>
               </TouchableOpacity>
@@ -309,13 +308,10 @@ const GroupMessageList = ({
                     {profile.robloxUsernameVerified && (
                       <Image source={require('../../../assets/verification.png')} style={styles.icon} />
                     )}
-                    {hasRecentWin && (
-                      <Image source={require('../../../assets/trophy.webp')} style={styles.icon} />
-                    )}
 
                     {item?.isCreator && (
                       <View style={[styles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
-                        <Text style={styles.roleBadgeText}>Creator</Text>
+                        <Text style={styles.roleBadgeText}>{t('chat.role_creator')}</Text>
                       </View>
                     )}
                     {(() => {
@@ -422,7 +418,7 @@ const GroupMessageList = ({
                             <Text
                               style={[fruitStyles.fruitValue, isCompactFruits && fruitStyles.fruitValueCompact, { color: valueColor }]}
                             >
-                              · Value: {Number(fruit.value || 0).toLocaleString()}
+                              {t('chat.value_label')}{Number(fruit.value || 0).toLocaleString()}
                             </Text>
 
                             {isPet && (
@@ -465,7 +461,7 @@ const GroupMessageList = ({
                         <Text
                           style={[fruitStyles.totalLabel, { color: fruitColors.totalLabel }]}
                         >
-                          Total:
+                          {t('chat.total_label')}
                         </Text>
                         <Text
                           style={[fruitStyles.totalValue, { color: fruitColors.totalValue }]}
@@ -482,7 +478,7 @@ const GroupMessageList = ({
                     carry no valueSource, and Elvebredd is the honest answer for
                     those: it was the only catalogue then. */}
                   <Text style={{ fontSize: 9, marginTop: 4, opacity: 0.6, color: c?.text || '#888' }}>
-                    {sourceStatement(sourceOfItems(fruits))}
+                    {sourceStatement(sourceOfItems(fruits), t)}
                   </Text>
                   </View>
                 )}
@@ -620,7 +616,7 @@ const GroupMessageList = ({
     // ✅ PERF FIX: Reduced from 24 deps to 14.
     // Removed: filteredMessages (uses ref), user, handleCopy, t, isAdmin (unused directly or stable).
     // frameBorderColorIndex removed — was re-rendering whole list every 1.5s; frames now static.
-    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel]
+    [userId, groupData, styles, fruitColors, navigation, triggerHapticFeedback, onUserPress, isDarkMode, scrollToMessage, highlightedMessageId, getReplyPreview, isAdminOrMod, onReaction, getDateLabel, t]
   );
 
   const keyExtractor = useCallback((item, index) => {
@@ -664,7 +660,7 @@ const GroupMessageList = ({
         initialNumToRender={15} // ✅ Render 15 messages initially
         maxToRenderPerBatch={10} // ✅ Render 10 per batch
         windowSize={5} // ✅ Optimize memory usage
-        removeClippedSubviews={true} // ✅ Improve performance
+        removeClippedSubviews={false} // Fabric clipping crashes on insert (addViewAt IOOBE, RN 0.87)
         ListFooterComponent={
           isPaginating ? (
             <View style={{ padding: 16, alignItems: 'center' }}>
@@ -675,7 +671,7 @@ const GroupMessageList = ({
         ListEmptyComponent={
           !loading ? (
             <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptyText}>{t('chat.no_messages_yet')}</Text>
             </View>
           ) : null
         }

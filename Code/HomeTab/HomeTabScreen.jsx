@@ -24,6 +24,9 @@ import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
 import SafeLottieView from '../Helper/SafeLottieView';
+import SquadBadge from '../Squad/SquadBadge';
+import { getPassCount, onSquadPassesChange } from '../Helper/squad';
+import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
   VALUE_SOURCE,
@@ -193,11 +196,31 @@ const HomeTabScreen = ({ selectedTheme }) => {
             const data = snap.data();
             pets = Array.isArray(data?.ownedPets) ? data.ownedPets : [];
             setOwnedPets(pets);
+            // Trade Match: this is the one read every player makes, so it is
+            // where lists that changed elsewhere reach matching (hash-gated).
+            if ('dreamPetKey' in data) setDreamKeyLocal(uid, data.dreamPetKey || null);
+            syncTradeInventory(uid, pets, Array.isArray(data?.wishlistPets) ? data.wishlistPets : []);
           }
           ownedPetsFocusCache.set(uid, { ts: Date.now(), ownedPets: pets });
         } catch (e) { console.warn('[Home] refresh pets:', e?.message); }
       })();
     }, [user?.id, firestoreDB])
+  );
+
+  // 🎟️ Squad card: unused Pro passes, from the phone (squad.js keeps the
+  // count fresh from each ping / Squad screen load; no extra reads here).
+  const [squadPasses, setSquadPasses] = useState(() => getPassCount(user?.id));
+  useEffect(() => {
+    setSquadPasses(getPassCount(user?.id));
+    return onSquadPassesChange(() => setSquadPasses(getPassCount(user?.id)));
+  }, [user?.id]);
+
+  // 🎯 Trade Match card: match count from the phone's cache (no network).
+  const [tradeMatchCount, setTradeMatchCount] = useState(null);
+  useFocusEffect(
+    useCallback(() => {
+      setTradeMatchCount(cachedMatchCount(user?.id));
+    }, [user?.id])
   );
 
   // ⭐ Star badge pulse animation
@@ -458,24 +481,25 @@ const HomeTabScreen = ({ selectedTheme }) => {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF4444' }}>
-                      ⚠️ {isAssociatedBan
-                        ? (isPermanent ? 'Device Permanently Restricted' : 'Device Temporarily Restricted')
-                        : (isPermanent ? 'Account Permanently Banned' : 'Account Temporarily Restricted')}
+                      {isAssociatedBan
+                        ? (isPermanent ? t('home_tab.ban_device_permanent') : t('home_tab.ban_device_temporary'))
+                        : (isPermanent ? t('home_tab.ban_account_permanent') : t('home_tab.ban_account_temporary'))}
                     </Text>
                     <Text style={{ fontSize: 11, color: isDarkMode ? '#f87171' : '#DC2626', marginTop: 2 }}>
-                      Strike {info.strikeCount || 1} • {
-                        isPermanent
-                          ? 'Permanent'
+                      {t('home_tab.ban_strike_status', {
+                        strike: info.strikeCount || 1,
+                        status: isPermanent
+                          ? t('home_tab.ban_permanent')
                           : (() => {
                             const diff = (info.bannedUntil || 0) - Date.now();
-                            if (diff <= 0) return 'Expired';
+                            if (diff <= 0) return t('home_tab.ban_expired');
                             const hrs = Math.floor(diff / (1000 * 60 * 60));
                             const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                            if (hrs > 24) return `${Math.floor(hrs / 24)}d ${hrs % 24}h remaining`;
-                            if (hrs > 0) return `${hrs}h ${mins}m remaining`;
-                            return `${mins}m remaining`;
-                          })()
-                      }
+                            if (hrs > 24) return t('home_tab.ban_remaining_days', { days: Math.floor(hrs / 24), hours: hrs % 24 });
+                            if (hrs > 0) return t('home_tab.ban_remaining_hours', { hours: hrs, minutes: mins });
+                            return t('home_tab.ban_remaining_minutes', { minutes: mins });
+                          })(),
+                      })}
                     </Text>
                   </View>
                 </View>
@@ -490,12 +514,12 @@ const HomeTabScreen = ({ selectedTheme }) => {
                     borderTopColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#FCE4E4',
                   }}>
                     <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
-                      Why you are seeing this
+                      {t('home_tab.ban_why_title')}
                     </Text>
                     <Text style={{ fontSize: 13, color: isDarkMode ? '#e5e5e5' : '#374151', lineHeight: 18 }}>
                       {associatedEmail
-                        ? `This device is linked to a banned account (${associatedEmail}). Signing in with a different email won't restore access.`
-                        : "This device is linked to a banned account. Signing in with a different email won't restore access."}
+                        ? t('home_tab.ban_device_linked_email', { email: associatedEmail })
+                        : t('home_tab.ban_device_linked')}
                     </Text>
                   </View>
                 )}
@@ -509,7 +533,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                     borderTopWidth: isAssociatedBan ? StyleSheet.hairlineWidth : 0,
                     borderTopColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#FCE4E4',
                   }}>
-                    <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: isDarkMode ? '#888' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{t('home_tab.ban_reason_title')}</Text>
                     <Text style={{ fontSize: 13, color: isDarkMode ? '#e5e5e5' : '#374151', lineHeight: 18 }}>
                       {info.reason}
                     </Text>
@@ -543,7 +567,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                   )}
                   {action.isNew && (
                     <View style={styles.newTileBadge}>
-                      <Text style={styles.newTileBadgeText}>NEW</Text>
+                      <Text style={styles.newTileBadgeText}>{t('home_tab.new')}</Text>
                     </View>
                   )}
                 </View>
@@ -553,6 +577,50 @@ const HomeTabScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ═══ TRADE MATCH ═══ */}
+          <TouchableOpacity
+            style={styles.tradeMatchCard}
+            onPress={() => requireSignIn(() => navigation.navigate('TradeMatch'), t('trade_match.sign_in'))}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.tradeMatchEmoji}>🎯</Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.tradeMatchTitle}>{t('trade_match.title')}</Text>
+                <View style={styles.tradeMatchNew}>
+                  <Text style={styles.tradeMatchNewText}>{t('home_tab.new')}</Text>
+                </View>
+              </View>
+              <Text style={styles.tradeMatchSub} numberOfLines={2}>
+                {tradeMatchCount > 0
+                  ? t('trade_match.home_sub_count', { count: tradeMatchCount })
+                  : t('trade_match.home_sub')}
+              </Text>
+            </View>
+            <FontAwesome name="chevron-right" size={14} color="#fff" />
+          </TouchableOpacity>
+
+          {/* ═══ SQUAD ═══ */}
+          <TouchableOpacity
+            style={[styles.tradeMatchCard, { backgroundColor: '#0EA5E9' }]}
+            onPress={() => requireSignIn(() => navigation.navigate('Squad'), t('squad.sign_in'))}
+            activeOpacity={0.85}
+          >
+            <SquadBadge rankKey="squad" size={34} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.tradeMatchTitle}>{t('squad.title')}</Text>
+                <View style={styles.tradeMatchNew}>
+                  <Text style={[styles.tradeMatchNewText, { color: '#0369A1' }]}>{t('home_tab.new')}</Text>
+                </View>
+              </View>
+              <Text style={styles.tradeMatchSub} numberOfLines={2}>
+                {squadPasses > 0 ? t('squad.home_passes', { count: squadPasses }) : t('squad.home_sub')}
+              </Text>
+            </View>
+            <FontAwesome name="chevron-right" size={14} color="#fff" />
+          </TouchableOpacity>
 
           {/* ═══ STATUS FEED (Stories) ═══ */}
           <StatusFeed
@@ -570,7 +638,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
           <View style={styles.section}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Image source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticsSectionIcon} resizeMode="contain" />
-              <Text style={[styles.sectionTitle, { color: selectedTheme.colors.text, marginBottom: 0 }]}>Cosmetics</Text>
+              <Text style={[styles.sectionTitle, { color: selectedTheme.colors.text, marginBottom: 0 }]}>{t('home_tab.cosmetics_title')}</Text>
             </View>
             <View style={styles.cosmeticsCards}>
               {/* 🥚 Hatch eggs to earn cosmetics */}
@@ -597,7 +665,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                       <Text style={styles.cosmeticNewBadgeText}>{t('home_tab.new')}</Text>
                     </View>
                   </View>
-                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>Hatch eggs to win cosmetics</Text>
+                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>{t('home_tab.cosmetics_egg_desc')}</Text>
                 </View>
                 <FontAwesome name="chevron-right" size={14} color={isDarkMode ? '#64748B' : '#94A3B8'} solid />
               </TouchableOpacity>
@@ -618,7 +686,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 </View>
                 <View style={styles.cosmeticCardContent}>
                   <Text style={[styles.cosmeticCardTitle, { color: selectedTheme.colors.text }]}>{t('home_tab.action_cosmetics')}</Text>
-                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>View and equip your collection</Text>
+                  <Text style={[styles.cosmeticCardDesc, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>{t('home_tab.cosmetics_collection_desc')}</Text>
                 </View>
                 <FontAwesome name="chevron-right" size={14} color={isDarkMode ? '#64748B' : '#94A3B8'} solid />
               </TouchableOpacity>
@@ -1010,6 +1078,22 @@ const styles = StyleSheet.create({
   },
 
   // ── Sections ──
+  tradeMatchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#7C3AED',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  tradeMatchEmoji: { fontSize: 30 },
+  tradeMatchTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  tradeMatchSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  tradeMatchNew: { backgroundColor: '#FDE68A', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  tradeMatchNewText: { color: '#6D28D9', fontSize: 9, fontWeight: '900' },
   section: {
     paddingHorizontal: 16,
     marginTop: 8,

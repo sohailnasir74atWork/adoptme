@@ -9,7 +9,7 @@
 import 'react-native-url-polyfill/auto';
 import { AppState } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
-import { getAuth, getIdToken, onAuthStateChanged } from '@react-native-firebase/auth';
+import { getAuth, getIdToken, getIdTokenResult, onAuthStateChanged } from '@react-native-firebase/auth';
 import config from '../Helper/Environment';
 
 // Resolves the first time Firebase has determined auth state. On
@@ -43,6 +43,10 @@ const _authReady = new Promise((resolve) => { _authResolveFn = resolve; });
   }, 8000);
 }
 
+// Forced token refreshes while the role claim is missing (see accessToken).
+const ROLE_REFRESH_EVERY_MS = 30000;
+let _lastRoleRefreshAt = 0;
+
 export const supabase = createClient(
   config.supabaseUrl,
   config.supabasePublishableKey,
@@ -64,7 +68,20 @@ export const supabase = createClient(
       const user = getAuth().currentUser;
       if (!user) return null;
       try {
-        return await getIdToken(user);
+        let token;
+        // A brand-new account's first token predates the role claim that
+        // setSupabaseRoleClaim adds a moment after sign-up, and Supabase runs a
+        // token without `role` as anon: every authenticated-only RPC (Squad
+        // join, Trade Match) failed for up to an hour, i.e. for exactly the
+        // new players Squad invites. Refresh once the claim should be there.
+        const res = await getIdTokenResult(user);
+        if (!res?.claims?.role && Date.now() - _lastRoleRefreshAt > ROLE_REFRESH_EVERY_MS) {
+          _lastRoleRefreshAt = Date.now();
+          token = await getIdToken(user, true);
+        } else {
+          token = res.token;
+        }
+        return token;
       } catch (e) {
         console.warn('[supabase] getIdToken failed:', e?.message);
         return null;

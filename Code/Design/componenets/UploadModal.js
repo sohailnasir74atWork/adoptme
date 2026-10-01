@@ -25,6 +25,17 @@ import { showMessage } from 'react-native-flash-message';
 import RNFS from 'react-native-fs';
 import { validateContent } from '../../Helper/ContentModeration';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
+
+// Stored tag value (English, saved to Firestore) → translated label key
+const POST_TAGS = [
+  { value: 'Scam Alert', labelKey: 'feed.tags.scam_alert' },
+  { value: 'Looking for Trade', labelKey: 'feed.tags.looking_for_trade' },
+  { value: 'Discussion', labelKey: 'feed.tags.discussion' },
+  { value: 'Real or Fake', labelKey: 'feed.tags.real_or_fake' },
+  { value: 'Need Help', labelKey: 'feed.tags.need_help' },
+  { value: 'Misc', labelKey: 'feed.tags.misc' },
+];
 
 
 const CLOUD_NAME = 'djtqw0jb5';
@@ -38,6 +49,7 @@ const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 
 const UploadModal = ({ visible, onClose, onUpload, user }) => {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [desc, setDesc] = useState('');
   const [imageUris, setImageUris] = useState([]);
@@ -116,8 +128,8 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
         // Show alert if any images were rejected
         if (rejectedCount.length > 0) {
           Alert.alert(
-            'Image Too Large',
-            `${rejectedCount.length} image(s) exceed 1 MB limit and were not added. Please select smaller images.`
+            t('feed.image_too_large'),
+            t('feed.images_rejected', { count: rejectedCount.length })
           );
         }
 
@@ -134,9 +146,9 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
       }
     } catch (error) {
       console.error('❌ Image picker crash:', error);
-      Alert.alert('Error', 'Failed to pick images. Please try again.');
+      Alert.alert(t('alert.error'), t('feed.pick_images_failed'));
     }
-  }, []);
+  }, [t]);
 
 
 
@@ -221,7 +233,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
 
     if (!user?.id) return;
     if (!currentUserEmail) {
-      Alert.alert('Missing Email', 'Could not detect your account email. Please re-login.');
+      Alert.alert(t('feed.missing_email'), t('feed.relogin_email'));
       return;
     }
 
@@ -229,16 +241,16 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
     // already validated against server time by GlobelStats listeners.
     if (isUserBlocked) {
       const info = strikeInfo || deviceBanInfo;
-      const strikeLabel = info?.strikeCount ? ` (Strike ${info.strikeCount})` : '';
-      const message = info?.bannedUntil === 'permanent'
-        ? `You are permanently banned${strikeLabel}.`
-        : `You are temporarily banned${strikeLabel}.`;
-      Alert.alert('Banned', message);
+      const isPermanent = info?.bannedUntil === 'permanent';
+      const message = info?.strikeCount
+        ? t(isPermanent ? 'feed.banned_permanent_strike' : 'feed.banned_temporary_strike', { strike: info.strikeCount })
+        : t(isPermanent ? 'feed.banned_permanent' : 'feed.banned_temporary');
+      Alert.alert(t('feed.banned_title'), message);
       return;
     }
 
     if (!desc && imageUris.length === 0) {
-      return Alert.alert('Missing Info', 'Please add a description or at least one image.');
+      return Alert.alert(t('feed.missing_info'), t('feed.add_desc_or_image'));
     }
 
     // ✅ Content moderation: Check description for inappropriate content
@@ -246,7 +258,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
     if (trimmedDesc) {
       const contentValidation = validateContent(trimmedDesc);
       if (!contentValidation.isValid) {
-        Alert.alert('Content Not Allowed', contentValidation.reason || 'Your post contains inappropriate content.');
+        Alert.alert(t('feed.content_not_allowed'), contentValidation.reason || t('feed.inappropriate_post'));
         return;
       }
     }
@@ -256,8 +268,8 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
     if (lastPostTime && (now - lastPostTime) < 60000) {
       const secondsLeft = Math.ceil((60000 - (now - lastPostTime)) / 1000);
       showMessage({
-        message: '⏱️ Cooldown Active',
-        description: `Please wait ${secondsLeft} second${secondsLeft === 1 ? '' : 's'} before posting again.`,
+        message: t('feed.cooldown_active'),
+        description: t('feed.cooldown_message', { time: t('feed.wait_sec', { seconds: secondsLeft }) }),
         type: 'warning',
         duration: 3000,
       });
@@ -289,12 +301,12 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
 
         onClose();
         showMessage({
-          message: 'Success',
-          description: 'Post created successfully',
+          message: t('alert.success'),
+          description: t('feed.post_created_success'),
           type: 'success',
         });
       } catch (err) {
-        Alert.alert('Upload Failed', 'Something went wrong. Try again.', err);
+        Alert.alert(t('feed.upload_failed'), t('feed.post_failed_desc'));
         console.log(err);
         // ✅ Reset loading on error so user can retry
         setLoading(false);
@@ -317,7 +329,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
       });
     }
 
-  }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime]);
+  }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime, t]);
 
 
   const themedStyles = useMemo(() => getStyles(isDark), [isDark]);
@@ -330,7 +342,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
       <View style={[themedStyles.fullScreenContainer, { paddingTop: insets.top }]}>
         {/* Header - Fixed at top */}
         <View style={themedStyles.header}>
-          <Text style={themedStyles.headerTitle}>Create Post</Text>
+          <Text style={themedStyles.headerTitle}>{t('feed.create_post')}</Text>
           <TouchableOpacity onPress={onClose} style={themedStyles.closeButton}>
             <Icon name="close" size={24} color={isDark ? '#fff' : '#000'} />
           </TouchableOpacity>
@@ -344,10 +356,10 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
             keyboardShouldPersistTaps="handled"
           >
             {/* Description Input */}
-            <Text style={themedStyles.sectionLabel}>DESCRIPTION</Text>
+            <Text style={themedStyles.sectionLabel}>{t('feed.description_label')}</Text>
             <TextInput
               style={themedStyles.input}
-              placeholder="What's on your mind?..."
+              placeholder={t('status_feed.placeholder')}
               placeholderTextColor={isDark ? '#888' : '#aaa'}
               value={desc}
               onChangeText={setDesc}
@@ -356,9 +368,9 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
             />
 
             {/* Tags */}
-            <Text style={themedStyles.sectionLabel}>SELECT TOPIC</Text>
+            <Text style={themedStyles.sectionLabel}>{t('feed.select_topic')}</Text>
             <View style={themedStyles.tagSelector}>
-              {['Scam Alert', 'Looking for Trade', 'Discussion', 'Real or Fake', 'Need Help', 'Misc'].map((tag) => (
+              {POST_TAGS.map(({ value: tag, labelKey }) => (
                 <TouchableOpacity
                   key={tag}
                   style={[
@@ -375,14 +387,14 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
                       fontWeight: '600',
                     }}
                   >
-                    {tag}
+                    {t(labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {/* Image Picker */}
-            <Text style={themedStyles.sectionLabel}>PHOTOS (MAX 4)</Text>
+            <Text style={themedStyles.sectionLabel}>{t('feed.photos_label', { max: MAX_IMAGES })}</Text>
             <TouchableOpacity
               style={[themedStyles.imagePicker, imageUris.length > 0 && { justifyContent: 'flex-start', padding: 10 }]}
               onPress={pickAndCompress}
@@ -407,7 +419,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
               ) : (
                 <View style={{ alignItems: 'center' }}>
                   <Icon name="images-outline" size={32} color={config.colors.primary} style={{ marginBottom: 8 }} />
-                  <Text style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>Tap to select photos</Text>
+                  <Text style={{ color: isDark ? '#aaa' : '#666', fontSize: 13 }}>{t('feed.tap_select_photos')}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -425,7 +437,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={themedStyles.btnText}>Post Now</Text>
+                  <Text style={themedStyles.btnText}>{t('feed.post_now')}</Text>
                   <Icon name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
                 </View>
               )}

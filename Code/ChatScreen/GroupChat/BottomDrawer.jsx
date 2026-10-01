@@ -47,7 +47,7 @@ import {
   writeBatch,
 } from '@react-native-firebase/firestore';
 import { ref, get, set, update, remove } from '@react-native-firebase/database';
-import { getOrFetchFullProfile, invalidateFullProfile, getCachedProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
+import { getOrFetchFullProfile, invalidateFullProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
 import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 import { getUserEmail, getPrivateProfile } from '../../Helper/privateProfile';
 
@@ -70,8 +70,20 @@ import XPBar from '../../Engagement/XPBar';
 import { getUserXP } from '../../Engagement/xpUtils';
 import FramedAvatar from './FramedAvatar';
 import { getThemeColors } from '../../Helper/themeColors';
+import SquadBadge from '../../Squad/SquadBadge';
+import { getPublicProfile } from '../../Helper/publicProfile';
 
 dayjs.extend(relativeTime);
+
+// The bio Setting.jsx saves for users who never wrote one. It is stored in
+// English, so it is swapped for the translated default when displayed.
+const DEFAULT_BIO_EN = 'Hi there, I am new here';
+
+// Post tags are stored in English ('Scam Alert'); show the feed.tags label.
+const getPostTagLabel = (t, tag) => {
+  const tagKey = String(tag || '').toLowerCase().replace(/\s+/g, '_').replace(/\.+/g, '');
+  return t(`feed.tags.${tagKey}`, { defaultValue: tag });
+};
 
 const REVIEWS_PAGE_SIZE = 3; // how many reviews per page (unfiltered)
 const FILTERED_REVIEWS_PAGE_SIZE = 5; // how many reviews per page when star filter is active
@@ -269,9 +281,8 @@ const ProfileBottomDrawer = ({
   // joined text
   const [createdAtText, setCreatedAtText] = useState(null);
 
-  // 💰 user points and game wins
+  // 💰 user points
   const [userPoints, setUserPoints] = useState(null);
-  const [gameWins, setGameWins] = useState(null);
 
   // 📝 reviews list (from Firestore /reviews where toUserId == selectedUserId)
   const [reviews, setReviews] = useState([]);
@@ -346,7 +357,6 @@ const ProfileBottomDrawer = ({
     setFollowersCount(0);
     setCreatedAtText(null);
     setUserPoints(null);
-    setGameWins(null);
     setReviews([]);
     setLastReviewDoc(null);
     setHasMoreReviews(false);
@@ -394,7 +404,6 @@ const ProfileBottomDrawer = ({
         robloxUserId: valOrNull('robloxUserId'),
         robloxUsernameVerified: has('robloxUsernameVerified') ? !!r.robloxUsernameVerified : false,
         isPro: has('isPro') ? !!r.isPro : false,
-        lastGameWinAt: valOrNull('lastGameWinAt'),
         isModerator: valOrNull('isModerator'),
         // RTDB field is `admin`, exposed to consumers as `isAdmin` (legacy name).
         isAdmin: valOrNull('admin'),
@@ -414,11 +423,8 @@ const ProfileBottomDrawer = ({
 
         if (BOTTOM_DRAWER_CACHE_ENABLED) {
           // Fetch migrated fields from Supabase (5 tables in one round-trip set).
-          // lastGameWinAt comes from profileCache (warmed by chat / online list);
-          // cold cache degrades trophy badge silently rather than paying an
-          // RTDB read per drawer open. Falls back to getOrFetchFullProfile
-          // (full RTDB read) when all Supabase rows are missing.
-          const cached = getCachedProfile(selectedUserId);
+          // Falls back to getOrFetchFullProfile (full RTDB read) when all
+          // Supabase rows are missing.
           // Roles we wrote moments ago; beats the Supabase mirror until it catches up.
           const roleOv = getRoleOverride(selectedUserId);
           const [identityRow, rolesRow, cosmeticsRow, robloxRow, badgesMap] = await Promise.all([
@@ -469,6 +475,7 @@ const ProfileBottomDrawer = ({
               dateOfBirth:             isStaffViewer ? (identityRow?.dateOfBirth ?? null) : null,
               isPro:                   cosmeticsRow?.isPro               ?? false,
               topBadge:                cosmeticsRow?.topBadge            ?? null,
+              squadCount:              cosmeticsRow?.squadCount          ?? 0,
               isAdmin:                 rolesRow?.isAdmin                 ?? roleFb?.isAdmin     ?? null,
               isModerator:             roleOv?.isModerator               ?? rolesRow?.isModerator ?? roleFb?.isModerator ?? null,
               isBabyMod:               roleOv?.isBabyMod                 ?? rolesRow?.isBabyMod ?? roleFb?.isBabyMod   ?? null,
@@ -478,7 +485,6 @@ const ProfileBottomDrawer = ({
               robloxUsername:          robloxRow?.robloxUsername         ?? null,
               robloxUserId:            robloxRow?.robloxUserId           ?? null,
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
-              lastGameWinAt:           cached?.lastGameWinAt ?? null,
             };
           } else {
             // Full RTDB fallback — mirror lag or brand-new user.
@@ -507,7 +513,6 @@ const ProfileBottomDrawer = ({
           // dateOfBirth are no longer read here — staff get them below.
           const [
             isProSnap,
-            lastGameWinAtSnap,
             isModeratorSnap,
             isAdminSnap,
             badgesSnap,
@@ -521,7 +526,6 @@ const ProfileBottomDrawer = ({
             supaRobloxRow,
           ] = await Promise.all([
             get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
-            get(ref(appdatabase, `users/${selectedUserId}/lastGameWinAt`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/badges`)).catch(() => null),
@@ -544,7 +548,6 @@ const ProfileBottomDrawer = ({
             robloxUserId: supaRobloxRow?.robloxUserId ?? null,
             robloxUsernameVerified: supaRobloxRow?.robloxUsernameVerified ?? false,
             isPro: isProSnap?.exists() ? isProSnap.val() : false,
-            lastGameWinAt: lastGameWinAtSnap?.exists() ? lastGameWinAtSnap.val() : null,
             isModerator: isModeratorSnap?.exists() ? isModeratorSnap.val() : null,
             isAdmin: isAdminSnap?.exists() ? isAdminSnap.val() : null,
             topBadge: topBadgeSnap?.exists() ? topBadgeSnap.val() : null,
@@ -653,9 +656,7 @@ const ProfileBottomDrawer = ({
       isAdmin: userData.isAdmin ?? selectedUser?.isAdmin ?? false,
       email: selectedUser?.email || selectedUser?.decodedEmail || selectedUser?.user?.email || userData.email || userData.decodedEmail,
       topBadge: userData.topBadge || selectedUser?.topBadge || null,
-      hasRecentGameWin: userData.lastGameWinAt
-        ? (Date.now() - userData.lastGameWinAt <= 24 * 60 * 60 * 1000)
-        : (selectedUser?.hasRecentGameWin ?? false),
+      squadCount: userData.squadCount ?? selectedUser?.squadCount ?? 0,
       isBabyMod: userData.isBabyMod ?? selectedUser?.isBabyMod ?? false,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
@@ -735,11 +736,11 @@ const ProfileBottomDrawer = ({
       }
     } catch (err) {
       console.error('Error toggling follow:', err);
-      Alert.alert('Error', 'Could not update follow status.');
+      Alert.alert(t('home.alert.error'), t('profile.follow_update_failed'));
     } finally {
       setFollowLoading(false);
     }
-  }, [user?.id, selectedUserId, firestoreDB, isFollowing, triggerHapticFeedback]);
+  }, [user?.id, selectedUserId, firestoreDB, isFollowing, triggerHapticFeedback, t]);
 
   // ─────────────────────────────────────────────
   // Clipboard
@@ -850,7 +851,9 @@ const ProfileBottomDrawer = ({
 
     Alert.alert(
       `${action}`,
-      `${t('chat.are_you_sure')} ${action.toLowerCase()} ${userName}?`,
+      isBlock
+        ? t('profile.unblock_confirm', { name: userName })
+        : t('profile.block_confirm', { name: userName }),
       [
         { text: t('chat.cancel'), style: 'cancel' },
         {
@@ -888,8 +891,8 @@ const ProfileBottomDrawer = ({
                 showSuccessMessage(
                   t('home.alert.success'),
                   isBlock
-                    ? `${userName} ${t('chat.user_unblocked')}`
-                    : `${userName} ${t('chat.user_blocked')}`,
+                    ? t('profile.user_unblocked', { name: userName })
+                    : t('profile.user_blocked', { name: userName }),
                 );
               }, 100);
             } catch (error) {
@@ -1613,7 +1616,6 @@ const ProfileBottomDrawer = ({
       setStarFilter(null);
       setCreatedAtText(null);
       setUserPoints(null);
-      setGameWins(null);
       setUserData(null); // ✅ Clear fetched user data
       setShowModTools(false); // ✅ Hide mod tools on close
       setTrades([]);
@@ -1634,15 +1636,13 @@ const ProfileBottomDrawer = ({
       try {
         // ✅ OPTIMIZED: Fetch only specific fields instead of full user object
         // ✅ MIGRATED: Read rating summary from Firestore user_ratings_summary (single source of truth)
-        // 📅 2026-03-13: bio/ownedPets/wishlistPets migrated from reviews/{userId} → user_profiles/{userId}.
-        //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fetch and its fallback reads below.
-        const [summaryDocSnap, createdSnap, rewardPointsSnap, profileDocSnap, reviewDocSnap, countSnapshot, identityForDates] = await Promise.all([
+        // Bio comes from the PUBLIC profile copy (see Code/Helper/publicProfile.js),
+        // shared with the portfolio loader: one read, never the Private pets.
+        const [summaryDocSnap, createdSnap, rewardPointsSnap, publicProfile, countSnapshot, identityForDates] = await Promise.all([
           getDoc(doc(firestoreDB, 'user_ratings_summary', selectedUserId)),
           get(ref(appdatabase, `users/${selectedUserId}/createdAt`)),
           get(ref(appdatabase, `users/${selectedUserId}/xp/total`)).catch(() => null),
-          getDoc(doc(firestoreDB, 'user_profiles', selectedUserId)),
-          // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this line once all users updated
-          getDoc(doc(firestoreDB, 'reviews', selectedUserId)),
+          getPublicProfile(firestoreDB, selectedUserId).catch(() => null),
           getCountFromServer(
             query(collection(firestoreDB, 'following'), where('followingId', '==', selectedUserId))
           ).catch(err => { console.error("Error fetching followers:", err); return { data: () => ({ count: 0 }) }; }),
@@ -1749,23 +1749,9 @@ const ProfileBottomDrawer = ({
           }
         }
 
-        // 📅 2026-03-13: Bio migrated from reviews/{userId} → user_profiles/{userId}.
-        //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviewDocSnap fallback block below.
-        let bioValue = null;
-        if (profileDocSnap.exists()) {
-          const profileData = profileDocSnap.data();
-          if (profileData && profileData.bio && typeof profileData.bio === 'string' && profileData.bio.trim()) {
-            bioValue = profileData.bio.trim();
-          }
-        }
-        // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this block once all users updated
-        if (!bioValue && reviewDocSnap.exists()) {
-          const reviewData = reviewDocSnap.data();
-          if (reviewData && reviewData.bio && typeof reviewData.bio === 'string' && reviewData.bio.trim()) {
-            bioValue = reviewData.bio.trim();
-          }
-        }
-        setUserBio(bioValue || t('profile.bio_default'));
+        const bioValue = publicProfile?.bio || null;
+        // null → the translated default is shown at render time.
+        setUserBio(bioValue && bioValue !== DEFAULT_BIO_EN ? bioValue : null);
 
         // Prefer Supabase user_identity for created_at_ms / last_activity_ms —
         // those are already there from the backfill. Fall back to RTDB createdAt
@@ -1810,26 +1796,12 @@ const ProfileBottomDrawer = ({
         } else {
           setUserPoints(0);
         }
-
-        // ✅ Load game wins (Firestore game_stats)
-        if (firestoreDB && selectedUserId) {
-          const statsDoc = await getDoc(doc(firestoreDB, 'game_stats', selectedUserId));
-          if (statsDoc.exists) {
-            const stats = statsDoc.data() || {};
-            setGameWins(stats.petGameWins || 0);
-          } else {
-            setGameWins(0);
-          }
-        } else {
-          setGameWins(0);
-        }
       } catch (err) {
         console.log('Rating load error:', err);
         if (isMounted) {
           setRatingSummary(null);
           setCreatedAtText(null);
           setUserPoints(null);
-          setGameWins(null);
         }
       } finally {
         if (isMounted) setLoadingRating(false);
@@ -1853,30 +1825,12 @@ const ProfileBottomDrawer = ({
     const loadPets = async () => {
       setLoadingPets(true);
       try {
-        // 📅 2026-03-13: Pets migrated from reviews/{userId} → user_profiles/{userId}.
-        //    🔮 FUTURE CLEANUP: Once all users updated, remove the reviews fallback read below.
-        let docSnap = await getDoc(
-          doc(firestoreDB, 'user_profiles', selectedUserId),
-        );
-        // ⬇️ BACKWARD COMPAT (2026-03-13): Remove this fallback once all users updated
-        if (!docSnap.exists) {
-          docSnap = await getDoc(
-            doc(firestoreDB, 'reviews', selectedUserId),
-          );
-        }
-
+        // Only the PUBLIC part: "For Trade" pets, "Looking for" wishes. The full
+        // user_profiles doc (with Private pets) is never downloaded for others.
+        const pub = await getPublicProfile(firestoreDB, selectedUserId);
         if (!isMounted) return;
-
-        if (docSnap.exists) {
-          const data = docSnap.data() || {};
-          setOwnedPets(Array.isArray(data.ownedPets) ? data.ownedPets : []);
-          setWishlistPets(
-            Array.isArray(data.wishlistPets) ? data.wishlistPets : [],
-          );
-        } else {
-          setOwnedPets([]);
-          setWishlistPets([]);
-        }
+        setOwnedPets(pub.forTrade);
+        setWishlistPets(pub.lookingFor);
       } catch (err) {
         console.log('Pets load error:', err);
         if (isMounted) {
@@ -2321,7 +2275,7 @@ const ProfileBottomDrawer = ({
     const tradePercentage = Math.abs(((tradeRatio - 1) * 100).toFixed(0));
     const isProfit = tradeRatio > 1;
     const neutral = tradeRatio === 1;
-    const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : "Unknown";
+    const formattedTime = trade.timestamp ? dayjs(trade.timestamp.toDate()).fromNow() : t('profile.time_unknown');
 
     const groupedHasItems = groupTradeItems(trade.hasItems || []);
     const groupedWantsItems = groupTradeItems(trade.wantsItems || []);
@@ -2609,7 +2563,7 @@ const ProfileBottomDrawer = ({
               borderRadius: 6,
               backgroundColor: config.colors.hasBlockGreen
             }}>
-              {t('trade.me')}: {formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0)}
+              {t('profile.trade_me_total', { value: formatTradeValue(typeof trade.hasTotal === 'number' ? trade.hasTotal : trade.hasTotal?.value || 0) })}
             </Text>
           )}
           <View style={{ justifyContent: 'center', alignItems: 'center', marginHorizontal: 8 }}>
@@ -2656,7 +2610,7 @@ const ProfileBottomDrawer = ({
               borderRadius: 6,
               backgroundColor: config.colors.wantBlockRed
             }}>
-              {t('trade.you')}: {formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0)}
+              {t('profile.trade_you_total', { value: formatTradeValue(typeof trade.wantsTotal === 'number' ? trade.wantsTotal : trade.wantsTotal?.value || 0) })}
             </Text>
           )}
         </View>
@@ -2680,7 +2634,7 @@ const ProfileBottomDrawer = ({
 
   // ✅ Render Post Item
   const renderPostItem = useCallback((post) => {
-    const timeLabel = post.createdAt ? dayjs(post.createdAt.toDate ? post.createdAt.toDate() : post.createdAt).fromNow() : 'Just now';
+    const timeLabel = post.createdAt ? dayjs(post.createdAt.toDate ? post.createdAt.toDate() : post.createdAt).fromNow() : t('settings.time.just_now');
     const images = Array.isArray(post.imageUrl) ? post.imageUrl : (post.imageUrl ? [post.imageUrl] : []);
     const likeCount = post.likes ? Object.keys(post.likes).length : 0;
     const tags = Array.isArray(post.selectedTags) ? post.selectedTags : [];
@@ -2730,7 +2684,7 @@ const ProfileBottomDrawer = ({
                   paddingHorizontal: 7, paddingVertical: 2,
                   borderRadius: 999, backgroundColor: getTagColor(tag),
                 }}>
-                  <Text style={{ fontSize: 9, color: '#fff', fontWeight: '700' }}>{tag}</Text>
+                  <Text style={{ fontSize: 9, color: '#fff', fontWeight: '700' }}>{getPostTagLabel(t, tag)}</Text>
                 </View>
               ))}
             </View>
@@ -2799,7 +2753,7 @@ const ProfileBottomDrawer = ({
     const post = selectedPost;
     const timeLabel = post.createdAt
       ? dayjs(post.createdAt.toDate ? post.createdAt.toDate() : post.createdAt).fromNow()
-      : 'Just now';
+      : t('settings.time.just_now');
     const images = Array.isArray(post.imageUrl) ? post.imageUrl : (post.imageUrl ? [post.imageUrl] : []);
     const likeCount = post.likes ? Object.keys(post.likes).length : 0;
     const tags = Array.isArray(post.selectedTags) ? post.selectedTags : [];
@@ -2840,7 +2794,7 @@ const ProfileBottomDrawer = ({
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 14, fontWeight: '600', color: isDarkMode ? '#f3f4f6' : '#111827' }} numberOfLines={1}>
-                    {post.displayName || userName || 'Anonymous'}
+                    {post.displayName || userName || t('profile.anonymous')}
                   </Text>
                   <Text style={{ fontSize: 11, color: c.textSecondary }}>{timeLabel}</Text>
                 </View>
@@ -2861,7 +2815,7 @@ const ProfileBottomDrawer = ({
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, marginBottom: 4 }}>
                   {tags.map((tag, idx) => (
                     <View key={idx} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: getTagColor(tag) }}>
-                      <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{tag}</Text>
+                      <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{getPostTagLabel(t, tag)}</Text>
                     </View>
                   ))}
                 </View>
@@ -2881,14 +2835,14 @@ const ProfileBottomDrawer = ({
               }}>
                 <Icon name="heart" size={16} color="#EF4444" />
                 <Text style={{ fontSize: 12, fontWeight: '600', color: c.text, marginLeft: 6 }}>
-                  {likeCount} {likeCount === 1 ? 'Like' : 'Likes'}
+                  {t('profile.likes_count', { count: likeCount })}
                 </Text>
                 {post.commentCount > 0 && (
                   <>
                     <Text style={{ color: isDarkMode ? '#4b5563' : '#d1d5db', marginHorizontal: 8 }}>•</Text>
                     <Icon name="chatbubble-outline" size={14} color={config.colors.primary} />
                     <Text style={{ fontSize: 12, fontWeight: '600', color: c.text, marginLeft: 4 }}>
-                      {post.commentCount} {post.commentCount === 1 ? 'Comment' : 'Comments'}
+                      {t('profile.comments_count', { count: post.commentCount })}
                     </Text>
                   </>
                 )}
@@ -2898,7 +2852,7 @@ const ProfileBottomDrawer = ({
         </Pressable>
       </Modal>
     );
-  }, [selectedPost, isDarkMode, avatar, userName, screenWidth, getTagColor]);
+  }, [selectedPost, isDarkMode, avatar, userName, screenWidth, getTagColor, t]);
 
   // ── Default gradient — neutral gray so purchased banners pop ──
   const DEFAULT_BANNER = ['#64748b', '#94a3b8', '#cbd5e1'];
@@ -3045,6 +2999,21 @@ const ProfileBottomDrawer = ({
                     {mergedUser?.isHelper && (
                       <UserBadgePill type="helper" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
                     )}
+                    {mergedUser?.squadCount > 0 && (() => {
+                      return (
+                        <View style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                          backgroundColor: isDarkMode ? 'rgba(124,58,237,0.2)' : 'rgba(124,58,237,0.1)',
+                          borderWidth: 1, borderColor: isDarkMode ? 'rgba(167,139,250,0.4)' : 'rgba(124,58,237,0.25)',
+                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+                        }}>
+                          <SquadBadge count={mergedUser.squadCount} size={14} />
+                          <Text style={{ fontSize: 9, fontWeight: '800', color: isDarkMode ? '#c4b5fd' : '#6d28d9' }}>
+                            {t('squad.pill', { count: mergedUser.squadCount })}
+                          </Text>
+                        </View>
+                      );
+                    })()}
                     {mergedUser?.robloxUsernameVerified && (
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -3053,7 +3022,7 @@ const ProfileBottomDrawer = ({
                         paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
                       }}>
                         <Icon name="checkmark-circle" size={10} color={isDarkMode ? '#38bdf8' : '#0ea5e9'} />
-                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#38bdf8' : '#0ea5e9' }}>Verified</Text>
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#38bdf8' : '#0ea5e9' }}>{t('profile.verified')}</Text>
                       </View>
                     )}
                     {mergedUser?.robloxUsername && !mergedUser?.robloxUsernameVerified && (
@@ -3064,7 +3033,7 @@ const ProfileBottomDrawer = ({
                         paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
                       }}>
                         <Icon name="alert-circle-outline" size={10} color={isDarkMode ? '#fbbf24' : '#d97706'} />
-                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>Unverified</Text>
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>{t('profile.unverified')}</Text>
                       </View>
                     )}
 
@@ -3114,7 +3083,7 @@ const ProfileBottomDrawer = ({
                     {/* Rating */}
                     {ratingSummary && (
                       <View style={{ flex: 1, alignItems: 'center' }}>
-                        <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>Rating</Text>
+                        <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>{t('profile.rating')}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
                           <Text style={{ fontSize: 12, color: '#fbbf24' }}>★</Text>
                           <Text style={{ fontSize: 13, fontWeight: '800', color: c.text }}>
@@ -3130,7 +3099,7 @@ const ProfileBottomDrawer = ({
                       borderLeftWidth: ratingSummary ? 1 : 0,
                       borderColor: c.border,
                     }}>
-                      <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>Followers</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>{t('profile.followers')}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
                         <Icon name="people" size={12} color="#8b5cf6" />
                         <Text style={{ fontSize: 13, fontWeight: '800', color: c.text }}>
@@ -3144,26 +3113,11 @@ const ProfileBottomDrawer = ({
                         flex: 1, alignItems: 'center',
                         borderLeftWidth: 1, borderColor: c.border,
                       }}>
-                        <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>XP</Text>
+                        <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>{t('profile.xp')}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
                           <Text style={{ fontSize: 12 }}>⚡</Text>
                           <Text style={{ fontSize: 13, fontWeight: '800', color: c.text }}>
                             {Number(userPoints).toLocaleString()}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                    {/* Wins */}
-                    {gameWins !== null && gameWins > 0 && (
-                      <View style={{
-                        flex: 1, alignItems: 'center',
-                        borderLeftWidth: 1, borderColor: c.border,
-                      }}>
-                        <Text style={{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, color: c.textMuted }}>Wins</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
-                          <Text style={{ fontSize: 12 }}>🏆</Text>
-                          <Text style={{ fontSize: 13, fontWeight: '800', color: c.text }}>
-                            {gameWins}
                           </Text>
                         </View>
                       </View>
@@ -3231,7 +3185,7 @@ const ProfileBottomDrawer = ({
                       fontSize: 13, lineHeight: 19,
                       color: c.text,
                     }}>
-                      {userBio || 'Hi there, I am new here'}
+                      {userBio || t('profile.bio_default')}
                     </Text>
                   </View>
                 )}
@@ -3392,7 +3346,7 @@ const ProfileBottomDrawer = ({
                               fontSize: 13, fontWeight: '700',
                               color: isFollowing ? (c.textSecondary) : '#fff',
                             }}>
-                              {isFollowing ? t('social.unfollow') || 'Unfollow' : t('social.follow') || 'Follow'}
+                              {isFollowing ? t('social.unfollow') : t('social.follow')}
                             </Text>
                           </>
                         )}

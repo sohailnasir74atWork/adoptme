@@ -19,9 +19,11 @@ import { useGlobalState } from "../GlobelStats";
 import { ref, push, onValue } from "@react-native-firebase/database";
 import config from "../Helper/Environment";
 import ConditionalKeyboardWrapper from "../Helper/keyboardAvoidingContainer";
+import { useTranslation } from "react-i18next";
 
 const NewsScreen = () => {
     const { appdatabase, theme, user } = useGlobalState(); // assumes 'light' | 'dark'
+    const { t } = useTranslation();
     const isDark = theme === "dark";
 
     // simple theme palette
@@ -198,20 +200,20 @@ const NewsScreen = () => {
                     pollId,
                     option: optionLabel,
                 });
-                Alert.alert("Thanks!", "Your vote has been recorded.");
+                Alert.alert(t("news.thanks_title"), t("news.vote_recorded"));
             } catch (e) {
-                Alert.alert("Error", "Could not send your vote right now.");
+                Alert.alert(t("alert.error"), t("news.vote_failed"));
             } finally {
                 setSendingPollId(null);
             }
         },
-        [appdatabase, sendToFirebase]
+        [appdatabase, sendToFirebase, t]
     );
 
     const handleQuickSuggestion = useCallback(
         async (text) => {
             if (!appdatabase) {
-                Alert.alert("Thanks!", "Suggestion noted.");
+                Alert.alert(t("news.thanks_title"), t("news.suggestion_noted"));
                 return;
             }
 
@@ -221,29 +223,29 @@ const NewsScreen = () => {
                     type: "quick_suggestion",
                     text,
                 });
-                Alert.alert("Thanks!", "Your suggestion has been sent.");
+                Alert.alert(t("news.thanks_title"), t("news.suggestion_sent"));
             } catch (e) {
                 Alert.alert(
-                    "Error",
-                    "Could not send your suggestion right now. Please try again later."
+                    t("alert.error"),
+                    t("news.suggestion_failed")
                 );
             } finally {
                 setQuickSending(false);
             }
         },
-        [appdatabase, sendToFirebase]
+        [appdatabase, sendToFirebase, t]
     );
 
     const handleCustomFeedbackSubmit = useCallback(async () => {
         const trimmed = customFeedback.trim();
         if (!trimmed) {
-            Alert.alert("Empty", "Please type your idea first.");
+            Alert.alert(t("news.empty_title"), t("news.empty_message"));
             return;
         }
 
         if (!appdatabase) {
             setCustomFeedback("");
-            Alert.alert("Thanks!", "Feedback noted.");
+            Alert.alert(t("news.thanks_title"), t("news.feedback_noted"));
             return;
         }
 
@@ -254,16 +256,16 @@ const NewsScreen = () => {
                 text: trimmed,
             });
             setCustomFeedback("");
-            Alert.alert("Thanks!", "Your feedback has been sent.");
+            Alert.alert(t("news.thanks_title"), t("news.feedback_sent"));
         } catch (e) {
             Alert.alert(
-                "Error",
-                "Could not send your feedback right now. Please try again later."
+                t("alert.error"),
+                t("news.feedback_failed")
             );
         } finally {
             setSendingCustom(false);
         }
-    }, [appdatabase, customFeedback, sendToFirebase]);
+    }, [appdatabase, customFeedback, sendToFirebase, t]);
 
     // ⏳ loading state
     if (loadingNews) {
@@ -284,7 +286,7 @@ const NewsScreen = () => {
                         { color: palette.textSecondary },
                     ]}
                 >
-                    Checking for updates...
+                    {t("news.checking")}
                 </Text>
             </View>
         );
@@ -305,7 +307,7 @@ const NewsScreen = () => {
                         { color: palette.textPrimary, marginBottom: 4 },
                     ]}
                 >
-                    Nothing new… yet
+                    {t("news.nothing_new_title")}
                 </Text>
                 <Text
                     style={[
@@ -313,7 +315,7 @@ const NewsScreen = () => {
                         { color: palette.textSecondary, textAlign: "center" },
                     ]}
                 >
-                    Check back later for updates and polls.
+                    {t("news.nothing_new_body")}
                 </Text>
             </View>
         );
@@ -339,7 +341,7 @@ const NewsScreen = () => {
                                         { color: palette.textPrimary },
                                     ]}
                                 >
-                                    Updates
+                                    {t("news.updates_title")}
                                 </Text>
                                 <Text
                                     style={[
@@ -347,7 +349,7 @@ const NewsScreen = () => {
                                         { color: palette.textSecondary },
                                     ]}
                                 >
-                                    What’s new in the app right now.
+                                    {t("news.updates_subtitle")}
                                 </Text>
                             </View>
                         </View>
@@ -407,7 +409,7 @@ const NewsScreen = () => {
                                 { color: palette.textPrimary },
                             ]}
                         >
-                            What’s next?
+                            {t("news.polls_title")}
                         </Text>
                         <Text
                             style={[
@@ -415,7 +417,7 @@ const NewsScreen = () => {
                                 { color: palette.textSecondary },
                             ]}
                         >
-                            Vote and help decide the roadmap.
+                            {t("news.polls_subtitle")}
                         </Text>
 
                         {polls.map((poll) => {
@@ -491,7 +493,7 @@ const NewsScreen = () => {
                                                     { color: palette.textSecondary },
                                                 ]}
                                             >
-                                                Sending vote...
+                                                {t("news.sending_vote")}
                                             </Text>
                                         </View>
                                     )}
@@ -512,7 +514,7 @@ const NewsScreen = () => {
                                 { color: palette.textPrimary },
                             ]}
                         >
-                            Quick suggestions
+                            {t("news.quick_title")}
                         </Text>
                         <Text
                             style={[
@@ -520,7 +522,7 @@ const NewsScreen = () => {
                                 { color: palette.textSecondary },
                             ]}
                         >
-                            Tap one of these if you don’t feel like typing.
+                            {t("news.quick_subtitle")}
                         </Text>
 
                         <View className="chipsRow" style={styles.chipsRow}>
@@ -562,7 +564,7 @@ const NewsScreen = () => {
                                         { color: palette.textSecondary },
                                     ]}
                                 >
-                                    Sending suggestion...
+                                    {t("news.sending_suggestion")}
                                 </Text>
                             </View>
                         )}
@@ -578,7 +580,7 @@ const NewsScreen = () => {
                         { color: palette.textPrimary },
                     ]}
                 >
-                    Tell us in your own words
+                    {t("news.own_words_title")}
                 </Text>
                 <Text
                     style={[
@@ -586,7 +588,7 @@ const NewsScreen = () => {
                         { color: palette.textSecondary },
                     ]}
                 >
-                    What should we build next? Which app or feature do you want to see?
+                    {t("news.own_words_subtitle")}
                 </Text>
 
                 <View />
@@ -606,7 +608,7 @@ const NewsScreen = () => {
                             { color: palette.textSecondary },
                         ]}
                     >
-                        Your idea
+                        {t("news.idea_label")}
                     </Text>
                     <TextInput
                         style={[
@@ -617,7 +619,7 @@ const NewsScreen = () => {
                                 color: palette.textPrimary,
                             },
                         ]}
-                        placeholder="Example: Make a separate trading app, or add a raid planner next..."
+                        placeholder={t("news.idea_placeholder")}
                         placeholderTextColor={palette.textSecondary + "99"}
                         value={customFeedback}
                         onChangeText={setCustomFeedback}
@@ -638,7 +640,7 @@ const NewsScreen = () => {
                         {sendingCustom ? (
                             <ActivityIndicator size="small" color="#02120b" />
                         ) : (
-                            <Text style={styles.submitButtonText}>Send feedback</Text>
+                            <Text style={styles.submitButtonText}>{t("news.send_feedback")}</Text>
                         )}
                     </TouchableOpacity>
                 </View>

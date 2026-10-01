@@ -11,25 +11,27 @@
  */
 
 import { ref, increment, update, get, push, set } from '@react-native-firebase/database';
+import i18n from '../../i18n';
 
 // ────────────────────────────────────────────────────────
 //  LEVEL TABLE
+//  `title` is a getter: display-only (never saved), translated at read time.
 // ────────────────────────────────────────────────────────
 const LEVELS = [
-  { level: 1,  xp: 0,       title: 'Hatchling',    emoji: '🥚' },
-  { level: 2,  xp: 200,     title: 'Newborn',      emoji: '🐣' },
-  { level: 3,  xp: 500,     title: 'Junior',       emoji: '🌱' },
-  { level: 5,  xp: 1200,    title: 'Explorer',     emoji: '🌿',  unlock: 'greenName' },
-  { level: 7,  xp: 2500,    title: 'Adventurer',   emoji: '🏕️' },
-  { level: 10, xp: 5000,    title: 'Collector',    emoji: '🌟',  unlock: 'sparkle' },
-  { level: 12, xp: 8000,    title: 'Veteran',      emoji: '🔥' },
-  { level: 15, xp: 12000,   title: 'Trader Pro',   emoji: '💼',  unlock: 'tradeBorder' },
-  { level: 18, xp: 18000,   title: 'Expert',       emoji: '💎' },
-  { level: 20, xp: 25000,   title: 'Rising Star',  emoji: '⭐',  unlock: 'animatedFrame' },
-  { level: 23, xp: 35000,   title: 'Master',       emoji: '🏆' },
-  { level: 25, xp: 50000,   title: 'Legend',        emoji: '👑',  unlock: 'rainbowName' },
-  { level: 28, xp: 75000,   title: 'Elite',        emoji: '🦅' },
-  { level: 30, xp: 100000,  title: 'Mythic',       emoji: '🦄',  unlock: 'holographic' },
+  { level: 1,  xp: 0,       get title() { return i18n.t('xp.titles.hatchling'); },   emoji: '🥚' },
+  { level: 2,  xp: 200,     get title() { return i18n.t('xp.titles.newborn'); },     emoji: '🐣' },
+  { level: 3,  xp: 500,     get title() { return i18n.t('xp.titles.junior'); },      emoji: '🌱' },
+  { level: 5,  xp: 1200,    get title() { return i18n.t('xp.titles.explorer'); },    emoji: '🌿',  unlock: 'greenName' },
+  { level: 7,  xp: 2500,    get title() { return i18n.t('xp.titles.adventurer'); },  emoji: '🏕️' },
+  { level: 10, xp: 5000,    get title() { return i18n.t('xp.titles.collector'); },   emoji: '🌟',  unlock: 'sparkle' },
+  { level: 12, xp: 8000,    get title() { return i18n.t('xp.titles.veteran'); },     emoji: '🔥' },
+  { level: 15, xp: 12000,   get title() { return i18n.t('xp.titles.trader_pro'); },  emoji: '💼',  unlock: 'tradeBorder' },
+  { level: 18, xp: 18000,   get title() { return i18n.t('xp.titles.expert'); },      emoji: '💎' },
+  { level: 20, xp: 25000,   get title() { return i18n.t('xp.titles.rising_star'); }, emoji: '⭐',  unlock: 'animatedFrame' },
+  { level: 23, xp: 35000,   get title() { return i18n.t('xp.titles.master'); },      emoji: '🏆' },
+  { level: 25, xp: 50000,   get title() { return i18n.t('xp.titles.legend'); },      emoji: '👑',  unlock: 'rainbowName' },
+  { level: 28, xp: 75000,   get title() { return i18n.t('xp.titles.elite'); },       emoji: '🦅' },
+  { level: 30, xp: 100000,  get title() { return i18n.t('xp.titles.mythic'); },      emoji: '🦄',  unlock: 'holographic' },
 ];
 
 // ────────────────────────────────────────────────────────
@@ -39,8 +41,6 @@ export const XP_ACTIONS = {
   DAILY_LOGIN:       50,
   CREATE_POST:       20,
   LEAVE_REVIEW:      30,
-  CORRECT_QUIZ:      10,
-  WIN_MEMORY_GAME:   50,
   UPDATE_PETS:       10,
   STREAK_7_DAY:      200,
   POST_STATUS:       15,
@@ -121,7 +121,7 @@ export const addXP = async (db, uid, amount, action = null) => {
     // ✅ OPTIMIZATION: For small XP (< 10), skip level recalculation
     // Level only changes at big thresholds (100, 200, 500...) so recalculating
     // for every 2-10 XP gain wastes 2 RTDB reads per call.
-    // Level will be recalculated on the next significant XP event (trade, game, quiz).
+    // Level will be recalculated on the next significant XP event (trade, review, post).
     if (amount < 10) {
       return null; // Skip level check — saves 2 reads
     }

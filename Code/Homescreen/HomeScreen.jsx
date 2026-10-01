@@ -17,6 +17,7 @@ import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
+import { adviseTrade, VERDICT_STYLE } from '../Helper/tradeAdvice';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import InterstitialAdManager from '../Ads/IntAd';
@@ -222,7 +223,13 @@ const HomeScreen = ({ selectedTheme }) => {
   const [showofferwall, setShowofferwall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
-  const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  const [rawAnalyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  // Value movers come from Elvebredd's diff. In GG mode the numbers on screen
+  // are GG's, so an Elvebredd "+X%" beside them would be someone else's move.
+  const analyticsMaps = useMemo(
+    () => (valueSource === VALUE_SOURCE.GG ? { ...rawAnalyticsMaps, hotMap: {}, dropMap: {} } : rawAnalyticsMaps),
+    [rawAnalyticsMaps, valueSource],
+  );
   const [viewMode, setViewMode] = useState('standard'); // 'standard' or 'detailed'
 
   // Load analytics data for demand/hot badges
@@ -322,12 +329,10 @@ const HomeScreen = ({ selectedTheme }) => {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
 
-    if (diffMins < 1) return t('settings.time.just_now');
-    if (diffMins === 1) return t('settings.time.min_ago_one', { count: 1 });
-    if (diffMins < 60) return t('settings.time.min_ago_other', { count: diffMins });
-    if (diffHours === 1) return t('settings.time.hour_ago_one', { count: 1 });
-    if (diffHours < 24) return t('settings.time.hour_ago_other', { count: diffHours });
-    return lastUpdatedTime.toLocaleDateString();
+    if (diffMins < 1) return t('home.updated_just_now');
+    if (diffMins < 60) return t('home.updated_mins_ago', { count: diffMins });
+    if (diffHours < 24) return t('home.updated_hours_ago', { count: diffHours });
+    return t('home.updated_on_date', { date: lastUpdatedTime.toLocaleDateString() });
   }, [lastUpdatedTime, t]);
 
   // ✅ Hard refresh values - reloads data from CDN/Firebase
@@ -835,7 +840,7 @@ const HomeScreen = ({ selectedTheme }) => {
             <Text style={styles.favoriteItemName} numberOfLines={1}>
               {item.name}{count > 1 ? ` (x${count})` : ''}
             </Text>
-            <Text style={styles.favoriteItemValue}>Value: {formatValue(currentValue)}</Text>
+            <Text style={styles.favoriteItemValue}>{t('home.value_amount', { value: formatValue(currentValue) })}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
               {tags.map(tag => (
                 <View key={tag.label} style={{ backgroundColor: tag.color, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
@@ -859,7 +864,7 @@ const HomeScreen = ({ selectedTheme }) => {
                 borderColor: pet.availableForTrade ? '#10B981' : (isDarkMode ? '#334155' : '#e2e8f0'),
               }}>
                 <Text style={{ fontSize: 9, fontWeight: '700', color: pet.availableForTrade ? '#10B981' : (isDarkMode ? '#64748B' : '#94a3b8') }}>
-                  {pet.availableForTrade ? '✅ For Trade' : '🔒 Private'}
+                  {pet.availableForTrade ? t('home.for_trade_badge') : t('home.private_badge')}
                 </Text>
               </View>
             </View>
@@ -902,7 +907,7 @@ const HomeScreen = ({ selectedTheme }) => {
           )}
           <View style={styles.detailedItemInfo}>
             <Text numberOfLines={1} style={styles.detailedItemName}>{item.name}</Text>
-            <Text style={styles.detailedItemValue}>{t('value.label')} {formatValue(currentValue)}</Text>
+            <Text style={styles.detailedItemValue}>{t('home.value_amount', { value: formatValue(currentValue) })}</Text>
             {(demand || hot) && (
               <View style={styles.gridAnalyticsRow}>
                 {demand && demand.score >= 7 && (
@@ -977,10 +982,10 @@ const HomeScreen = ({ selectedTheme }) => {
       return (
         <View style={styles.favoritesHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
-            <Text style={styles.favoritesTitle}>{t('home.my_stuff', 'My Stuff')} ({myPets.length})</Text>
+            <Text style={styles.favoritesTitle}>{t('home.my_stuff_count', { number: myPets.length })}</Text>
             {totalValue > 0 && (
               <Text style={{ fontSize: 13, fontWeight: '600', color: isDarkMode ? '#10B981' : '#059669' }}>
-                {t('trade_journal.my_pets.total_value', 'Total')}: {formatValue(totalValue)}
+                {t('home.my_stuff_total', { value: formatValue(totalValue) })}
               </Text>
             )}
           </View>
@@ -1135,8 +1140,8 @@ const HomeScreen = ({ selectedTheme }) => {
     }
 
     if (isBanned) {
-      const reason = banDetails?.reason || 'Access Denied';
-      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      const reason = banDetails?.reason;
+      showErrorMessage(t("chat.access_denied"), reason ? t('home.alert.trade_banned_reason', { reason }) : t('home.alert.trade_banned'));
       return;
     }
 
@@ -1172,8 +1177,8 @@ const HomeScreen = ({ selectedTheme }) => {
 
     // ✅ Ban check — defense in depth (in case modal was opened before ban)
     if (isBanned) {
-      const reason = banDetails?.reason || 'Access Denied';
-      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      const reason = banDetails?.reason;
+      showErrorMessage(t("chat.access_denied"), reason ? t('home.alert.trade_banned_reason', { reason }) : t('home.alert.trade_banned'));
       return;
     }
 
@@ -1217,11 +1222,6 @@ const HomeScreen = ({ selectedTheme }) => {
       }
       const now = Date.now(); // ✅ Use Date.now() for cooldown comparison
       const timestamp = serverTimestamp(); // ✅ Use serverTimestamp() for Firestore
-
-      // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
-      const hasRecentWin =
-        typeof user?.lastGameWinAt === 'number' &&
-        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
 
       const mapTradeItem = item => ({
         name: item.name || item.Name,
@@ -1305,7 +1305,6 @@ const HomeScreen = ({ selectedTheme }) => {
         ...(user.flage ? { flage: user.flage } : {}),
         robloxUsername: robloxUsername.trim(),
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
-        ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
         ...(user?.isAdmin ? { isAdmin: true } : {}),
         ...(user?.isModerator ? { isModerator: true } : {}),
@@ -1322,13 +1321,8 @@ const HomeScreen = ({ selectedTheme }) => {
       const COOLDOWN_MS = 120000; // 2 minutes
       if (lastTradeTime && (now - lastTradeTime) < COOLDOWN_MS) {
         const secondsLeft = Math.ceil((COOLDOWN_MS - (now - lastTradeTime)) / 1000);
-        const minutesLeft = Math.floor(secondsLeft / 60);
-        const remainingSeconds = secondsLeft % 60;
-        const timeMessage = minutesLeft > 0
-          ? `${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} and ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`
-          : `${secondsLeft} second${secondsLeft === 1 ? '' : 's'}`;
         if (!isMountedRef.current) return;
-        showErrorMessage(t("home.alert.error"), `Please wait ${timeMessage} before creating a new trade.`);
+        showErrorMessage(t("home.alert.error"), t('home.alert.trade_cooldown', { count: secondsLeft }));
         setIsSubmitting(false);
         return;
       }
@@ -1388,7 +1382,7 @@ const HomeScreen = ({ selectedTheme }) => {
       }
 
       // Step 3: Show success message immediately
-      showSuccessMessage(t("home.alert.success"), "Your trade has been posted successfully!");
+      showSuccessMessage(t("home.alert.success"), t("home.alert.trade_posted"));
 
       // Step 4: Update timestamp and analytics
       if (isMountedRef.current) {
@@ -1434,7 +1428,7 @@ const HomeScreen = ({ selectedTheme }) => {
     } catch (error) {
       console.error("Error creating trade:", error);
       if (!isMountedRef.current) return;
-      showErrorMessage(t("home.alert.error"), "Something went wrong while posting the trade.");
+      showErrorMessage(t("home.alert.error"), t("home.alert.trade_post_failed"));
     } finally {
       if (isMountedRef.current) {
         setIsSubmitting(false);
@@ -1452,8 +1446,8 @@ const HomeScreen = ({ selectedTheme }) => {
     }
 
     if (isBanned) {
-      const reason = banDetails?.reason || 'Access Denied';
-      showErrorMessage(t("chat.access_denied", { defaultValue: 'Access Denied' }), t("chat.banned_message", { defaultValue: `You are banned: ${reason}` }));
+      const reason = banDetails?.reason;
+      showErrorMessage(t("chat.access_denied"), reason ? t('home.alert.trade_banned_reason', { reason }) : t('home.alert.trade_banned'));
       return;
     }
 
@@ -1546,6 +1540,15 @@ const HomeScreen = ({ selectedTheme }) => {
     return { myDemand, theirDemand, myHotCount, theirHotCount, tips: tips.slice(0, 3) };
   }, [hasItems, wantsItems, analyticsMaps, tradeStatus, t]);
 
+  // "Should I take it?" — Me gives hasItems, gets wantsItems.
+  const advice = useMemo(() => adviseTrade({
+    give: hasItems,
+    receive: wantsItems,
+    giveTotal: hasTotal,
+    getTotal: wantsTotal,
+    maps: analyticsMaps,
+  }), [hasItems, wantsItems, hasTotal, wantsTotal, analyticsMaps]);
+
 
   const styles = useMemo(() => getStyles(isDarkMode, c), [isDarkMode]);
 
@@ -1636,8 +1639,45 @@ const HomeScreen = ({ selectedTheme }) => {
                       </View>
                     </View>
 
-                    {/* ── Smart Tip ── */}
-                    {tradeInsights.tips.length > 0 && (() => {
+                    {/* ── Verdict: value + how easily the pets trade + recent moves ── */}
+                    {advice && (() => {
+                      const vs = VERDICT_STYLE[advice.verdict];
+                      const [main, extra] = advice.reasons;
+                      if (!showTips) return (
+                        <TouchableOpacity onPress={() => setShowTips(true)} style={{ alignItems: 'center', marginTop: 4 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '600', color: isDarkMode ? '#475569' : '#94a3b8' }}>{t('home.insights.show_tips')}</Text>
+                        </TouchableOpacity>
+                      );
+                      return (
+                        <View style={{ alignItems: 'center', marginTop: 6, paddingHorizontal: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => setShowTips(false)}
+                            activeOpacity={0.7}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1,
+                              backgroundColor: vs.color + '18',
+                              paddingLeft: 12, paddingRight: 8, paddingVertical: 6,
+                              borderRadius: 20,
+                            }}
+                          >
+                            <Text style={{ fontSize: 14 }}>{vs.emoji}</Text>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: vs.color, flexShrink: 1 }}>
+                              {t(`trade_advice.verdict_${advice.verdict}`)}
+                              {main ? ` · ${t(`trade_advice.${main.key}`, main.params)}` : ''}
+                            </Text>
+                            <Icon name="close-circle" size={14} color={vs.color + '60'} />
+                          </TouchableOpacity>
+                          {extra && (
+                            <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#94a3b8' : '#64748b', marginTop: 4, textAlign: 'center' }}>
+                              {t(`trade_advice.${extra.key}`, extra.params)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
+
+                    {/* ── Smart Tip (only while one side is still empty) ── */}
+                    {!advice && tradeInsights.tips.length > 0 && (() => {
                       const mainTip = tradeInsights.tips[0];
                       const extraTips = tradeInsights.tips.slice(1);
                       if (!showTips) return (
@@ -1857,7 +1897,7 @@ const HomeScreen = ({ selectedTheme }) => {
                     <Icon name="time-outline" size={14} color={isDarkMode ? '#aaa' : '#888'} style={{ marginRight: 6 }} />
                   )}
                   <Text style={[styles.lastUpdatedText, { color: isDarkMode ? '#aaa' : '#666' }]}>
-                    {refreshing ? 'Updating...' : `${t('home.updated_prefix')}${getLastUpdatedText()}`}
+                    {refreshing ? t('home.updating') : getLastUpdatedText()}
                   </Text>
                   {!refreshing && (
                     <Icon name="refresh-outline" size={14} color={config.colors.primary} style={{ marginLeft: 6 }} />
@@ -1911,14 +1951,14 @@ const HomeScreen = ({ selectedTheme }) => {
                   <View style={[styles.summaryBox, styles.hasBox]}>
                     <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
                     <View style={{ justifyContent: 'space-between', flexDirection: 'row' }} >
-                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                      <Text style={styles.priceValue}>{t('value.label')}</Text>
                       <Text style={styles.priceValue}>${hasTotal?.toLocaleString()}</Text>
                     </View>
                   </View>
                   <View style={[styles.summaryBox, styles.wantsBox]}>
                     <View style={{ width: '90%', backgroundColor: '#e0e0e0', alignSelf: 'center', }} />
                     <View style={{ justifyContent: 'space-between', flexDirection: 'row' }} >
-                      <Text style={styles.priceValue}>{t('home.value')}:</Text>
+                      <Text style={styles.priceValue}>{t('value.label')}</Text>
                       <Text style={styles.priceValue}>${wantsTotal?.toLocaleString()}</Text>
                     </View>
                   </View>
@@ -1938,7 +1978,7 @@ const HomeScreen = ({ selectedTheme }) => {
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <Icon name="book-outline" size={14} color="#fff" />
-                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>Log Trade</Text>
+                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>{t('home.log_trade')}</Text>
                 </View>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1961,7 +2001,7 @@ const HomeScreen = ({ selectedTheme }) => {
               <View style={styles.drawerHeader}>
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search..."
+                  placeholder={t('home.search_placeholder')}
                   value={searchText}
                   onChangeText={setSearchText}
                   placeholderTextColor={isDarkMode ? '#999' : '#666'}
@@ -2003,7 +2043,7 @@ const HomeScreen = ({ selectedTheme }) => {
                       ]}>{getCategoryLabel(category)}</Text>
                       {category === 'STICKERS' && (
                         <View style={styles.newBadge}>
-                          <Text style={styles.newBadgeText}>NEW</Text>
+                          <Text style={styles.newBadgeText}>{t('home_tab.new')}</Text>
                         </View>
                       )}
                     </TouchableOpacity>

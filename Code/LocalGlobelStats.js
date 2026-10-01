@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
 import { serverNowMs } from './Helper/serverTime';
+import { isSquadProActive, onSquadProChange } from './Helper/squad';
 
 let storage;
 try {
@@ -17,7 +18,7 @@ try {
     getString: () => undefined,
     getBoolean: () => undefined,
     set: () => {},
-    delete: () => {},
+    remove: () => {},
     clearAll: () => {},
   };
 }
@@ -250,6 +251,22 @@ export const LocalStateProvider = ({ children }) => {
     }
   }, []);
 
+  // Pro = a RevenueCat purchase OR Pro earned through the Squad (server-side,
+  // supabase/034_squad.sql). RevenueCat is the only thing that sets rcPro;
+  // Squad Pro changes (earned, expired, sign-out) re-run the merge.
+  const rcProRef = useRef(null);
+  const applyPro = useCallback((rcPro) => {
+    if (typeof rcPro === 'boolean') rcProRef.current = rcPro;
+    const squadPro = isSquadProActive();
+    if (rcProRef.current === null) {
+      // RevenueCat hasn't answered yet: only ever add Pro here, never remove it.
+      if (squadPro) updateLocalState('isPro', true);
+      return;
+    }
+    updateLocalState('isPro', rcProRef.current || squadPro);
+  }, [updateLocalState]);
+  useEffect(() => onSquadProChange(() => applyPro()), [applyPro]);
+
   const checkEntitlements = useCallback(async () => {
     try {
       const customerInfo = await Purchases.getCustomerInfo();
@@ -258,7 +275,7 @@ export const LocalStateProvider = ({ children }) => {
         (key) => key.toLowerCase() === 'pro'
       );
       const proStatus = !!(proKey && entitlements[proKey]);
-      updateLocalState('isPro', proStatus);
+      applyPro(proStatus);
 
       setMySubscriptions(
         proStatus
@@ -271,7 +288,7 @@ export const LocalStateProvider = ({ children }) => {
     } catch (error) {
       // Silently handle
     }
-  }, [updateLocalState]);
+  }, [applyPro]);
 
   const initRevenueCat = useCallback(async () => {
     try {
@@ -304,7 +321,7 @@ export const LocalStateProvider = ({ children }) => {
         (key) => key.toLowerCase() === 'pro'
       );
       const proStatus = !!(proKey && entitlements[proKey]);
-      updateLocalState('isPro', proStatus);
+      applyPro(proStatus);
 
       if (proStatus) {
         setMySubscriptions(
@@ -318,7 +335,7 @@ export const LocalStateProvider = ({ children }) => {
       }
     });
     return () => { if (listener && typeof listener.remove === 'function') listener.remove(); };
-  }, [updateLocalState]);
+  }, [applyPro, updateLocalState]);
 
 
   const restorePurchases = useCallback(async (setLoadingReStore) => {
@@ -331,7 +348,7 @@ export const LocalStateProvider = ({ children }) => {
       );
       const proStatus = !!(proKey && entitlements[proKey]);
 
-      updateLocalState('isPro', proStatus);
+      applyPro(proStatus);
       setMySubscriptions(
         proStatus
           ? customerInfo.activeSubscriptions.map((plan) => ({
@@ -345,7 +362,7 @@ export const LocalStateProvider = ({ children }) => {
     } finally {
       setLoadingReStore(false);
     }
-  }, [updateLocalState]);
+  }, [applyPro]);
 
   // Handle in-app purchase
   const purchaseProduct = useCallback(async (packageToPurchase, setLoading, track) => {
@@ -358,7 +375,7 @@ export const LocalStateProvider = ({ children }) => {
       );
       const proStatus = !!(proKey && entitlements[proKey]);
 
-      updateLocalState('isPro', proStatus);
+      applyPro(proStatus);
       setMySubscriptions(
         proStatus
           ? customerInfo.activeSubscriptions.map((plan) => ({
@@ -371,15 +388,15 @@ export const LocalStateProvider = ({ children }) => {
       if (track) {
       }
 
-      showSuccessMessage('Success', 'Purchase completed successfully!');
+      showSuccessMessage(t('alert.success'), t('alert.purchase_success'));
     } catch (error) {
       if (!error.userCancelled) {
-        showErrorMessage('Error', 'Failed to complete purchase. Please try again.');
+        showErrorMessage(t('alert.error'), t('alert.purchase_failed'));
       }
     } finally {
       setLoading(false);
     }
-  }, [updateLocalState]);
+  }, [applyPro, t]);
 
   const clearKey = useCallback((key) => {
     setLocalState((prevState) => {
@@ -387,7 +404,7 @@ export const LocalStateProvider = ({ children }) => {
       delete newState[key];
       return newState;
     });
-    storage.delete(key);
+    storage.remove(key);
   }, []);
 
   const clearAll = useCallback(() => {

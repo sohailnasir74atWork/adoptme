@@ -93,7 +93,7 @@ const BlockedUsersScreen = () => {
     };
   }, [user?.id, localState?.bannedUsers, appdatabase]);
   // ✅ Memoize handleUnblockUser
-  const handleUnblockUser = useCallback(async (selectedUserId) => {
+  const handleUnblockUser = useCallback(async (selectedUserId, name) => {
     // ✅ Safety check
     if (!selectedUserId) {
       console.error('❌ Invalid user ID for unblock');
@@ -122,7 +122,7 @@ const BlockedUsersScreen = () => {
       });
 
       // ✅ Show Alert
-      showSuccessMessage(t("home.alert.success"), t("chat.user_unblocked"));
+      showSuccessMessage(t("home.alert.success"), t("profile.user_unblocked", { name: name || t("chat.anonymous") }));
     } catch (error) {
       console.error('❌ Error unblocking user:', error);
     }
@@ -153,7 +153,7 @@ const BlockedUsersScreen = () => {
           <Text style={styles.userName}>{displayName}</Text>
           <TouchableOpacity
             style={styles.unblockButton}
-            onPress={() => handleUnblockUser(userId)}
+            onPress={() => handleUnblockUser(userId, displayName)}
           >
             <Icon name="person-remove-outline" size={20} color={c.text} />
             <Text style={styles.unblockText}>{t("chat.unblock")}</Text>
@@ -175,7 +175,7 @@ const BlockedUsersScreen = () => {
           keyExtractor={(item, index) => item?.id || `blocked-${index}`}
           renderItem={renderBlockedUser}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true}
+          removeClippedSubviews={false}
           maxToRenderPerBatch={10}
           windowSize={10}
         />

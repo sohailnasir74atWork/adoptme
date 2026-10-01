@@ -22,6 +22,7 @@ import { useGlobalState } from "../GlobelStats";
 import InterstitialAdManager from "../Ads/IntAd";
 import { useLocalState } from "../LocalGlobelStats";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll"; // ✅ default import
+import { useTranslation } from "react-i18next";
 
 // Base URL for your wallpapers
 const IMAGE_BASE = "https://pull-gag.b-cdn.net/wallpaper";
@@ -30,6 +31,7 @@ const IMAGE_BASE = "https://pull-gag.b-cdn.net/wallpaper";
 const PAGE_SIZE = 14;
 
 const HDWallpaperScreen = () => {
+  const { t } = useTranslation();
   const { appdatabase } = useGlobalState();
   const { localState } = useLocalState();
 
@@ -253,8 +255,8 @@ const HDWallpaperScreen = () => {
           const granted = await requestAndroidGalleryPermission();
           if (!granted) {
             Alert.alert(
-              'Permission required',
-              'Storage permission is needed to save wallpapers to your gallery.',
+              t('wallpaper.permission_title'),
+              t('wallpaper.permission_message'),
             );
             return;
           }
@@ -299,21 +301,21 @@ const HDWallpaperScreen = () => {
             );
           }
 
-          Alert.alert('Downloaded', 'Wallpaper saved to your gallery.');
+          Alert.alert(t('wallpaper.downloaded_title'), t('wallpaper.downloaded_message'));
         } else {
-          Alert.alert('Error', 'Could not download this image.');
+          Alert.alert(t('alert.error'), t('wallpaper.download_failed'));
         }
       } catch (e) {
         console.log('Download error (raw):', e);
         Alert.alert(
-          'Error',
-          e?.message || 'Something went wrong while downloading.',
+          t('alert.error'),
+          t('wallpaper.download_error'),
         );
       } finally {
         setDownloadingId(null);
       }
     },
-    [appdatabase],
+    [appdatabase, t],
   );
 
 
@@ -477,7 +479,7 @@ const HDWallpaperScreen = () => {
     return (
       <View style={styles.footer}>
         <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
-          <Text style={styles.loadMoreText}>Load more</Text>
+          <Text style={styles.loadMoreText}>{t('wallpaper.load_more')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -486,6 +488,7 @@ const HDWallpaperScreen = () => {
   return (
     <View style={styles.container}>
       <FlatList
+        removeClippedSubviews={false}
         data={items}
         numColumns={2}
         keyExtractor={keyExtractor}

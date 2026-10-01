@@ -57,6 +57,30 @@ const getFirebaseAuthErrorMessage = (error, t) => {
   }
 };
 
+// Renders a translated sentence whose linked words are wrapped in tags, e.g.
+// "By continuing, you agree to our <terms>Terms</terms> and <privacy>Privacy
+// Policy</privacy>." Translators get the whole sentence and can move the
+// tagged words wherever their grammar needs them; each tag becomes a tappable
+// nested <Text> calling handlers[tag]. A tag with no handler renders as plain
+// text, and a sentence with no tags renders unchanged.
+const renderLinkedSentence = (sentence, handlers, linkStyle) => {
+  const parts = [];
+  const tagRe = /<(\w+)>([\s\S]*?)<\/\1>/g;
+  let last = 0;
+  let match;
+  while ((match = tagRe.exec(sentence)) !== null) {
+    if (match.index > last) parts.push(sentence.slice(last, match.index));
+    const [, tag, label] = match;
+    const onPress = handlers[tag];
+    parts.push(onPress
+      ? <Text key={`${tag}-${match.index}`} style={linkStyle} onPress={onPress}>{label}</Text>
+      : label);
+    last = tagRe.lastIndex;
+  }
+  if (last < sentence.length) parts.push(sentence.slice(last));
+  return parts;
+};
+
 // Detect "user changed their mind" cancellations from Apple/Google sign-in
 // sheets so we don't show a scary error toast for what's just a dismiss.
 const isUserCancellation = (error) => {
@@ -142,7 +166,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     const isValidEmail = (em) => /\S+@\S+\.\S+/.test(em);
     if (!isValidEmail(trimmedEmail)) {
-      showErrorMessage(t('home.alert.error'), t('signin.error_input_message'));
+      showErrorMessage(t('home.alert.error'), t('signin.error_invalid_email'));
       return;
     }
 
@@ -207,7 +231,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
 
     const isValidEmail = (em) => /\S+@\S+\.\S+/.test(em);
     if (!isValidEmail(trimmedEmail)) {
-      showErrorMessage(t('home.alert.error'), t('signin.error_input_message'));
+      showErrorMessage(t('home.alert.error'), t('signin.error_invalid_email'));
       return;
     }
 
@@ -233,7 +257,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       if (TEMP_EMAIL_DOMAINS.has(emailDomain)) {
         showErrorMessage(
           t('home.alert.error'),
-          'Temporary or disposable email addresses are not allowed. Please use a real email address (Gmail, Outlook, Yahoo, etc.).'
+          t('signin.error_disposable_email')
         );
         return;
       }
@@ -345,7 +369,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               {isRegisterMode
                 ? t('signin.title_register')
                 : isForgotPasswordMode
-                  ? t('signin.title_forget_password')
+                  ? t('signin.title_reset_password')
                   : t('signin.title_signin')}
             </Text>
 
@@ -394,7 +418,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
               onPress={() => setIsForgotPasswordMode(!isForgotPasswordMode)}
             >
               <Text style={styles.secondaryButtonText}>
-                {isForgotPasswordMode ? t('signin.mode_signin') : t('signin.mode_forget_password')}
+                {isForgotPasswordMode ? t('signin.back_to_sign_in') : t('signin.forgot_password')}
               </Text>
             </TouchableOpacity>
 
@@ -497,15 +521,11 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
             </TouchableOpacity>
 
             <Text style={[styles.legalText, { color: selectedTheme.colors.text }]}>
-              {t('signin.legal_prefix', { defaultValue: 'By continuing, you agree to our ' })}
-              <Text style={styles.legalLink} onPress={handleOpenTerms}>
-                {t('signin.legal_terms', { defaultValue: 'Terms' })}
-              </Text>
-              {t('signin.legal_and', { defaultValue: ' and ' })}
-              <Text style={styles.legalLink} onPress={handleOpenPrivacy}>
-                {t('signin.legal_privacy', { defaultValue: 'Privacy Policy' })}
-              </Text>
-              .
+              {renderLinkedSentence(
+                t('signin.legal_agree'),
+                { terms: handleOpenTerms, privacy: handleOpenPrivacy },
+                styles.legalLink,
+              )}
             </Text>
           </SwipeableBottomDrawer>
         </Pressable>

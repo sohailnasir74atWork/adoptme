@@ -48,10 +48,12 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
     push(reportsRef, reportData)
       .then(() => {
         setLoading(false); // Stop loader
+        const reasonLabel = showCustomInput
+          ? customReason
+          : t(selectedReason === "Fraud" ? "trade.report.reason_fraud" : "trade.report.reason_inappropriate");
         Alert.alert(
           t("trade.report.success_title"),
-          `${t("trade.report.trade_id_label")}${trade.id}\n${t("trade.report.reason_label") || "Reason"}: ${showCustomInput ? customReason : selectedReason
-          }\n${t("trade.report.success_message")}`
+          t("trade.report.success_body", { id: trade.id, reason: reasonLabel })
         );
         onClose(true); // Indicate success
       })
@@ -69,8 +71,8 @@ const ReportTradePopup = ({ visible, trade, onClose }) => {
       <View style={styles.overlay}>
         <View style={styles.popup}>
           <Text style={styles.title}>{t("trade.report.title")}</Text>
-          <Text style={styles.messageText}>{`${t("trade.report.trade_id_label")}${trade?.id || t("profile.anonymous")}`}</Text>
-          <Text style={styles.messageText}>{`${t("trade.report.trader_label")}${trade?.traderName || t("profile.anonymous")}`}</Text>
+          <Text style={styles.messageText}>{t("trade.report.trade_id_line", { id: trade?.id || t("profile.anonymous") })}</Text>
+          <Text style={styles.messageText}>{t("trade.report.trader_line", { name: trade?.traderName || t("profile.anonymous") })}</Text>
 
           <View style={styles.optionsContainer}>
             {["Inappropriate", "Fraud"].map((reason) => {

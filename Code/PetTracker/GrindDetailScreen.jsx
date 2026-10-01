@@ -189,7 +189,7 @@ const GrindDetailScreen = () => {
               {allDone
                 ? '🎉'
                 : eta != null
-                  ? t('tracker.days_to_go', { count: eta, defaultValue: 'About {{count}} days to go' })
+                  ? t('tracker.about_days_left', { count: eta })
                   : t('tracker.almost_there', { defaultValue: 'Almost there!' })}
             </Text>
             <Text style={styles.heroSub}>
@@ -248,13 +248,13 @@ const GrindDetailScreen = () => {
         {advOpen && (
           <View style={styles.advBody}>
             <Text style={styles.advLine}>
-              {totals.pct}%  ·  {t('tracker.tasks_left', { count: totals.remaining, defaultValue: '{{count}} tasks left' })}
-              {'  ·  ≈ '}{potions} {t('tracker.potions', { defaultValue: 'potions' })}
+              {totals.pct}%  ·  {t('tracker.task_left_count', { count: totals.remaining })}
+              {'  ·  '}{t('tracker.potions_approx', { count: potions })}
             </Text>
             <View style={styles.paceRow}>
               {pace != null ? (
                 <Text style={styles.paceMeasured}>
-                  {t('tracker.your_pace', { count: pace, defaultValue: 'You do about {{count}} tasks a day' })}
+                  {t('tracker.daily_pace', { count: pace })}
                 </Text>
               ) : (
                 <>
@@ -265,7 +265,7 @@ const GrindDetailScreen = () => {
                       onPress={() => updateGrindFields(grind.id, { tasksPerDay: p })}
                       style={[styles.paceChip, grind.tasksPerDay === p && { backgroundColor: goalColor, borderColor: goalColor }]}
                     >
-                      <Text style={[styles.paceChipText, grind.tasksPerDay === p && { color: '#fff' }]}>{p}/d</Text>
+                      <Text style={[styles.paceChipText, grind.tasksPerDay === p && { color: '#fff' }]}>{t('tracker.per_day_short', { value: p })}</Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -331,7 +331,7 @@ const LogTasksModal = ({ visible, onClose, grind, slotIndex, goalColor, c, t }) 
       key: `n${n}`,
       icon: 'paw',
       color: goalColor,
-      label: t('tracker.tasks_total', { count: n, defaultValue: '{{count}} tasks' }),
+      label: t('tracker.task_count', { count: n }),
       run: () => logTasks(grind.id, slotIndex, n),
     })),
     {

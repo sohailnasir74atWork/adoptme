@@ -27,8 +27,9 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
 import PetModal from '../ChatScreen/PrivateChat/PetsModel';
 import { useLocalState } from '../LocalGlobelStats';
-import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
+import { fetchAnalyticsData, getDemandScore, getHotStatus, getMarket, normalizeName } from '../Helper/analyticsDataHelper';
 import { getThemeColors } from '../Helper/themeColors';
+import { syncTradeInventory, setDreamKeyLocal } from '../Helper/tradeMatch';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import BannerAdComponent from '../Ads/bannerAds';
@@ -178,6 +179,9 @@ const TradeJournal = ({
         // Sync to MMKV so next open is instant
         updateLocalState('ownedPets', owned);
         updateLocalState('wishlistPets', wishlist);
+        // Trade Match: keep the public lists current (no-op when unchanged).
+        if ('dreamPetKey' in data) setDreamKeyLocal(uid, data.dreamPetKey || null);
+        syncTradeInventory(uid, owned, wishlist);
       }
     } catch (err) {
       console.warn('[MyStuff] fetch pets error:', err?.message);
@@ -348,6 +352,7 @@ const TradeJournal = ({
       // Sync MMKV immediately so HomeScreen & next open reflect changes
       updateLocalState('ownedPets', newOwned);
       updateLocalState('wishlistPets', newWishlist);
+      syncTradeInventory(uid, newOwned, newWishlist);
     } catch (err) {
       console.warn('[MyStuff] save error:', err?.message);
     }
@@ -407,7 +412,7 @@ const TradeJournal = ({
             } catch {
               Alert.alert(
                 t('trade_journal.alerts.error', { defaultValue: 'Error' }),
-                t('trade_journal.alerts.could_not_clear', { defaultValue: 'Could not clear inventory.' })
+                t('trade_journal.alerts.could_not_clear_inventory')
               );
             }
           },
@@ -436,7 +441,7 @@ const TradeJournal = ({
             } catch {
               Alert.alert(
                 t('trade_journal.alerts.error', { defaultValue: 'Error' }),
-                t('trade_journal.alerts.could_not_clear', { defaultValue: 'Could not clear wishlist.' })
+                t('trade_journal.alerts.could_not_clear_wishlist')
               );
             }
           },
@@ -505,7 +510,13 @@ const TradeJournal = ({
   }, [parsedPetData, valueSource]);
 
   // ── Demand data ──
-  const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  const [rawAnalyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  // Value movers come from Elvebredd's diff. In GG mode the numbers on screen
+  // are GG's, so an Elvebredd "+X%" beside them would be someone else's move.
+  const analyticsMaps = useMemo(
+    () => (valueSource === VALUE_SOURCE.GG ? { ...rawAnalyticsMaps, hotMap: {}, dropMap: {} } : rawAnalyticsMaps),
+    [rawAnalyticsMaps, valueSource],
+  );
 
   // ── Computed values ──
   const portfolioValue = useMemo(() =>
@@ -745,6 +756,38 @@ const TradeJournal = ({
                   {t('trade_journal.my_pets.best_assets')} {highDemand.sort((a, b) => b.demandScore - a.demandScore).slice(0, 3).map(p => p.name).join(', ')}
                 </Text>
               )}
+              {/* Your pets this week: value moves + the one most asked for */}
+              {(() => {
+                const seen = new Set();
+                let up = null, down = null, wanted = null;
+                ownedPets.forEach((p) => {
+                  const key = normalizeName(p.name);
+                  if (!key || seen.has(key)) return;
+                  seen.add(key);
+                  const h = analyticsMaps.hotMap?.[key];
+                  const d = analyticsMaps.dropMap?.[key];
+                  const m = getMarket(p.name, analyticsMaps.marketMap);
+                  if (h && (!up || h.pct > up.pct)) up = { name: p.name, pct: h.pct };
+                  if (d && (!down || d.pct < down.pct)) down = { name: p.name, pct: Math.abs(d.pct) };
+                  if (m?.liquidity === 'fast' && (!wanted || m.wanted > wanted.count)) wanted = { name: p.name, count: m.wanted };
+                });
+                if (!up && !down && !wanted) return null;
+                return (
+                  <View style={{ marginTop: 10, borderRadius: 10, padding: 10, backgroundColor: isDarkMode ? '#0f172a' : '#F8FAFC', gap: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: textColor }}>{t('trade_journal.market.title')}</Text>
+                    {up && <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '600' }}>📈 {t('trade_journal.market.went_up', up)}</Text>}
+                    {down && <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '600' }}>📉 {t('trade_journal.market.went_down', down)}</Text>}
+                    {wanted && (
+                      <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('TradeMatch')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ flex: 1, fontSize: 11, color: '#3B82F6', fontWeight: '600' }}>
+                          ⚡ {t('trade_journal.market.in_demand', wanted)}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: '#3B82F6', fontWeight: '800' }}>{t('trade_journal.market.find_trade')} ›</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })()}
             </View>
           );
         })()}
@@ -1007,7 +1050,7 @@ const TradeJournal = ({
                   color: pet.availableForTrade ? '#10B981' : '#D97706',
                   textAlign: 'center',
                 }}>
-                  {pet.availableForTrade ? '✅ For Trade' : '🔒 Private'}
+                  {pet.availableForTrade ? t('trade_journal.my_pets.pill_for_trade') : t('trade_journal.my_pets.pill_private')}
                 </Text>
               </TouchableOpacity>
             </TouchableOpacity>
@@ -1225,7 +1268,7 @@ const TradeJournal = ({
                       fontWeight: '800',
                       color: pet.availableForTrade ? '#10B981' : '#D97706',
                     }}>
-                      {pet.availableForTrade ? '✅ Trading' : '🔒 Private'}
+                      {pet.availableForTrade ? t('trade_journal.goals.pill_trading') : t('trade_journal.goals.pill_private')}
                     </Text>
                   </TouchableOpacity>
                   {/* Delete */}
@@ -1450,6 +1493,7 @@ const TradeJournal = ({
 
   const renderTimeline = () => (
     <FlatList
+      removeClippedSubviews={false}
       data={history}
       keyExtractor={(item, i) => item.id || `t-${i}`}
       contentContainerStyle={styles.listContent}

@@ -1,0 +1,303 @@
+rules_version = '2';
+
+// Adopt Me Firestore rules — replaces the test-mode catch-all (2026-09-29).
+//
+// Backward compatible by design: every read and write an installed app build
+// or the website makes (current code AND anything removed in the last ~6
+// months, mapped file-by-file) is still allowed. What changes: signed-out
+// users can no longer write anything, users can only write as themselves,
+// others can only touch the counters/maps the app actually lets them touch,
+// and moderation actions need real staff status.
+//
+// Staff = founder email, or a staff/{uid} doc kept by the mirrorStaffToFirestore
+// Cloud Function from RTDB users/{uid}/admin and /isModerator (the same
+// "admin or moderator" gate the app uses).
+//
+// Collections with no match below are denied (Firestore's default).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isFounder() {
+      return signedIn() && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in ['thesolanalabs@gmail.com', 'sohailnasir74business@gmail.com', 'sohailnasir74@gmail.com'];
+    }
+    function isStaff() {
+      return signedIn() && (isFounder() || exists(/databases/$(database)/documents/staff/$(request.auth.uid)));
+    }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    // A per-user map field (reactions.{uid}, likes.{uid}, voters.{uid}) where
+    // the writer may only add/change/remove their own entry.
+    function ownEntryOnly(field) {
+      return !(field in changed())
+        || request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([me()]);
+    }
+    function ownerIs(field) { return signedIn() && resource.data.get(field, null) == me(); }
+    function createsAs(field) { return signedIn() && request.resource.data.get(field, null) == me(); }
+
+    // ── Trades (feed, featured, search; website renders them signed out) ──
+    match /trades_new/{tradeId} {
+      allow read: if true;
+      allow create: if createsAs('userId');
+      allow update: if (ownerIs('userId') && request.resource.data.userId == me())
+        || (signedIn() && changed().hasOnly(['reactions']) && ownEntryOnly('reactions'))
+        || isStaff();
+      allow delete: if ownerIs('userId') || isStaff();
+    }
+    // Legacy trade collection (builds from April 2025).
+    match /trades/{tradeId} {
+      allow read: if true;
+      allow create: if createsAs('userId');
+      allow update, delete: if ownerIs('userId') || isStaff();
+    }
+
+    // ── Design feed posts ──
+    match /designPosts/{postId} {
+      allow read: if true;
+      allow create: if createsAs('userId');
+      allow update: if ownerIs('userId') || isStaff()
+        || (signedIn()
+            && changed().hasOnly(['reactions', 'likes', 'commentCount', 'reportCount', 'report', 'banned'])
+            && ownEntryOnly('reactions') && ownEntryOnly('likes'));
+      allow delete: if ownerIs('userId') || isStaff();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if createsAs('userId');
+        allow update: if ownerIs('userId') || isStaff()
+          || (signedIn() && changed().hasOnly(['likes']) && ownEntryOnly('likes'));
+        allow delete: if ownerIs('userId') || isStaff();
+      }
+    }
+
+    // ── Statuses (stories) ──
+    match /statuses/{statusId} {
+      allow read: if true;
+      allow create: if createsAs('userId');
+      allow update: if ownerIs('userId') || isStaff()
+        || (signedIn()
+            && changed().hasOnly(['viewedBy', 'reactions', 'pollVotes', 'commentCount'])
+            && ownEntryOnly('reactions'));
+      allow delete: if ownerIs('userId') || isStaff();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if createsAs('userId');
+        allow update: if ownerIs('userId') || isStaff()
+          || (signedIn() && changed().hasOnly(['likes']) && ownEntryOnly('likes'));
+        // The status owner clears everyone's comments when deleting a status.
+        allow delete: if ownerIs('userId') || isStaff()
+          || (signedIn() && get(/databases/$(database)/documents/statuses/$(statusId)).data.get('userId', null) == me());
+      }
+    }
+
+    // ── Polls (staff-authored, users vote) ──
+    match /polls/{pollId} {
+      allow read: if true;
+      allow create, delete: if isStaff();
+      allow update: if isStaff()
+        || (signedIn() && changed().hasOnly(['options', 'totalVotes', 'voters']) && ownEntryOnly('voters'));
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if createsAs('userId');
+        allow update, delete: if ownerIs('userId') || isStaff();
+      }
+    }
+
+    // ── Profiles ──
+    // Doc id = uid. Installed builds and the website open other players'
+    // profiles by reading this doc directly, so single-doc reads stay open for
+    // now; listing (bulk download) is closed. Other players' new builds read
+    // user_profiles_public instead.
+    match /user_profiles/{uid} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if signedIn() && me() == uid;
+      allow delete: if (signedIn() && me() == uid) || isStaff();
+    }
+    match /user_profiles_public/{uid} {
+      allow read: if true;
+      allow write: if false; // mirrorPublicProfile only
+    }
+
+    // `reviews` holds two kinds of doc:
+    //   reviews/{uid}              legacy copy of a player's profile (owner writes)
+    //   reviews/{toUid}_{fromUid}  a review (the reviewer writes)
+    // Lists must filter by toUserId or fromUserId (every app/website query
+    // does), so the legacy profile copies can't be bulk-listed.
+    match /reviews/{docId} {
+      allow get: if true;
+      allow list: if resource.data.toUserId is string || resource.data.fromUserId is string;
+      allow create, update: if signedIn() && (
+        (docId == me() && request.resource.data.get('toUserId', null) == null && request.resource.data.get('fromUserId', null) == null)
+        || (request.resource.data.fromUserId == me()
+            && request.resource.data.toUserId is string
+            && request.resource.data.toUserId != me()
+            && docId == request.resource.data.toUserId + '_' + me())
+      );
+      allow delete: if isStaff() || (signedIn() && (docId == me() || resource.data.get('fromUserId', null) == me()));
+    }
+
+    // Written by the rater onto the RATED player's doc (and by one-time
+    // migrations), always {averageRating, count, updatedAt}.
+    match /user_ratings_summary/{uid} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['averageRating', 'count', 'updatedAt']);
+      allow update: if isStaff() || (signedIn()
+        && changed().hasOnly(['averageRating', 'count', 'updatedAt'])
+        && (request.resource.data.get('count', 0) == resource.data.get('count', 0)
+            || request.resource.data.get('count', 0) == resource.data.get('count', 0) + 1)
+        && request.resource.data.get('averageRating', 0) >= 0
+        && request.resource.data.get('averageRating', 0) <= 5);
+      allow delete: if isStaff();
+    }
+
+    // ── Social ──
+    match /following/{id} {
+      allow read: if true;
+      allow create: if createsAs('followerId') && request.resource.data.get('followingId', null) != me();
+      allow update: if false;
+      allow delete: if ownerIs('followerId') || isStaff();
+    }
+
+    match /notifications/{id} {
+      allow read: if signedIn() && (resource.data.get('toUid', null) == me() || isStaff());
+      allow create: if createsAs('fromUid');
+      allow update: if ownerIs('toUid') && changed().hasOnly(['read']);
+      allow delete: if ownerIs('toUid') || isStaff();
+    }
+
+    // Write-only activity log. Builds before 2026-03-26 listed friends' docs
+    // and deleted the ones they had seen.
+    match /user_activity/{id} {
+      allow read: if signedIn();
+      allow create: if createsAs('userId');
+      allow update: if ownerIs('userId');
+      allow delete: if signedIn();
+    }
+
+    // Doc id = the two uids sorted and joined with "_". The app reads the doc
+    // before it exists, so access is decided by the id, not the data.
+    match /streaks/{pairId} {
+      allow get, create, update: if signedIn() && me() in pairId.split('_');
+      allow list: if signedIn() && me() in resource.data.users;
+      allow delete: if isStaff();
+    }
+
+    // ── Groups (membership lives here; chat itself is elsewhere) ──
+    function groupAdmin() {
+      return signedIn() && (resource.data.get('createdBy', null) == me()
+        || resource.data.get('members', {}).get(me(), {}).get('role', '') == 'admin');
+    }
+    // A member joining or leaving changes only their own membership.
+    function ownMembershipOnly() {
+      let before = resource.data.get('memberIds', []).toSet();
+      let after = request.resource.data.get('memberIds', []).toSet();
+      return changed().hasOnly(['memberIds', 'members', 'memberCount', 'updatedAt'])
+        && after.difference(before).union(before.difference(after)).hasOnly([me()])
+        && ownEntryOnly('members');
+    }
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if createsAs('createdBy');
+      allow update: if groupAdmin() || isStaff() || (signedIn() && ownMembershipOnly());
+      allow delete: if groupAdmin() || isStaff()
+        || (signedIn() && resource.data.get('memberIds', []) == [me()]);
+    }
+    match /group_invitations/{id} {
+      allow read: if signedIn();
+      allow create: if createsAs('invitedBy');
+      allow update: if isStaff() || ownerIs('invitedBy')
+        || (ownerIs('invitedUserId') && changed().hasOnly(['status', 'updatedAt', 'respondedAt']));
+      allow delete: if signedIn();
+    }
+    match /group_join_requests/{id} {
+      allow read: if signedIn();
+      allow create: if createsAs('requesterId');
+      allow update: if isStaff() || ownerIs('creatorId') || ownerIs('requesterId')
+        || (signedIn() && changed().hasOnly(['status', 'approvedAt', 'rejectedAt', 'rejectionReason', 'updatedAt']));
+      allow delete: if signedIn();
+    }
+
+    // ── Scammer database (app + website) ──
+    match /scammerSummaries/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.get('status', '') == 'unverified'
+        && request.resource.data.get('reportCount', 0) == 1;
+      allow update: if isStaff() || (signedIn()
+        && changed().hasOnly(['reportCount', 'updatedAt'])
+        && request.resource.data.reportCount == resource.data.get('reportCount', 0) + 1);
+      allow delete: if isStaff();
+    }
+    match /scammerDetails/{id} {
+      allow read: if true;
+      allow create: if createsAs('reporterUid');
+      allow update, delete: if isStaff();
+    }
+    match /userRateLimits/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    match /tracker_feedback/{id} {
+      allow read: if true;
+      allow create: if createsAs('userId');
+    }
+
+    // ── Server-written, public to read ──
+    match /leaderboard_cache/{id} { allow read: if true; allow write: if false; }
+    match /leaderboard/{id} { allow read: if true; allow write: if false; }
+    match /trade_analytics/{id} { allow read: if true; allow write: if false; }
+    match /online_users_node/{id} { allow read: if true; allow write: if false; }
+    match /online_users/{id} { allow read: if true; allow write: if false; }
+    match /wc2026_meta/{id} { allow read: if true; allow write: if false; }
+
+    match /staff/{uid} {
+      allow get: if signedIn() && me() == uid;
+      allow list, write: if false; // mirrorStaffToFirestore only
+    }
+
+    // Only the admin "Delete User Data" sweep touches this.
+    match /cosmetics_inventory/{id} {
+      allow read: if isStaff();
+      allow delete: if isStaff();
+    }
+
+    // ── Mini games: removed from the app, but builds on phones still run them ──
+    match /games/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+    match /game_stats/{uid} {
+      allow read: if true;
+      // The winner's stats are written by whoever runs the match.
+      allow create, update: if signedIn() && request.resource.data.keys().hasOnly(['petGameWins']);
+      allow delete: if isStaff();
+    }
+    match /petGuessingGame_rooms/{roomId} {
+      allow read, update, delete: if signedIn();
+      allow create: if createsAs('hostId');
+    }
+    match /petGuessingGame_userInvites/{inviteeUid}/invites/{roomId} {
+      allow read, update, delete: if signedIn()
+        && (me() == inviteeUid || resource == null || resource.data.get('fromUserId', null) == me());
+      allow create: if createsAs('fromUserId');
+    }
+
+    // ── World Cup 2026 (over; builds from Jul–Sep 2026 still call it) ──
+    match /wc2026_user_picks/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+    match /wc2026_scores/{uid} {
+      allow read: if true;
+      allow write: if signedIn() && me() == uid;
+    }
+    match /wc2026_predictions/{matchId} {
+      allow read: if true;
+      allow create, update: if signedIn() && request.resource.data.keys().hasOnly(['home', 'draw', 'away']);
+    }
+  }
+}

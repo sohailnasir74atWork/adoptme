@@ -446,7 +446,9 @@ const PrivateMessageInput = ({
       {replyTo && (
         <View style={styles.replyContainer}>
           <Text style={styles.replyText}>
-            {t('chat.replying_to')} {replyTo?.text || t('chat.message_placeholder')}
+            {replyTo?.text
+              ? t('chat.replying_to_text', { text: replyTo.text })
+              : t('chat.replying_to_message')}
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -629,10 +631,7 @@ const PrivateMessageInput = ({
           <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>
             {isSending
               ? t('chat.sending')
-              : t('chat.send_pets', {
-                count: selectedFruits.length,
-                defaultValue: 'Send {{count}} pets',
-              })}
+              : t('chat.send_items', { count: selectedFruits.length })}
           </Text>
         </TouchableOpacity>
       )}
@@ -649,7 +648,7 @@ const PrivateMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12, marginRight: 8 }}>
-            {t('chat.attached_images', { count: imageUris.length, suffix: imageUris.length > 1 ? 's' : '' })}
+            {t('chat.images_attached', { count: imageUris.length })}
           </Text>
           {imageUris.map((uri, index) => (
             <TouchableOpacity
@@ -680,7 +679,7 @@ const PrivateMessageInput = ({
           }}
         >
           <Text style={{ color: isDark ? '#ccc' : '#555', fontSize: 12 }}>
-            {t('chat.pets_selected', { count: selectedFruits.length })}
+            {t('chat.items_selected', { count: selectedFruits.length })}
           </Text>
 
           <TouchableOpacity

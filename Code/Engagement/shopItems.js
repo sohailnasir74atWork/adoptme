@@ -4,7 +4,13 @@
  *
  * Defines all egg tiers, reward pools, and cosmetic item definitions
  * for Profile Frames, Chat Text Colors, and Trade Card Backgrounds.
+ *
+ * i18n: item `name`s stay English — they are saved to RTDB/MMKV as data.
+ * Render them with getCosmeticName(). Rarity labels and egg names are
+ * display-only, so they are getters that translate at read time.
  */
+
+import i18n from '../../i18n';
 
 // ════════════════════════════════════════════════════════════
 //  RARITY TIERS
@@ -18,11 +24,11 @@ export const RARITY = {
 };
 
 export const RARITY_CONFIG = {
-  [RARITY.COMMON]:    { label: 'Common',    color: '#94a3b8', emoji: '⚪', bgLight: '#f1f5f9', bgDark: '#1e293b' },
-  [RARITY.UNCOMMON]:  { label: 'Uncommon',  color: '#22c55e', emoji: '🟢', bgLight: '#f0fdf4', bgDark: '#14532d' },
-  [RARITY.RARE]:      { label: 'Rare',      color: '#3b82f6', emoji: '🔵', bgLight: '#eff6ff', bgDark: '#1e3a5f' },
-  [RARITY.LEGENDARY]: { label: 'Legendary', color: '#f59e0b', emoji: '🟡', bgLight: '#fffbeb', bgDark: '#78350f' },
-  [RARITY.EXCLUSIVE]: { label: 'Exclusive', color: '#a855f7', emoji: '🟣', bgLight: '#faf5ff', bgDark: '#581c87' },
+  [RARITY.COMMON]:    { get label() { return i18n.t('shop.rarity.common'); },    color: '#94a3b8', emoji: '⚪', bgLight: '#f1f5f9', bgDark: '#1e293b' },
+  [RARITY.UNCOMMON]:  { get label() { return i18n.t('shop.rarity.uncommon'); },  color: '#22c55e', emoji: '🟢', bgLight: '#f0fdf4', bgDark: '#14532d' },
+  [RARITY.RARE]:      { get label() { return i18n.t('shop.rarity.rare'); },      color: '#3b82f6', emoji: '🔵', bgLight: '#eff6ff', bgDark: '#1e3a5f' },
+  [RARITY.LEGENDARY]: { get label() { return i18n.t('shop.rarity.legendary'); }, color: '#f59e0b', emoji: '🟡', bgLight: '#fffbeb', bgDark: '#78350f' },
+  [RARITY.EXCLUSIVE]: { get label() { return i18n.t('shop.rarity.exclusive'); }, color: '#a855f7', emoji: '🟣', bgLight: '#faf5ff', bgDark: '#581c87' },
 };
 
 // ════════════════════════════════════════════════════════════
@@ -1039,6 +1045,40 @@ export const CHAT_BG_COLORS = {
 export const ALL_ITEMS = { ...FRAMES, ...TEXT_COLORS, ...TRADE_BG_COLORS, ...BANNER_GRADIENTS, ...CHAT_BG_COLORS };
 
 // ════════════════════════════════════════════════════════════
+//  DISPLAY NAME (translated)
+//  `name` is saved to RTDB/MMKV, so it stays English as data. Translate by
+//  type + id at render time. Keyed per type because one id ('mint_fresh')
+//  exists in both TRADE_BG_COLORS and CHAT_BG_COLORS with different names.
+//  Falls back to the stored English name for unknown/removed ids.
+// ════════════════════════════════════════════════════════════
+const NAME_KEY_GROUP = {
+  [COSMETIC_TYPE.FRAME]: 'frames',
+  [COSMETIC_TYPE.TEXT_COLOR]: 'text_colors',
+  [COSMETIC_TYPE.TRADE_BG]: 'trade_bgs',
+  [COSMETIC_TYPE.BANNER]: 'banners',
+  [COSMETIC_TYPE.CHAT_BG]: 'chat_bgs',
+};
+const ITEMS_BY_TYPE = {
+  [COSMETIC_TYPE.FRAME]: FRAMES,
+  [COSMETIC_TYPE.TEXT_COLOR]: TEXT_COLORS,
+  [COSMETIC_TYPE.TRADE_BG]: TRADE_BG_COLORS,
+  [COSMETIC_TYPE.BANNER]: BANNER_GRADIENTS,
+  [COSMETIC_TYPE.CHAT_BG]: CHAT_BG_COLORS,
+};
+
+export const getCosmeticName = (item, typeHint) => {
+  if (!item) return '';
+  const id = item.id;
+  const type = item.type || typeHint;
+  let def = ITEMS_BY_TYPE[type]?.[id];
+  if (!def) def = ALL_ITEMS[id];
+  const fallback = item.name || def?.name || '';
+  const group = def ? NAME_KEY_GROUP[def.type] : null;
+  if (!group) return fallback;
+  return i18n.t(`shop.items.${group}.${id}`, { defaultValue: fallback });
+};
+
+// ════════════════════════════════════════════════════════════
 //  EGG DEFINITIONS
 //  Each egg has a cost and weighted drop table.
 //  Drop table maps rarity → weight (probability).
@@ -1046,7 +1086,7 @@ export const ALL_ITEMS = { ...FRAMES, ...TEXT_COLORS, ...TRADE_BG_COLORS, ...BAN
 export const EGGS = {
   common_egg: {
     id: 'common_egg',
-    name: 'Common Egg',
+    get name() { return i18n.t('shop.eggs.common_egg'); },
     emoji: '🥚',
     cost: 3,
     color: '#D4A574',
@@ -1061,7 +1101,7 @@ export const EGGS = {
   },
   star_egg: {
     id: 'star_egg',
-    name: 'Star Egg',
+    get name() { return i18n.t('shop.eggs.star_egg'); },
     emoji: '⭐',
     cost: 7,
     color: '#FBBF24',
@@ -1076,7 +1116,7 @@ export const EGGS = {
   },
   crystal_egg: {
     id: 'crystal_egg',
-    name: 'Crystal Egg',
+    get name() { return i18n.t('shop.eggs.crystal_egg'); },
     emoji: '💎',
     cost: 15,
     color: '#60A5FA',
@@ -1091,7 +1131,7 @@ export const EGGS = {
   },
   royal_egg: {
     id: 'royal_egg',
-    name: 'Royal Egg',
+    get name() { return i18n.t('shop.eggs.royal_egg'); },
     emoji: '👑',
     cost: 30,
     color: '#A855F7',

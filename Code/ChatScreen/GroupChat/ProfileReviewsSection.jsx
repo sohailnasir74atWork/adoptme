@@ -67,7 +67,7 @@ const ProfileReviewsSection = ({
         {STAR_OPTIONS.map((star) => {
           const isActive = starFilter === star;
           const label = star === null
-            ? (t('profile.filter_all') || 'All')
+            ? t('profile.filter_all')
             : `${star}★`;
 
           return (

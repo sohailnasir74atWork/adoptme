@@ -31,9 +31,8 @@ import { saveOwnPrivateProfile, getPrivateProfile } from './Code/Helper/privateP
 import { ref as dbRef, update as dbUpdate } from '@react-native-firebase/database';
 
 // Heavy screens stay out of the eager-import graph and are loaded on first
-// navigation via getComponent / inline require. ArrowGameScreen alone is
-// 2300+ lines; admin/analytics/leaderboard etc. are never visited by most
-// users. Each one used to add to JS bundle parse time on every cold start.
+// navigation via getComponent / inline require. Admin/analytics/leaderboard
+// etc. are never visited by most users. Each one used to add to JS bundle parse time on every cold start.
 
 
 
@@ -92,8 +91,10 @@ function App() {
   const { t } = useTranslation();
   const { localState, updateLocalState } = useLocalState();
 
-  // ✅ DOB gate — mandatory for all logged-in users
-  const showDobModal = !!user?.id && !user?.dateOfBirth;
+  // ✅ DOB gate — mandatory for all logged-in users. Not while the login
+  // reads are incomplete: the DOB may be on file and just not loaded yet, and
+  // the profile reload (GlobelStats) clears the flag once it is.
+  const showDobModal = !!user?.id && !user?.dateOfBirth && !user?.profileIncomplete;
   const handleDobSubmit = useCallback(async (dobString) => {
     if (!user?.id || !appdatabase) return;
     try {
@@ -298,10 +299,6 @@ function App() {
     />
   ), [selectedTheme, chatFocused, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo]);
 
-  const renderGameHub = useCallback(({ navigation }) => {
-    const GameHub = require('./Code/Engagement/GameHub').default;
-    return <GameHub navigation={navigation} />;
-  }, []);
   const renderValueScreen = useCallback(() => {
     const ValueScreen = require('./Code/ValuesScreen/ValueScreen').default;
     return <ValueScreen selectedTheme={selectedTheme} />;
@@ -352,17 +349,14 @@ function App() {
             getComponent={() => require('./Code/AppHelper/AdminDashboard').default}
           />
 
-          <Stack.Screen name="Analytics" options={{ title: 'Market Analytics', ...headerOptions }} getComponent={() => require('./Code/Analytics/AnalyticsScreen').default} />
+          <Stack.Screen name="Analytics" options={{ title: t('nav.market_analytics'), ...headerOptions }} getComponent={() => require('./Code/Analytics/AnalyticsScreen').default} />
           <Stack.Screen name="PetTracker" options={{ headerShown: false }} getComponent={() => require('./Code/PetTracker/PetTrackerScreen').default} />
           <Stack.Screen name="GrindDetail" options={{ headerShown: false }} getComponent={() => require('./Code/PetTracker/GrindDetailScreen').default} />
-          <Stack.Screen name="QuizBattleScreen" options={{ title: 'Quiz Battle', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/QuizBattle').default} />
-          <Stack.Screen name="TradeShowdownScreen" options={{ title: 'Trade Showdown', ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/TradeShowdown').default} />
           <Stack.Screen name="MysteryEggScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MysteryEgg').default} />
           <Stack.Screen name="MyCosmeticsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MyCosmeticsScreen').default} />
-          <Stack.Screen name="ArrowGameScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ArrowGameScreen').default} />
           <Stack.Screen name="BadgesScreen" options={{ headerShown: false }} getComponent={() => require('./Code/SettingScreen/BadgesScreen').default} />
-          <Stack.Screen name="NotificationFeedScreen" options={{ title: 'Notifications', ...headerOptions }} getComponent={() => require('./Code/Engagement/NotificationFeed').default} />
-          <Stack.Screen name="SocialDashboardScreen" options={{ title: 'Friends', ...headerOptions }} getComponent={() => require('./Code/AppHelper/SocialDashboard').default} />
+          <Stack.Screen name="NotificationFeedScreen" options={{ title: t('settings.notifications'), ...headerOptions }} getComponent={() => require('./Code/Engagement/NotificationFeed').default} />
+          <Stack.Screen name="SocialDashboardScreen" options={{ title: t('home_tab.action_friends'), ...headerOptions }} getComponent={() => require('./Code/AppHelper/SocialDashboard').default} />
           <Stack.Screen
             name="PrivateChatRoot"
             options={({ route }) => ({
@@ -383,14 +377,12 @@ function App() {
           >
             {(props) => <PrivateChatRootWrapper {...props} />}
           </Stack.Screen>
-          <Stack.Screen name="LeaderboardScreen" options={{ title: 'Leaderboard', ...headerOptions }} getComponent={() => require('./Code/ChatScreen/GroupChat/LeaderboardScreen').default} />
+          <Stack.Screen name="LeaderboardScreen" options={{ title: t('home_tab.action_leaderboard'), ...headerOptions }} getComponent={() => require('./Code/ChatScreen/GroupChat/LeaderboardScreen').default} />
           <Stack.Screen name="ModsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ModsScreen').default} />
+          <Stack.Screen name="TradeMatch" options={{ headerShown: false }} getComponent={() => require('./Code/TradeMatch/TradeMatchScreen').default} />
+          <Stack.Screen name="Squad" options={{ headerShown: false }} getComponent={() => require('./Code/Squad/SquadScreen').default} />
 
-          <Stack.Screen name="GameHub" options={{ title: 'Game Hub', ...headerOptions }}>
-            {renderGameHub}
-          </Stack.Screen>
-
-          <Stack.Screen name="ValueScreen" options={{ title: 'Pet Values', ...headerOptions }}>
+          <Stack.Screen name="ValueScreen" options={{ title: t('home_tab.action_pet_values'), ...headerOptions }}>
             {renderValueScreen}
           </Stack.Screen>
 
@@ -398,7 +390,7 @@ function App() {
             {renderSettings}
           </Stack.Screen>
 
-          <Stack.Screen name="MyStuffScreen" options={{ title: 'My Stuff', ...headerOptions }}>
+          <Stack.Screen name="MyStuffScreen" options={{ title: t('home.my_stuff'), ...headerOptions }}>
             {renderMyStuff}
           </Stack.Screen>
         </Stack.Navigator>
@@ -418,13 +410,14 @@ function App() {
 
       {/* Email news-and-updates opt-in: applies the sign-in checkbox, asks
           undecided users once, and backs the Settings switch. Waits for the
-          DOB gate, which it relies on for the 13+ check. */}
+          DOB gate, which it relies on for the 13+ check, and for a complete
+          profile (an unloaded DOB is not a missing one). */}
       <EmailOptInGate
         user={user}
         appdatabase={appdatabase}
         isDarkMode={theme === 'dark'}
         knownDob={user?.dateOfBirth || null}
-        blocked={showDobModal || attPrimerVisible}
+        blocked={showDobModal || attPrimerVisible || !!user?.profileIncomplete}
       />
 
       {/* ATT priming pre-prompt (iOS) — shown once before Apple's system

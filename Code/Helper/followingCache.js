@@ -37,7 +37,7 @@ try {
     getString: () => undefined,
     getNumber: () => undefined,
     set: () => {},
-    delete: () => {},
+    remove: () => {},
   };
 }
 
@@ -107,7 +107,7 @@ export const getFollowingIds = async (firestoreDB, userId, force = false) => {
 /** Drop the cache — e.g. on sign-out, so the next user doesn't inherit it. */
 export const clearFollowingCache = () => {
   try {
-    store.delete(KEY);
-    store.delete(`${KEY}_ts`);
+    store.remove(KEY);
+    store.remove(`${KEY}_ts`);
   } catch {}
 };

@@ -10,9 +10,14 @@ import { showErrorMessage } from '../Helper/MessageHelper';
 import InterstitialAdManager from '../Ads/IntAd';
 import { useTranslation } from 'react-i18next';
 
+// Same verdict as the calculator (HomeScreen getTradeStatus). This used to
+// answer "fair" for every trade with both sides filled, so a 100-for-10 share
+// card said Fair while the calculator behind it said Lose.
 const getTradeStatus = (hasTotal, wantsTotal) => {
-    if (hasTotal > 0 && wantsTotal === 0) return 'lose';
-    if (hasTotal === 0 && wantsTotal > 0) return 'win';
+    const has = Number(hasTotal) || 0;
+    const wants = Number(wantsTotal) || 0;
+    if (has > wants) return 'lose';
+    if (has < wants) return 'win';
     return 'fair';
 };
 

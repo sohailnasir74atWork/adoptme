@@ -64,7 +64,7 @@ try {
     getString: () => undefined,
     set: () => {},
     getNumber: () => undefined,
-    delete: () => {},
+    remove: () => {},
   };
 }
 const STATUS_CACHE_TTL = 60 * 60 * 1000;       // 1 hour — refetch only after this
@@ -1262,6 +1262,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   return (
     <View style={[styles.container, { borderBottomColor: isDarkMode ? '#1e293b' : 'rgba(0,0,0,0.05)' }]}>
       <FlatList
+        removeClippedSubviews={false}
         data={feedData}
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -1454,7 +1455,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                   })}
                   {pollTotalVotes > 0 && (
                     <Text style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
-                      {pollTotalVotes} {pollTotalVotes === 1 ? 'vote' : 'votes'}
+                      {t('poll.votes', { count: pollTotalVotes })}
                     </Text>
                   )}
                 </View>
@@ -1554,7 +1555,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                     }}
                   >
                     <FontAwesome name="paper-plane" size={12} color="#fff" solid />
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Chat</Text>
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>{t('feed.chat')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1564,7 +1565,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                 <View style={{ gap: 8 }}>
                   {(currentStatus.viewedBy?.length > 0 || reactionEntries.length > 0) && (
                     <Text style={{ fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)' }}>
-                      👁 {t('status_feed.views_count', { count: currentStatus.viewedBy?.length || 0 })}  •  {t('status_feed.reactions_count', { count: reactionEntries.length })}
+                      👁 {t('status_feed.view_count', { count: currentStatus.viewedBy?.length || 0 })}  •  {t('status_feed.reaction_count', { count: reactionEntries.length })}
                     </Text>
                   )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
@@ -1687,7 +1688,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                 onPress={() => { setIsPollMode(!isPollMode); if (!isPollMode) { setSelectedImage(null); setSelectedThemeId('none'); } }}
               >
                 <Text style={{ fontSize: 16 }}>📊</Text>
-                <Text style={{ color: isPollMode ? '#3B82F6' : subtextColor, fontSize: 12, fontWeight: isPollMode ? '700' : '500', marginLeft: 6 }}>Poll</Text>
+                <Text style={{ color: isPollMode ? '#3B82F6' : subtextColor, fontSize: 12, fontWeight: isPollMode ? '700' : '500', marginLeft: 6 }}>{t('status_feed.poll')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1703,7 +1704,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                         backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc',
                         borderColor: isDarkMode ? '#334155' : '#e2e8f0',
                       }]}
-                      placeholder={`Option ${i + 1}`}
+                      placeholder={t('status_feed.option_placeholder', { number: i + 1 })}
                       placeholderTextColor={subtextColor}
                       maxLength={60}
                       value={opt}
@@ -1728,7 +1729,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                     onPress={() => setPollOptions([...pollOptions, ''])}
                     style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9', borderWidth: 1, borderColor: isDarkMode ? '#334155' : '#e2e8f0' }}
                   >
-                    <Text style={{ color: subtextColor, fontSize: 12, fontWeight: '600' }}>+ Add Option</Text>
+                    <Text style={{ color: subtextColor, fontSize: 12, fontWeight: '600' }}>{t('status_feed.add_option')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1737,7 +1738,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
             {/* Theme selector (only for text-only statuses, no image or poll) */}
             {!selectedImage && !isPollMode && (
               <View style={{ marginBottom: 12 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: subtextColor, marginBottom: 8 }}>Background Theme</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: subtextColor, marginBottom: 8 }}>{t('status_feed.background_theme')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                   {STATUS_THEMES.map((theme) => (
                     <TouchableOpacity
@@ -1753,7 +1754,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                       }}
                     >
                       <Text style={{ fontSize: theme.colors ? 16 : 11, color: theme.colors ? '#fff' : subtextColor }}>
-                        {theme.label}
+                        {theme.id === 'none' ? t('status_feed.theme_none') : theme.label}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1782,7 +1783,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
                 backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc',
                 borderColor: isDarkMode ? '#334155' : '#e2e8f0',
               }]}
-              placeholder={isPollMode ? 'Ask a question...' : t('status_feed.placeholder')}
+              placeholder={isPollMode ? t('status_feed.poll_placeholder') : t('status_feed.placeholder')}
               placeholderTextColor={subtextColor}
               multiline
               maxLength={200}

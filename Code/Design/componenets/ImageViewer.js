@@ -35,6 +35,7 @@ const ImageViewerScreen = ({ route }) => {
 
   return (
     <FlatList
+      removeClippedSubviews={false}
       ref={listRef}
       data={images}
       horizontal

@@ -32,7 +32,7 @@ try {
     getString: () => undefined,
     getNumber: () => undefined,
     set: () => {},
-    delete: () => {},
+    remove: () => {},
   };
 }
 
@@ -111,7 +111,7 @@ const loadIndex = async () => {
       _indexMemo = JSON.parse(cached);
       return _indexMemo;
     } catch (e) {
-      historyCache.delete(INDEX_KEY);
+      historyCache.remove(INDEX_KEY);
     }
   }
 
@@ -171,7 +171,7 @@ const fetchSeries = async (historyKey) => {
     try {
       return JSON.parse(cached);
     } catch (e) {
-      historyCache.delete(cacheKey);
+      historyCache.remove(cacheKey);
     }
   }
 
@@ -275,8 +275,12 @@ const todayISO = () => {
  *   'thin'      — the item exists upstream but has too few points to plot
  *   'none'      — no history published for this item (or an ambiguous name)
  *   'error'     — network/parse failure; the caller may offer a retry
+ *
+ * appendCurrent: add the item's live value as today's point. Only when the
+ * item is an Elvebredd row: the history feed is Elvebredd's, and a GG value
+ * (Frost Dragon 1.775 vs ~319) on the end drew a fake -99% cliff.
  */
-export const loadItemHistory = async (item, seriesKey) => {
+export const loadItemHistory = async (item, seriesKey, { appendCurrent = true } = {}) => {
   const historyKey = await getHistoryKey(item);
   if (!historyKey) return { points: [], status: 'none' };
 
@@ -291,7 +295,7 @@ export const loadItemHistory = async (item, seriesKey) => {
 
   // Append today's live value so the line reaches the present instead of
   // stopping wherever the upstream series happened to end.
-  const current = getCurrentValueFor(item, seriesKey);
+  const current = appendCurrent ? getCurrentValueFor(item, seriesKey) : null;
   if (current != null) {
     const today = todayISO();
     const last = points[points.length - 1];
@@ -311,6 +315,6 @@ export const loadItemHistory = async (item, seriesKey) => {
 /** Test hook — drops every cached index and series. */
 export const clearHistoryCache = () => {
   _indexMemo = null;
-  historyCache.delete(INDEX_KEY);
-  historyCache.delete(INDEX_TS_KEY);
+  historyCache.remove(INDEX_KEY);
+  historyCache.remove(INDEX_TS_KEY);
 };

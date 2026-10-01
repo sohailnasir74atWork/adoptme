@@ -89,19 +89,19 @@ const PrivateMessageList = ({
 
   // Get reply preview text (matching group chat)
   const getReplyPreview = useCallback((replyTo) => {
-    if (!replyTo || typeof replyTo !== 'object') return '[Deleted message]';
+    if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
     if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
       return replyTo.text;
     }
     if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
-      return '[Image]';
+      return t('chat.reply_preview_image');
     }
     if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
       const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
-      return count > 0 ? `[${count} pet(s) message]` : '[Pets message]';
+      return count > 0 ? t('chat.reply_preview_items', { count }) : t('chat.reply_preview_items_none');
     }
-    return '[Deleted message]';
-  }, []);
+    return t('chat.deleted_message_placeholder');
+  }, [t]);
   const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
   const navigation = useNavigation()
 
@@ -112,7 +112,7 @@ const PrivateMessageList = ({
     Clipboard.setString(message.text);
     triggerHapticFeedback('impactLight');
     showSuccessMessage(t('chat.success'), t('chat.message_copied'));
-  }, [triggerHapticFeedback]);
+  }, [triggerHapticFeedback, t]);
 
   // ✅ Memoize filteredMessages. Dedup-by-id guards against duplicate keys
   // reaching the FlatList (can happen briefly when realtime onInsert races
@@ -264,7 +264,7 @@ const PrivateMessageList = ({
               }}
             >
               <Text style={{ fontSize: 12, color: c.textSecondary }} numberOfLines={1}>
-                {t('chat.replying_to')}: {getReplyPreview(item.replyTo)}
+                {t('chat.replying_to_text', { text: getReplyPreview(item.replyTo) })}
               </Text>
             </TouchableOpacity>
           )}
@@ -424,7 +424,7 @@ const PrivateMessageList = ({
                     carry no valueSource, and Elvebredd is the honest answer for
                     those: it was the only catalogue then. */}
                 <Text style={{ fontSize: 9, marginTop: 4, opacity: 0.6, color: c?.text || '#888' }}>
-                  {sourceStatement(sourceOfItems(fruits))}
+                  {sourceStatement(sourceOfItems(fruits), t)}
                 </Text>
               </View>
             )}
@@ -549,7 +549,7 @@ const PrivateMessageList = ({
         )}
       </>
     );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, getDateLabel, isDarkMode, otherLastRead, localState?.showReadReceipts]);
+  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, getDateLabel, getReplyPreview, isDarkMode, otherLastRead, localState?.showReadReceipts]);
 
   // ✅ Add FlatList reference and scrollToMessage functionality
   const flatListRef = useRef(null);
@@ -608,7 +608,7 @@ const PrivateMessageList = ({
             <FlatList
               ref={flatListRef}
               data={filteredMessages}
-              removeClippedSubviews={true}
+              removeClippedSubviews={false}
               keyExtractor={keyExtractor}
               renderItem={renderMessage}
               inverted

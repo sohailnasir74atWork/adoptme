@@ -64,12 +64,12 @@ try {
     getString: () => undefined,
     getNumber: () => undefined,
     set: () => {},
-    delete: () => {}
+    remove: () => {}
   };
 }
 
 // Cache durations
-const ANALYTICS_CACHE_MS = 60 * 60 * 1000; // 3 hours
+const ANALYTICS_CACHE_MS = 60 * 60 * 1000; // 1 hour
 const CHANGES_CACHE_MS = 60 * 60 * 1000;   // 1 hour
 
 // CDN URLs — you push data here after cloud function runs
@@ -77,10 +77,6 @@ const ANALYTICS_CDN_URL = 'https://analytics.b-cdn.net';
 const VALUE_CHANGES_CDN_URL = 'https://check-diff-adoptme.b-cdn.net/diff.json';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Visual multiplier — cosmetic boost for displayed counts only
-// Does NOT affect ratios, percentages, confidence, or prediction logic
-const VM = 2;
 
 // Fun color palettes for kids
 const FUN_COLORS = {
@@ -101,25 +97,37 @@ const VALUE_TYPE_LABELS = {
   m_nopotion: 'M', m_fly: 'M-F', m_ride: 'M-R', m_flyride: 'M-FR',
 };
 
+// Feed item types are lowercase category names ("pets", "pet wear", "food"…).
+// Translate them through the shared categories.* keys; the raw value is only a fallback.
+const categoryLabel = (type, t) => {
+  const raw = String(type || '').trim();
+  const key = !raw || raw.toLowerCase() === 'unknown' ? 'OTHER' : raw.toUpperCase();
+  return t(`categories.${key}`, { defaultValue: raw });
+};
+
 // ── Extracted sub-components (outside main component to prevent unmount/remount on every state change) ──
 
-const LockedOverlay = memo(({ message, onPress, styles }) => (
-  <TouchableOpacity
-    style={styles.lockedOverlay}
-    activeOpacity={0.9}
-    onPress={onPress}
-  >
-    <View style={styles.lockedContent}>
-      <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
-      <Text style={styles.lockedText}>{message}</Text>
-      <View style={styles.unlockButton}>
-        <Text style={styles.unlockButtonText}>{'\u{2B50}'} Upgrade</Text>
+const LockedOverlay = memo(({ message, onPress, styles }) => {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      style={styles.lockedOverlay}
+      activeOpacity={0.9}
+      onPress={onPress}
+    >
+      <View style={styles.lockedContent}>
+        <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
+        <Text style={styles.lockedText}>{message}</Text>
+        <View style={styles.unlockButton}>
+          <Text style={styles.unlockButtonText}>{t('analytics.upgrade_button')}</Text>
+        </View>
       </View>
-    </View>
-  </TouchableOpacity>
-));
+    </TouchableOpacity>
+  );
+});
 
 const ItemRow = memo(({ item, index, showSignal, showChange, locked, getImageUrl, isDarkMode, styles }) => {
+  const { t } = useTranslation();
   const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
   const rankDisplay = index < 3 ? medals[index] : `#${index + 1}`;
 
@@ -153,7 +161,7 @@ const ItemRow = memo(({ item, index, showSignal, showChange, locked, getImageUrl
       </View>
       <View style={styles.itemInfo}>
         <Text style={styles.itemName} numberOfLines={1}>{locked ? '???' : item.name}</Text>
-        <Text style={styles.itemType}>{item.type}</Text>
+        <Text style={styles.itemType}>{categoryLabel(item.type, t)}</Text>
       </View>
       {showSignal && item.signal && (
         <View style={[styles.signalBadge, { backgroundColor: getSignalColor(item.signal) + '25' }]}>
@@ -177,14 +185,29 @@ const ItemRow = memo(({ item, index, showSignal, showChange, locked, getImageUrl
       )}
       {!showSignal && !showChange && (
         <View style={styles.countBadge}>
-          <Text style={styles.countText}>{(item.count || 0) * VM}x</Text>
+          <Text style={styles.countText}>{item.count || 0}x</Text>
         </View>
       )}
     </View>
   );
 });
 
+// The server buckets trades by UTC hour. Shift the 24 buckets so bar i is
+// the phone's local hour i (whole-hour shift; half-hour zones round).
+const toLocalHours = (utcHours) => {
+  const offset = Math.round(-new Date().getTimezoneOffset() / 60);
+  const out = new Array(24).fill(0);
+  (Array.isArray(utcHours) ? utcHours : []).slice(0, 24).forEach((v, utcHour) => {
+    out[(((utcHour + offset) % 24) + 24) % 24] = Number(v) || 0;
+  });
+  return out;
+};
+
+// Older than this and the screen says so instead of passing it off as current.
+const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+
 const MiniBarChart = memo(({ data, label, peakHour, styles }) => {
+  const { t } = useTranslation();
   const maxVal = Math.max(...data, 1);
   return (
     <View style={styles.chartContainer}>
@@ -205,7 +228,7 @@ const MiniBarChart = memo(({ data, label, peakHour, styles }) => {
                 ]}
               />
               {i % 4 === 0 && (
-                <Text style={styles.chartBarLabel}>{i}h</Text>
+                <Text style={styles.chartBarLabel}>{t('analytics.hour_short', { hour: i })}</Text>
               )}
             </View>
           );
@@ -237,6 +260,7 @@ const SectionHeader = memo(({ icon, title, subtitle, locked, emoji, styles }) =>
 
 // ── Change Row Component (heavy — memoized to avoid re-renders) ──
 const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, formatNumber, getPrimaryChange, styles }) => {
+  const { t } = useTranslation();
   const primary = getPrimaryChange(item);
   const isUp = primary.pct > 0;
   const isZero = primary.pct === 0;
@@ -259,7 +283,7 @@ const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, form
           <View style={styles.changeInfo}>
             <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.itemType}>{item.type || 'Pet'}</Text>
+              <Text style={styles.itemType}>{categoryLabel(item.type || 'pets', t)}</Text>
               {item.date && (
                 <Text style={styles.changeDateText}>{getTimeAgo(item.date)}</Text>
               )}
@@ -327,7 +351,7 @@ const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, form
 const CHANGES_PAGE_SIZE = 15;
 const LIST_PAGE_SIZE = 15;
 
-const AnalyticsScreen = ({ navigation }) => {
+const AnalyticsScreen = ({ navigation, route }) => {
   const { theme, single_offer_wall } = useGlobalState();
   const { localState } = useLocalState();
   const { t } = useTranslation();
@@ -338,7 +362,7 @@ const AnalyticsScreen = ({ navigation }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(route?.params?.tab || 'overview');
   const [showOfferwall, setShowOfferwall] = useState(false);
   const [valueChanges, setValueChanges] = useState(null);
   const [valueChangesLoading, setValueChangesLoading] = useState(false);
@@ -370,6 +394,7 @@ const AnalyticsScreen = ({ navigation }) => {
 
       // Cache expired or missing — fetch from CDN
       const res = await fetch(`${url}?cb=${Date.now()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`); // keep the last good copy
       const data = await res.json();
 
       // Save to MMKV cache
@@ -391,8 +416,8 @@ const AnalyticsScreen = ({ navigation }) => {
       else setLoading(true);
 
       if (isRefresh) {
-        analyticsCache.delete('analytics');
-        analyticsCache.delete('analytics_time');
+        analyticsCache.remove('analytics');
+        analyticsCache.remove('analytics_time');
       }
 
       const raw = await fetchFromCDN(ANALYTICS_CDN_URL, 'analytics', ANALYTICS_CACHE_MS);
@@ -465,7 +490,7 @@ const AnalyticsScreen = ({ navigation }) => {
 
     return {
       lastUpdated: data.meta?.generatedAt || new Date().toISOString(),
-      note: `${changes.length} value${changes.length !== 1 ? 's' : ''} changed`,
+      changeCount: changes.length,
       changes,
     };
   }, []);
@@ -475,8 +500,8 @@ const AnalyticsScreen = ({ navigation }) => {
       setValueChangesLoading(true);
 
       if (isRefresh) {
-        analyticsCache.delete('value_changes');
-        analyticsCache.delete('value_changes_time');
+        analyticsCache.remove('value_changes');
+        analyticsCache.remove('value_changes_time');
       }
 
       const raw = await fetchFromCDN(VALUE_CHANGES_CDN_URL, 'value_changes', CHANGES_CACHE_MS);
@@ -571,8 +596,8 @@ const AnalyticsScreen = ({ navigation }) => {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     if (diffDays === 0) return t('analytics.today');
     if (diffDays === 1) return t('analytics.yesterday') || 'Yesterday';
-    if (diffDays < 7) return `${diffDays}d`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
+    if (diffDays < 7) return t('analytics.days_short', { value: diffDays });
+    if (diffDays < 30) return t('analytics.weeks_short', { value: Math.floor(diffDays / 7) });
     return date.toLocaleDateString();
   }, [t]);
 
@@ -804,19 +829,14 @@ const AnalyticsScreen = ({ navigation }) => {
           <>
             {/* Trade Volume Cards — big, colorful, fun */}
             <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2540' : '#EBF5FF', borderColor: FUN_COLORS.blue + '40' }]}>
-                <Text style={styles.statEmoji}>{'\u{1F91D}'}</Text>
-                <Text style={[styles.statNumber, { color: FUN_COLORS.blue }]}>{formatNumber((analytics.tradeVolume?.today || 0) * VM)}</Text>
-                <Text style={styles.statLabel}>{t('analytics.today')}</Text>
-              </View>
               <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#1a2a1a' : '#ECFDF5', borderColor: FUN_COLORS.green + '40' }]}>
                 <Text style={styles.statEmoji}>{'\u{23F0}'}</Text>
-                <Text style={[styles.statNumber, { color: FUN_COLORS.green }]}>{formatNumber((analytics.tradeVolume?.last24h || 0) * VM)}</Text>
+                <Text style={[styles.statNumber, { color: FUN_COLORS.green }]}>{formatNumber(analytics.tradeVolume?.last24h || 0)}</Text>
                 <Text style={styles.statLabel}>{t('analytics.hours_24')}</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2a1a2e' : '#FDF2F8', borderColor: FUN_COLORS.pink + '40' }]}>
                 <Text style={styles.statEmoji}>{'\u{1F4C5}'}</Text>
-                <Text style={[styles.statNumber, { color: FUN_COLORS.pink }]}>{formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM)}</Text>
+                <Text style={[styles.statNumber, { color: FUN_COLORS.pink }]}>{formatNumber(analytics.tradeVolume?.thisWeek || 0)}</Text>
                 <Text style={styles.statLabel}>{t('analytics.this_week')}</Text>
               </View>
             </View>
@@ -824,22 +844,22 @@ const AnalyticsScreen = ({ navigation }) => {
             {/* Win/Lose/Fair Distribution — emoji labels */}
             {analytics.statusDistribution && (
               <View style={styles.card}>
-                <SectionHeader icon="chart-pie" title={t('analytics.trade_outcomes')} emoji={'\u{1F3AF}'} styles={styles} />
+                <SectionHeader icon="chart-pie" title={t('analytics.posted_verdicts')} subtitle={t('analytics.posted_verdicts_sub')} emoji={'\u{1F3AF}'} styles={styles} />
                 <View style={styles.distributionRow}>
                   <View style={styles.distributionItem}>
                     <Text style={styles.distributionEmoji}>{'\u{1F389}'}</Text>
-                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.green }]}>{t('analytics.win')}</Text>
-                    <Text style={[styles.distributionValue, { color: FUN_COLORS.green }]}>{(analytics.statusDistribution.win || 0) * VM}</Text>
+                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.green }]}>{t('analytics.poster_wins')}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.green }]}>{analytics.statusDistribution.win || 0}</Text>
                   </View>
                   <View style={styles.distributionItem}>
                     <Text style={styles.distributionEmoji}>{'\u{1F91D}'}</Text>
                     <Text style={[styles.distributionLabel, { color: FUN_COLORS.yellow }]}>{t('analytics.fair')}</Text>
-                    <Text style={[styles.distributionValue, { color: FUN_COLORS.yellow }]}>{(analytics.statusDistribution.fair || 0) * VM}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.yellow }]}>{analytics.statusDistribution.fair || 0}</Text>
                   </View>
                   <View style={styles.distributionItem}>
                     <Text style={styles.distributionEmoji}>{'\u{1F614}'}</Text>
-                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.red }]}>{t('analytics.lose')}</Text>
-                    <Text style={[styles.distributionValue, { color: FUN_COLORS.red }]}>{(analytics.statusDistribution.lose || 0) * VM}</Text>
+                    <Text style={[styles.distributionLabel, { color: FUN_COLORS.red }]}>{t('analytics.poster_overpays')}</Text>
+                    <Text style={[styles.distributionValue, { color: FUN_COLORS.red }]}>{analytics.statusDistribution.lose || 0}</Text>
                   </View>
                 </View>
                 {/* Fun rounded bar */}
@@ -865,12 +885,16 @@ const AnalyticsScreen = ({ navigation }) => {
             )}
 
             {/* Hourly Activity — colorful bars */}
-            {analytics.hourlyActivity && (
-              <View style={styles.card}>
-                <SectionHeader icon="chart-bar" title={t('analytics.hourly_activity')} subtitle={t('analytics.peak', { hour: analytics.peakHour })} emoji={'\u{1F552}'} styles={styles} />
-                <MiniBarChart data={analytics.hourlyActivity} label={t('analytics.trades_per_hour')} peakHour={analytics?.peakHour} styles={styles} />
-              </View>
-            )}
+            {Array.isArray(analytics.hourlyActivity) && (() => {
+              const hours = toLocalHours(analytics.hourlyActivity);
+              const peak = hours.indexOf(Math.max(...hours));
+              return (
+                <View style={styles.card}>
+                  <SectionHeader icon="chart-bar" title={t('analytics.hourly_activity')} subtitle={t('analytics.peak', { hour: peak })} emoji={'\u{1F552}'} styles={styles} />
+                  <MiniBarChart data={hours} label={t('analytics.trades_per_hour_local')} peakHour={peak} styles={styles} />
+                </View>
+              );
+            })()}
 
             {/* Top 5 Most Traded */}
             <View style={styles.card}>
@@ -944,7 +968,12 @@ const AnalyticsScreen = ({ navigation }) => {
                 <SectionHeader
                   icon="rotate"
                   title={t('analytics.value_updates')}
-                  subtitle={valueChanges.note || `${filteredChanges.length} items changed`}
+                  subtitle={
+                    valueChanges.note
+                    || (valueChanges.changeCount != null
+                      ? t('analytics.values_changed', { count: valueChanges.changeCount })
+                      : t('analytics.items_changed', { count: filteredChanges.length }))
+                  }
                   emoji={'\u{1F504}'}
                   styles={styles}
                 />
@@ -1169,7 +1198,7 @@ const AnalyticsScreen = ({ navigation }) => {
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={[styles.sectionTitle, { color: FUN_COLORS.purple, fontSize: 18 }]}>{t('analytics.value_predictions')}</Text>
                   <Text style={styles.predictionSubtext}>
-                    {t('analytics.predictions_based_on', { count: formatNumber((analytics.tradeVolume?.thisWeek || 0) * VM) })}
+                    {t('analytics.predictions_based_on', { count: formatNumber(analytics.tradeVolume?.thisWeek || 0) })}
                   </Text>
                 </View>
               </View>
@@ -1198,7 +1227,7 @@ const AnalyticsScreen = ({ navigation }) => {
                             <View style={styles.itemInfo}>
                               <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                               <Text style={styles.itemType}>
-                                Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
+                                {t('analytics.wants_has', { wants: item.demand || 0, has: item.supply || 0 })}
                               </Text>
                             </View>
                           </View>
@@ -1258,7 +1287,7 @@ const AnalyticsScreen = ({ navigation }) => {
                           <View style={styles.itemInfo}>
                             <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                             <Text style={styles.itemType}>
-                              Wants: {(item.demand || 0) * VM} | Has: {(item.supply || 0) * VM}
+                              {t('analytics.wants_has', { wants: item.demand || 0, has: item.supply || 0 })}
                             </Text>
                           </View>
                         </View>
@@ -1289,14 +1318,17 @@ const AnalyticsScreen = ({ navigation }) => {
         )}
 
         {/* Last Updated */}
-        {analytics.computedAt && (
-          <View style={styles.updatedRow}>
-            <Icon name="time-outline" size={12} color={isDarkMode ? '#666' : '#999'} />
-            <Text style={styles.updatedText}>
-              {t('analytics.updated', { date: new Date(analytics.computedAt).toLocaleString() })}
-            </Text>
-          </View>
-        )}
+        {analytics.computedAt && (() => {
+          const stale = Date.now() - Date.parse(analytics.computedAt) > STALE_AFTER_MS;
+          return (
+            <View style={styles.updatedRow}>
+              <Icon name={stale ? 'alert-circle-outline' : 'time-outline'} size={12} color={stale ? FUN_COLORS.orange : (isDarkMode ? '#666' : '#999')} />
+              <Text style={[styles.updatedText, stale && { color: FUN_COLORS.orange }]}>
+                {t(stale ? 'analytics.stale_note' : 'analytics.updated', { date: new Date(analytics.computedAt).toLocaleString() })}
+              </Text>
+            </View>
+          );
+        })()}
 
         <View style={{ height: 100 }} />
       </ScrollView>

@@ -338,11 +338,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
   const loadMessages = useCallback(
-    async (reset = false) => {
+    // `silent`: refresh in place without swapping the list for the
+    // full-screen spinner (gap-fill after a long absence, pull-to-refresh).
+    async (reset = false, { silent = false } = {}) => {
       try {
         if (reset) {
 
-          setLoading(true);
+          if (!silent) setLoading(true);
           setLastLoadedKey(null); // Reset pagination key
         }
 
@@ -437,7 +439,10 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       if (fetched.length >= GAP_LIMIT) {
         // Gap exceeds one page — start fresh from the newest messages
         // (re-anchors newestCursorRef and pagination key internally).
-        await loadMessagesRef.current?.(true);
+        // Silent: the old list stays visible until the fresh page replaces
+        // it. This used to blank the room with a spinner on every return
+        // after a busy few minutes away.
+        await loadMessagesRef.current?.(true, { silent: true });
         return;
       }
 
@@ -886,7 +891,8 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadMessages(true);
+    // RefreshControl already shows progress; don't also blank the list.
+    await loadMessages(true, { silent: true });
     // Manual realtime recovery: if the channel is wedged (e.g. cold-start
     // CHANNEL_ERROR that retries couldn't recover from, or the user just
     // came back from a long sleep), pull-to-refresh now also forces a
@@ -989,12 +995,13 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
         const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
-        const timeLeftText =
-          hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        const timeLeftText = hours > 0
+          ? t('chat.duration_hours_minutes', { hours, minutes })
+          : t('chat.duration_minutes', { minutes });
 
         showMessage({
           message: t('chat.strike_title', { count: strikeCount }),
-          description: t('chat.strike_message', { time: timeLeftText }),
+          description: t('chat.strike_time_left', { time: timeLeftText }),
           type: 'warning',
           duration: 5000,
         });
@@ -1007,7 +1014,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
     if (hasFruits && fruits.length > MAX_FRUITS_PER_MESSAGE) {
-      Alert.alert(t('home.alert.error'), t('chat.max_pets_error'));
+      Alert.alert(t('home.alert.error'), t('chat.max_items_per_message', { max: MAX_FRUITS_PER_MESSAGE }));
       return;
     }
 
@@ -1080,7 +1087,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     const isPro = !!localState?.isPro || !!myProfile?.isPro;
     const verified = !!user.robloxUsernameVerified || !!myProfile?.robloxUsernameVerified;
     const topBadge = myProfile?.topBadge || null;
-    const hasWin = !!(myProfile?.hasRecentGameWin || (myProfile?.lastGameWinAt && Date.now() - myProfile.lastGameWinAt <= 24 * 60 * 60 * 1000));
     const frame = myCosmetics?.profileFrame || myProfile?.profileFrame || null;
     const txtColor = myCosmetics?.chatTextColor?.color || myProfile?.chatTextColor || null;
     const bubbleBg = myCosmetics?.chatBubbleBg || myProfile?.chatBubbleBg || null;
@@ -1093,12 +1099,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       clientMsgId,
       text: trimmedInput || null,
       senderId: user.id,
-      sender: user.displayName || t('chat.anonymous'),
+      sender: user.displayName || 'Anonymous', // stored in the message row, not a label
       avatar,
       isPro,
       robloxUsernameVerified: verified,
       topBadge,
-      hasRecentGameWin: hasWin,
       profileFrame: frame,
       chatTextColor: txtColor,
       chatBubbleBg: bubbleBg,
@@ -1271,7 +1276,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 }}
               >
                 <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
-                  ⏸  Live chat paused to save data — tap to resume
+                  {t('chat.live_chat_paused')}
                 </Text>
               </TouchableOpacity>
             )}

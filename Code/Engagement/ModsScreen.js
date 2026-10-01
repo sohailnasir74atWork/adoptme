@@ -24,12 +24,13 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 const MODS_CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const ROLE_META = {
-  mod:  { label: 'Moderator',  color: '#3B82F6', icon: 'shield-halved' },
-  jmod: { label: 'Junior Mod', color: '#8B5CF6', icon: 'shield' },
+  mod:  { labelKey: 'mods.role_mod',  color: '#3B82F6', icon: 'shield-halved' },
+  jmod: { labelKey: 'mods.role_jmod', color: '#8B5CF6', icon: 'shield' },
 };
 
 // ─── Mod Card ───
 const ModCard = React.memo(({ mod, onChat, isDarkMode }) => {
+  const { t } = useTranslation();
   const roleMeta = ROLE_META[mod.role] || ROLE_META.mod;
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
   const textColor = isDarkMode ? '#f1f5f9' : '#1a1a2e';
@@ -56,7 +57,7 @@ const ModCard = React.memo(({ mod, onChat, isDarkMode }) => {
           {mod.displayName}
         </Text>
         <View style={[styles.rolePill, { backgroundColor: roleMeta.color + '18' }]}>
-          <Text style={[styles.roleText, { color: roleMeta.color }]}>{roleMeta.label}</Text>
+          <Text style={[styles.roleText, { color: roleMeta.color }]}>{t(roleMeta.labelKey)}</Text>
         </View>
       </View>
 
@@ -137,7 +138,7 @@ const ModsScreen = () => {
 
   const handleModPress = useCallback((mod) => {
     if (!user?.id) {
-      Alert.alert('Sign In', 'Sign in to view moderator profiles.');
+      Alert.alert(t('signin.title_signin'), t('mods.sign_in_to_view'));
       return;
     }
     setDrawerUser({
@@ -146,7 +147,7 @@ const ModsScreen = () => {
       avatar: mod.avatar,
     });
     setIsDrawerVisible(true);
-  }, [user?.id]);
+  }, [user?.id, t]);
 
   const handleStartChatFromDrawer = useCallback(() => {
     if (!drawerUser) return;
@@ -194,13 +195,13 @@ const ModsScreen = () => {
         <View style={styles.statItem}>
           <FontAwesome name="shield-halved" size={12} color="#3B82F6" solid />
           <Text style={[styles.statNum, { color: textColor }]}>{stats.modCount}</Text>
-          <Text style={[styles.statLabel, { color: subColor }]}>Mods</Text>
+          <Text style={[styles.statLabel, { color: subColor }]}>{t('mods.stat_mods')}</Text>
         </View>
         <View style={[styles.statDivider, { backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }]} />
         <View style={styles.statItem}>
           <FontAwesome name="shield" size={12} color="#8B5CF6" solid />
           <Text style={[styles.statNum, { color: textColor }]}>{stats.jmodCount}</Text>
-          <Text style={[styles.statLabel, { color: subColor }]}>JMods</Text>
+          <Text style={[styles.statLabel, { color: subColor }]}>{t('mods.stat_jmods')}</Text>
         </View>
       </View>
 
@@ -208,6 +209,7 @@ const ModsScreen = () => {
         <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
+          removeClippedSubviews={false}
           data={mods}
           keyExtractor={item => item.uid}
           renderItem={renderItem}

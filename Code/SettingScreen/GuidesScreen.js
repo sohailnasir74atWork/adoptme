@@ -12,120 +12,99 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import { useTranslation } from 'react-i18next';
 
+// Translation keys only; t() runs at render time so the text follows the app language.
 const GUIDES = [
   {
     id: 'values',
     icon: '💎',
-    titleKey: 'guides.values_title',
-    titleDefault: 'Pet Values',
-    items: [
-      { key: 'guides.values_1', default: 'All pet values are community-driven and update regularly based on real trading data.' },
-      { key: 'guides.values_2', default: 'Values are shown in Default (D), Neon (N), and Mega (M) variants.' },
-      { key: 'guides.values_3', default: 'Demand scores (🔥) show how popular a pet currently is in the trading community.' },
-      { key: 'guides.values_4', default: 'Use the search and filters to quickly find any pet, egg, vehicle, or toy.' },
-      { key: 'guides.values_5', default: 'Trending pets on the home screen show what\'s rising or falling in value.' },
+    titleKey: 'settings.guides.values_title',
+    itemKeys: [
+      'settings.guides.values_1',
+      'settings.guides.values_2',
+      'settings.guides.values_3',
+      'settings.guides.values_4',
+      'settings.guides.values_5',
     ],
   },
   {
     id: 'trading',
     icon: '🔄',
-    titleKey: 'guides.trading_title',
-    titleDefault: 'Trading',
-    items: [
-      { key: 'guides.trading_1', default: 'Go to the Trades tab to browse active trade listings from the community.' },
-      { key: 'guides.trading_2', default: 'Create your own trade by tapping "+ New Trade" and selecting items you want to give & get.' },
-      { key: 'guides.trading_3', default: 'Chat privately with traders to negotiate — you\'ll see typing indicators and read receipts.' },
-      { key: 'guides.trading_4', default: 'Use the Trade Calculator to check if a trade is fair before accepting!' },
-      { key: 'guides.trading_5', default: 'Use the filter icons at the top of the Trades tab — 👤 My Trades, 👥 Following, 🔖 Saved — to instantly find your own, followed, or saved trades.' },
+    titleKey: 'settings.guides.trading_title',
+    itemKeys: [
+      'settings.guides.trading_1',
+      'settings.guides.trading_2',
+      'settings.guides.trading_3',
+      'settings.guides.trading_4',
+      'settings.guides.trading_5',
     ],
   },
   {
     id: 'mystuff',
     icon: '🎒',
-    titleKey: 'guides.mystuff_title',
-    titleDefault: 'My Stuff',
-    items: [
-      { key: 'guides.mystuff_1', default: '🐾 My Pets — Add your owned pets to see your total portfolio value and demand breakdown.' },
-      { key: 'guides.mystuff_2', default: '⭐ Goals — Add dream pets to your wishlist and track progress towards getting them.' },
+    titleKey: 'settings.guides.mystuff_title',
+    itemKeys: [
+      'settings.guides.mystuff_1',
+      'settings.guides.mystuff_2',
     ],
   },
   {
     id: 'chat',
     icon: '💬',
-    titleKey: 'guides.chat_title',
-    titleDefault: 'Private Chat',
-    items: [
-      { key: 'guides.chat_1', default: 'Tap any user\'s name to open a private chat and start a conversation.' },
-      { key: 'guides.chat_2', default: 'See "typing..." in the header when the other person is typing a message.' },
-      { key: 'guides.chat_3', default: 'Grey ✓✓ means your message was delivered. Blue ✓✓ means the other person has seen it.' },
-      { key: 'guides.chat_4', default: 'Send images, share pets, and use quick message templates for fast replies.' },
-      { key: 'guides.chat_5', default: 'Long-press any message to copy, translate, or report it.' },
+    titleKey: 'settings.guides.chat_title',
+    itemKeys: [
+      'settings.guides.chat_1',
+      'settings.guides.chat_2',
+      'settings.guides.chat_3',
+      'settings.guides.chat_4',
+      'settings.guides.chat_5',
     ],
   },
   {
     id: 'rating',
     icon: '⭐',
-    titleKey: 'guides.rating_title',
-    titleDefault: 'Rating & Reviews',
-    items: [
-      { key: 'guides.rating_1', default: 'Open a private chat with any user and exchange at least 3 messages each.' },
-      { key: 'guides.rating_2', default: 'Once 3 messages are exchanged, the ⭐ Rate button appears at the top of the chat.' },
-      { key: 'guides.rating_3', default: 'Tap the stars to set 1–5 rating, optionally add a written review, then submit.' },
-      { key: 'guides.rating_4', default: 'You can edit your rating anytime by tapping the ⭐ Edit Rating button.' },
-      { key: 'guides.rating_5', default: 'Honest ratings help the community find trustworthy traders and stay safe!' },
-    ],
-  },
-  {
-    id: 'games',
-    icon: '🎮',
-    titleKey: 'guides.games_title',
-    titleDefault: 'Mini Games',
-    items: [
-      { key: 'guides.games_1', default: '🎡 Daily Spin — Spin the wheel once a day to win XP and rewards.' },
-      { key: 'guides.games_2', default: '🧠 Pet Quiz — Answer 5 pet value questions to earn XP. Test your knowledge!' },
-      { key: 'guides.games_3', default: '🃏 Memory Match — Flip cards to match pet pairs. Faster matches = more XP!' },
-      { key: 'guides.games_4', default: '⚔️ Quiz Battle — Challenge a friend in real-time and see who knows pet values better!' },
-      { key: 'guides.games_5', default: '💰 Trade Duel — Go head-to-head: pick the higher-value pet to win. 2-player!' },
-      { key: 'guides.games_6', default: '🥚 Mystery Egg — Hatch eggs to win cosmetic items for your profile!' },
+    titleKey: 'settings.guides.rating_title',
+    itemKeys: [
+      'settings.guides.rating_1',
+      'settings.guides.rating_2',
+      'settings.guides.rating_3',
+      'settings.guides.rating_4',
+      'settings.guides.rating_5',
     ],
   },
   {
     id: 'badges',
     icon: '🏆',
-    titleKey: 'guides.badges_title',
-    titleDefault: 'Badges & XP',
-    items: [
-      { key: 'guides.badges_1', default: 'Earn XP by logging in daily, rating traders, completing trades, playing games, and posting.' },
-      { key: 'guides.badges_2', default: 'Badges are awarded when you hit milestones — e.g., 5 ratings, 10 trades, etc.' },
-      { key: 'guides.badges_3', default: 'Your badges are shown on your profile for everyone to see.' },
-      { key: 'guides.badges_4', default: 'Higher-tier badges (Uncommon, Rare) require more activity — keep going!' },
-      { key: 'guides.badges_5', default: 'Daily login streaks give bonus XP — don\'t break your streak!' },
+    titleKey: 'settings.guides.badges_title',
+    itemKeys: [
+      'settings.guides.badges_1',
+      'settings.guides.badges_2',
+      'settings.guides.badges_3',
+      'settings.guides.badges_4',
+      'settings.guides.badges_5',
     ],
   },
   {
     id: 'profile',
     icon: '👤',
-    titleKey: 'guides.profile_title',
-    titleDefault: 'Your Profile',
-    items: [
-      { key: 'guides.profile_1', default: 'Tap your avatar in Settings to edit your display name, bio, and profile picture.' },
-      { key: 'guides.profile_2', default: 'Add your owned pets and wishlist so other traders know what you have & want.' },
-      { key: 'guides.profile_3', default: 'Other users can see your profile by tapping your name in any chat.' },
-      { key: 'guides.profile_4', default: 'Your rating, badges, XP level, and trade history are all visible on your profile.' },
-      { key: 'guides.profile_5', default: 'Follow traders you trust to easily find them later in the Friends section.' },
+    titleKey: 'settings.guides.profile_title',
+    itemKeys: [
+      'settings.guides.profile_1',
+      'settings.guides.profile_2',
+      'settings.guides.profile_3',
+      'settings.guides.profile_4',
+      'settings.guides.profile_5',
     ],
   },
   {
     id: 'safety',
     icon: '🛡️',
-    titleKey: 'guides.safety_title',
-    titleDefault: 'Scam Safety',
-    items: [
-      { key: 'guides.safety_1', default: 'Never share your Roblox password or login info with anyone.' },
-      { key: 'guides.safety_2', default: 'If a deal sounds too good to be true, it probably is — be cautious.' },
-      { key: 'guides.safety_3', default: 'Use the official Roblox trading system inside the game to complete trades.' },
-      { key: 'guides.safety_4', default: 'Report suspicious users by long-pressing their message and selecting "Report".' },
-      { key: 'guides.safety_5', default: 'Check a trader\'s rating and reviews on their profile before trading with them.' },
+    titleKey: 'settings.guides.safety_title',
+    itemKeys: [
+      'settings.guides.safety_1',
+      'settings.guides.safety_2',
+      'settings.guides.safety_3',
+      'settings.guides.safety_4',
+      'settings.guides.safety_5',
     ],
   },
 ];
@@ -154,14 +133,14 @@ export default function GuidesScreen({ visible, onClose }) {
             <Icon name="close" size={24} color={isDark ? '#E2E8F0' : '#1E293B'} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {t('guides.title', { defaultValue: '📖 How It Works' })}
+            {t('guides.title')}
           </Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          {t('guides.subtitle', { defaultValue: 'Everything you need to know about using the app.' })}
+          {t('guides.subtitle')}
         </Text>
 
         {/* Guide sections */}
@@ -181,7 +160,7 @@ export default function GuidesScreen({ visible, onClose }) {
                 >
                   <Text style={styles.cardIcon}>{guide.icon}</Text>
                   <Text style={styles.cardTitle}>
-                    {t(guide.titleKey, { defaultValue: guide.titleDefault })}
+                    {t(guide.titleKey)}
                   </Text>
                   <Icon
                     name={isOpen ? 'chevron-up' : 'chevron-down'}
@@ -192,13 +171,13 @@ export default function GuidesScreen({ visible, onClose }) {
 
                 {isOpen && (
                   <View style={styles.cardBody}>
-                    {guide.items.map((item, idx) => (
-                      <View key={idx} style={styles.stepRow}>
+                    {guide.itemKeys.map((itemKey, idx) => (
+                      <View key={itemKey} style={styles.stepRow}>
                         <View style={styles.stepNumber}>
                           <Text style={styles.stepNumberText}>{idx + 1}</Text>
                         </View>
                         <Text style={styles.stepText}>
-                          {t(item.key, { defaultValue: item.default })}
+                          {t(itemKey)}
                         </Text>
                       </View>
                     ))}

@@ -112,11 +112,43 @@ export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onSt
   let cancelled = false;
   let initialDone = false;
   let subscribedOnce = false;
+  let prevStatus = null;   // last channel status (reconnect detection)
+  let maxKnownTs = 0;      // newest last_message_timestamp_ms delivered
+  let gapFillInFlight = false;
 
   const tryReady = () => {
     if (initialDone && subscribedOnce && !cancelled) {
       onReady?.();
     }
+  };
+
+  const deliver = (row) => {
+    if (!row || cancelled) return;
+    if (row.lastMessageTimestamp > maxKnownTs) maxKnownTs = row.lastMessageTimestamp;
+    onUpsert?.(row);
+  };
+
+  // Reconnect gap-fill, same as subscribeToChatMeta: realtime doesn't replay
+  // what fired while the socket was down (client.js drops it after 20 s in
+  // background), so group last-message / unread changes from that window
+  // stayed missing until an app restart. Fetch only rows newer than the
+  // newest seen — usually 0–few.
+  const runGapFill = () => {
+    if (cancelled || gapFillInFlight) return;
+    gapFillInFlight = true;
+    supabase
+      .from('group_meta_data')
+      .select(GROUP_META_COLS)
+      .eq('user_id', userId)
+      .gt('last_message_timestamp_ms', maxKnownTs || 0)
+      .order('last_message_timestamp_ms', { ascending: false, nullsFirst: false })
+      .limit(GROUP_META_PAGE)
+      .then(({ data, error }) => {
+        if (error) throw error;
+        if (!cancelled) (data || []).forEach((r) => deliver(fromGroupMetaRow(r)));
+      })
+      .catch((e) => console.warn('[groupMetaBackend] gap-fill failed:', e?.message))
+      .finally(() => { gapFillInFlight = false; });
   };
 
   // Per-call random suffix on the topic — supabase-js returns the
@@ -142,7 +174,7 @@ export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onSt
             const groupId = payload.old?.group_id;
             if (groupId) onRemove?.(groupId);
           } else if (payload?.new) {
-            onUpsert?.(fromGroupMetaRow(payload.new));
+            deliver(fromGroupMetaRow(payload.new));
           }
         } catch (e) {
           console.warn('[groupMetaBackend] realtime handler failed:', e?.message);
@@ -152,15 +184,19 @@ export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onSt
     .subscribe((status, err) => {
       onStatus?.(status, err);
       if (status === 'SUBSCRIBED') {
+        // SUBSCRIBED after a non-SUBSCRIBED status = reconnect. The first
+        // subscribe is covered by the initial load below.
+        if (prevStatus && prevStatus !== 'SUBSCRIBED') runGapFill();
         subscribedOnce = true;
         tryReady();
       }
+      prevStatus = status;
     });
 
   loadGroupMeta(userId)
     .then((rows) => {
       if (cancelled) return;
-      rows.forEach((r) => onUpsert?.(r));
+      rows.forEach(deliver);
       initialDone = true;
       tryReady();
     })

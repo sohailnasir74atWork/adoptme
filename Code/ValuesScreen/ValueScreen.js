@@ -38,7 +38,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { isMatch } from '../Helper/searchHelper';
-import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
+import { fetchAnalyticsData, getDemandScore, getHotStatus, getMarket } from '../Helper/analyticsDataHelper';
 import { useNavigation } from '@react-navigation/native';
 import ValueHistoryModal from './ValueHistoryModal';
 import { prefetchHistoryIndex } from '../Helper/valueHistoryHelper';
@@ -167,8 +167,7 @@ const formatValue = (n) => {
 // Allowlist — only pets get the value-type (D/N/M) and modifier (F/R) badges.
 // Was a denylist (HIDE_BADGE_TYPES) but the data has variants the list didn't
 // cover (PETWEAR no-space, FOODS plural, future categories like GAME PASS), so
-// non-pet items were still showing M/F/R toggles. Matches the canonical pet
-// check used elsewhere (e.g. TradeShowdown, IceBreaker).
+// non-pet items were still showing M/F/R toggles.
 const PET_TYPES = ['PETS', 'PET'];
 const isPetType = (type) => PET_TYPES.includes(String(type || '').toUpperCase());
 // Category filters are derived from the ACTIVE feed (see categoriesFor), not
@@ -176,7 +175,7 @@ const isPetType = (type) => PET_TYPES.includes(String(type || '').toUpperCase())
 // only the cold-start fallback for code paths that run before data loads.
 const CATEGORIES_FALLBACK = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'TOYS', 'PET WEAR', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS', 'OTHER'];
 
-const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, fromChat, fromSetting, imgurl, t }) => {
+const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, styles, onPress, demandMap, hotMap, marketMap, fromChat, fromSetting, imgurl, t }) => {
   const currentValue = getItemValue(item, itemSelection.valueType, itemSelection.isFly, itemSelection.isRide);
   const badges = [];
 
@@ -265,6 +264,20 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
               }
               return null;
             })()}
+            {(() => {
+              // How easily it trades, from last week's trade posts.
+              const liquidity = getMarket(item.name, marketMap)?.liquidity;
+              if (!liquidity) return null;
+              const fast = liquidity === 'fast';
+              return (
+                <View style={[styles.hotBadge, !fast && styles.slowBadge]}>
+                  <Text style={{ fontSize: 8 }}>{fast ? '\u{26A1}' : '\u{1F422}'}</Text>
+                  <Text style={[styles.hotText, !fast && styles.slowText]}>
+                    {t(fast ? 'trade_advice.tag_fast' : 'trade_advice.tag_slow')}
+                  </Text>
+                </View>
+              );
+            })()}
           </View>
         </View>
       </View>
@@ -331,7 +344,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const { t } = useTranslation();
   const [filters, setFilters] = useState(['All']);
   const displayedFilter = selectedFilter === 'PREMIUM' ? t('categories.GAME PASS') : t(`categories.${selectedFilter.toUpperCase()}`, { defaultValue: selectedFilter });
-  const [analyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
+  const [rawAnalyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
 
   // Warm the history name->key index in the background so the first tap on a
   // row doesn't pay for the catalog download. Browse mode only — the chat and
@@ -451,6 +464,12 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   // Which site's values this list shows. Set on the calculator; the list
   // follows it so the two screens never disagree.
   const valueSource = localState?.valueSource || DEFAULT_VALUE_SOURCE;
+  // Value movers come from Elvebredd's diff. In GG mode the numbers on screen
+  // are GG's, so an Elvebredd "+X%" beside them would be someone else's move.
+  const analyticsMaps = useMemo(
+    () => (valueSource === VALUE_SOURCE.GG ? { ...rawAnalyticsMaps, hotMap: {}, dropMap: {} } : rawAnalyticsMaps),
+    [rawAnalyticsMaps, valueSource],
+  );
 
   const parsedValuesData = useMemo(() => {
     try {
@@ -752,7 +771,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           if (owned && setOwnedPets) {
             setOwnedPets(prev => [...(prev || []), fruitObj]);
           } else if (setWishlistPets) {
-            setWishlistPets(prev => [...(prev || []), fruitObj]);
+            // Wishes start public ("Looking for") so Trade Match can find
+            // them; the player can still switch one to Private.
+            setWishlistPets(prev => [...(prev || []), { ...fruitObj, availableForTrade: true }]);
           }
         }
 
@@ -782,6 +803,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           onPress={handlePress}
           demandMap={analyticsMaps.demandMap}
           hotMap={analyticsMaps.hotMap}
+          marketMap={analyticsMaps.marketMap}
           fromChat={fromChat}
           fromSetting={fromSetting}
           imgurl={localState.imgurl}
@@ -978,6 +1000,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
               </View>
 
               <FlatList
+                removeClippedSubviews={false}
                 horizontal
                 data={selectedList}
                 keyExtractor={(item, index) => `${item.id || item.name}-${index}`}
@@ -1041,7 +1064,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                       </Text>
                       {filter.toUpperCase() === 'STICKERS' && (
                         <View style={styles.newBadge}>
-                          <Text style={styles.newBadgeText}>NEW</Text>
+                          <Text style={styles.newBadgeText}>{t('value.new_badge')}</Text>
                         </View>
                       )}
                     </View>
@@ -1144,7 +1167,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 activeOpacity={0.8}
               >
                 <Text style={[styles.chatSourceText, chatPetSource === 'mine' && styles.chatSourceTextActive]}>
-                  {`My Pets${myPets.length ? ` (${myPets.length})` : ''}`}
+                  {myPets.length ? t('value.my_pets_with_count', { number: myPets.length }) : t('value.my_pets')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1153,7 +1176,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 activeOpacity={0.8}
               >
                 <Text style={[styles.chatSourceText, chatPetSource === 'all' && styles.chatSourceTextActive]}>
-                  All
+                  {t('value.all_pets')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1213,7 +1236,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 : (item) => item.id || item.name}
               renderItem={(fromChat && chatPetSource === 'mine') ? renderOwnedItem : renderItem}
               showsVerticalScrollIndicator={false}
-              removeClippedSubviews={true}
+              removeClippedSubviews={false}
               numColumns={2}
               columnWrapperStyle={styles.columnWrapper}
               refreshing={refreshing}
@@ -1225,9 +1248,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           ) : (fromChat && chatPetSource === 'mine' && myPets.length === 0) ? (
             <View style={styles.emptyMyPets}>
               <Icon name="paw-outline" size={40} color={config.colors.hasBlockGreen} />
-              <Text style={styles.emptyMyPetsTitle}>No pets in your inventory yet</Text>
+              <Text style={styles.emptyMyPetsTitle}>{t('value.no_owned_pets_title')}</Text>
               <Text style={styles.emptyMyPetsSub}>
-                Add the pets you own so you can send them here instantly — no more searching every time.
+                {t('value.no_owned_pets_sub')}
               </Text>
               <TouchableOpacity
                 style={styles.emptyMyPetsBtn}
@@ -1238,10 +1261,10 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 }}
                 activeOpacity={0.85}
               >
-                <Text style={styles.emptyMyPetsBtnText}>+ Add my pets</Text>
+                <Text style={styles.emptyMyPetsBtnText}>{t('value.add_my_pets')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setChatPetSource('all')} style={{ marginTop: 12 }}>
-                <Text style={styles.emptyMyPetsLink}>Browse all pets instead</Text>
+                <Text style={styles.emptyMyPetsLink}>{t('value.browse_all_pets')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1257,6 +1280,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           item={historyTarget?.item}
           imageUrl={historyTarget?.imageUrl}
           isDarkMode={isDarkMode}
+          liveValues={valueSource !== VALUE_SOURCE.GG}
           onClose={() => {
             setHistoryTarget(null);
             // They opened a chart, so the hint has done its job. Retiring it
@@ -1571,6 +1595,12 @@ export const getStyles = (isDarkMode) => {
     fontSize: 9,
     fontWeight: '700',
     color: '#10B981',
+  },
+  slowBadge: {
+    backgroundColor: isDarkMode ? '#94a3b820' : '#64748b15',
+  },
+  slowText: {
+    color: isDarkMode ? '#94a3b8' : '#64748b',
   },
   itemBadgesContainer: {
     position: 'absolute',

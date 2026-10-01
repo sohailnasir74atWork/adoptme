@@ -28,6 +28,37 @@ const NOTIF_ICONS = {
 
 const PAGE_SIZE = 20;
 
+// Localized "x ago" (dayjs has no locale set app-wide, so fromNow() was always English).
+const formatTimeAgo = (date, t) => {
+  const mins = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (mins < 1) return t('settings.time.just_now');
+  if (mins < 60) return t('settings.time.min_ago', { count: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return t('settings.time.hour_ago', { count: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 30) return t('settings.time.day_ago', { count: days });
+  const months = Math.floor(days / 30);
+  if (months < 12) return t('settings.time.month_ago', { count: months });
+  return t('settings.time.year_ago', { count: Math.floor(months / 12) });
+};
+
+// The stored `message` is English text written by the sender's client
+// (tradeHelpers.js pingTrader). For trade pings, rebuild it in the reader's
+// language from fromName + the item summary; anything else shows as stored.
+const getNotifMessage = (item, t) => {
+  const message = item.message || '';
+  if (item.type === 'trade_ping' && item.fromName) {
+    const prefix = `${item.fromName} wants to trade with you! `;
+    if (message.startsWith(prefix) || message === prefix.trimEnd()) {
+      const summary = message.slice(prefix.length).trim();
+      return summary
+        ? t('notifications.trade_ping_with_items', { name: item.fromName, items: summary })
+        : t('notifications.trade_ping', { name: item.fromName });
+    }
+  }
+  return message;
+};
+
 const NotificationFeed = () => {
   const { user, theme, firestoreDB, appdatabase } = useGlobalState();
   const { t } = useTranslation();
@@ -206,7 +237,7 @@ const NotificationFeed = () => {
 
   const renderNotification = useCallback(({ item }) => {
     const meta = NOTIF_ICONS[item.type] || NOTIF_ICONS.trade_accepted;
-    const timeAgo = item.createdAt?.toDate ? dayjs(item.createdAt.toDate()).fromNow() : '';
+    const timeAgo = item.createdAt?.toDate ? formatTimeAgo(item.createdAt.toDate(), t) : '';
     const isUnread = !item.read;
 
     return (
@@ -224,7 +255,7 @@ const NotificationFeed = () => {
         </View>
         <View style={styles.notifContent}>
           <Text style={[styles.notifMessage, { color: textColor }]} numberOfLines={2}>
-            {item.message}
+            {getNotifMessage(item, t)}
           </Text>
           <Text style={[styles.notifTime, { color: subtextColor }]}>{timeAgo}</Text>
         </View>
@@ -237,7 +268,7 @@ const NotificationFeed = () => {
         </TouchableOpacity>
       </TouchableOpacity>
     );
-  }, [cardBg, textColor, subtextColor, handleNotifPress, handleDelete]);
+  }, [cardBg, textColor, subtextColor, handleNotifPress, handleDelete, t]);
 
   if (!user?.id) {
     return (
@@ -293,6 +324,7 @@ const NotificationFeed = () => {
         )}
       </View>
       <FlatList
+        removeClippedSubviews={false}
         data={notifications}
         keyExtractor={item => item.id}
         renderItem={renderNotification}

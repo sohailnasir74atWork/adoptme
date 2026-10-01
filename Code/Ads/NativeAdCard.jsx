@@ -17,6 +17,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   NativeAdView,
   NativeAsset,
@@ -32,6 +33,7 @@ import config from '../Helper/Environment';
 const MAX_RETRIES = 3;
 
 const NativeAdCard = ({ adKey, isDarkMode = false }) => {
+  const { t } = useTranslation();
   const [ad, setAd] = useState(null);
   const [failed, setFailed] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
@@ -123,7 +125,7 @@ const NativeAdCard = ({ adKey, isDarkMode = false }) => {
           {/* Sponsored attribution (required) shown inline with the advertiser
               so the card reads like a feed item instead of a boxed-off ad. */}
           <View style={styles.metaRow}>
-            <Text style={styles.sponsored}>Sponsored</Text>
+            <Text style={styles.sponsored}>{t('misc.ad_sponsored')}</Text>
             {ad.advertiser ? (
               <>
                 <Text style={[styles.metaDot, { color: C.textSecondary }]}>·</Text>

@@ -61,6 +61,19 @@
 -dontwarn com.facebook.hermes.**
 -dontwarn com.facebook.jni.**
 
+# ── Room / WorkManager / androidx.startup ───────────────────────────────────
+# WorkManager (pulled in by notifee) starts from an androidx.startup provider
+# and builds its Room database by reflectively loading WorkDatabase_Impl. Room's
+# own consumer rule keeps the class but not its constructor, and AGP 9's R8 no
+# longer keeps the default ctor for a class-only rule, so 1.15.40 crashed at
+# launch ("Failed to create an instance of class
+# androidx.work.impl.WorkDatabase.canonicalName") before any JS ran. Same fix
+# as mm2values 1.4.8.
+-keepattributes InnerClasses,EnclosingMethod,Signature,*Annotation*
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keepnames class * extends androidx.room.RoomDatabase
+-keep class * implements androidx.startup.Initializer { <init>(); }
+
 # ── Nitro modules / MMKV ────────────────────────────────────────────────────
 # Nitro's generated hybrids are annotated @DoNotStrip + @Keep, so RN's rules
 # would cover them, but the C++ side resolves every hybrid by literal class
@@ -78,6 +91,12 @@
 # for when those lines come back.
 -keep class com.google.ads.mediation.** { *; }
 -dontwarn com.google.ads.mediation.**
+
+# ── Install Referrer (react-native-device-info) ─────────────────────────────
+# RNInstallReferrerClient looks up InstallReferrerClient.newBuilder by
+# reflection; renamed, getInstallReferrer() silently returns nothing and Squad
+# invites from a Play link are never credited. Rule from the library README.
+-keep class com.android.installreferrer.api.** { *; }
 
 # ── Warning suppression only — NO keeps ─────────────────────────────────────
 # These libraries reference classes that are absent at compile time (optional

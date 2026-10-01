@@ -45,6 +45,11 @@ exports.notifyGroupInvitation = require('./notifyGroupInvitation').notifyGroupIn
 exports.notifyGroupJoinRequest = require('./notifyGroupJoinRequest').notifyGroupJoinRequest;
 exports.notifyFromTrade = require('./notifyFromTrade').notifyFromTrade;
 exports.notifyTradeAccept = require('./notifyTradeAccept').notifyTradeAccept;
+exports.notifyTradeMatch = require('./notifyTradeMatch').notifyTradeMatch;
+exports.notifySquadEvent = require('./notifySquadEvent').notifySquadEvent;
+
+// ── Public profile projection (no Private pets for other players) ─────
+exports.mirrorPublicProfile = require('./mirrorPublicProfile').mirrorPublicProfile;
 exports.notifyPostComment = require('./notifyPostComment').notifyPostComment;
 exports.notifyPostReaction = require('./notifyPostReaction').notifyPostReaction;
 
@@ -66,7 +71,6 @@ exports.computeFeedRanking = require('./computeFeedRanking').computeFeedRanking;
 exports.aggregateTradeAnalytics = require('./aggregateTradeAnalytics').aggregateTradeAnalytics;
 exports.updateLeaderboardCache = require('./updateLeaderboardCache').updateLeaderboardCache;
 exports.updateTrustedTraders = require('./updateTrustedTraders').updateTrustedTraders; // v2
-exports.valueAlertsPoll = require('./valueAlertsPoll').valueAlertsPoll;                // v2
 
 // ── Roles mirror safety net (6-hourly RTDB ⇄ Supabase user_roles diff) ─
 exports.reconcileRolesMirror = require('./reconcileRolesMirror').reconcileRolesMirror;
@@ -75,6 +79,12 @@ exports.reconcileRolesMirror = require('./reconcileRolesMirror').reconcileRolesM
 const modRoles = require('./syncModRole_Moderator');
 exports.syncModRole_Moderator = modRoles.syncModRole_Moderator;
 exports.syncModRole_BabyMod = modRoles.syncModRole_BabyMod;
+
+// Firestore `staff/{uid}` mirror of RTDB admin/isModerator (read by firestore.rules)
+const staffMirror = require('./mirrorStaffToFirestore');
+exports.syncStaff_Admin = staffMirror.syncStaff_Admin;
+exports.syncStaff_Moderator = staffMirror.syncStaff_Moderator;
+exports.reconcileStaffMirror = staffMirror.reconcileStaffMirror;
 exports.seedModRoster = require('./syncModRoster').seedModRoster;
 const rosters = require('./syncRosterMaintenance');
 exports.refreshAllRosters = rosters.refreshAllRosters;

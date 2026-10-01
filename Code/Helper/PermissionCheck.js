@@ -1,5 +1,6 @@
 import notifee from '@notifee/react-native';
 import { Alert, Linking } from 'react-native';
+import i18n from '../../i18n';
 
 
 
@@ -11,12 +12,12 @@ export const requestPermission = async () => {
       settings.authorizationStatus == 0
     ) {
       Alert.alert(
-        'Permission Required',
-        'Notification permissions are disabled. Please enable them in the app settings.',
+        i18n.t('settings.permission_required'),
+        i18n.t('settings.notification_permissions_disabled'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: i18n.t('home.cancel'), style: 'cancel' },
           {
-            text: 'Go to Settings',
+            text: i18n.t('permissions.go_to_settings'),
             onPress: () => Linking.openSettings(), // Redirect to app settings
           },
         ]
@@ -32,7 +33,7 @@ export const requestPermission = async () => {
     }
   } catch (error) {
     console.error('Error requesting notification permission:', error);
-    Alert.alert('Error', 'An error occurred while requesting notification permissions.');
+    Alert.alert(i18n.t('alert.error'), i18n.t('permissions.notification_request_failed'));
     return false;
   }
 };

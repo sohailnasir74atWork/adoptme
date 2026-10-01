@@ -271,12 +271,12 @@ const CommentModal = ({ visible, onClose, postId, collectionName = 'designPosts'
     if (!user?.id || user.id !== commentUserId) return;
 
     Alert.alert(
-      t('feed.delete_post', { defaultValue: 'Delete' }),
+      t('feed.delete_comment_title'),
       t('comments.delete_confirm', { defaultValue: 'Delete this comment?' }),
       [
         { text: t('feed.cancel'), style: 'cancel' },
         {
-          text: t('feed.submit', { defaultValue: 'Delete' }),
+          text: t('feed.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -447,6 +447,7 @@ const CommentModal = ({ visible, onClose, postId, collectionName = 'designPosts'
               <ActivityIndicator size="small" color={isDarkMode ? '#94a3b8' : '#64748b'} style={{ marginVertical: 30 }} />
             ) : (
               <FlatList
+                removeClippedSubviews={false}
                 data={threadedComments}
                 keyExtractor={(item) => item.id}
                 renderItem={renderThread}

@@ -2,6 +2,12 @@ import {trackGrowthEvent} from './Code/Helper/growthAnalytics';
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import * as RNLocalize from "react-native-localize";
+import dayjs from "dayjs";
+import "dayjs/locale/ru";
+import "dayjs/locale/es";
+import "dayjs/locale/fr";
+import "dayjs/locale/de";
+import "dayjs/locale/ar";
 
 
 // ✅ Only import English at startup (fallback language)
@@ -82,6 +88,11 @@ i18n
       escapeValue: false,
     },
   });
+
+// dayjs dates and "5 minutes ago" follow the app language, not English.
+const syncDayjsLocale = (lng) => dayjs.locale(SUPPORTED_LANGUAGES.includes(lng) ? lng : 'en');
+syncDayjsLocale(initialLanguage);
+i18n.on('languageChanged', syncDayjsLocale);
 
 // ✅ Lazy-load translation bundle on demand
 export const loadLanguage = async (langCode) => {

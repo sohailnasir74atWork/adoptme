@@ -13,18 +13,20 @@
 import { ref, get, update, increment } from '@react-native-firebase/database';
 import { addXP, XP_ACTIONS } from './xpUtils';
 import { getServerTime } from '../Helper/serverTime';
+import i18n from '../../i18n';
 
 // ────────────────────────────────────────────────────────
 //  DAILY REWARDS TABLE
+//  `description` is a getter: display-only (never saved), translated at read time.
 // ────────────────────────────────────────────────────────
 export const DAILY_REWARDS = [
-  { day: 1, xp: 50,  stars: 1, label: '1 ⭐',  emoji: '⭐', description: 'Welcome back!' },
-  { day: 2, xp: 75,  stars: 1, label: '1 ⭐',  emoji: '⭐', description: 'Keep going!' },
-  { day: 3, xp: 100, stars: 2, label: '2 ⭐',  emoji: '🌟', description: 'Hat trick!' },
-  { day: 4, xp: 150, stars: 2, label: '2 ⭐',  emoji: '🌟', description: 'On fire!' },
-  { day: 5, xp: 200, stars: 3, label: '3 ⭐',  emoji: '💫', description: 'Halfway hero!' },
-  { day: 6, xp: 300, stars: 3, label: '3 ⭐',  emoji: '💫', description: 'Almost there!' },
-  { day: 7, xp: 500, stars: 5, label: '5 ⭐',  emoji: '🎁', description: 'Jackpot Day!' },
+  { day: 1, xp: 50,  stars: 1, label: '1 ⭐',  emoji: '⭐', get description() { return i18n.t('stars.daily_rewards.day_1'); } },
+  { day: 2, xp: 75,  stars: 1, label: '1 ⭐',  emoji: '⭐', get description() { return i18n.t('stars.daily_rewards.day_2'); } },
+  { day: 3, xp: 100, stars: 2, label: '2 ⭐',  emoji: '🌟', get description() { return i18n.t('stars.daily_rewards.day_3'); } },
+  { day: 4, xp: 150, stars: 2, label: '2 ⭐',  emoji: '🌟', get description() { return i18n.t('stars.daily_rewards.day_4'); } },
+  { day: 5, xp: 200, stars: 3, label: '3 ⭐',  emoji: '💫', get description() { return i18n.t('stars.daily_rewards.day_5'); } },
+  { day: 6, xp: 300, stars: 3, label: '3 ⭐',  emoji: '💫', get description() { return i18n.t('stars.daily_rewards.day_6'); } },
+  { day: 7, xp: 500, stars: 5, label: '5 ⭐',  emoji: '🎁', get description() { return i18n.t('stars.daily_rewards.day_7'); } },
 ];
 
 // ────────────────────────────────────────────────────────

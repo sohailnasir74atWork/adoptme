@@ -29,11 +29,12 @@ const ROSTER_CACHE_MS = 4 * 60 * 60 * 1000;        // 4 hours — Trusted / CMSR
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
 const ROSTER_PAGE_SIZE = 25;
 
+// labelKey is translated at render time (t(tab.labelKey)).
 const TABS = [
-  { key: 'topRated', label: 'Top Picks', icon: 'medal',             color: '#F59E0B' },
-  { key: 'trusted',  label: 'Trusted',   icon: 'shield-checkmark',  color: '#10B981' },
-  { key: 'cmsr',     label: 'CMSR',      icon: 'ribbon',            color: '#0EA5E9' },
-  { key: 'helper',   label: 'Helper',    icon: 'hand-left',         color: '#14B8A6' },
+  { key: 'topRated', labelKey: 'leaderboard.tab_top_picks', icon: 'medal',             color: '#F59E0B' },
+  { key: 'trusted',  labelKey: 'leaderboard.tab_trusted',   icon: 'shield-checkmark',  color: '#10B981' },
+  { key: 'cmsr',     labelKey: 'leaderboard.tab_cmsr',      icon: 'ribbon',            color: '#0EA5E9' },
+  { key: 'helper',   labelKey: 'leaderboard.tab_helper',    icon: 'hand-left',         color: '#14B8A6' },
 ];
 
 const LeaderboardScreen = () => {
@@ -337,18 +338,20 @@ const LeaderboardScreen = () => {
         </View>
         <Image source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
         <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>{item.displayName || 'Anonymous'}</Text>
+          <Text style={styles.userName} numberOfLines={1}>
+            {!item.displayName || item.displayName === 'Anonymous' ? t('chat.anonymous') : item.displayName}
+          </Text>
           <View style={styles.ratingInfo}>
             <Icon name="star" size={12} color="#FFD700" />
             <Text style={styles.ratingText}>
-              {item.averageRating.toFixed(1)} ({item.ratingCount} {item.ratingCount === 1 ? 'rating' : 'ratings'})
+              {t('leaderboard.rating_summary', { rating: item.averageRating.toFixed(1), count: item.ratingCount })}
             </Text>
           </View>
         </View>
         <Icon name="chatbubble-outline" size={20} color={config.colors.primary} />
       </TouchableOpacity>
     );
-  }, [styles, handleUserClick]);
+  }, [styles, handleUserClick, t]);
 
   const renderRosterItem = useCallback(({ item }) => {
     const tabMeta = TABS.find(tab => tab.key === activeTab);
@@ -356,16 +359,16 @@ const LeaderboardScreen = () => {
       <TouchableOpacity style={styles.userItem} onPress={() => handleUserClick(item)} activeOpacity={0.7}>
         <Image source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
         <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>{item.displayName || 'Unknown'}</Text>
+          <Text style={styles.userName} numberOfLines={1}>{item.displayName || t('leaderboard.unknown_user')}</Text>
           <View style={[styles.rolePill, { backgroundColor: tabMeta.color + '18' }]}>
             <Icon name={tabMeta.icon} size={10} color={tabMeta.color} />
-            <Text style={[styles.rolePillText, { color: tabMeta.color }]}>{tabMeta.label}</Text>
+            <Text style={[styles.rolePillText, { color: tabMeta.color }]}>{t(tabMeta.labelKey)}</Text>
           </View>
         </View>
         <Icon name="chatbubble-outline" size={20} color={config.colors.primary} />
       </TouchableOpacity>
     );
-  }, [styles, handleUserClick, activeTab]);
+  }, [styles, handleUserClick, activeTab, t]);
 
   // ── Active state ──
   const activeData =
@@ -382,16 +385,18 @@ const LeaderboardScreen = () => {
   // RLS on user_identity / user_roles requires an authenticated request, so
   // logged-out users get zero rows back (no error). Show a clear sign-in CTA
   // rather than the generic "no users yet" message in that case.
+  const activeLabel = activeMeta ? t(activeMeta.labelKey) : '';
+
   const emptyText = isLoggedOut
-    ? 'Sign in to see the leaderboard'
-    : activeTab === 'topRated' ? 'No users found with 3.7+ rating'
-    : activeTab === 'trusted'  ? 'No trusted users yet'
-    : activeTab === 'cmsr'     ? 'No CMSR users yet'
-    : 'No helpers yet';
+    ? t('leaderboard.empty_signed_out')
+    : activeTab === 'topRated' ? t('leaderboard.empty_top_picks', { rating: '3.7' })
+    : activeTab === 'trusted'  ? t('leaderboard.empty_trusted')
+    : activeTab === 'cmsr'     ? t('leaderboard.empty_cmsr')
+    : t('leaderboard.empty_helper');
 
   const emptySubtext = isLoggedOut
-    ? `Log in to view the ${activeMeta?.label || 'leaderboard'} list.`
-    : activeTab === 'topRated' ? 'Leaderboard is updated daily'
+    ? t('leaderboard.signed_out_subtext', { list: activeLabel })
+    : activeTab === 'topRated' ? t('leaderboard.updated_daily')
     : null;
 
   return (
@@ -410,7 +415,7 @@ const LeaderboardScreen = () => {
               >
                 <Icon name={tab.icon} size={18} color={isActive ? tab.color : c.textMuted} />
                 <Text style={[styles.tabLabel, { color: isActive ? tab.color : c.textMuted, fontWeight: isActive ? '700' : '500' }]}>
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </Text>
               </TouchableOpacity>
             );
@@ -421,7 +426,7 @@ const LeaderboardScreen = () => {
         {loading && activeData.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={config.colors.primary} />
-            <Text style={styles.loadingText}>Loading {activeMeta.label}...</Text>
+            <Text style={styles.loadingText}>{t('leaderboard.loading_tab', { tab: activeLabel })}</Text>
           </View>
         ) : activeData.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -437,6 +442,7 @@ const LeaderboardScreen = () => {
           </View>
         ) : (
           <FlatList
+            removeClippedSubviews={false}
             data={activeData}
             renderItem={activeRenderer}
             keyExtractor={(item) => item.userId}
@@ -469,7 +475,7 @@ const LeaderboardScreen = () => {
         {/* Cache info — Top Rated only */}
         {activeTab === 'topRated' && localState.leaderboardTop50?.lastFetched && !loading && (
           <Text style={styles.cacheInfo}>
-            Last updated: {new Date(localState.leaderboardTop50.lastFetched).toLocaleDateString()}
+            {t('leaderboard.last_updated', { date: new Date(localState.leaderboardTop50.lastFetched).toLocaleDateString() })}
           </Text>
         )}
 

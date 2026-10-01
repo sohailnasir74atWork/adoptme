@@ -278,7 +278,7 @@ const NotifierDrawer = () => {
     });
 
     showMessage({
-      message: t("trade.notifier.added_to", { item: itemName, mode: mode.toUpperCase() }),
+      message: t(mode === 'sale' ? "trade.notifier.added_to_sale" : "trade.notifier.added_to_buy", { item: itemName }),
       type: 'success',
       duration: 2500,
     });
@@ -410,6 +410,7 @@ const NotifierDrawer = () => {
           </View>
 
           <FlatList
+            removeClippedSubviews={false}
             data={filteredItems}
             renderItem={renderItem}
             keyExtractor={(item, index) => item?.name || item?.Name || `item-${index}`}

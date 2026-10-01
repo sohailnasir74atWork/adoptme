@@ -18,6 +18,7 @@ import { clearActiveChat, useOnlineStatus, setActiveChat, updateLastRead, flushL
 import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
 import {
   loadPrivateMessages,
+  loadPrivateMessagesSince,
   sendPrivateMessage,
   sendPrivateChatMeta,
   subscribeToPrivateMessages,
@@ -66,6 +67,47 @@ const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
 // Scrolling past this re-fetches older pages from Supabase.
 const MAX_LIVE = 150;
 
+// Last messages seen per chat, in memory for this app session. Reopening a
+// chat paints these instantly while the fresh page loads behind them, instead
+// of a full-screen spinner on every visit. Keyed by chatKey (both UIDs), so a
+// different signed-in account can never read another account's entries.
+const CACHE_MAX_CHATS = 20;
+const CACHE_PER_CHAT = 50;
+const messageCache = new Map(); // chatKey -> messages, newest first
+
+const writeCachedMessages = (key, msgs) => {
+  if (!key || !Array.isArray(msgs) || msgs.length === 0) return;
+  messageCache.delete(key); // re-insert = most recently used
+  messageCache.set(key, msgs.slice(0, CACHE_PER_CHAT));
+  if (messageCache.size > CACHE_MAX_CHATS) {
+    messageCache.delete(messageCache.keys().next().value);
+  }
+};
+
+// Supabase cursor for a message. Prefers the raw microsecond created_at; the
+// ms `timestamp` fallback only covers rows mapped before that field existed.
+const cursorOf = (m) => (m
+  ? { createdAt: m.createdAt || new Date(m.timestamp).toISOString(), id: m.id }
+  : null);
+
+// Merge incoming rows into a newest-first list: skip ones already present (by
+// id or client_msg_id), keep newest-first, and cap the live list.
+const mergeIncoming = (prev, incoming) => {
+  const list = Array.isArray(prev) ? prev : [];
+  const ids = new Set();
+  const clientIds = new Set();
+  list.forEach((m) => {
+    ids.add(String(m?.id));
+    if (m?.clientMsgId) clientIds.add(String(m.clientMsgId));
+  });
+  const fresh = incoming.filter((m) => m
+    && !ids.has(String(m.id))
+    && !(m.clientMsgId && clientIds.has(String(m.clientMsgId))));
+  if (fresh.length === 0) return list;
+  const sorted = [...fresh, ...list].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+  return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
+};
+
 const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVisible, noTabBar }) => {
   const { selectedUser, selectedTheme, item } = route.params || {};
 
@@ -80,6 +122,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   // message in the current `messages` array. null = no older page known yet
   // OR end-of-history reached (handleLoadMore returns early when null).
   const oldestCursorRef = useRef(null);
+  // Mirrors `messages` for callbacks that must read the latest list without
+  // re-subscribing (realtime gap-fill).
+  const messagesRef = useRef([]);
+  // True once the fresh first page has landed. Until then a realtime
+  // SUBSCRIBED needs no gap-fill — the in-flight first page covers it.
+  const initialLoadDoneRef = useRef(false);
+  const paginatingRef = useRef(false);
   const previousChatKeyRef = useRef(null); // ✅ Track previous chatKey to prevent unnecessary resets
   const [replyTo, setReplyTo] = useState(null);
   const [input, setInput] = useState('');
@@ -108,6 +157,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   // though we're reading the message live, so we reset once on blur — but
   // only if something actually arrived, to avoid a wasted write per visit.
   const unreadWhileFocusedRef = useRef(false);
+
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  useEffect(() => {
+    if (isDrawerVisible) setDrawerMounted(true);
+  }, [isDrawerVisible]);
 
   const closeProfileDrawer = () => {
     setIsDrawerVisible(false);
@@ -269,21 +323,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       console.error('Error updating user points:', error);
     }
   }, [getUserPoints, appdatabase, updateLocalStateAndDatabase]);
-  // const navigation = useNavigation();
-  useFocusEffect(
-    useCallback(() => {
-      // Screen is focused
-      // console.log('Screen is focused');
-
-      return () => {
-        // Screen is unfocused
-        if (user?.id) {
-          clearActiveChat(user.id);
-          // console.log('Triggered clearActiveChat for user:', user.id);
-        }
-      };
-    }, [user?.id])
-  );
+  // (clearActiveChat on blur lives in the focus effect that sets it — a second
+  // effect here wrote the same RTDB null on every exit.)
   // ✅ Memoize handleRating - FIRESTORE ONLY (no RTDB)
   const handleRating = useCallback(async () => {
     if (!rating || rating < 1 || rating > 5) {
@@ -437,10 +478,21 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       if (!chatKey) return;
 
       if (reset) {
-        setLoading(true);
-        setMessages([]);
-        oldestCursorRef.current = null;
+        initialLoadDoneRef.current = false;
+        const cached = messageCache.get(chatKey);
+        if (cached?.length) {
+          // Paint the last-seen messages now; the fresh page merges in below.
+          setMessages(cached);
+          setLoading(false);
+          oldestCursorRef.current = cursorOf(cached[cached.length - 1]);
+        } else {
+          setLoading(true);
+          setMessages([]);
+          oldestCursorRef.current = null;
+        }
       } else {
+        if (paginatingRef.current) return;
+        paginatingRef.current = true;
         setIsPaginating(true);
       }
 
@@ -458,32 +510,48 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
           return;
         }
 
+        if (reset) {
+          // The fresh newest page wins. Rows already on screen survive only
+          // if they sit outside its time range: older ones (cached history the
+          // user may be scrolled into) and newer ones (realtime inserts that
+          // landed while this request was in flight). A row inside the range
+          // but missing from it was deleted, so it goes.
+          const newestFresh = parsedMessages[0]?.timestamp || 0;
+          const oldestFresh = parsedMessages[parsedMessages.length - 1]?.timestamp || 0;
+          const freshIds = new Set(parsedMessages.map(m => String(m?.id)));
+          setMessages(prev => {
+            const keep = (Array.isArray(prev) ? prev : []).filter(m => m
+              && !freshIds.has(String(m.id))
+              && ((m.timestamp || 0) < oldestFresh || (m.timestamp || 0) > newestFresh));
+            const merged = [...parsedMessages, ...keep]
+              .sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
+            oldestCursorRef.current = cursorOf(merged[merged.length - 1]);
+            return merged;
+          });
+          return;
+        }
+
         setMessages(prev => {
           if (!Array.isArray(prev)) return parsedMessages;
           const existingIds = new Set(prev.map(m => String(m?.id)));
           const onlyNew = parsedMessages.filter(m => !existingIds.has(String(m?.id)));
-
-          if (reset) {
-            return parsedMessages;
-          }
           // Append older page; resort to keep descending invariant.
           const combined = [...prev, ...onlyNew];
           return combined.sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
         });
 
         // Cursor = oldest row in this page (last element after descending sort).
-        const oldest = parsedMessages[parsedMessages.length - 1];
-        if (oldest) {
-          oldestCursorRef.current = {
-            createdAt: new Date(oldest.timestamp).toISOString(),
-            id: oldest.id,
-          };
-        }
+        oldestCursorRef.current = cursorOf(parsedMessages[parsedMessages.length - 1]);
       } catch (err) {
         console.warn('Error loading messages:', err);
       } finally {
-        if (reset) setLoading(false);
-        setIsPaginating(false);
+        if (reset) {
+          setLoading(false);
+          initialLoadDoneRef.current = true;
+        } else {
+          paginatingRef.current = false;
+          setIsPaginating(false);
+        }
       }
     },
     [chatKey],
@@ -518,18 +586,26 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       await softDeletePrivateMessage(messageId, myUserId);
       setMessages(prev => prev.filter(m => m.id !== messageId));
     } catch (e) {
-      Alert.alert('Error', 'Failed to delete message.');
+      Alert.alert(t('chat.error'), t('chat.delete_error'));
     }
-  }, [myUserId]);
+  }, [myUserId, t]);
+
+  // Keep the session cache and the gap-fill ref in step with what's on screen.
+  useEffect(() => {
+    messagesRef.current = messages;
+    writeCachedMessages(chatKey, messages);
+  }, [chatKey, messages]);
 
   const handleLoadMore = useCallback(() => {
-    // ✅ Prevent loading if already paginating or no more messages
-    if (isPaginating || !oldestCursorRef.current) {
+    // ✅ Prevent loading if already paginating or no more messages. The ref
+    // (not the state) is the guard: onEndReached can fire twice before the
+    // isPaginating re-render lands.
+    if (paginatingRef.current || !oldestCursorRef.current) {
       return;
     }
     // explicitly say "this is NOT a reset"
     loadMessages(false);
-  }, [loadMessages, isPaginating]);
+  }, [loadMessages]);
   // ✅ Memoize groupItems
   const groupItems = useCallback((items) => {
     if (!Array.isArray(items)) return [];
@@ -662,7 +738,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     // ✅ Validate fruits count - maximum 18 fruits allowed
     if (hasFruits && fruits.length > MAX_FRUITS_PER_MESSAGE) {
-      showErrorMessage(t("home.alert.error"), t('chat.max_pets_allowed'));
+      showErrorMessage(t("home.alert.error"), t('chat.max_items_per_message', { max: MAX_FRUITS_PER_MESSAGE }));
       return;
     }
 
@@ -718,8 +794,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       // Permanent ban
       if (bannedUntil === 'permanent') {
         showMessage({
-          message: '⛔ Permanently Banned',
-          description: 'You are permanently banned from sending messages.',
+          message: t('chat.permanently_banned_title'),
+          description: t('chat.permanently_banned_message'),
           type: 'danger',
         });
         return;
@@ -730,11 +806,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         const totalMinutes = Math.ceil((bannedUntil - now) / 60000);
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
-        const timeLeftText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        const timeLeftText = hours > 0
+          ? t('chat.duration_hours_minutes', { hours, minutes })
+          : t('chat.duration_minutes', { minutes });
 
         showMessage({
-          message: `⚠️ Strike ${strikeCount}`,
-          description: `You are banned from chatting for ${timeLeftText} more minute(s).`,
+          message: t('chat.strike_title', { count: strikeCount }),
+          description: t('chat.strike_time_left', { time: timeLeftText }),
           type: 'warning',
           duration: 5000,
         });
@@ -764,7 +842,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // Without this, the message silently queues in the local RTDB buffer, appears sent
     // to the sender, but never reaches Firebase servers or the other user.
     if (!isRTDBConnected) {
-      showErrorMessage('No Connection', 'Unable to reach chat server. Try switching to mobile data or a different network.');
+      showErrorMessage(t('chat.no_connection_title'), t('chat.no_connection_message'));
       return;
     }
 
@@ -853,11 +931,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         partnerUid: selectedUserId,
         lastMessage: lastMessagePreview,
         timestampMs: timestamp,
-        senderName: writeReceiverIdentity ? (user?.displayName || t('chat.anonymous')) : null,
+        // Names are stored data shown to the other person — keep the
+        // fallback English rather than the sender's UI language.
+        senderName: writeReceiverIdentity ? (user?.displayName || 'Anonymous') : null,
         senderAvatar: writeReceiverIdentity
           ? (user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
           : null,
-        receiverName: writeSenderIdentity ? (selectedUser?.sender || t('chat.anonymous')) : null,
+        receiverName: writeSenderIdentity ? (selectedUser?.sender || 'Anonymous') : null,
         receiverAvatar: writeSenderIdentity
           ? (selectedUser?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png')
           : null,
@@ -978,11 +1058,35 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   // rare (mod path) and removes by id. Uses useFocusEffect to detach the
   // channel when navigating away (prevents stale subscriptions piling up
   // on rapid nav).
+  //
+  // Realtime never replays what it missed. Every SUBSCRIBED — re-focus after
+  // the image viewer, or the rejoin after client.js dropped the socket in the
+  // background — fetches only the rows newer than the newest on screen.
+  // Before this, a message that arrived in that gap stayed invisible until the
+  // chat was closed and reopened.
   useFocusEffect(
     useCallback(() => {
       if (!chatKey) return undefined;
 
+      let active = true;
+      let gapFillInFlight = false;
+      const gapFill = () => {
+        // Before the first page lands there's nothing to fill: that request
+        // already covers everything up to now.
+        if (!active || gapFillInFlight || !initialLoadDoneRef.current) return;
+        gapFillInFlight = true;
+        loadPrivateMessagesSince(chatKey, cursorOf(messagesRef.current[0]), { limit: 50 })
+          .then((rows) => {
+            if (active && rows.length > 0) setMessages(prev => mergeIncoming(prev, rows));
+          })
+          .catch((e) => console.warn('[PrivateChat] gap-fill failed:', e?.message))
+          .finally(() => { gapFillInFlight = false; });
+      };
+
       const unsubscribe = subscribeToPrivateMessages(chatKey, {
+        onStatus: (status) => {
+          if (status === 'SUBSCRIBED') gapFill();
+        },
         onInsert: (newMessage) => {
           if (!newMessage) return;
 
@@ -998,19 +1102,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
             }
           }
 
-          setMessages(prev => {
-            if (!Array.isArray(prev)) return [newMessage];
-            // Idempotency: client_msg_id or id collision means we already have it.
-            const exists = prev.some(m =>
-              String(m?.id) === String(newMessage.id)
-              || (newMessage.clientMsgId && String(m?.clientMsgId) === String(newMessage.clientMsgId)),
-            );
-            if (exists) return prev;
-            // Keep DESCENDING (newest first for inverted FlatList).
-            const sorted = [newMessage, ...prev].sort((a, b) => (b?.timestamp || 0) - (a?.timestamp || 0));
-            // Cap the live list (newest-first, so trim the oldest tail).
-            return sorted.length > MAX_LIVE ? sorted.slice(0, MAX_LIVE) : sorted;
-          });
+          // Idempotent on id / client_msg_id, newest-first, capped at MAX_LIVE.
+          setMessages(prev => mergeIncoming(prev, [newMessage]));
         },
         onUpdate: (updated) => {
           if (!updated) return;
@@ -1031,7 +1124,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         },
       });
 
-      return () => unsubscribe();
+      return () => {
+        active = false;
+        unsubscribe();
+      };
     }, [chatKey, myUserId, localState?.showReadReceipts])
   );
 
@@ -1149,7 +1245,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 )}
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 9, color: isDarkMode ? '#8B9DC3' : '#6B7280', fontWeight: '600' }}>
-                    {t('feed.about_post') || 'About a post'}
+                    {t('feed.about_post')}
                   </Text>
                   {post.desc ? (
                     <Text
@@ -1384,7 +1480,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
           />
         )}
       </View>} */}
-      <ProfileBottomDrawer
+      {/* Mounted on first open only: mounted hidden, it fetched the partner's
+          full profile (5 Supabase reads + RTDB + Firestore) on every chat open,
+          competing with the message load for the same connection slots. */}
+      {(drawerMounted || isDrawerVisible) && <ProfileBottomDrawer
         isVisible={isDrawerVisible}
         toggleModal={closeProfileDrawer}
         startChat={() => { }}
@@ -1392,7 +1491,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         isOnline={isOnline}
         bannedUsers={bannedUsers}
         fromPvtChat={true}
-      />
+      />}
     </>
   );
 };

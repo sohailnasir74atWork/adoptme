@@ -10,12 +10,27 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../GlobelStats';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, setCachedEggInventory } from '../Helper/cosmeticsCache';
-import { getInventory, activateItem, deactivateItem, formatTimeRemaining } from './shopUtils';
-import { RARITY_CONFIG, ALL_ITEMS, COSMETIC_TYPE, FRAMES, TEXT_COLORS, TRADE_BG_COLORS, BANNER_GRADIENTS, CHAT_BG_COLORS } from './shopItems';
+import { getInventory, activateItem, deactivateItem } from './shopUtils';
+import { RARITY_CONFIG, ALL_ITEMS, COSMETIC_TYPE, FRAMES, TEXT_COLORS, TRADE_BG_COLORS, BANNER_GRADIENTS, CHAT_BG_COLORS, getCosmeticName } from './shopItems';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import config from '../Helper/Environment';
+import { serverNowMs } from '../Helper/serverTime';
+
+// Translated twin of shopUtils.formatTimeRemaining (same thresholds, same
+// cached server-time estimate) — that helper returns hardcoded English.
+const formatTimeLeft = (expiresAt, t) => {
+  if (expiresAt === -1) return t('cosmetics.time_left.permanent');
+  const remaining = expiresAt - serverNowMs();
+  if (remaining <= 0) return t('cosmetics.time_left.expired');
+  const hours = Math.floor(remaining / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+  if (days > 0) return t('cosmetics.time_left.days_hours', { days, hours: hours % 24 });
+  if (hours > 0) return t('cosmetics.time_left.hours', { hours });
+  return t('cosmetics.time_left.minutes', { minutes: Math.floor(remaining / (1000 * 60)) });
+};
 
 // ── DEV: Generate full inventory with all cosmetics for testing ──
 const generateTestInventory = () => {
@@ -40,12 +55,13 @@ const generateTestInventory = () => {
   };
 };
 
-const TYPE_LABELS = {
-  profileFrame: { emoji: '🖼️', label: 'Profile Frames' },
-  chatTextColor: { emoji: '🔤', label: 'Text Colors' },
-  tradeCardBg: { emoji: '🃏', label: 'Trade Backgrounds' },
-  profileBanner: { emoji: '🌈', label: 'Profile Banners' },
-  chatBubbleBg: { emoji: '💬', label: 'Chat Bubbles' },
+// Section titles (keys include the emoji) — shared with the Mystery Egg catalog.
+const TYPE_LABEL_KEYS = {
+  profileFrame: 'mystery_egg.catalog.frames_title',
+  chatTextColor: 'mystery_egg.catalog.text_colors_title',
+  tradeCardBg: 'mystery_egg.catalog.trade_bgs_title',
+  profileBanner: 'mystery_egg.catalog.banners_title',
+  chatBubbleBg: 'mystery_egg.catalog.chat_bgs_title',
 };
 
 // Who sees the test-mode toggle (flask). It unlocks every cosmetic locally so
@@ -74,6 +90,7 @@ const TYPE_LABELS = {
 const COSMETIC_TEST_UIDS = [];
 
 const MyCosmeticsScreen = ({ navigation }) => {
+  const { t } = useTranslation();
   const { theme, user, appdatabase, isAdmin } = useGlobalState();
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
@@ -131,8 +148,8 @@ const MyCosmeticsScreen = ({ navigation }) => {
         <View style={s.headerCenter}>
           <Text style={{ fontSize: 26 }}>✨</Text>
           <View>
-            <Text style={s.headerTitle}>My Cosmetics</Text>
-            <Text style={s.headerSub}>Tap to equip • Tap active to remove</Text>
+            <Text style={s.headerTitle}>{t('cosmetics.title')}</Text>
+            <Text style={s.headerSub}>{t('cosmetics.header_sub')}</Text>
           </View>
         </View>
 
@@ -165,7 +182,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
           <View style={s.emptyState}>
             <ActivityIndicator size="large" color={isDark ? '#a78bfa' : '#7c3aed'} />
             <Text style={[s.emptySubtitle, { color: isDark ? '#64748b' : '#94a3b8', marginTop: 16 }]}>
-              Loading your cosmetics...
+              {t('cosmetics.loading')}
             </Text>
           </View>
         ) : !hasAnyItems ? (
@@ -173,10 +190,10 @@ const MyCosmeticsScreen = ({ navigation }) => {
           <View style={s.emptyState}>
             <Text style={{ fontSize: 60, marginBottom: 16 }}>🎒</Text>
             <Text style={[s.emptyTitle, { color: isDark ? '#e2e8f0' : '#0f172a' }]}>
-              No cosmetics yet!
+              {t('cosmetics.empty_title')}
             </Text>
             <Text style={[s.emptySubtitle, { color: isDark ? '#64748b' : '#94a3b8' }]}>
-              Hatch Mystery Eggs to win profile frames, chat colors, trade backgrounds, and more!
+              {t('cosmetics.empty_sub')}
             </Text>
             <TouchableOpacity
               style={s.emptyBtn}
@@ -184,20 +201,20 @@ const MyCosmeticsScreen = ({ navigation }) => {
               activeOpacity={0.85}
             >
               <Text style={{ fontSize: 18 }}>🥚</Text>
-              <Text style={s.emptyBtnText}>Hatch Mystery Eggs</Text>
+              <Text style={s.emptyBtnText}>{t('cosmetics.empty_btn')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           /* ── Cosmetics Inventory ── */
           <>
             {Object.entries(displayInventory).map(([type, items]) => {
-              const typeInfo = TYPE_LABELS[type] || { emoji: '🎁', label: type };
+              const typeLabelKey = TYPE_LABEL_KEYS[type];
               const activeId = cosmetics?.[type]?.id;
 
               return (
                 <View key={type} style={[s.typeSection, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}>
                   <Text style={[s.typeLabel, { color: isDark ? '#e2e8f0' : '#0f172a' }]}>
-                    {typeInfo.emoji} {typeInfo.label}
+                    {typeLabelKey ? t(typeLabelKey) : `🎁 ${type}`}
                   </Text>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 8 }}>
@@ -229,7 +246,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                           {/* Active badge */}
                           {isActive && (
                             <View style={s.activeBadge}>
-                              <Text style={{ fontSize: 7, color: '#fff', fontWeight: '800' }}>✓ ON</Text>
+                              <Text style={{ fontSize: 7, color: '#fff', fontWeight: '800' }}>{t('cosmetics.active_badge')}</Text>
                             </View>
                           )}
 
@@ -254,7 +271,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                                 backgroundColor: (item.color || itemDef?.color) === 'rainbow' ? '#A855F7' : (item.color || itemDef?.color || '#94a3b8'),
                                 alignItems: 'center', justifyContent: 'center',
                               }}>
-                                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>Aa</Text>
+                                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{t('cosmetics.text_sample')}</Text>
                               </View>
                             ) : type === 'profileBanner' ? (
                               <View style={{
@@ -281,13 +298,13 @@ const MyCosmeticsScreen = ({ navigation }) => {
 
                           {/* Name + Rarity */}
                           <Text style={[s.itemName, { color: isDark ? '#e2e8f0' : '#334155' }]} numberOfLines={1}>
-                            {item.name}
+                            {getCosmeticName(item, type)}
                           </Text>
                           <Text style={[s.itemRarity, { color: rc?.color }]}>
                             {rc?.emoji} {rc?.label}
                           </Text>
                           <Text style={[s.itemTime, { color: isDark ? '#64748b' : '#94a3b8' }]}>
-                            {formatTimeRemaining(item.expiresAt)}
+                            {formatTimeLeft(item.expiresAt, t)}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -305,8 +322,8 @@ const MyCosmeticsScreen = ({ navigation }) => {
             >
               <Text style={{ fontSize: 22 }}>🥚</Text>
               <View style={{ flex: 1 }}>
-                <Text style={[s.getMoreTitle, { color: isDark ? '#e2e8f0' : '#0f172a' }]}>Want more?</Text>
-                <Text style={[s.getMoreSub, { color: isDark ? '#64748b' : '#94a3b8' }]}>Hatch Mystery Eggs to win cosmetics!</Text>
+                <Text style={[s.getMoreTitle, { color: isDark ? '#e2e8f0' : '#0f172a' }]}>{t('cosmetics.more_title')}</Text>
+                <Text style={[s.getMoreSub, { color: isDark ? '#64748b' : '#94a3b8' }]}>{t('cosmetics.more_sub')}</Text>
               </View>
               <Icon name="chevron-forward" size={18} color={isDark ? '#64748b' : '#94a3b8'} />
             </TouchableOpacity>
@@ -357,7 +374,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                   color: itemDef?.borderColors?.[0] || (isDark ? '#e2e8f0' : '#0f172a'),
                   marginTop: 16,
                 }}>
-                  {item.name}
+                  {getCosmeticName(item, type)}
                 </Text>
 
                 {/* Rarity pill */}
@@ -376,7 +393,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                   fontSize: 11, color: isDark ? '#64748b' : '#94a3b8',
                   textAlign: 'center', marginTop: 6,
                 }}>
-                  {formatTimeRemaining(item.expiresAt)}
+                  {formatTimeLeft(item.expiresAt, t)}
                 </Text>
 
                 {/* Equip / Remove button */}
@@ -396,7 +413,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
                 >
                   <Icon name={isActive ? 'close-circle' : 'checkmark-circle'} size={18} color="#fff" />
                   <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
-                    {isActive ? 'Remove' : 'Equip'}
+                    {isActive ? t('cosmetics.remove') : t('cosmetics.equip')}
                   </Text>
                 </TouchableOpacity>
               </TouchableOpacity>

@@ -5,7 +5,7 @@ import {
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
-import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
+import { fetchAnalyticsData, freshDiffEntries, valueChangeOf } from '../Helper/analyticsDataHelper';
 
 let analyticsCache = null;
 try {
@@ -15,49 +15,6 @@ try {
   console.warn('[TrendingPets] MMKV not available:', e.message);
 }
 const CHANGES_CACHE_KEY = 'value_changes';
-
-const SKIP_KEYS = new Set(['key', 'name', 'type', 'image']);
-const VALUE_KEY_MAP = {
-  'value': true, 'value - fly': true, 'value - ride': true, 'value - fly&ride': true,
-  'rvalue': true, 'rvalue - fly': true, 'rvalue - ride': true, 'rvalue - fly&ride': true,
-  'nvalue': true, 'nvalue - fly': true, 'nvalue - ride': true, 'nvalue - fly&ride': true,
-  'mvalue': true, 'mvalue - fly': true, 'mvalue - ride': true, 'mvalue - fly&ride': true,
-};
-
-// Extract primary value change (old → new) from a diff item
-const getPrimaryChange = (item) => {
-  // Adoptme format: score: {oldVal, newVal}
-  if (item.score && typeof item.score === 'object' && 'oldVal' in item.score && 'newVal' in item.score) {
-    const diff = item.score.newVal - item.score.oldVal;
-    const pct = item.score.oldVal > 0 ? Math.round((diff / item.score.oldVal) * 100) : 0;
-    return { pct, oldVal: item.score.oldVal, newVal: item.score.newVal };
-  }
-
-  // New format with item.values (MM2)
-  if (item.values) {
-    const primary = item.primary || 'd_nopotion';
-    const v = item.values[primary];
-    if (v && 'oldVal' in v && 'newVal' in v) {
-      const diff = v.newVal - v.oldVal;
-      const pct = v.oldVal > 0 ? Math.round((diff / v.oldVal) * 100) : 0;
-      return { pct, oldVal: v.oldVal, newVal: v.newVal };
-    }
-    return null;
-  }
-
-  // Old format with inline keys (MM2)
-  for (const k of Object.keys(item)) {
-    if (SKIP_KEYS.has(k)) continue;
-    if (!VALUE_KEY_MAP[k]) continue;
-    const v = item[k];
-    if (v && typeof v === 'object' && 'oldVal' in v && 'newVal' in v) {
-      const diff = v.newVal - v.oldVal;
-      const pct = v.oldVal > 0 ? Math.round((diff / v.oldVal) * 100) : 0;
-      return { pct, oldVal: v.oldVal, newVal: v.newVal };
-    }
-  }
-  return null;
-};
 
 const TrendingPets = ({ isDarkMode, navigation }) => {
   const { t } = useTranslation();
@@ -89,10 +46,7 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
       const cachedChanges = analyticsCache?.getString(CHANGES_CACHE_KEY);
       if (!cachedChanges) { setLoading(false); return; }
 
-      const changesData = JSON.parse(cachedChanges);
-      const rawList = Array.isArray(changesData?.changed) ? changesData.changed
-        : Array.isArray(changesData?.changes) ? changesData.changes
-          : [];
+      const rawList = freshDiffEntries(JSON.parse(cachedChanges));
 
       const gainersList = [];
       const losersList = [];
@@ -101,10 +55,10 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
         const name = String(item.name || '').toLowerCase().trim();
         if (!name) return;
 
-        const change = getPrimaryChange(item);
+        const change = valueChangeOf(item);
         if (!change || change.pct === 0) return;
 
-        const entry = { id: name, pct: change.pct };
+        const entry = { id: name, name: String(item.name).trim(), pct: change.pct };
 
         if (change.pct > 0) {
           gainersList.push(entry);
@@ -126,7 +80,9 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
     }
   }, [fetchGen]);
 
-  if (!loading && gainers.length === 0 && losers.length === 0) return null;
+  // Always rendered: this card is the Home entry point to Analytics, so it
+  // must not vanish when the latest value update has no movers.
+  const hasMovers = gainers.length > 0 || losers.length > 0;
 
   return (
     <View style={styles.section}>
@@ -148,29 +104,29 @@ const TrendingPets = ({ isDarkMode, navigation }) => {
       ) : (
       <TouchableOpacity
         activeOpacity={0.7}
-        onPress={() => navigation.navigate('Analytics')}
+        onPress={() => navigation.navigate('Analytics', hasMovers ? { tab: 'changes' } : undefined)}
         style={[styles.card, { backgroundColor: isDarkMode ? '#1C1C1E' : '#fff' }]}
       >
+        {hasMovers && (
         <View style={styles.statsRow}>
           {gainers.length > 0 && (
             <View style={[styles.statPill, { backgroundColor: isDarkMode ? '#12261f' : '#F0FDF4' }]}>
               <FontAwesome name="fire-flame-curved" size={12} color="#10B981" solid />
-              <Text style={[styles.statLabel, { color: '#10B981' }]} numberOfLines={1}>{t('trending.hot')}</Text>
-              <FontAwesome name="lock" size={9} color={isDarkMode ? '#777' : '#aaa'} solid />
+              <Text style={[styles.statLabel, { color: '#10B981' }]} numberOfLines={1}>{gainers[0].name || t('trending.hot')}</Text>
               <Text style={[styles.statPct, { color: '#10B981' }]}>+{gainers[0].pct}%</Text>
             </View>
           )}
           {losers.length > 0 && (
             <View style={[styles.statPill, { backgroundColor: isDarkMode ? '#2a1a1a' : '#FEF2F2' }]}>
               <FontAwesome name="arrow-trend-down" size={12} color="#EF4444" solid />
-              <Text style={[styles.statLabel, { color: '#EF4444' }]} numberOfLines={1}>{t('trending.dropping')}</Text>
-              <FontAwesome name="lock" size={9} color={isDarkMode ? '#777' : '#aaa'} solid />
+              <Text style={[styles.statLabel, { color: '#EF4444' }]} numberOfLines={1}>{losers[0].name || t('trending.dropping')}</Text>
               <Text style={[styles.statPct, { color: '#EF4444' }]}>{losers[0].pct}%</Text>
             </View>
           )}
         </View>
-        <View style={styles.teaserRow}>
-          <FontAwesome name="lock" size={10} color={config.colors.primary} solid />
+        )}
+        <View style={[styles.teaserRow, !hasMovers && { marginTop: 0 }]}>
+          <FontAwesome name="chart-line" size={10} color={config.colors.primary} solid />
           <Text style={styles.teaserText}>{t('trending.locked_teaser')}</Text>
           <FontAwesome name="chevron-right" size={9} color={config.colors.primary} />
         </View>

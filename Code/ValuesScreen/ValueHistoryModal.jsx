@@ -47,7 +47,9 @@ const formatValue = (n) => {
   });
 };
 
-const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose }) => {
+// liveValues=false: the item's own values are from another source (GG) than
+// the history feed (Elvebredd), so the chart shows the feed alone.
+const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveValues = true }) => {
   const { t } = useTranslation();
   const { width: screenWidth } = useWindowDimensions();
   const c = getThemeColors(isDarkMode);
@@ -85,14 +87,14 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose }) => 
     requestRef.current = requestId;
     setState({ status: 'loading', points: [] });
     try {
-      const result = await loadItemHistory(item, seriesKey);
+      const result = await loadItemHistory(item, seriesKey, { appendCurrent: liveValues });
       if (requestRef.current !== requestId) return; // superseded
       setState(result);
     } catch (e) {
       if (requestRef.current !== requestId) return;
       setState({ status: 'error', points: [] });
     }
-  }, [visible, item, seriesKey]);
+  }, [visible, item, seriesKey, liveValues]);
 
   useEffect(() => {
     fetchHistory();
@@ -108,10 +110,10 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose }) => 
     return {
       high: Math.max(...values),
       low: Math.min(...values),
-      current: getCurrentValueFor(item, seriesKey) ?? values[values.length - 1],
+      current: (liveValues ? getCurrentValueFor(item, seriesKey) : null) ?? values[values.length - 1],
       count: pts.length,
     };
-  }, [state.points, item, seriesKey]);
+  }, [state.points, item, seriesKey, liveValues]);
 
   const renderBody = () => {
     if (state.status === 'loading') {
@@ -232,10 +234,8 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose }) => 
                   <Stat label={t('value.history.stat_current', { defaultValue: 'Current' })} value={formatValue(stats.current)} styles={styles} />
                 </View>
                 <Text style={styles.footnote}>
-                  {t('value.history.footnote', {
-                    count: stats.count,
-                    defaultValue: '{{count}} recorded prices. The latest point is the current live value.',
-                  })}
+                  {t('value.history.recorded_prices', { count: stats.count })}
+                  {!liveValues ? ` · ${t('value.history.elvebredd_only')}` : ''}
                 </Text>
               </>
             )}

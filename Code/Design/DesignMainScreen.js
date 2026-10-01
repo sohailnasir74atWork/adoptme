@@ -575,8 +575,8 @@ const DesignFeedScreen = ({ route }) => {
         const minutesLeft = Math.floor(secondsLeft / 60);
         const remainingSeconds = secondsLeft % 60;
         const timeMessage = minutesLeft > 0
-          ? `${minutesLeft} ${t('value.num_m')} and ${remainingSeconds} ${t('value.num_s', { defaultValue: 's' })}`
-          : `${secondsLeft} ${t('value.num_s', { defaultValue: 's' })}`;
+          ? t('feed.wait_min_sec', { minutes: minutesLeft, seconds: remainingSeconds })
+          : t('feed.wait_sec', { seconds: secondsLeft });
         showMessage({
           message: t('feed.cooldown_message', { time: timeMessage }),
           type: 'danger',
@@ -601,11 +601,6 @@ const DesignFeedScreen = ({ route }) => {
         ? imageUrls.filter(url => url && typeof url === 'string' && url.trim().length > 0)
         : (imageUrls && typeof imageUrls === 'string' && imageUrls.trim().length > 0 ? [imageUrls] : []);
 
-      // ✅ Calculate hasRecentGameWin (similar to Trader.jsx)
-      const hasRecentWin =
-        typeof user?.lastGameWinAt === 'number' &&
-        now - user.lastGameWinAt <= 24 * 60 * 60 * 1000; // last win within 24h
-
       // ✅ Get cosmetics for embedding
       const { getMyCosmetics } = require('../Helper/cosmeticsCache');
       const myCosmetics = getMyCosmetics();
@@ -629,7 +624,6 @@ const DesignFeedScreen = ({ route }) => {
         ...(user?.flage ? { flage: user.flage } : {}),
         ...(user?.robloxUsername ? { robloxUsername: user.robloxUsername } : {}),
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
-        ...(hasRecentWin ? { hasRecentGameWin: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
         ...(user?.isAdmin ? { isAdmin: true } : {}),
         ...(user?.isModerator ? { isModerator: true } : {}),
@@ -681,7 +675,7 @@ const DesignFeedScreen = ({ route }) => {
       if (!error.message || (!error.message.includes('Cooldown') && !error.message.includes('tags'))) {
         showMessage({
           message: t('feed.upload_failed'),
-          description: t('feed.failed_submit_report'),
+          description: t('feed.post_failed_desc'),
           type: 'danger',
         });
       }
@@ -769,6 +763,7 @@ const DesignFeedScreen = ({ route }) => {
       />
 
       <FlatList
+        removeClippedSubviews={false}
         ref={feedListRef}
         onScroll={handleFeedScroll}
         scrollEventThrottle={16}
@@ -800,7 +795,7 @@ const DesignFeedScreen = ({ route }) => {
               <Text style={styles.emptyTitle}>
               {filterFollowing ? t('feed.no_following_posts', { defaultValue: 'No posts from people you follow yet' }) : filterMyPosts ? t('feed.no_my_posts') : t('feed.no_posts_found')}
               </Text>
-              <Text style={styles.emptySubtitle}>Be the first to post!</Text>
+              <Text style={styles.emptySubtitle}>{t('feed.be_first')}</Text>
             </View>
           )
         }

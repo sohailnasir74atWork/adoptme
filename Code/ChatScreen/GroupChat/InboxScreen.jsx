@@ -84,22 +84,37 @@ const InboxScreen = ({ bannedUsers }) => {
     // Always the latest banned list (via ref) without being an effect dependency.
     const getBanned = () => (Array.isArray(bannedUsersRef.current) ? bannedUsersRef.current : []);
 
+    const flushChatsList = () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      const updatedChats = Array.from(chatsMap.values())
+        .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
+      setLocalChats(updatedChats);
+      // Only seed the page size on the first load. Resetting it on every
+      // realtime batch would snap the list back to 15 rows and discard
+      // the user's "load more" progress whenever any chat updates.
+      if (!hasLoadedOnce.current) {
+        setDisplayedChatsCount(INITIAL_LOAD);
+        hasLoadedOnce.current = true;
+        setLocalLoading(false);
+      }
+    };
+
     const updateChatsList = () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      // First paint: the rows are usually already in memory (the shared
+      // subscription replays them synchronously), so show them on the next
+      // tick. The 500 ms + idle debounce only coalesces later realtime bursts —
+      // applied to the first load it held a re-opened inbox on the skeleton,
+      // then "No chats", for up to 1.5 s.
+      if (!hasLoadedOnce.current) {
+        debounceTimerRef.current = setTimeout(flushChatsList, 0);
+        return;
+      }
       debounceTimerRef.current = setTimeout(() => {
-        requestIdleCallback(() => {
-          const updatedChats = Array.from(chatsMap.values())
-            .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
-          setLocalChats(updatedChats);
-          // Only seed the page size on the first load. Resetting it on every
-          // realtime batch would snap the list back to 15 rows and discard
-          // the user's "load more" progress whenever any chat updates.
-          if (!hasLoadedOnce.current) {
-            setDisplayedChatsCount(INITIAL_LOAD);
-            hasLoadedOnce.current = true;
-            setLocalLoading(false);
-          }
-        }, { timeout: 1000 });
+        requestIdleCallback(flushChatsList, { timeout: 1000 });
       }, 500);
     };
 
@@ -126,7 +141,8 @@ const InboxScreen = ({ bannedUsers }) => {
         // sorted UID pair, so derive it when missing.
         chatId: chatData.chatId || (user?.id ? chatIdForPair(user.id, chatPartnerId) : null),
         otherUserId: chatPartnerId,
-        lastMessage: chatData.lastMessage || 'No messages yet',
+        // Empty preview is translated at render time (renderChatItem).
+        lastMessage: chatData.lastMessage || null,
         lastMessageTimestamp: chatData.timestamp || 0,
         unreadCount: isBlocked ? 0 : rawUnread,
         otherUserAvatar: chatData.receiverAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
@@ -163,11 +179,11 @@ const InboxScreen = ({ bannedUsers }) => {
       // Empty-list path: subscribeToChatMeta still fires onReady once
       // initial load + SUBSCRIBED both land, so we drop the spinner
       // even when the user has zero chats.
+      // Flush (not just drop the spinner): rows delivered before ready are
+      // still waiting in chatsMap, and clearing loading without them showed
+      // the "No chats" empty state for a moment.
       onReady: () => {
-        if (!hasLoadedOnce.current) {
-          hasLoadedOnce.current = true;
-          setLocalLoading(false);
-        }
+        if (!hasLoadedOnce.current) flushChatsList();
       },
       onStatus: (status) => {
         // Show the reconnecting pill only after the channel has been
@@ -242,16 +258,16 @@ const InboxScreen = ({ bannedUsers }) => {
       await setChatMuted(user.id, otherUserId, newMuted);
       setMutedChats(prev => ({ ...prev, [otherUserId]: newMuted }));
       showSuccessMessage(
-        'Success',
+        t('chat.success'),
         newMuted
-          ? `Notifications muted for "${otherUserName}"`
-          : `Notifications enabled for "${otherUserName}"`
+          ? t('inbox.notifications_muted', { name: otherUserName })
+          : t('inbox.notifications_enabled', { name: otherUserName })
       );
     } catch (error) {
       console.warn('[Inbox] toggle mute error:', error?.message);
-      showError('Error', 'Failed to update notification settings.');
+      showError(t('chat.error'), t('inbox.errors.mute_failed'));
     }
-  }, [user?.id, mutedChats]);
+  }, [user?.id, mutedChats, t]);
 
   const allChats = localChats;
   const displayLoading = localLoading;
@@ -368,7 +384,7 @@ const InboxScreen = ({ bannedUsers }) => {
               showSuccessMessage(t("home.alert.success"), t("chat.chat_success_message"));
             } catch (error) {
               console.error('❌ Error deleting chat:', error);
-              Alert.alert('Error', 'Failed to delete chat. Please try again.');
+              Alert.alert(t('chat.error'), t('inbox.errors.delete_failed'));
             }
           },
         },
@@ -417,9 +433,9 @@ const InboxScreen = ({ bannedUsers }) => {
 
     } catch (error) {
       console.error("Error opening chat:", error);
-      Alert.alert('Error', 'Failed to open chat. Please try again.');
+      Alert.alert(t('chat.error'), t('inbox.errors.open_failed'));
     }
-  }, [user?.id, navigation]);
+  }, [user?.id, navigation, t]);
 
 
 
@@ -443,10 +459,13 @@ const InboxScreen = ({ bannedUsers }) => {
     const cachedName = cachedProfile?.displayName && cachedProfile.displayName !== 'Anonymous'
       ? cachedProfile.displayName
       : null;
+    // otherUserName is data (passed on as the chat partner's name); 'Anonymous'
+    // is the stored placeholder, so only the on-screen label is translated.
     const otherUserName = cachedName || item.otherUserName || 'Anonymous';
+    const otherUserLabel = otherUserName === 'Anonymous' ? t('chat.anonymous') : otherUserName;
     const otherUserAvatar = cachedProfile?.avatar || item.otherUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
     const userAvatar = user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-    const lastMessage = item.lastMessage || 'No messages yet';
+    const lastMessage = item.lastMessage || t('inbox.no_messages_yet');
     const unreadCount = item.unreadCount || 0;
     const isOnline = item.isOnline || false;
     const isBanned = item.isBanned || false;
@@ -468,9 +487,9 @@ const InboxScreen = ({ bannedUsers }) => {
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.userName}>
-              {otherUserName}
+              {otherUserLabel}
               {isOnline && !isBanned && (
-                <Text style={{ color: '#22c55e' }}> - Online</Text>
+                <Text style={{ color: '#22c55e' }}> - {t('chat.online')}</Text>
               )}
             </Text>
             {streaks.get(otherUserId) >= 2 && (
@@ -489,7 +508,7 @@ const InboxScreen = ({ bannedUsers }) => {
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => handleToggleMute(otherUserId, otherUserName)}
+          onPress={() => handleToggleMute(otherUserId, otherUserLabel)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={{ paddingHorizontal: 6 }}
         >
@@ -562,7 +581,7 @@ const InboxScreen = ({ bannedUsers }) => {
           keyExtractor={(item, index) => item?.chatId || `chat-${index}`}
           renderItem={renderChatItem}
           refreshControl={refreshControl}
-          removeClippedSubviews={true}
+          removeClippedSubviews={false}
           maxToRenderPerBatch={10}
           windowSize={10}
           onEndReached={handleLoadMore}
@@ -572,7 +591,7 @@ const InboxScreen = ({ bannedUsers }) => {
               <View style={styles.loadMoreContainer}>
                 <ActivityIndicator size="small" color="#1E88E5" />
                 <Text style={styles.loadMoreText}>
-                  Loading more chats... ({displayedChatsCount} of {filteredChats.length})
+                  {t('inbox.loading_more', { shown: displayedChatsCount, total: filteredChats.length })}
                 </Text>
               </View>
             ) : null

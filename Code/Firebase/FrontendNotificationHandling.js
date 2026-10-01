@@ -2,12 +2,19 @@
 
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { getMessaging, onMessage } from '@react-native-firebase/messaging';
+import { getMessaging, onMessage, onNotificationOpenedApp, getInitialNotification } from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { useLocalState } from '../LocalGlobelStats';
+import i18n from '../../i18n';
+import { openPushRoute } from '../Helper/navigationService';
+import { onSquadPush } from '../Helper/squad';
 
 // ✅ Messaging instance for default app
 const messaging = getMessaging();
+
+// A tap that cold-started the app is delivered once; don't replay it when the
+// effect below re-runs (it re-subscribes whenever the block list changes).
+let initialTapHandled = false;
 
 const NotificationHandler = () => {
   const { localState } = useLocalState();
@@ -19,7 +26,8 @@ const NotificationHandler = () => {
         if (Platform.OS === 'android') {
           await notifee.createChannel({
             id: 'default',
-            name: 'Default Channel',
+            // Shown in Android's system notification settings.
+            name: i18n.t('misc.notification_channel_name'),
             importance: AndroidImportance.HIGH,
             smallIcon: 'ic_notification',
             color: '#36454F',
@@ -77,8 +85,8 @@ const NotificationHandler = () => {
         if (type === 'selectedFruits') {
           // keep as is
         } else if (type === 'stockUpdate') {
-          notificationTitle = 'Stock Update';
-          notificationBody = 'Stocks have been updated!';
+          notificationTitle = i18n.t('misc.stock_update_title');
+          notificationBody = i18n.t('misc.stock_update_body');
         }
 
         // ✅ Display notification after current interactions finish to avoid blocking UI
@@ -92,6 +100,7 @@ const NotificationHandler = () => {
               color: '#36454F',
               pressAction: { id: 'default' },
             },
+            ...(data?.route ? { data: { route: String(data.route) } } : {}),
           });
         }, { timeout: 1000 });
       } catch (error) {
@@ -103,6 +112,7 @@ const NotificationHandler = () => {
 
     // ✅ Foreground listener (modular)
     const unsubscribeForeground = onMessage(messaging, async (remoteMessage) => {
+      if (remoteMessage?.data?.type === 'squad') onSquadPush(remoteMessage.data.kind);
       await processNotification(remoteMessage);
     });
 
@@ -110,15 +120,33 @@ const NotificationHandler = () => {
     const unsubscribeNotifee = notifee.onForegroundEvent(
       async ({ type, detail }) => {
         if (type === EventType.PRESS) {
-          // console.log('Notification clicked:', detail.notification);
-          // handle navigation if you want
+          const route = detail?.notification?.data?.route;
+          if (route) openPushRoute(route);
         }
       },
     );
 
+    // ✅ Taps on system-tray pushes (app in background / killed)
+    const unsubscribeOpened = onNotificationOpenedApp(messaging, (remoteMessage) => {
+      if (remoteMessage?.data?.type === 'squad') onSquadPush(remoteMessage.data.kind);
+      const route = remoteMessage?.data?.route;
+      if (route) openPushRoute(route);
+    });
+    if (!initialTapHandled) {
+      initialTapHandled = true;
+      getInitialNotification(messaging)
+        .then((remoteMessage) => {
+          if (remoteMessage?.data?.type === 'squad') onSquadPush(remoteMessage.data.kind);
+          const route = remoteMessage?.data?.route;
+          if (route) openPushRoute(route);
+        })
+        .catch(() => {});
+    }
+
     return () => {
       unsubscribeForeground();
       unsubscribeNotifee();
+      unsubscribeOpened();
     };
   }, [localState?.bannedUsers]);
 

@@ -16,6 +16,11 @@ import { getThemeColors } from '../../Helper/themeColors';
 import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 
+// Partner roles / Pro / Roblox link, per uid, for this app session. These
+// change rarely; 10 minutes keeps a role change visible within one sitting.
+const HEADER_CACHE_TTL_MS = 10 * 60 * 1000;
+const headerUserCache = new Map(); // uid -> { data, at }
+
 const Badge = ({ icon, label, color }) => (
   <View style={[styles.badge, { backgroundColor: color }]}>
     <Icon name={icon} size={9} color="#fff" />
@@ -57,12 +62,20 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
     let isMounted = true;
 
+    // Reopening the same chat reuses the last answer instead of three more
+    // Supabase reads queued in front of the message load.
+    const hit = headerUserCache.get(selectedUserId);
+    if (hit && Date.now() - hit.at < HEADER_CACHE_TTL_MS) {
+      setUserData(hit.data);
+      return () => { isMounted = false; };
+    }
+
     const fetchUserData = async () => {
       try {
-        // lastGameWinAt + profileFrame come from profileCache (warmed by any
-        // prior chat/drawer interaction with this user). Skipping the RTDB
-        // reads cuts 2 reads per chat open; cold cache degrades gracefully
-        // (no trophy / frame until cache warms).
+        // profileFrame comes from profileCache (warmed by any prior
+        // chat/drawer interaction with this user). Skipping the RTDB read
+        // saves a read per chat open; cold cache degrades gracefully
+        // (no frame until cache warms).
         const cached = getCachedProfile(selectedUserId);
         const [rolesRow, cosmeticsRow, robloxRow] = await Promise.all([
           getRoles(selectedUserId).catch(() => null),
@@ -91,12 +104,11 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           missing.forEach((p, i) => { if (snaps[i] && snaps[i].exists()) fb[p] = snaps[i].val(); });
         }
 
-        setUserData({
+        const data = {
           robloxUsername:         robloxRow?.robloxUsername         ?? fb?.robloxUsername         ?? null,
           robloxUserId:           robloxRow?.robloxUserId           ?? fb?.robloxUserId           ?? null,
           robloxUsernameVerified: !!(robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified),
           isPro:                  !!(cosmeticsRow?.isPro            ?? fb?.isPro),
-          lastGameWinAt:          cached?.lastGameWinAt ?? null,
           isAdmin:                !!(rolesRow?.isAdmin              ?? fb?.admin),
           isModerator:            !!(rolesRow?.isModerator          ?? fb?.isModerator),
           isBabyMod:              !!(rolesRow?.isBabyMod            ?? fb?.isBabyMod),
@@ -104,7 +116,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           isCMSR:                 !!(rolesRow?.isCMSR               ?? fb?.isCMSR),
           isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
           profileFrame:           cached?.profileFrame ?? null,
-        });
+        };
+        headerUserCache.set(selectedUserId, { data, at: Date.now() });
+        setUserData(data);
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
         if (isMounted) setUserData(null);
@@ -129,9 +143,6 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         ? selectedUser.robloxUsernameVerified
         : userData.robloxUsernameVerified,
       isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
-      lastGameWinAt: selectedUser?.lastGameWinAt !== undefined
-        ? selectedUser.lastGameWinAt
-        : userData.lastGameWinAt,
       isAdmin: selectedUser?.isAdmin !== undefined ? selectedUser.isAdmin : userData.isAdmin,
       isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
@@ -162,13 +173,6 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
   const isOnline = useOnlineStatus(selectedUserId);
 
-  const hasRecentWin = useMemo(() =>
-    !!mergedUser?.hasRecentGameWin ||
-    (typeof mergedUser?.lastGameWinAt === 'number' &&
-      Date.now() - mergedUser.lastGameWinAt <= 24 * 60 * 60 * 1000),
-    [mergedUser?.hasRecentGameWin, mergedUser?.lastGameWinAt]
-  );
-
   // ✅ Check if user is banned with array validation
   const isBanned = useMemo(() => {
     const selectedUserId = mergedUser?.senderId || mergedUser?.id;
@@ -188,7 +192,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     const action = !isBanned ? t('chat.block_action') : t('chat.unblock_action');
     Alert.alert(
       `${action}`,
-      `${t("chat.are_you_sure")} ${action.toLowerCase()} ${userName}?`,
+      !isBanned ? t('profile.block_confirm', { name: userName }) : t('profile.unblock_confirm', { name: userName }),
       [
         { text: t("chat.cancel"), style: 'cancel' },
         {
@@ -266,9 +270,6 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           )}
           {mergedUser?.robloxUsernameVerified && (
             <Image source={require('../../../assets/verification.png')} style={styles.inlineIcon} />
-          )}
-          {hasRecentWin && (
-            <Image source={require('../../../assets/trophy.webp')} style={styles.inlineIcon} />
           )}
 
           <TouchableOpacity

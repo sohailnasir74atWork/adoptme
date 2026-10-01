@@ -125,7 +125,7 @@ const PetTrackerScreen = () => {
             {finished
               ? '🎉'
               : eta != null
-                ? t('tracker.days_to_go', { count: eta, defaultValue: 'About {{count}} days to go' })
+                ? t('tracker.about_days_left', { count: eta })
                 : t('tracker.almost_there', { defaultValue: 'Almost there!' })}
           </Text>
         </View>
@@ -175,7 +175,7 @@ const PetTrackerScreen = () => {
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.todayTitle}>{t('tracker.today_grind', { defaultValue: 'You played today!' })}</Text>
           <Text style={styles.todayCount}>
-            {today} / {dailyGoal} {t('tracker.tasks', { defaultValue: 'tasks' })}
+            {t('tracker.today_progress', { done: today, count: dailyGoal })}
           </Text>
         </View>
         <TouchableOpacity style={styles.goalEditBtn} onPress={() => setShowGoalEdit(true)}>
@@ -210,6 +210,7 @@ const PetTrackerScreen = () => {
         </ScrollView>
       ) : (
         <FlatList
+          removeClippedSubviews={false}
           data={grinds}
           keyExtractor={(g) => g.id}
           renderItem={renderGrind}
@@ -333,6 +334,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
               />
             </View>
             <FlatList
+              removeClippedSubviews={false}
               data={filtered}
               keyExtractor={(p, i) => `${p.name}-${i}`}
               keyboardShouldPersistTaps="handled"
@@ -438,7 +440,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
                       </View>
                       {rarity && (
                         <Text style={[styles.goalTotal, { color }]}>
-                          {t('tracker.tasks_total', { count: total, defaultValue: '{{count}} tasks' })}
+                          {t('tracker.task_count', { count: total })}
                         </Text>
                       )}
                     </TouchableOpacity>

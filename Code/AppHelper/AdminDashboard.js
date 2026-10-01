@@ -2586,6 +2586,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={filteredBannedUsers}
               keyExtractor={(item) => item.encodedEmail}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.text} />}
@@ -2629,6 +2630,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={searchResults}
               keyExtractor={(item, index) => item.id || item.email || `search-${index}`}
               contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
@@ -2755,6 +2757,7 @@ const AdminDashboard = () => {
               <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
             ) : (
               <FlatList
+                removeClippedSubviews={false}
                 data={leaderboard}
                 keyExtractor={(item) => item.actorUid}
                 contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
@@ -2855,6 +2858,7 @@ const AdminDashboard = () => {
               <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
             ) : (
               <FlatList
+                removeClippedSubviews={false}
                 data={feedItems}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
@@ -3078,6 +3082,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={chatMessages}
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={[styles.listContent, { paddingTop: 4, paddingBottom: 80 + insets.bottom }]}
@@ -3265,6 +3270,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={userChatsList}
               keyExtractor={(item) => item.partnerId}
               contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
@@ -3461,6 +3467,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={statusList}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
@@ -3662,6 +3669,7 @@ const AdminDashboard = () => {
             <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 24 }} />
           ) : (
             <FlatList
+              removeClippedSubviews={false}
               data={jmdGranters}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}

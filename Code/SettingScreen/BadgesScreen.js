@@ -18,7 +18,7 @@ import Share from 'react-native-share';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../GlobelStats';
 import {
-  BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES, computeBadges,
+  BADGE_DEFINITIONS, BADGE_DISPLAY_ORDER, BADGE_IMAGES, computeBadges, listedBadgeIds,
 } from '../ChatScreen/GroupChat/badgeUtils';
 import {
   LEVELS, XP_ACTIONS, getLevelFromXP, getNextLevel, getXPProgress, getUserXP,
@@ -200,8 +200,6 @@ const XPActionsSection = ({ isDark }) => {
     DAILY_LOGIN: t('badges_screen.actions.daily_login'),
     CREATE_POST: t('badges_screen.actions.create_post'),
     LEAVE_REVIEW: t('badges_screen.actions.leave_review'),
-    CORRECT_QUIZ: t('badges_screen.actions.quiz_answer'),
-    WIN_MEMORY_GAME: t('badges_screen.actions.memory_win'),
     UPDATE_PETS: t('badges_screen.actions.update_pets'),
     STREAK_7_DAY: t('badges_screen.actions.streak_7_day'),
     POST_STATUS: t('badges_screen.actions.post_status'),
@@ -331,7 +329,7 @@ const BadgesScreen = ({ navigation }) => {
             {t('badges_screen.main.header_title')}
           </Text>
           <View style={s.headerCount}>
-            <Text style={s.headerCountText}>{earnedCount}/{BADGE_DISPLAY_ORDER.length}</Text>
+            <Text style={s.headerCountText}>{earnedCount}/{listedBadgeIds(badges).length}</Text>
           </View>
         </View>
 
@@ -347,7 +345,7 @@ const BadgesScreen = ({ navigation }) => {
 
           {/* All Badges by Tier */}
           {tiers.map(({ tier, label, desc }) => {
-            const tierBadges = BADGE_DISPLAY_ORDER.filter(
+            const tierBadges = listedBadgeIds(badges).filter(
               id => BADGE_DEFINITIONS[id]?.tier === tier
             );
             if (tierBadges.length === 0) return null;
@@ -446,7 +444,11 @@ const BadgesScreen = ({ navigation }) => {
                 <Text style={{ fontSize: 36 }}>🐾</Text>
                 <Text style={s.shareCardTitle}>{t('badges_screen.share_card.title')}</Text>
                 <Text style={s.shareCardLevel}>
-                  {currentLevel.emoji} {user?.displayName || t('badges_screen.share_card.default_name')} • Lv.{currentLevel.level}
+                  {t('badges_screen.share_card.name_level', {
+                    emoji: currentLevel.emoji,
+                    name: user?.displayName || t('badges_screen.share_card.default_name'),
+                    level: currentLevel.level,
+                  })}
                 </Text>
               </View>
 
@@ -485,10 +487,10 @@ const BadgesScreen = ({ navigation }) => {
               {/* Progress */}
               <View style={s.shareCardProgress}>
                 <Text style={s.shareCardProgressText}>
-                  {t('badges_screen.share_card.progress', { earned: earnedCount, total: BADGE_DISPLAY_ORDER.length })}
+                  {t('badges_screen.share_card.progress', { earned: earnedCount, total: listedBadgeIds(badges).length })}
                 </Text>
                 <View style={s.shareCardProgressBar}>
-                  <View style={[s.shareCardProgressFill, { width: `${Math.round((earnedCount / BADGE_DISPLAY_ORDER.length) * 100)}%` }]} />
+                  <View style={[s.shareCardProgressFill, { width: `${Math.round((earnedCount / listedBadgeIds(badges).length) * 100)}%` }]} />
                 </View>
               </View>
 

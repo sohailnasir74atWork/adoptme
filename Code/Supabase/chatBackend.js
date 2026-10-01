@@ -33,6 +33,15 @@ import { getAuth, getIdToken } from '@react-native-firebase/auth';
 // restoration), the channel JOIN is sent with a null token and the
 // server rejects with InvalidJWTToken. Awaiting setAuth() here closes
 // that race.
+// Realtime topic that is unique per subscribe call. supabase-js hands back
+// the EXISTING channel when a topic is already registered, and removeChannel()
+// keeps a channel registered (state 'leaving') until the server acks the
+// leave. A screen that unsubscribes on blur and resubscribes on focus inside
+// that window got the dying channel back: `.subscribe()` is a no-op on it,
+// onStatus never fires, and the screen silently stops receiving messages.
+export const uniqueTopic = (base) =>
+  `${base}:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 export async function ensureRealtimeAuth() {
   try { await supabase.realtime.setAuth(); }
   catch (e) { console.warn('[realtime] ensureRealtimeAuth failed:', e?.message); }
@@ -53,7 +62,10 @@ export async function resetRealtimeAndAuth() {
     try { supabase.realtime.setAuth(freshToken); }
     catch (e) { console.warn('[realtime] setAuth failed:', e?.message); }
   }
-  try { supabase.realtime.disconnect(); } catch {}
+  // Await the close: connect() returns early while the socket is still
+  // closing, and phoenix does not auto-reconnect after a clean close — so the
+  // un-awaited version left the shared socket (every chat channel) down.
+  try { await supabase.realtime.disconnect(); } catch {}
   try { supabase.realtime.connect(); }
   catch (e) { console.warn('[realtime] reconnect failed:', e?.message); }
 }
@@ -86,7 +98,6 @@ export function fromRow(row) {
     isPro: !!profile.isPro,
     robloxUsernameVerified: !!profile.robloxUsernameVerified,
     topBadge: profile.topBadge ?? null,
-    hasRecentGameWin: !!profile.hasRecentGameWin,
     profileFrame: profile.profileFrame ?? null,
     chatTextColor: profile.chatTextColor ?? null,
     chatBubbleBg: profile.chatBubbleBg ?? null,
@@ -128,7 +139,6 @@ function toInsertPayload(roomId, m) {
       isPro: !!m.isPro,
       robloxUsernameVerified: !!m.robloxUsernameVerified,
       topBadge: m.topBadge ?? null,
-      hasRecentGameWin: !!m.hasRecentGameWin,
       profileFrame: m.profileFrame ?? null,
       chatTextColor: m.chatTextColor ?? null,
       chatBubbleBg: m.chatBubbleBg ?? null,
@@ -217,7 +227,7 @@ export async function loadMessagesSince(roomId, since = null, { limit = 60 } = {
 // CLOSED → SUBSCRIBED. Returns an unsubscribe function.
 export function subscribeToMessages(roomId, { onInsert, onUpdate, onDelete, onStatus } = {}) {
   const channel = supabase
-    .channel(`room-messages:${roomId}`)
+    .channel(uniqueTopic(`room-messages:${roomId}`))
     // ONE binding for all events (2026-09): three bindings = three server-side
     // subscriptions evaluated per change; same deliveries, 3× the DB work.
     .on(
@@ -443,7 +453,7 @@ export async function getPinnedMessages(roomId) {
 
 export function subscribeToPinned(roomId, { onChange } = {}) {
   const channel = supabase
-    .channel(`pinned:${roomId}`)
+    .channel(uniqueTopic(`pinned:${roomId}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'pinned_messages', filter: `room_id=eq.${roomId}` },

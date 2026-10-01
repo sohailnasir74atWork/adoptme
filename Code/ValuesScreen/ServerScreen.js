@@ -14,8 +14,10 @@ import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { getDatabase, ref, get } from '@react-native-firebase/database';
+import { useTranslation } from 'react-i18next';
 
 const ServerScreen = ({ selectedTheme }) => {
+  const { t } = useTranslation();
   const { theme } = useGlobalState();
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
@@ -63,7 +65,7 @@ const ServerScreen = ({ selectedTheme }) => {
   // ✅ Handle server click
   const handleServerPress = useCallback((server) => {
     if (!server?.link) {
-      Alert.alert('Error', 'Server link not available');
+      Alert.alert(t('alert.error'), t('chat.server_error'));
       return;
     }
 
@@ -71,15 +73,15 @@ const ServerScreen = ({ selectedTheme }) => {
 
     const trimmedUrl = server.link?.trim();
     if (!trimmedUrl) {
-      Alert.alert('Error', 'Invalid server link');
+      Alert.alert(t('alert.error'), t('server.invalid_link'));
       return;
     }
 
     Linking.openURL(trimmedUrl).catch(err => {
       console.warn('Failed to open link:', err);
-      Alert.alert('Error', 'Failed to open link');
+      Alert.alert(t('alert.error'), t('chat.server_open_failed'));
     });
-  }, [triggerHapticFeedback]);
+  }, [triggerHapticFeedback, t]);
 
   // ✅ Get background color based on server index
   const getBackgroundColor = useCallback((index) => {
@@ -105,7 +107,7 @@ const ServerScreen = ({ selectedTheme }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={isDarkMode ? '#fff' : '#000'} />
-        <Text style={styles.loadingText}>Loading servers...</Text>
+        <Text style={styles.loadingText}>{t('server.loading')}</Text>
       </View>
     );
   }
@@ -114,7 +116,7 @@ const ServerScreen = ({ selectedTheme }) => {
     return (
       <View style={styles.errorContainer}>
         <Icon name="alert-circle-outline" size={48} color={isDarkMode ? '#fff' : '#000'} />
-        <Text style={styles.errorText}>Failed to load servers</Text>
+        <Text style={styles.errorText}>{t('server.load_failed')}</Text>
         <Text style={styles.errorSubtext}>{error}</Text>
       </View>
     );
@@ -124,7 +126,7 @@ const ServerScreen = ({ selectedTheme }) => {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="server-outline" size={48} color={isDarkMode ? '#666' : '#999'} />
-        <Text style={styles.emptyText}>No servers available</Text>
+        <Text style={styles.emptyText}>{t('server.empty')}</Text>
       </View>
     );
   }
@@ -135,7 +137,7 @@ const ServerScreen = ({ selectedTheme }) => {
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.headerTitle}>Available Servers</Text>
+      <Text style={styles.headerTitle}>{t('server.title')}</Text>
 
       {/* Server Cards - Display each server from Firebase */}
       <View style={styles.serversRow}>
@@ -157,7 +159,7 @@ const ServerScreen = ({ selectedTheme }) => {
 
             {/* Server Name from Firebase */}
             <Text style={styles.serverLabel} numberOfLines={1}>
-              {server.name || 'Server'}
+              {server.name || t('server.default_name')}
             </Text>
           </TouchableOpacity>
         ))}

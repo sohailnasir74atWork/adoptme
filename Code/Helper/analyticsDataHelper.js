@@ -23,7 +23,7 @@ try {
     getString: () => undefined,
     getNumber: () => undefined,
     set: () => {},
-    delete: () => {},
+    remove: () => {},
   };
 }
 const ANALYTICS_CACHE_KEY = 'analytics';
@@ -75,46 +75,61 @@ const normalizeFirestoreDocPayload = (payload) => {
     return payload;
 };
 
-// ── Value-changes diff normalizer ──
-const VALUE_KEY_MAP = {
-    'value': 'd_nopotion', 'value - fly': 'd_fly', 'value - ride': 'd_ride', 'value - fly&ride': 'd_flyride',
-    'rvalue': 'd_nopotion', 'rvalue - fly': 'd_fly', 'rvalue - ride': 'd_ride', 'rvalue - fly&ride': 'd_flyride',
-    'nvalue': 'n_nopotion', 'nvalue - fly': 'n_fly', 'nvalue - ride': 'n_ride', 'nvalue - fly&ride': 'n_flyride',
-    'mvalue': 'm_nopotion', 'mvalue - fly': 'm_fly', 'mvalue - ride': 'm_ride', 'mvalue - fly&ride': 'm_flyride',
+// ── Value-changes diff reader ──
+// diff.json entries carry {oldVal,newVal} per value key: rvalue (regular),
+// nvalue (neon), mvalue (mega), plus "- fly"/"- ride" variants. They may
+// also carry `score`, which is a RANK (1 = most valuable), not a value, so a
+// rising score means the pet got LESS valuable. Never read it as a price.
+const PRIMARY_VALUE_KEYS = ['rvalue', 'value', 'nvalue', 'mvalue'];
+const VALUE_KEY_RE = /^[rnm]?value( - .+)?$/;
+const MM2_PRIMARY_DEFAULT = 'd_nopotion';
+
+// A diff older than this is not "news" any more: no Hot / +X% badges.
+export const DIFF_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const asChange = (v) => {
+    if (!v || typeof v !== 'object') return null;
+    const oldVal = Number(v.oldVal);
+    const newVal = Number(v.newVal);
+    if (!Number.isFinite(oldVal) || !Number.isFinite(newVal) || oldVal <= 0) return null;
+    return { oldVal, newVal, pct: Math.round(((newVal - oldVal) / oldVal) * 100) };
 };
-const SKIP_KEYS = new Set(['key', 'name', 'type', 'image']);
 
-const normalizeDiffItem = (item) => {
-    // Adoptme format: score: {oldVal, newVal}
-    if (item.score && typeof item.score === 'object' && 'oldVal' in item.score && 'newVal' in item.score) {
-        const diff = item.score.newVal - item.score.oldVal;
-        const pct = item.score.oldVal > 0 ? Math.round((diff / item.score.oldVal) * 100) : 0;
-        return { oldVal: item.score.oldVal, newVal: item.score.newVal, pct };
+/**
+ * The value change of one diff entry: {oldVal, newVal, pct, key} or null.
+ * Prefers the regular value, then neon, then mega. Rank-only (`score`)
+ * entries return null.
+ */
+export const valueChangeOf = (item) => {
+    if (!item || typeof item !== 'object') return null;
+
+    // Normalised format ({values, primary}): MM2 feed and AnalyticsScreen.
+    if (item.values && typeof item.values === 'object') {
+        const key = item.primary || MM2_PRIMARY_DEFAULT;
+        const c = asChange(item.values[key]);
+        return c ? { ...c, key } : null;
     }
 
-    // MM2 format: inline value keys
-    let primaryOld = 0;
-    let primaryNew = 0;
-    let foundPrimary = false;
-
-    for (const k of Object.keys(item)) {
-        if (SKIP_KEYS.has(k)) continue;
-        const mapped = VALUE_KEY_MAP[k];
-        if (!mapped) continue;
-        const v = item[k];
-        if (v && typeof v === 'object' && 'oldVal' in v && 'newVal' in v) {
-            if (!foundPrimary) {
-                primaryOld = v.oldVal;
-                primaryNew = v.newVal;
-                foundPrimary = true;
-            }
-        }
+    for (const key of PRIMARY_VALUE_KEYS) {
+        const c = asChange(item[key]);
+        if (c) return { ...c, key };
     }
+    for (const key of Object.keys(item)) {
+        if (!VALUE_KEY_RE.test(key)) continue;
+        const c = asChange(item[key]);
+        if (c) return { ...c, key };
+    }
+    return null;
+};
 
-    if (!foundPrimary) return null;
-    const diff = primaryNew - primaryOld;
-    const pct = primaryOld > 0 ? Math.round((diff / primaryOld) * 100) : 0;
-    return { oldVal: primaryOld, newVal: primaryNew, pct };
+/** The entries of a diff payload, or [] when it is missing or too old. */
+export const freshDiffEntries = (changesData, now = Date.now()) => {
+    if (!changesData || typeof changesData !== 'object') return [];
+    const generatedAt = Date.parse(changesData.meta?.generatedAt || changesData.lastUpdated || '');
+    if (Number.isFinite(generatedAt) && now - generatedAt > DIFF_MAX_AGE_MS) return [];
+    return Array.isArray(changesData.changed) ? changesData.changed
+        : Array.isArray(changesData.changes) ? changesData.changes
+            : [];
 };
 
 export const normalizeName = (name) => (typeof name === 'string' ? name : String(name || '')).toLowerCase().trim();
@@ -125,9 +140,26 @@ const isCacheFresh = (tsKey) => {
     return Date.now() - ts < CACHE_DURATION_MS;
 };
 
+// How easily a pet trades, from last week's trade posts (demandWindow '7d').
+//   fast: lots of people ask for it, or asks clearly beat offers
+//   slow: offered at least 4x as often as it is asked for
+// Thresholds checked on the 2026-09-29 week (1,730 trades): Crystal Egg
+// 175 wanted / 16 offered = fast, Ride Potion 156/364 = fast (it's currency),
+// Throwback Egg 18/110 and Catte 3/70 = slow.
+export const liquidityFor = (wanted, offered) => {
+    const w = Number(wanted) || 0;
+    const o = Number(offered) || 0;
+    if (w >= 40 || (w >= 20 && w * 2 >= o) || (w >= 5 && w >= o * 1.5)) return 'fast';
+    if (o >= 8 && w * 4 <= o) return 'slow';
+    return null; // average, or too little data to say
+};
+
 // ── Build maps from raw data (called once, result is cached in state) ──
+//   demandMap: 1-10 rank score from topWanted
+//   hotMap / dropMap: value risers / fallers from the latest diff
+//   marketMap: { wanted, offered, liquidity } per pet (7-day trade posts)
 const buildMaps = (analyticsRaw, changesRaw) => {
-    const result = { demandMap: {}, hotMap: {} };
+    const result = { demandMap: {}, hotMap: {}, dropMap: {}, marketMap: {} };
 
     try {
         if (analyticsRaw) {
@@ -144,42 +176,34 @@ const buildMaps = (analyticsRaw, changesRaw) => {
                     result.demandMap[name] = { score, label: `${score}/10`, count: (item.count || 0) };
                 });
             }
+
+            // Before 2026-09-29 the counts were mostly wishlists and owned
+            // pets, not trades, so they say nothing about how fast a pet sells.
+            if (analytics?.demandWindow === '7d') {
+                const market = {};
+                const add = (list, field) => (Array.isArray(list) ? list : []).forEach((item) => {
+                    const name = normalizeName(item?.name);
+                    if (!name) return;
+                    market[name] = market[name] || { wanted: 0, offered: 0 };
+                    market[name][field] = Number(item.count) || 0;
+                });
+                add(analytics.topWanted, 'wanted');
+                add(analytics.topOffered, 'offered');
+                Object.keys(market).forEach((name) => {
+                    const m = market[name];
+                    result.marketMap[name] = { ...m, liquidity: liquidityFor(m.wanted, m.offered) };
+                });
+            }
         }
 
         if (changesRaw) {
-            let changesData = typeof changesRaw === 'string' ? JSON.parse(changesRaw) : changesRaw;
-            const rawList = Array.isArray(changesData?.changed) ? changesData.changed
-                : Array.isArray(changesData?.changes) ? changesData.changes
-                    : [];
-
-            rawList.forEach((item) => {
+            const changesData = typeof changesRaw === 'string' ? JSON.parse(changesRaw) : changesRaw;
+            freshDiffEntries(changesData).forEach((item) => {
                 const name = normalizeName(item.name);
                 if (!name) return;
-
-                // Adoptme format: score: {oldVal, newVal}
-                if (item.score && typeof item.score === 'object' && 'oldVal' in item.score && 'newVal' in item.score) {
-                    if (item.score.newVal > item.score.oldVal) {
-                        const pct = item.score.oldVal > 0 ? Math.round(((item.score.newVal - item.score.oldVal) / item.score.oldVal) * 100) : 0;
-                        result.hotMap[name] = { pct, isHot: true };
-                    }
-                    return;
-                }
-
-                // MM2 format: item.values
-                if (item.values) {
-                    const primary = item.primary || 'd_nopotion';
-                    const v = item.values[primary];
-                    if (v && v.newVal > v.oldVal) {
-                        const pct = v.oldVal > 0 ? Math.round(((v.newVal - v.oldVal) / v.oldVal) * 100) : 0;
-                        result.hotMap[name] = { pct, isHot: true };
-                    }
-                    return;
-                }
-
-                const normalized = normalizeDiffItem(item);
-                if (normalized && normalized.pct > 0) {
-                    result.hotMap[name] = { pct: normalized.pct, isHot: true };
-                }
+                const change = valueChangeOf(item);
+                if (change && change.pct >= 1) result.hotMap[name] = { pct: change.pct, isHot: true };
+                else if (change && change.pct <= -1) result.dropMap[name] = { pct: change.pct };
             });
         }
     } catch (error) {
@@ -212,7 +236,7 @@ export const fetchAnalyticsData = async () => {
 
         if (!analyticsRaw || !isCacheFresh(ANALYTICS_TS_KEY)) {
             try {
-                const res = await fetch(ANALYTICS_CDN_URL);
+                const res = await fetch(`${ANALYTICS_CDN_URL}?cb=${Date.now()}`);
                 if (res.ok) {
                     const text = await res.text();
                     analyticsCache.set(ANALYTICS_CACHE_KEY, text);
@@ -226,7 +250,7 @@ export const fetchAnalyticsData = async () => {
 
         if (!changesRaw || !isCacheFresh(CHANGES_TS_KEY)) {
             try {
-                const res = await fetch(VALUE_CHANGES_CDN_URL);
+                const res = await fetch(`${VALUE_CHANGES_CDN_URL}?cb=${Date.now()}`);
                 if (res.ok) {
                     const text = await res.text();
                     analyticsCache.set(CHANGES_CACHE_KEY, text);
@@ -259,3 +283,5 @@ export const getDemandScore = (itemName, demandMap) => {
 export const getHotStatus = (itemName, hotMap) => {
     return hotMap[normalizeName(itemName)] || null;
 };
+
+export const getMarket = (itemName, marketMap) => (marketMap && marketMap[normalizeName(itemName)]) || null;

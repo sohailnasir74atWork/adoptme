@@ -18,6 +18,7 @@
 
 import { supabase } from './client';
 import { uuidv4 } from './uuid';
+import { uniqueTopic } from './chatBackend';
 
 const PAGE_SIZE_DEFAULT = 15;
 
@@ -77,6 +78,10 @@ export function fromPrivateMessageRow(row) {
     reportCount: row.report_count ?? 0,
     timestamp: ts,                               // ms epoch — UI sort key
     serverTime: ts,                              // mirrors RTDB serverTime
+    // Raw Postgres timestamp (microsecond precision). Pagination cursors use
+    // this instead of `timestamp`, which is truncated to ms and would make a
+    // `lt`/`gt` cursor skip or repeat rows that share a millisecond.
+    createdAt: row.created_at ?? null,
   };
 }
 
@@ -204,8 +209,10 @@ export async function loadPrivateMessagesSince(chatId, since = null, { limit = 2
 export function subscribeToPrivateMessages(chatId, { onInsert, onUpdate, onDelete, onStatus } = {}) {
   if (!chatId) return () => {};
 
+  // Unique topic: reopening a chat right after leaving it used to get the
+  // still-closing channel back, and never received a live message.
   const channel = supabase
-    .channel(`pvt-messages:${chatId}`)
+    .channel(uniqueTopic(`pvt-messages:${chatId}`))
     // ONE binding for all events (2026-09): each `.on('postgres_changes')` is a
     // separate server-side subscription evaluated per change — same deliveries,
     // a third of the DB work. Callbacks unchanged, dispatched on eventType.

@@ -9,7 +9,8 @@ const isNoman = true; // Toggle this to switch configurations
 const rev_cat_id = Platform.OS === 'ios' ? 'appl_fJWiaIgCJxAeJnMeDtvGsHtEWfR' : 'goog_eYhrxPwwtRYXwhBwsnfCvxmxnRX'
 
 const config = {
-  appName: isNoman ? 'Blox Fruit Values Calc' : 'Blox Fruit Stock',
+  // Matches the launcher name: CFBundleDisplayName "Petfolio: …" on iOS, app_name on Android.
+  appName: Platform.OS === 'ios' ? 'Petfolio' : 'Adoptme Values',
   andriodBanner: isNoman ? 'ca-app-pub-1340655056171083/3794486024' : 'ca-app-pub-3701208411582706/4133745803',
   andriodIntestial: isNoman ? 'ca-app-pub-1340655056171083/7602595440' : 'ca-app-pub-3701208411582706/2820664136',
   andriodRewarded: isNoman ? 'ca-app-pub-1340655056171083/7759261705' : 'ca-app-pub-3701208411582706/5175818984',

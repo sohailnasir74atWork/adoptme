@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { DAILY_REWARDS, getStarStatus, claimDailyStar } from './starUtils';
 import { getThemeColors } from '../Helper/themeColors';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
@@ -23,6 +24,7 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => {
+  const { t } = useTranslation();
   const [status, setStatus] = useState(null);
   const [claiming, setClaiming] = useState(false);
   const [claimedReward, setClaimedReward] = useState(null);
@@ -89,7 +91,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
         <SwipeableBottomDrawer onClose={handleClose} isDarkMode={isDarkMode} style={[styles.container, { backgroundColor: bg }]}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.title, { color: textColor }]}>⭐ Daily Stars</Text>
+            <Text style={[styles.title, { color: textColor }]}>{t('stars.daily.title')}</Text>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={{ fontSize: 20, color: subtextColor }}>✕</Text>
             </TouchableOpacity>
@@ -99,7 +101,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
           {status?.streakBroken && (
             <View style={[styles.streakAlert, { backgroundColor: '#FEF2F2' }]}>
               <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>
-                😢 Streak broken! Starting over from Day 1
+                {t('stars.daily.streak_broken')}
               </Text>
             </View>
           )}
@@ -108,7 +110,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
           {status && !status.canClaim && !claimedReward && (
             <View style={[styles.streakAlert, { backgroundColor: isDarkMode ? '#064e3b' : '#ECFDF5' }]}>
               <Text style={{ color: '#10B981', fontSize: 13, fontWeight: '700' }}>
-                ✅ Already claimed today! Come back tomorrow
+                {t('stars.daily.already_claimed')}
               </Text>
             </View>
           )}
@@ -146,7 +148,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
                 >
                   {/* Day number */}
                   <Text style={[styles.dayNumber, { color: subtextColor }]}>
-                    Day {reward.day}
+                    {t('stars.daily.day', { day: reward.day })}
                   </Text>
 
                   {/* Emoji */}
@@ -169,7 +171,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
                   {/* Today indicator */}
                   {isToday && status?.canClaim && (
                     <View style={[styles.claimBadge, { backgroundColor: accentColor }]}>
-                      <Text style={styles.claimText}>TAP!</Text>
+                      <Text style={styles.claimText}>{t('stars.daily.tap')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -207,7 +209,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
 
           {/* Cycle info */}
           <Text style={[styles.cycleText, { color: subtextColor }]}>
-            Cycle #{status?.cycleNumber || 1} · {status?.totalStarsEarned || 0} stars earned
+            {t('stars.daily.cycle_summary', { cycle: status?.cycleNumber || 1, count: status?.totalStarsEarned || 0 })}
           </Text>
         </SwipeableBottomDrawer>
       </View>

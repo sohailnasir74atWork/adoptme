@@ -79,7 +79,8 @@ const base64ToBytes = (base64) => {
 
 // Helper function to truncate group names
 const truncateGroupName = (name, maxLength = 25) => {
-  if (!name || typeof name !== 'string') return 'Group';
+  // Callers pass an already-translated fallback name; this only guards bad input.
+  if (!name || typeof name !== 'string') return '';
   if (name.length <= maxLength) return name;
   return name.substring(0, maxLength).trim() + '...';
 };
@@ -89,7 +90,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
   const navigation = useNavigation();
   const { user, theme, appdatabase, firestoreDB, isAdmin } = useGlobalState();
   const { localState } = useLocalState();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [invitationsLoading, setInvitationsLoading] = useState(false);
   const [pendingJoinRequests, setPendingJoinRequests] = useState([]); // Join requests for groups where user is creator
@@ -202,7 +203,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     }
 
     if (searchText.trim().length < 3) {
-      Alert.alert('Search', 'Please enter at least 3 characters to search.');
+      Alert.alert(t('chat.search'), t('groups.search_min_chars', { count: 3 }));
       return;
     }
 
@@ -307,7 +308,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           }
         );
         if (result.success) {
-          showSuccessMessage('Success', `You joined "${result.groupName || 'the group'}"!`);
+          showSuccessMessage(
+            t('chat.success'),
+            result.groupName
+              ? t('groups.joined_group_named', { name: result.groupName })
+              : t('groups.joined_group')
+          );
           // Remove from pending list locally
           setPendingInvitations(prev => prev.filter(invite => invite.id !== inviteId));
 
@@ -320,39 +326,39 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           // Navigate to the group chat
           navigation.navigate('GroupChatDetail', { groupId, groupName: result.groupName });
         } else {
-          showErrorMessage('Error', result.error || 'Failed to accept invitation.');
+          showErrorMessage(t('chat.error'), result.error || t('groups.errors.accept_failed'));
         }
       } catch (error) {
         console.error('Error accepting invitation:', error);
-        showErrorMessage('Error', 'Failed to accept invitation. Please try again.');
+        showErrorMessage(t('chat.error'), t('groups.errors.accept_failed'));
       }
     };
 
     // ✅ Removed navigation ad - exit ads are shown when leaving chat instead
     callbackFunction();
-  }, [user?.id, firestoreDB, appdatabase, navigation]);
+  }, [user?.id, firestoreDB, appdatabase, navigation, t]);
 
   const handleDeclineInvitation = useCallback(async (inviteId) => {
     if (!user?.id) return;
     try {
       const result = await declineGroupInvite(firestoreDB, inviteId, user.id);
       if (result.success) {
-        showSuccessMessage('Success', 'Invitation declined.');
+        showSuccessMessage(t('chat.success'), t('groups.invitation_declined'));
         setPendingInvitations(prev => prev.filter(invite => invite.id !== inviteId));
       } else {
-        showErrorMessage('Error', result.error || 'Failed to decline invitation.');
+        showErrorMessage(t('chat.error'), result.error || t('groups.errors.decline_failed'));
       }
     } catch (error) {
       console.error('Error declining invitation:', error);
-      showErrorMessage('Error', 'Failed to decline invitation. Please try again.');
+      showErrorMessage(t('chat.error'), t('groups.errors.decline_failed'));
     }
-  }, [user?.id, firestoreDB]);
+  }, [user?.id, firestoreDB, t]);
 
   // Handle open group
   const handleOpenGroup = useCallback((groupId, groupName) => {
     if (!groupId) {
       console.warn('Cannot open group: missing groupId');
-      showErrorMessage('Error', 'Group ID is missing. Please try again.');
+      showErrorMessage(t('chat.error'), t('groups.errors.open_failed'));
       return;
     }
 
@@ -363,7 +369,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         groupName: groupName || 'Group',
       });
     }
-  }, [navigation]);
+  }, [navigation, t]);
 
   // Handle delete group (Group Admin only)
   const handleDeleteGroup = useCallback((groupId, groupName) => {
@@ -378,23 +384,23 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     const isGroupAdmin = isCreator || (group?.members?.[user.id]?.role === 'admin') || (isAdmin && group?.members?.[user.id]) || !!user?.isModerator;
 
     if (!isGroupAdmin) {
-      showErrorMessage('Error', 'Only group admins can delete groups');
+      showErrorMessage(t('chat.error'), t('groups.errors.only_admins_delete'));
       return;
     }
 
     Alert.alert(
-      'Delete Group',
-      `Are you sure you want to delete "${groupName || 'this group'}"? This action cannot be undone.`,
+      t('groups.delete_group'),
+      t('groups.delete_confirm', { name: groupName || t('groups.default_name') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('chat.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await deleteGroup(firestoreDB, appdatabase, groupId);
               if (result.success) {
-                showSuccessMessage('Success', 'Group deleted successfully');
+                showSuccessMessage(t('chat.success'), t('groups.deleted'));
                 // Update local state
                 if (setGroups && typeof setGroups === 'function') {
                   setGroups((prevGroups) => {
@@ -403,17 +409,17 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   });
                 }
               } else {
-                showErrorMessage('Error', result.error || 'Failed to delete group');
+                showErrorMessage(t('chat.error'), result.error || t('groups.errors.delete_failed'));
               }
             } catch (error) {
               console.error('Error deleting group:', error);
-              showErrorMessage('Error', 'Failed to delete group. Please try again.');
+              showErrorMessage(t('chat.error'), t('groups.errors.delete_failed'));
             }
           },
         },
       ]
     );
-  }, [user?.id, isAdmin, firestoreDB, appdatabase, setGroups, groups]);
+  }, [user?.id, isAdmin, firestoreDB, appdatabase, setGroups, groups, t]);
 
   // Handle leave group
   const handleLeaveGroup = useCallback((groupId, groupName) => {
@@ -423,18 +429,18 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     }
 
     Alert.alert(
-      'Leave Group',
-      `Are you sure you want to leave "${groupName || 'this group'}"?`,
+      t('groups.leave_group'),
+      t('groups.leave_confirm', { name: groupName || t('groups.default_name') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('chat.cancel'), style: 'cancel' },
         {
-          text: 'Leave',
+          text: t('groups.leave'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await leaveGroup(firestoreDB, appdatabase, groupId, user.id);
               if (result.success) {
-                showSuccessMessage('Success', 'You left the group');
+                showSuccessMessage(t('chat.success'), t('groups.left_group'));
                 // Update local state
                 if (setGroups && typeof setGroups === 'function') {
                   setGroups((prevGroups) => {
@@ -443,17 +449,17 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   });
                 }
               } else {
-                showErrorMessage('Error', result.error || 'Failed to leave group');
+                showErrorMessage(t('chat.error'), result.error || t('groups.errors.leave_failed'));
               }
             } catch (error) {
               console.error('Error leaving group:', error);
-              showErrorMessage('Error', 'Failed to leave group. Please try again.');
+              showErrorMessage(t('chat.error'), t('groups.errors.leave_failed'));
             }
           },
         },
       ]
     );
-  }, [user?.id, firestoreDB, appdatabase, setGroups]);
+  }, [user?.id, firestoreDB, appdatabase, setGroups, t]);
 
   // Upload image to BunnyCDN
   const uploadToBunny = useCallback(async (imagePath) => {
@@ -489,7 +495,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
     const group = groups.find(g => g.groupId === groupId);
     if (!group) {
-      showErrorMessage('Error', 'Group not found');
+      showErrorMessage(t('chat.error'), t('groups.errors.not_found'));
       return;
     }
 
@@ -499,7 +505,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     const canEdit = isCreator || isGroupAdmin || (isAdmin && group.members?.[user.id]);
 
     if (!canEdit) {
-      showErrorMessage('Error', 'Only group creator or admin can edit this group');
+      showErrorMessage(t('chat.error'), t('groups.errors.only_creator_or_admin_edit'));
       return;
     }
 
@@ -532,7 +538,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
     setEditingGroup({ id: groupId, name, description, avatar });
     setEditGroupModalVisible(true);
-  }, [isAdmin, groups, user?.id, showErrorMessage, firestoreDB]);
+  }, [isAdmin, groups, user?.id, showErrorMessage, firestoreDB, t]);
 
   // Handle group updated callback
   const handleGroupUpdated = useCallback(() => {
@@ -573,7 +579,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       const groupDocSnapshot = await getDoc(groupDocRef);
 
       if (!groupDocSnapshot.exists()) {
-        showErrorMessage('Error', 'Group not found');
+        showErrorMessage(t('chat.error'), t('groups.errors.not_found'));
         setGroupInfoModalVisible(false);
         return;
       }
@@ -591,12 +597,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       }
 
       // Creator info via Supabase identity (one row instead of 2 RTDB reads).
-      let creatorName = 'Unknown';
+      // Name/description fallbacks are translated at render time (null here).
+      let creatorName = null;
       let creatorAvatar = null;
       if (createdBy) {
         const ident = await getIdentity(createdBy).catch(() => null);
         if (ident) {
-          creatorName = ident.displayName || 'Unknown';
+          creatorName = ident.displayName || null;
           creatorAvatar = ident.avatar || null;
         }
       }
@@ -607,8 +614,8 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
       const groupInfo = {
         groupId,
-        name: groupData.name || 'Group',
-        description: groupData.description || 'No description',
+        name: groupData.name || null,
+        description: groupData.description || null,
         avatar: groupData.avatar || groupData.groupAvatar || null,
         createdBy: {
           id: createdBy,
@@ -623,13 +630,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       setSelectedGroupInfo(groupInfo);
     } catch (error) {
       console.error('Error loading group info:', error);
-      showErrorMessage('Error', 'Failed to load group information');
+      showErrorMessage(t('chat.error'), t('groups.errors.load_info_failed'));
       setGroupInfoModalVisible(false);
     } finally {
       setGroupInfoLoading(false);
       console.log('Loading finished');
     }
-  }, [firestoreDB, appdatabase, showErrorMessage]);
+  }, [firestoreDB, appdatabase, showErrorMessage, t]);
 
   // ✅ Toggle mute notifications for a group
   const handleToggleMute = useCallback(async (groupId, groupName) => {
@@ -655,17 +662,18 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         [groupId]: newMutedStatus,
       }));
 
+      const name = groupName || t('groups.default_name');
       showSuccessMessage(
-        'Success',
+        t('chat.success'),
         newMutedStatus
-          ? `Notifications muted for "${groupName || 'group'}"`
-          : `Notifications enabled for "${groupName || 'group'}"`
+          ? t('groups.notifications_muted', { name })
+          : t('groups.notifications_enabled', { name })
       );
     } catch (error) {
       console.error('Error toggling mute status:', error);
-      showErrorMessage('Error', 'Failed to update notification settings. Please try again.');
+      showErrorMessage(t('chat.error'), t('groups.errors.mute_failed'));
     }
-  }, [appdatabase, user?.id, mutedGroups]);
+  }, [appdatabase, user?.id, mutedGroups, t]);
 
   // Handle update group icon (Admin or creator)
   const handleUpdateGroupIcon = useCallback(async (groupId) => {
@@ -675,7 +683,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     const group = groups.find(g => g.groupId === groupId);
     const isCreator = group?.createdBy === user.id;
     if (!isAdmin && !isCreator) {
-      showErrorMessage('Error', 'Only admin or creator can update group icon');
+      showErrorMessage(t('chat.error'), t('groups.errors.only_admin_update_icon'));
       return;
     }
 
@@ -701,7 +709,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       const result = await updateGroupAvatar(firestoreDB, appdatabase, groupId, user.id, avatarUrl, isAdmin);
 
       if (result.success) {
-        showSuccessMessage('Success', 'Group icon updated successfully!');
+        showSuccessMessage(t('chat.success'), t('groups.icon_updated'));
         if (setGroups && typeof setGroups === 'function') {
           setGroups((prevGroups) => {
             if (!Array.isArray(prevGroups)) return prevGroups;
@@ -713,13 +721,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           });
         }
       } else {
-        showErrorMessage('Error', result.error || 'Failed to update group icon');
+        showErrorMessage(t('chat.error'), result.error || t('groups.errors.icon_update_failed'));
       }
     } catch (error) {
       console.error('Error updating group icon:', error);
-      showErrorMessage('Error', 'Failed to update group icon. Please try again.');
+      showErrorMessage(t('chat.error'), t('groups.errors.icon_update_failed'));
     }
-  }, [user?.id, firestoreDB, appdatabase, uploadToBunny, setGroups, isAdmin, groups]);
+  }, [user?.id, firestoreDB, appdatabase, uploadToBunny, setGroups, isAdmin, groups, t]);
 
   // Render group item
   const renderGroupItem = useCallback(({ item }) => {
@@ -731,10 +739,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       return null;
     }
 
-    const groupName = item.groupName || 'Group';
+    const groupName = item.groupName || t('groups.default_name');
     const truncatedName = truncateGroupName(groupName, 25);
     const groupAvatar = item.groupAvatar || null;
-    const lastMessage = item.lastMessage || 'No messages yet';
+    const lastMessage = item.lastMessage || t('groups.no_messages_yet');
     const unreadCount = item.unreadCount || 0;
     const memberCount = item.memberCount || 0;
     const isMyGroup = item.createdBy === user?.id;
@@ -768,11 +776,11 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                     color: '#FFF',
                     fontSize: 10,
                     fontWeight: '600',
-                  }}>My Group</Text>
+                  }}>{t('groups.my_group_badge')}</Text>
                 </View>
               )}
               {memberCount > 0 && (
-                <Text style={styles.memberCountText}> · {memberCount} members</Text>
+                <Text style={styles.memberCountText}> · {t('groups.member_count', { count: memberCount })}</Text>
               )}
             </View>
             <Text style={styles.lastMessage} numberOfLines={1}>
@@ -822,7 +830,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           }}>
             {/* Group Info */}
             <MenuOption onSelect={() => handleShowGroupInfo(groupId)}>
-              <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Group Info</Text>
+              <Text style={{ fontSize: 16, padding: 10, color: c.text }}>{t('groups.menu.info')}</Text>
             </MenuOption>
             {/* Mute/Unmute Notifications */}
             <MenuOption onSelect={() => { }} closeOnSelect={false}>
@@ -833,7 +841,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 paddingHorizontal: 10,
                 paddingVertical: 10,
               }}>
-                <Text style={{ fontSize: 16, flex: 1, color: c.text }}>Mute Notifications</Text>
+                <Text style={{ fontSize: 16, flex: 1, color: c.text }}>{t('groups.menu.mute')}</Text>
                 <Switch
                   value={mutedGroups[groupId] || false}
                   onValueChange={() => handleToggleMute(groupId, groupName)}
@@ -845,24 +853,24 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             {isGroupAdmin && (
               <>
                 <MenuOption onSelect={() => handleUpdateGroupIcon(groupId)}>
-                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Update Group Icon</Text>
+                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>{t('groups.menu.update_icon')}</Text>
                 </MenuOption>
                 <MenuOption onSelect={() => handleEditGroup(groupId)}>
-                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>Edit</Text>
+                  <Text style={{ fontSize: 16, padding: 10, color: c.text }}>{t('groups.menu.edit')}</Text>
                 </MenuOption>
                 <MenuOption onSelect={() => handleDeleteGroup(groupId, groupName)}>
-                  <Text style={{ color: 'red', fontSize: 16, padding: 10, fontWeight: 'bold' }}>Delete Group (Admin)</Text>
+                  <Text style={{ color: 'red', fontSize: 16, padding: 10, fontWeight: 'bold' }}>{t('groups.menu.delete_admin')}</Text>
                 </MenuOption>
               </>
             )}
             <MenuOption onSelect={() => handleLeaveGroup(groupId, groupName)}>
-              <Text style={{ color: 'red', fontSize: 16, padding: 10 }}>Leave Group</Text>
+              <Text style={{ color: 'red', fontSize: 16, padding: 10 }}>{t('groups.leave_group')}</Text>
             </MenuOption>
           </MenuOptions>
         </Menu>
       </View>
     );
-  }, [styles, handleOpenGroup, handleLeaveGroup, handleUpdateGroupIcon, handleEditGroup, handleDeleteGroup, handleToggleMute, user?.id, isDarkMode, isAdmin, groups, mutedGroups]);
+  }, [styles, handleOpenGroup, handleLeaveGroup, handleUpdateGroupIcon, handleEditGroup, handleDeleteGroup, handleToggleMute, user?.id, isDarkMode, isAdmin, groups, mutedGroups, t]);
 
   const filteredGroups = useMemo(() => {
     if (!Array.isArray(groups)) return [];
@@ -941,7 +949,8 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
             const namesMap = {};
             for (const id of creatorIds) {
-              namesMap[id] = identityMap.get(id)?.displayName || 'Creator';
+              // Missing names fall back to a translated label at render time.
+              namesMap[id] = identityMap.get(id)?.displayName || null;
             }
             setCreatorNames(namesMap);
           } else {
@@ -959,7 +968,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
       loadAllGroups();
     }
-  }, [activeTab, firestoreDB, appdatabase, allGroupsSearchQuery, filteredGroups]);
+    // filteredGroups was a dependency here though nothing above reads it: any
+    // message in any joined group changed it, which re-ran this whole fetch,
+    // flashed the spinner and reset pagination. "Already joined" is computed
+    // at render time from filteredGroups, so it stays current without this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, firestoreDB, appdatabase, allGroupsSearchQuery]);
 
   // ✅ Load more groups on scroll
   const loadMoreGroups = useCallback(async () => {
@@ -984,7 +998,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
         const namesMap = {};
         for (const id of creatorIds) {
-          namesMap[id] = identityMap.get(id)?.displayName || 'Creator';
+          namesMap[id] = identityMap.get(id)?.displayName || null;
         }
 
         setAllGroups(prev => [...prev, ...newGroups]);
@@ -1015,7 +1029,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
   // Render invitation item
   const renderInvitationItem = useCallback(({ item }) => {
-    const inviteGroupName = item.groupName || 'Group';
+    const inviteGroupName = item.groupName || t('groups.default_name');
     const truncatedInviteName = truncateGroupName(inviteGroupName, 20);
 
     return (
@@ -1058,7 +1072,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               color: c.textSecondary,
 
             }}>
-              Invited by {item.invitedByDisplayName || 'Someone'}
+              {t('groups.invited_by', { name: item.invitedByDisplayName || t('groups.someone') })}
             </Text>
           </View>
         </View>
@@ -1080,7 +1094,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               fontWeight: 'bold',
               fontSize: 13,
               textAlign: 'center',
-            }}>Decline</Text>
+            }}>{t('groups.decline')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleAcceptInvitation(item.id, item.groupId)}
@@ -1097,16 +1111,16 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               fontWeight: 'bold',
               fontSize: 13,
               textAlign: 'center',
-            }}>Accept</Text>
+            }}>{t('groups.accept')}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
-  }, [styles, isDarkMode, handleAcceptInvitation, handleDeclineInvitation]);
+  }, [styles, isDarkMode, handleAcceptInvitation, handleDeclineInvitation, t]);
 
   // Render join request item (for groups where user is creator)
   const renderJoinRequestItem = useCallback(({ item }) => {
-    const requestGroupName = item.groupName || 'Group';
+    const requestGroupName = item.groupName || t('groups.default_name');
     const truncatedGroupName = truncateGroupName(requestGroupName, 20);
 
     return (
@@ -1158,14 +1172,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               color: c.text,
               marginBottom: 4,
             }} numberOfLines={1} ellipsizeMode="tail">
-              {item.requesterDisplayName || 'Anonymous'}
+              {item.requesterDisplayName || t('chat.anonymous')}
             </Text>
             <Text style={{
               fontSize: 12,
               color: c.textSecondary,
 
             }}>
-              Wants to join "{truncatedGroupName}"
+              {t('groups.wants_to_join', { name: truncatedGroupName })}
             </Text>
           </View>
         </View>
@@ -1174,9 +1188,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             onPress={async () => {
               const result = await rejectJoinRequest(firestoreDB, item.id, user.id);
               if (result.success) {
-                showSuccessMessage('Success', 'Join request rejected');
+                showSuccessMessage(t('chat.success'), t('groups.join_request_rejected'));
               } else {
-                showErrorMessage('Error', result.error || 'Failed to reject request');
+                showErrorMessage(t('chat.error'), result.error || t('groups.errors.reject_failed'));
               }
             }}
             style={{
@@ -1194,15 +1208,15 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               fontWeight: 'bold',
               fontSize: 13,
               textAlign: 'center',
-            }}>Reject</Text>
+            }}>{t('groups.reject')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={async () => {
               const result = await approveJoinRequest(firestoreDB, appdatabase, item.id, user.id);
               if (result.success) {
-                showSuccessMessage('Success', 'Join request approved');
+                showSuccessMessage(t('chat.success'), t('groups.join_request_approved'));
               } else {
-                showErrorMessage('Error', result.error || 'Failed to approve request');
+                showErrorMessage(t('chat.error'), result.error || t('groups.errors.approve_failed'));
               }
             }}
             style={{
@@ -1218,12 +1232,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               fontWeight: 'bold',
               fontSize: 13,
               textAlign: 'center',
-            }}>Approve</Text>
+            }}>{t('groups.approve')}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
-  }, [styles, isDarkMode, firestoreDB, appdatabase, user?.id]);
+  }, [styles, isDarkMode, firestoreDB, appdatabase, user?.id, t]);
 
   return (
     <View style={styles.container}>
@@ -1262,7 +1276,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               : (c.textSecondary),
             letterSpacing: 0.3,
           }}>
-            Joined Groups
+            {t('groups.tab_joined')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1289,7 +1303,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               : (c.textSecondary),
             letterSpacing: 0.3,
           }}>
-            All Groups ({totalGroupCount})
+            {t('groups.tab_all', { total: totalGroupCount })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1342,14 +1356,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   fontSize: 12,
                   marginBottom: 2,
                 }}>
-                  Join Requests
+                  {t('groups.join_requests_title')}
                 </Text>
                 <Text style={{
                   color: c.textSecondary,
 
                   fontSize: 10,
                 }}>
-                  {pendingJoinRequests.length} pending approval
+                  {t('groups.join_requests_pending', { count: pendingJoinRequests.length })}
                 </Text>
               </View>
             </View>
@@ -1371,6 +1385,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           {joinRequestsExpanded && (
             <View style={{ padding: 12 }}>
               <FlatList
+                removeClippedSubviews={false}
                 data={dedupedJoinRequests}
                 keyExtractor={(item) => item.id}
                 renderItem={renderJoinRequestItem}
@@ -1430,14 +1445,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   fontSize: 12,
                   marginBottom: 2,
                 }}>
-                  Pending Invitations
+                  {t('groups.invitations_title')}
                 </Text>
                 <Text style={{
                   color: c.textSecondary,
 
                   fontSize: 12,
                 }}>
-                  {pendingInvitations.length} waiting for you
+                  {t('groups.invitations_waiting', { count: pendingInvitations.length })}
                 </Text>
               </View>
             </View>
@@ -1459,6 +1474,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           {invitationsExpanded && (
             <View style={{ padding: 12 }}>
               <FlatList
+                removeClippedSubviews={false}
                 data={dedupedInvitations}
                 keyExtractor={(item) => item.id}
                 renderItem={renderInvitationItem}
@@ -1477,14 +1493,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
         // Joined Groups Tab
         filteredGroups.length === 0 && pendingInvitations.length === 0 && pendingJoinRequests.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No groups yet</Text>
+            <Text style={styles.emptyText}>{t('groups.empty_joined')}</Text>
           </View>
         ) : (
           <FlatList
             data={filteredGroups}
             keyExtractor={(item, index) => item?.groupId || `group-${index}`}
             renderItem={renderGroupItem}
-            removeClippedSubviews={true}
+            removeClippedSubviews={false}
             maxToRenderPerBatch={10}
             windowSize={10}
           />
@@ -1505,7 +1521,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 fontSize: 14,
                 marginRight: 8,
               }}
-              placeholder="Search groups..."
+              placeholder={t('groups.search_placeholder')}
               placeholderTextColor={c.textSecondary}
               value={searchText}
               onChangeText={setSearchText}
@@ -1532,7 +1548,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           ) : allGroups.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
-                {allGroupsSearchQuery ? 'No groups found' : 'No groups available'}
+                {allGroupsSearchQuery ? t('groups.no_results') : t('groups.none_available')}
               </Text>
             </View>
           ) : (
@@ -1554,13 +1570,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
               }
               renderItem={({ item }) => {
                 const groupId = item.id || item.groupId;
-                const groupName = item.groupName || item.name || 'Group';
+                const groupName = item.groupName || item.name || t('groups.default_name');
                 const groupAvatar = item.groupAvatar || item.avatar || null;
                 const memberCount = item.memberCount || (item.members ? Object.keys(item.members).length : 0) || 0;
                 const createdBy = item.createdBy || null;
                 const description = item.description || null;
                 const truncatedName = truncateGroupName(groupName, 30);
-                const creatorName = createdBy ? (creatorNames[createdBy] || 'Creator') : null;
+                const creatorName = createdBy ? (creatorNames[createdBy] || t('groups.unknown_user')) : null;
 
                 // Check if user is already a member
                 const isAlreadyJoined = filteredGroups.some(g => g.groupId === groupId);
@@ -1605,7 +1621,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                             color: c.textSecondary,
                             marginBottom: 4,
                           }}>
-                            Created by {creatorName}
+                            {t('groups.created_by_name', { name: creatorName })}
                           </Text>
                         )}
                         {description && (
@@ -1623,7 +1639,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
                           color: c.textSecondary,
                         }}>
-                          {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                          {t('groups.member_count', { count: memberCount })}
                         </Text>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 }}>
@@ -1644,7 +1660,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                               fontWeight: 'bold',
                               letterSpacing: 0.2,
                             }}>
-                              Joined
+                              {t('groups.status_joined')}
                             </Text>
                           </TouchableOpacity>
                         ) : (isAdmin || !!user?.isModerator) ? (
@@ -1689,7 +1705,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                               fontWeight: 'bold',
                               letterSpacing: 0.2,
                             }}>
-                              Pending
+                              {t('groups.status_pending')}
                             </Text>
                           </View>
                         ) : (
@@ -1697,7 +1713,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                             onPress={async () => {
                               // Send join request
                               if (!firestoreDB || !user?.id) {
-                                showErrorMessage('Error', 'You must be logged in to send a join request');
+                                showErrorMessage(t('chat.error'), t('groups.errors.login_to_request'));
                                 return;
                               }
 
@@ -1713,13 +1729,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                                 );
 
                                 if (result.success) {
-                                  showSuccessMessage('Success', 'Join request sent! The group creator will review it.');
+                                  showSuccessMessage(t('chat.success'), t('groups.join_request_sent'));
                                 } else {
-                                  showErrorMessage('Error', result.error || 'Failed to send join request');
+                                  showErrorMessage(t('chat.error'), result.error || t('groups.errors.join_request_failed'));
                                 }
                               } catch (error) {
                                 console.error('Error sending join request:', error);
-                                showErrorMessage('Error', 'Failed to send join request');
+                                showErrorMessage(t('chat.error'), t('groups.errors.join_request_failed'));
                               }
                             }}
                             style={{
@@ -1743,7 +1759,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                               fontWeight: 'bold',
                               letterSpacing: 0.2,
                             }}>
-                              Send Request
+                              {t('groups.send_request')}
                             </Text>
                           </TouchableOpacity>
                         )}
@@ -1800,7 +1816,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                   </View>
                 );
               }}
-              removeClippedSubviews={true}
+              removeClippedSubviews={false}
               maxToRenderPerBatch={10}
               windowSize={10}
             />
@@ -1840,7 +1856,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             />
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 }} numberOfLines={1}>
               {myGroup
-                ? t('chat.add_members_in', { groupName: truncateGroupName(myGroup.groupName, 15) })
+                ? t('chat.add_members_in', { groupName: truncateGroupName(myGroup.groupName || t('groups.default_name'), 15) })
                 : t('chat.create_group')}
             </Text>
           </TouchableOpacity>
@@ -1912,7 +1928,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 fontWeight: 'bold',
                 color: c.text,
               }}>
-                Group Information
+                {t('groups.info.title')}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -1958,7 +1974,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       marginTop: 12,
                       textAlign: 'center',
                     }}>
-                      {selectedGroupInfo.name}
+                      {selectedGroupInfo.name || t('groups.default_name')}
                     </Text>
                   </View>
 
@@ -1970,7 +1986,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       color: c.textSecondary,
                       marginBottom: 8,
                     }}>
-                      Description
+                      {t('groups.info.description')}
                     </Text>
                     <Text style={{
                       fontSize: 15,
@@ -1978,7 +1994,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       color: isDarkMode ? '#E5E7EB' : '#374151',
                       lineHeight: 22,
                     }}>
-                      {selectedGroupInfo.description || 'No description'}
+                      {selectedGroupInfo.description || t('groups.info.no_description')}
                     </Text>
                   </View>
 
@@ -2011,14 +2027,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                           color: c.textSecondary,
                           marginBottom: 4,
                         }}>
-                          Created by
+                          {t('groups.info.created_by')}
                         </Text>
                         <Text style={{
                           fontSize: 16,
                           fontWeight: 'bold',
                           color: c.text,
                         }}>
-                          {selectedGroupInfo.createdBy.name}
+                          {selectedGroupInfo.createdBy.name || t('groups.unknown_user')}
                         </Text>
                       </View>
                     </View>
@@ -2033,14 +2049,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                         color: c.textSecondary,
                         marginBottom: 8,
                       }}>
-                        Created on
+                        {t('groups.info.created_on')}
                       </Text>
                       <Text style={{
                         fontSize: 15,
 
                         color: isDarkMode ? '#E5E7EB' : '#374151',
                       }}>
-                        {new Date(selectedGroupInfo.createdAt).toLocaleDateString('en-US', {
+                        {new Date(selectedGroupInfo.createdAt).toLocaleDateString(i18n.language || undefined, {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
@@ -2071,14 +2087,14 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                           color: c.textSecondary,
                           marginBottom: 4,
                         }}>
-                          Members
+                          {t('groups.info.members')}
                         </Text>
                         <Text style={{
                           fontSize: 18,
                           fontWeight: 'bold',
                           color: c.text,
                         }}>
-                          {selectedGroupInfo.memberCount || 0} {selectedGroupInfo.memberCount === 1 ? 'member' : 'members'}
+                          {t('groups.member_count', { count: selectedGroupInfo.memberCount || 0 })}
                         </Text>
                       </View>
                     </View>
@@ -2092,7 +2108,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
                   color: c.textSecondary,
                 }}>
-                  No group information available
+                  {t('groups.info.unavailable')}
                 </Text>
               </View>
             )}

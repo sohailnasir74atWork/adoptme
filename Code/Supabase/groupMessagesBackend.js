@@ -17,10 +17,11 @@
 // API surface mirrors what GroupChatScreen.jsx already consumes
 // (id + senderId + sender + avatar + text + imageUrl + imageUrls +
 // fruits + replyTo + timestamp + isPro + robloxUsernameVerified +
-// hasRecentGameWin + lastGameWinAt + isCreator).
+// isCreator).
 
 import { supabase } from './client';
 import { uuidv4 } from './uuid';
+import { uniqueTopic } from './chatBackend';
 
 const PAGE_SIZE_DEFAULT = 25;
 
@@ -28,8 +29,8 @@ const PAGE_SIZE_DEFAULT = 25;
 // deleted_at / deleted_by on every paginated history fetch.
 const GROUP_MSG_COLS =
   'id,client_msg_id,group_id,sender_id,sender_name,sender_avatar,text,image_url,' +
-  'image_urls,fruits,reply_to,is_pro,roblox_username_verified,has_recent_game_win,' +
-  'last_game_win_at,is_creator,os,deleted,report_count,reactions,created_at';
+  'image_urls,fruits,reply_to,is_pro,roblox_username_verified,' +
+  'is_creator,os,deleted,report_count,reactions,created_at';
 
 export function newClientMsgId() {
   return uuidv4();
@@ -58,8 +59,6 @@ export function fromGroupMessageRow(row) {
     replyTo: row.reply_to ?? null,
     isPro: !!row.is_pro,
     robloxUsernameVerified: !!row.roblox_username_verified,
-    hasRecentGameWin: !!row.has_recent_game_win,
-    lastGameWinAt: row.last_game_win_at ?? null,
     isCreator: !!row.is_creator,
     OS: row.os ?? null,
     deleted: !!row.deleted,
@@ -69,6 +68,8 @@ export function fromGroupMessageRow(row) {
     reactions: (row.reactions && typeof row.reactions === 'object') ? row.reactions : {},
     timestamp: ts,
     serverTime: ts,
+    // Raw microsecond created_at for exact pagination / gap-fill cursors.
+    createdAt: row.created_at ?? null,
   };
 }
 
@@ -139,7 +140,9 @@ export function subscribeToGroupMessages(groupId, { onInsert, onUpdate, onDelete
   if (!groupId) return () => {};
 
   const channel = supabase
-    .channel(`group-messages:${groupId}`)
+    // Unique topic: a fixed one handed a still-closing channel back when the
+    // group was refocused quickly, leaving it with no live messages.
+    .channel(uniqueTopic(`group-messages:${groupId}`))
     // ONE binding for all events (2026-09) — see privateMessagesBackend for why.
     .on(
       'postgres_changes',
@@ -194,8 +197,10 @@ export async function sendGroupMessage({
     p_sender_avatar: message.avatar ?? null,
     p_is_pro: !!message.isPro,
     p_roblox_username_verified: !!message.robloxUsernameVerified,
-    p_has_recent_game_win: !!message.hasRecentGameWin,
-    p_last_game_win_at: message.lastGameWinAt ?? null,
+    // Game-win trophy retired with the mini-games; the RPC signature keeps
+    // these params for old builds, so new builds always send the "no win" values.
+    p_has_recent_game_win: false,
+    p_last_game_win_at: null,
     p_is_creator: !!message.isCreator,
     p_os: message.OS ?? null,
   });
