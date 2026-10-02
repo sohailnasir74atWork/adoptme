@@ -617,24 +617,31 @@ export default function SettingsScreen({ selectedTheme }) {
               triggerHapticFeedback('impactLight');
               setActiveTab(tab.key);
             }}
-            android_ripple={{ color: 'rgba(255,255,255,0.2)', borderless: true }}
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 10,
-              alignItems: "center",
-              backgroundColor: isActive ? config.colors.primary : "transparent",
-            }}
+            // 2026-10-03: on the New Architecture the ripple, set as this view's
+            // Android *background*, replaced the backgroundColor, so the active
+            // tab lost its fill and its white label vanished in light mode. The
+            // fill now lives on an inner View and the ripple draws over it.
+            android_ripple={{ color: 'rgba(255,255,255,0.25)', foreground: true }}
+            style={{ flex: 1, borderRadius: 10, overflow: 'hidden' }}
           >
-            <Text
+            <View
               style={{
-                fontSize: 12,
-                fontWeight: 'bold',
-                color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: "center",
+                backgroundColor: isActive ? config.colors.primary : "transparent",
               }}
             >
-              {tab.label}
-            </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
+                }}
+              >
+                {tab.label}
+              </Text>
+            </View>
           </Pressable>
         );
       })}

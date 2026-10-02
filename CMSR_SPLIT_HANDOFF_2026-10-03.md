@@ -68,7 +68,10 @@ tiny PNGs like every other UI icon (no vector-icon glyphs, no emoji).
 | `scripts/role-badges/apply042.sh` | **DONE.** Column and index present; 168,923 `user_roles` rows; 12 House CMSR holders untouched; 0 Art CMSR holders. |
 | RTDB rules | **DONE.** Live ruleset re-read after the release: identical to the repo, `isArtCMSR` in `.indexOn`, the grant clause present. |
 | `mirrorUsersToSupabase`, `reconcileRolesMirror` | **DONE**, both "Successful update operation" (1st gen, us-central1). |
-| App build | Not released. |
+| Commit | `c137845` (all pending work, 103 files) + `40be5aa` (Android 1.15.43 / 169) on `bump-android-138`, not pushed. |
+| Android build | **BUILT 2026-10-03**: `./gradlew assembleRelease bundleRelease`. AAB 66.7 MB at `android/app/build/outputs/bundle/release/app-release.aab` (copy: `~/Downloads/adoptme-values-1.15.43-169.aab`), all four ABIs, both CMSR icons at mdpi/xhdpi/xxhdpi, Crashlytics unstripped-libs dir present. Release APK installed on the emulator and launched: process alive, no FATAL / SoLoader / JS error in logcat. **Upload to Play Console: owner.** |
+| Settings tabs (found on the 1.15.43 emulator pass) | **FIXED** in `Code/SettingScreen/Setting.jsx`: the active tab lost its fill on the New Architecture because the Android ripple was set as the view background and replaced `backgroundColor`, leaving a white label on the light tab bar. The fill now lives on an inner View and the ripple draws as a foreground. Verified on a debug build (emulator-5554, Metro): both tabs fill correctly. Needs a new build: 1.15.44 (170). |
+| iOS | Not built. No distribution certificate on this Mac for a CLI archive; archive and upload from Xcode. |
 
 **Node runtime, resolved.** The first functions deploy put both on **Node 20**
 because `functions/package.json` declared `"node": "20"` while all 39 other live

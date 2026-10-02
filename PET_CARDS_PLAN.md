@@ -320,6 +320,19 @@ Same pattern as Squad and Trade Match: tables locked to the service role, `secur
 
 ## 10. Where it stands (2026-10-02) and how to resume
 
+> **2026-10-03: server side deployed.** The owner ran, in order,
+> `scripts/pet-cards/apply037.sh` (6 tables, 20 functions, packs `haunted26`
+> (ends 2026-11-10) + `all`, 20 album pages), `scripts/pet-cards/sync-catalog.sh --apply`
+> (785 catalog rows, 579 `hd_ready`), and `scripts/pet-cards/apply043.sh`
+> (player RPCs revoked from anon; 037 had left them callable, harmless because
+> every RPC raises "sign in required", but now closed like the staff RPCs).
+> `cards_state()` simulated for a throwaway uid returns both packs. The app
+> build 1.15.43 (169) shows the Home card to signed-in players as soon as it
+> is installed: no app change. Still to do: the device pass (step 5, needs a
+> signed-in test account on `PetCardsTest`) and the §9 kids-safety checklist.
+> `apply037.sh` refuses to run twice (the launch-pack inserts are not
+> idempotent); use `--check`.
+
 Parked on the owner's decision: ship the pending uploads and the app release
 first, then come back here. Everything below was checked on 2026-10-02, not
 taken from notes.
