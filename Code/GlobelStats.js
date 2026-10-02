@@ -111,10 +111,10 @@ export const GlobalStateProvider = ({ children }) => {
   // flip RTDB /mod_controls_enabled = false in the Admin Dashboard to strip
   // ban/mute/strike from moderators. Admins are never affected.
   const [modControlsEnabled, setModControlsEnabled] = useState(true);
-  // JMD-grant delegation. The owner can hand the "Make Junior Mod" power to any
-  // user from the Admin Dashboard; the grant lives at RTDB /jmd_granters/{uid}.
-  // Admins and the hardcoded owner UID never depend on this flag.
-  const [canGrantJmd, setCanGrantJmd] = useState(false);
+  // Staff elections switch. OFF by default: the Home button reads "Coming
+  // soon" until an admin flips RTDB /elections_enabled = true (Admin
+  // Dashboard → Elections), and only an explicit `true` turns it on.
+  const [electionsEnabled, setElectionsEnabled] = useState(false);
   const [tradingServerLink, setTradingServerLink] = useState(null); // Trading server link from admin servers
 
 
@@ -906,19 +906,19 @@ export const GlobalStateProvider = ({ children }) => {
     return () => { try { unsub(); } catch (e) { /* noop */ } };
   }, [appdatabase]);
 
-  // Delegated JMD-grant permission for the signed-in user. Single leaf listener
-  // on /jmd_granters/{uid} — negligible RTDB cost, and a revoke propagates to
-  // the device immediately. Denied/offline reads leave the flag OFF (fail closed).
+  // Staff elections switch: live, so turning it on reaches open apps at once.
+  // One tiny leaf for the whole session; denied/offline leaves it OFF.
   useEffect(() => {
-    if (!appdatabase || !user?.id) { setCanGrantJmd(false); return; }
-    const r = ref(appdatabase, `jmd_granters/${user.id}`);
+    if (!appdatabase) return;
     const unsub = onValue(
-      r,
-      (snap) => setCanGrantJmd(snap.exists() && snap.val() !== false),
-      () => setCanGrantJmd(false),
+      ref(appdatabase, 'elections_enabled'),
+      (snap) => setElectionsEnabled(snap.val() === true),
+      () => { /* denied / offline → stay OFF */ }
     );
     return () => { try { unsub(); } catch (e) { /* noop */ } };
-  }, [appdatabase, user?.id]);
+    // appdatabase is a module-level constant, not a reactive dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appdatabase]);
 
   // Live role flags for the signed-in user (2026-09-04): a demoted moderator /
   // junior mod loses the powers immediately instead of at next login. Two leaf
@@ -1538,10 +1538,10 @@ export const GlobalStateProvider = ({ children }) => {
       deviceBanInfo, // device-side ban payload — carries originating email/userId
       isUserBlocked, // canonical gate: email-ban OR device-ban
       worldCupEnabled, // World Cup feature kill switch (RTDB /worldcup_enabled)
+      electionsEnabled, // staff elections switch (RTDB /elections_enabled), OFF = "Coming soon"
       modControlsEnabled, // moderator ban/mute kill switch (RTDB /mod_controls_enabled)
-      canGrantJmd, // delegated "can make Junior Mods" grant (RTDB /jmd_granters/{uid})
     }),
-    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, canGrantJmd]
+    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, electionsEnabled]
   );
 
   return (

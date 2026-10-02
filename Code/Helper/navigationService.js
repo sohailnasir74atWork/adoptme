@@ -4,7 +4,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 export const navigationRef = createNavigationContainerRef();
 
 // Routes a push notification may open (data.route). Anything else is ignored.
-const PUSH_ROUTES = new Set(['TradeMatch', 'Squad']);
+const PUSH_ROUTES = new Set(['TradeMatch', 'Squad', 'Elections']);
 
 /**
  * Open the screen a tapped notification points to. On a cold start the

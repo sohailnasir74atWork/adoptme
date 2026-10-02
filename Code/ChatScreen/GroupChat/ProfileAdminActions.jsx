@@ -5,12 +5,13 @@ import { View, Text, TouchableOpacity } from 'react-native';
 const ProfileAdminActions = ({
   isAdmin, isDarkMode, isBanned, mergedUser,
   handleApplyStrike, handleMuteUser, handleUnbanUser,
-  handlePromoteModerator, handleDemoteModerator,
+  handleDemoteModerator,
   isBabyMod = false, isModerator = false, isStaff = true,
   canManageBabyMod = false, targetIsBabyMod = false,
   canManageModerator = false,
-  handleMakeBabyMod, handleRemoveBabyMod,
+  handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
+  badgeAllowed = true, targetSquad = 0, badgeMinSquad = 3,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR, handleMakeHelper, handleRemoveHelper,
   canResetAvatar = false, targetHasAvatar = false, handleResetAvatar,
   handleDeleteUserData, deletingUser = false,
@@ -19,14 +20,12 @@ const ProfileAdminActions = ({
 }) => {
   const c = getThemeColors(isDarkMode);
   const isBabyModOnly = isBabyMod && !isAdmin && !isModerator;
-  // A user who only holds the delegated grant is not staff: no strikes, no
-  // mute, no unban, no badges, no delete. They get exactly two chips —
-  // Make/Remove Moderator and Make/Remove Junior Mod — and nothing else.
-  const grantOnly = !isStaff;
   // 2026-09-20: staff are off-limits to non-admins. Folded into the same flag
   // the strike/mute/unban blocks already test, so there is one condition to
   // reason about rather than two overlapping ones.
-  const noSanctions = grantOnly || !canSanction;
+  const noSanctions = !isStaff || !canSanction;
+  // Badges: a grant needs badgeMinSquad squad friends; removing never does.
+  const showMakeBadge = canManageBadges && badgeAllowed;
 
   const bg = c.bg;
   const border = c.border;
@@ -46,7 +45,7 @@ const ProfileAdminActions = ({
 
       <Text style={{ fontSize: 10, fontWeight: '700', color: dim,
         textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : grantOnly ? 'Staff Access' : 'Junior Mod'}
+        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : 'Junior Mod'}
       </Text>
 
       {targetIsStaff && !canSanction && (
@@ -88,45 +87,23 @@ const ProfileAdminActions = ({
         {!isBabyModOnly && !noSanctions && isBanned && (
           <Chip label="Unban" color="#10b981" onPress={handleUnbanUser} />
         )}
-        {/* Admins, plus anyone holding the delegated JMD grant — see
-            canManageModerator in BottomDrawer. Shown to grant-only users too:
-            promoting a Moderator is the point of the grant, so it is the one
-            staff action that survives the `grantOnly` suppression below. */}
-        {(isAdmin || canManageModerator) && (
-          <Chip
-            label={mergedUser?.isModerator ? 'Remove Mod' : 'Make Mod'}
-            color={mergedUser?.isModerator ? '#f59e0b' : '#3b82f6'}
-            onPress={mergedUser?.isModerator ? handleDemoteModerator : handlePromoteModerator}
-          />
+        {/* MODs and JMDs are elected (Elections screen); nobody appoints them
+            by hand. Admins can still remove one who abuses the role. */}
+        {canManageModerator && mergedUser?.isModerator && (
+          <Chip label="Remove Mod" color="#f59e0b" onPress={handleDemoteModerator} />
         )}
-        {canManageBabyMod && (
-          <Chip
-            label={targetIsBabyMod ? 'Remove Junior Mod' : 'Make Junior Mod'}
-            color={targetIsBabyMod ? '#f59e0b' : '#3b82f6'}
-            onPress={targetIsBabyMod ? handleRemoveBabyMod : handleMakeBabyMod}
-          />
+        {canManageBabyMod && targetIsBabyMod && (
+          <Chip label="Remove Junior Mod" color="#f59e0b" onPress={handleRemoveBabyMod} />
         )}
-        {canManageBadges && (
-          <Chip
-            label={targetIsTrusted ? 'Remove Trusted' : 'Make Trusted'}
-            color={targetIsTrusted ? '#f59e0b' : '#10b981'}
-            onPress={targetIsTrusted ? handleRemoveTrusted : handleMakeTrusted}
-          />
-        )}
-        {canManageBadges && (
-          <Chip
-            label={targetIsCMSR ? 'Remove CMSR' : 'Make CMSR'}
-            color={targetIsCMSR ? '#f59e0b' : '#6366f1'}
-            onPress={targetIsCMSR ? handleRemoveCMSR : handleMakeCMSR}
-          />
-        )}
-        {canManageBadges && (
-          <Chip
-            label={targetIsHelper ? 'Remove Helper' : 'Make Helper'}
-            color={targetIsHelper ? '#f59e0b' : '#14b8a6'}
-            onPress={targetIsHelper ? handleRemoveHelper : handleMakeHelper}
-          />
-        )}
+        {canManageBadges && (targetIsTrusted
+          ? <Chip label="Remove Trusted" color="#f59e0b" onPress={handleRemoveTrusted} />
+          : showMakeBadge && <Chip label="Make Trusted" color="#10b981" onPress={handleMakeTrusted} />)}
+        {canManageBadges && (targetIsCMSR
+          ? <Chip label="Remove CMSR" color="#f59e0b" onPress={handleRemoveCMSR} />
+          : showMakeBadge && <Chip label="Make CMSR" color="#6366f1" onPress={handleMakeCMSR} />)}
+        {canManageBadges && (targetIsHelper
+          ? <Chip label="Remove Helper" color="#f59e0b" onPress={handleRemoveHelper} />
+          : showMakeBadge && <Chip label="Make Helper" color="#14b8a6" onPress={handleMakeHelper} />)}
         {/* Only offered when there's a custom avatar to clear — resetting a
             user who already shows the default would be a no-op. */}
         {canResetAvatar && targetHasAvatar && handleResetAvatar && (
@@ -137,6 +114,12 @@ const ProfileAdminActions = ({
           />
         )}
       </View>
+
+      {canManageBadges && !badgeAllowed && (
+        <Text style={{ fontSize: 11, color: dim, marginTop: 10, lineHeight: 16 }}>
+          Badges need {badgeMinSquad} squad friends. This player has {targetSquad}.
+        </Text>
+      )}
 
       {/* Delete User Data — admins + owner UID */}
       {canDeleteUser && handleDeleteUserData && (

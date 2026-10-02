@@ -1,0 +1,159 @@
+jest.mock('../Code/Supabase/client', () => ({ supabase: { rpc: jest.fn() } }));
+jest.mock('../Code/Helper/growthAnalytics', () => ({ trackGrowthEvent: jest.fn() }));
+jest.mock('../Code/Helper/deviceFingerprint', () => ({ getDeviceFingerprint: jest.fn(async () => 'dev-test-123') }));
+jest.mock('react-native-mmkv', () => {
+  const stores = new Map();
+  return {
+    createMMKV: ({ id } = {}) => {
+      if (!stores.has(id)) stores.set(id, new Map());
+      const m = stores.get(id);
+      return {
+        getString: (k) => m.get(k),
+        set: (k, v) => m.set(k, v),
+        remove: (k) => m.delete(k),
+      };
+    },
+  };
+});
+
+const { supabase } = require('../Code/Supabase/client');
+const { getDeviceFingerprint } = require('../Code/Helper/deviceFingerprint');
+const el = require('../Code/Helper/staffElections');
+const HOUR = 3600000;
+const DAY = 24 * HOUR;
+const iso = (ms) => new Date(ms).toISOString();
+const race = (role, now, { nom = -1, vote = 1, close = 2 } = {}) => ({
+  id: role === 'mod' ? 1 : 2,
+  role,
+  nominationsAt: iso(now + nom * DAY),
+  votingAt: iso(now + vote * DAY),
+  closesAt: iso(now + close * DAY),
+});
+
+beforeEach(() => {
+  supabase.rpc.mockReset();
+});
+
+describe('badge eligibility (mirrors the RTDB rule)', () => {
+  test('needs BADGE_MIN_SQUAD squad friends; admins exempt', () => {
+    expect(el.BADGE_MIN_SQUAD).toBe(3);
+    expect(el.canGrantBadge({ targetSquad: 2 })).toBe(false);
+    expect(el.canGrantBadge({ targetSquad: 3 })).toBe(true);
+    expect(el.canGrantBadge({ targetSquad: '10' })).toBe(true);
+    expect(el.canGrantBadge({ targetSquad: undefined })).toBe(false);
+    expect(el.canGrantBadge({ isAdmin: true, targetSquad: 0 })).toBe(true);
+  });
+});
+
+describe('phases and countdowns', () => {
+  const now = Date.UTC(2026, 9, 2, 12);
+  test('phaseOf follows the calendar like _staff_phase', () => {
+    expect(el.phaseOf(race('mod', now, { nom: 1, vote: 2, close: 3 }), now)).toBe('upcoming');
+    expect(el.phaseOf(race('mod', now), now)).toBe('nominations');
+    expect(el.phaseOf(race('mod', now, { nom: -2, vote: -1, close: 1 }), now)).toBe('voting');
+    expect(el.phaseOf(race('mod', now, { nom: -3, vote: -2, close: -1 }), now)).toBe('counting');
+    expect(el.phaseOf({ ...race('mod', now), phase: 'finalized' }, now)).toBe('finalized');
+    expect(el.phaseOf(null)).toBeNull();
+  });
+
+  test('phaseEndsAt points at the next boundary', () => {
+    const r = race('mod', now);
+    expect(el.phaseEndsAt(r, now)).toBe(Date.parse(r.votingAt));
+    expect(el.phaseEndsAt(r, Date.parse(r.votingAt) + 1)).toBe(Date.parse(r.closesAt));
+    expect(el.phaseEndsAt(r, Date.parse(r.closesAt) + 1)).toBeNull();
+  });
+
+  test('splitDuration', () => {
+    expect(el.splitDuration(2 * DAY + 3 * HOUR + 4 * 60000)).toEqual({ d: 2, h: 3, m: 4 });
+    expect(el.splitDuration(-5)).toEqual({ d: 0, h: 0, m: 0 });
+  });
+
+  test('homeHighlight prefers voting, then MOD; ignores upcoming and closed races', () => {
+    expect(el.homeHighlight([], now)).toBeNull();
+    expect(el.homeHighlight([race('mod', now, { nom: 1, vote: 2, close: 3 })], now)).toBeNull();
+    const nomMod = race('mod', now);
+    const voteJmd = race('jmd', now, { nom: -2, vote: -1, close: 1 });
+    const pick = el.homeHighlight([nomMod, voteJmd], now);
+    expect(pick.role).toBe('jmd');
+    expect(pick.phase).toBe('voting');
+    expect(pick.endsAt).toBe(Date.parse(voteJmd.closesAt));
+    expect(el.homeHighlight([race('jmd', now), race('mod', now)], now).role).toBe('mod');
+  });
+});
+
+describe('eligibility', () => {
+  const data = (me) => ({ me, rules: el.ROLE_RULES, limits: { voterMinDays: 7 } });
+  test('squad bar per role', () => {
+    const e = el.eligibility(data({ squad: 4, accountDays: 30, cleanRecord: true }));
+    expect(e.jmd).toEqual({ need: 0, ok: true });
+    expect(e.mod).toEqual({ need: 6, ok: false });
+    expect(e.vote).toEqual({ ok: true, daysLeft: 0 });
+  });
+  test('record, sitting MOD and account age', () => {
+    expect(el.eligibility(data({ squad: 12, cleanRecord: false, accountDays: 30 })).mod.ok).toBe(false);
+    expect(el.eligibility(data({ squad: 12, cleanRecord: true, isMod: true, accountDays: 30 })).jmd.ok).toBe(false);
+    expect(el.eligibility(data({ squad: 12, cleanRecord: true, isMod: true, accountDays: 30 })).mod.ok).toBe(true);
+    expect(el.eligibility(data({ squad: 0, accountDays: 3 })).vote).toEqual({ ok: false, daysLeft: 4 });
+    expect(el.eligibility(data({ squad: 0, accountDays: 30, banned: true })).vote.ok).toBe(false);
+  });
+});
+
+describe('RPC calls', () => {
+  test('getElections caches per user and seeds the Home calendar', async () => {
+    const now = Date.now();
+    supabase.rpc.mockResolvedValueOnce({
+      data: { elections: [{ ...race('mod', now), phase: 'nominations' }, { ...race('jmd', now), phase: 'finalized' }] },
+      error: null,
+    });
+    const d = await el.getElections('u1');
+    expect(d.elections).toHaveLength(2);
+    expect(supabase.rpc).toHaveBeenCalledWith('staff_elections_get');
+    await el.getElections('u1');
+    expect(supabase.rpc).toHaveBeenCalledTimes(1); // cached
+    const brief = await el.getBrief();
+    expect(supabase.rpc).toHaveBeenCalledTimes(1); // brief came from the screen fetch
+    expect(brief.map((b) => b.role)).toEqual(['mod']); // finalized races are not on the Home card
+  });
+
+  test('castVote sends the device id and drops the cache', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: true }, error: null });
+    const res = await el.castVote('u1', 7, 'cand');
+    expect(res.ok).toBe(true);
+    expect(supabase.rpc).toHaveBeenCalledWith('staff_vote', { p_election: 7, p_candidate: 'cand', p_device: 'dev-test-123' });
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
+    await el.getElections('u1');
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_elections_get'); // refetched, not cached
+  });
+
+  test('castVote without a device id never reaches the server', async () => {
+    getDeviceFingerprint.mockResolvedValueOnce(null);
+    expect(await el.castVote('u1', 7, 'cand')).toEqual({ ok: false, reason: 'device' });
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  test('runForRole trims the pitch to PITCH_MAX and passes server reasons through', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: false, reason: 'squad', need: 10, have: 4 }, error: null });
+    const res = await el.runForRole('u1', 3, 'x'.repeat(400));
+    expect(res).toEqual({ ok: false, reason: 'squad', need: 10, have: 4 });
+    expect(supabase.rpc.mock.calls[0][1].p_pitch).toHaveLength(el.PITCH_MAX);
+  });
+
+  test('network errors throw; getBrief never does', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: null, error: new Error('offline') });
+    await expect(el.withdraw('u1', 3)).rejects.toThrow('offline');
+    supabase.rpc.mockResolvedValueOnce({ data: null, error: new Error('offline') });
+    expect(await el.getBrief({ force: true })).toEqual([]);
+  });
+
+  test('admin calls', async () => {
+    supabase.rpc.mockResolvedValue({ data: { ok: true }, error: null });
+    await el.adminOpen('a', 'jmd', 5);
+    await el.adminCancel('a', 9);
+    await el.adminDisqualify('a', 9, 'bad');
+    expect(supabase.rpc.mock.calls).toEqual([
+      ['staff_admin_open', { p_role: 'jmd', p_seats: 5 }],
+      ['staff_admin_cancel', { p_election: 9 }],
+      ['staff_admin_disqualify', { p_election: 9, p_uid: 'bad' }],
+    ]);
+  });
+});

@@ -71,7 +71,7 @@ const ModCard = React.memo(({ mod, onChat, isDarkMode }) => {
 
 // ─── Main Screen ───
 const ModsScreen = () => {
-  const { theme, appdatabase, user } = useGlobalState();
+  const { theme, appdatabase, user, electionsEnabled } = useGlobalState();
   const { localState, updateLocalState } = useLocalState();
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -205,6 +205,20 @@ const ModsScreen = () => {
         </View>
       </View>
 
+      {/* Staff are elected (supabase/038_staff_elections.sql), once the
+          backend switch /elections_enabled is on. */}
+      {electionsEnabled && (
+      <TouchableOpacity
+        style={[styles.electionBanner, { backgroundColor: isDarkMode ? 'rgba(124,58,237,0.18)' : '#F5F3FF' }]}
+        onPress={() => navigation.navigate('Elections')}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.electionEmoji}>🗳️</Text>
+        <Text style={[styles.electionText, { color: textColor }]}>{t('elections.mods_banner')}</Text>
+        <Icon name="chevron-forward" size={16} color="#7C3AED" />
+      </TouchableOpacity>
+      )}
+
       {loading ? (
         <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
       ) : (
@@ -269,6 +283,9 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 14, fontWeight: '700' },
   statLabel: { fontSize: 11, fontWeight: '500' },
   statDivider: { width: 1, height: 16 },
+  electionBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12 },
+  electionEmoji: { fontSize: 18 },
+  electionText: { flex: 1, fontSize: 13, fontWeight: '700', lineHeight: 18 },
 
   card: {
     flexDirection: 'row',

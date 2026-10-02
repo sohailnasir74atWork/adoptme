@@ -113,6 +113,20 @@ exports.notifySquadEvent = functions
       res.status(200).send('Skipped');
       return;
     }
+
+    // Input to the badge rule (database.rules.json): a MOD may grant Trusted /
+    // CMSR / Helper only once /squad_size says 3+. runStaffElections keeps it
+    // in sync too; this makes it instant. Only ever raised, so a late event
+    // can't lower it.
+    const squadCount = Number(record.count);
+    if ((record.kind === 'member_qualified' || record.kind === 'reward') && squadCount >= 3) {
+      try {
+        await admin.database().ref(`squad_size/${String(record.recipient_uid)}`)
+          .transaction((cur) => (typeof cur === 'number' && cur >= squadCount ? undefined : squadCount));
+      } catch (e) {
+        console.error('[notifySquadEvent] squad_size write failed:', e.message);
+      }
+    }
     const msg = buildMessage(record);
     if (!msg) {
       res.status(200).send('Unknown kind');

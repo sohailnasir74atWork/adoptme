@@ -55,7 +55,8 @@ import { getUserEmail, getPrivateProfile } from '../../Helper/privateProfile';
 const BOTTOM_DRAWER_CACHE_ENABLED = true;
 import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
-import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute, canSanctionTarget } from '../utils';
+import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute, canSanctionTarget } from '../utils';
+import { canGrantBadge, BADGE_MIN_SQUAD } from '../../Helper/staffElections';
 import ModEvidencePicker from '../../AppHelper/ModEvidencePicker';
 import { uploadEvidence } from '../../Helper/modEvidenceUpload';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -247,7 +248,7 @@ const ProfileBottomDrawer = ({
   fromPvtChat,
 }) => {
   const insets = useSafeAreaInsets();
-  const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled, canGrantJmd } = useGlobalState();
+  const { theme, firestoreDB, appdatabase, isAdmin, user, modControlsEnabled } = useGlobalState();
   const { updateLocalState, localState } = useLocalState();
   const { t } = useTranslation();
   const { triggerHapticFeedback } = useHaptic();
@@ -1322,28 +1323,6 @@ const ProfileBottomDrawer = ({
     }
   };
 
-  const handlePromoteModerator = async () => {
-    const confirm = await new Promise((resolve) => {
-      Alert.alert(
-        "Promote to Moderator",
-        `Are you sure you want to make ${userName} a Moderator?`,
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Promote", onPress: () => resolve(true) }
-        ]
-      );
-    });
-
-    if (!confirm) return;
-
-    const success = await makeModerator(selectedUserId);
-    if (success) {
-      invalidateFullProfile(selectedUserId);
-      setRoleOverride(selectedUserId, { isModerator: true });
-      setUserData(prev => ({ ...prev, isModerator: true }));
-    }
-  };
-
   const handleDemoteModerator = async () => {
     const confirm = await new Promise((resolve) => {
       Alert.alert(
@@ -1374,21 +1353,23 @@ const ProfileBottomDrawer = ({
     if (startChat) startChat();
   };
 
-  // ── Junior Mod handlers ──
-  // Admins always qualify. Everyone else needs an explicit grant the owner
-  // issues from the Admin Dashboard (RTDB /jmd_granters/{uid}), which
-  // GlobelStats resolves into `canGrantJmd`. A granter can only add/remove the
-  // Junior Mod role — no other staff power comes with it.
-  const canManageBabyMod = isAdmin || !!canGrantJmd;
-  // A JMD granter can promote/demote MODERATORS as well as Junior Mods
-  // (owner's decision, 2026-09-17). That is a real escalation — the mods they
-  // create get strikes, mute and badge powers the granter does not hold — so
-  // it is deliberately the same single grant, revocable from one place
-  // (RTDB /jmd_granters/{uid}), and the RTDB rule carries the matching
-  // carve-out. Changing this gate alone would not work: without the rule the
-  // server rejects the write.
-  const canManageModerator = isAdmin || !!canGrantJmd;
+  // ── MOD / Junior Mod ──
+  // Elected only (2026-10-02, supabase/038_staff_elections.sql): nobody
+  // appoints a MOD or JMD by hand any more, and the /users RTDB rule rejects
+  // it from everyone but admins. Admins keep one emergency power: removing a
+  // MOD or JMD who abuses the role (runStaffElections then closes the term).
+  const canManageBabyMod = isAdmin;
+  const canManageModerator = isAdmin;
   const canManageBadges = isAdmin || !!user?.isModerator;
+  // Trusted / CMSR / Helper go only to players with BADGE_MIN_SQUAD squad
+  // friends (the RTDB rule checks /squad_size; this is the matching UI).
+  const targetSquad = Number(mergedUser?.squadCount) || 0;
+  const badgeAllowed = canGrantBadge({ isAdmin, targetSquad });
+  const badgeBlocked = () => {
+    if (badgeAllowed) return false;
+    Alert.alert('Not eligible yet', `${userName} has ${targetSquad} squad friend${targetSquad === 1 ? '' : 's'}. Badges need at least ${BADGE_MIN_SQUAD}.`);
+    return true;
+  };
   const canDeleteUser = isAdmin;
   // Staff targets are off-limits to everyone but admins (2026-09-20). Drives
   // the UI only; utils.js/canSanctionTarget and the RTDB rule are what
@@ -1396,28 +1377,6 @@ const ProfileBottomDrawer = ({
   const targetIsStaff = !!(mergedUser?.isModerator || mergedUser?.isBabyMod
     || mergedUser?.isAdmin || mergedUser?.admin);
   const canSanction = isAdmin || !targetIsStaff;
-
-  const handleMakeBabyMod = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Junior Mod', `Make ${userName} a Junior Mod? They can only mute users for up to 2 hours.`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Confirm', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      // One atomic write: the flag + a rolesUpdatedAt stamp, so the Supabase
-      // mirror always runs (even if the flag value did not change).
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isBabyMod: true, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      setRoleOverride(selectedUserId, { isBabyMod: true });
-      setUserData(prev => ({ ...prev, isBabyMod: true }));
-      Alert.alert('Success', `${userName} is now a Junior Mod`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to set Junior Mod');
-    }
-  };
 
   const handleRemoveBabyMod = async () => {
     if (!selectedUserId || !appdatabase) return;
@@ -1444,6 +1403,7 @@ const ProfileBottomDrawer = ({
   // ── Trusted badge handlers ──
   const handleMakeTrusted = async () => {
     if (!selectedUserId || !appdatabase) return;
+    if (badgeBlocked()) return;
     const confirm = await new Promise((resolve) => {
       Alert.alert('Make Trusted', `Give ${userName} the Trusted badge?`, [
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
@@ -1485,6 +1445,7 @@ const ProfileBottomDrawer = ({
   // ── CMSR badge handlers ──
   const handleMakeCMSR = async () => {
     if (!selectedUserId || !appdatabase) return;
+    if (badgeBlocked()) return;
     const confirm = await new Promise((resolve) => {
       Alert.alert('Make Commissioner', `Give ${userName} the CMSR badge?`, [
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
@@ -1526,6 +1487,7 @@ const ProfileBottomDrawer = ({
   // ── Helper badge handlers ──
   const handleMakeHelper = async () => {
     if (!selectedUserId || !appdatabase) return;
+    if (badgeBlocked()) return;
     const confirm = await new Promise((resolve) => {
       Alert.alert('Make Helper', `Give ${userName} the Helper badge?`, [
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
@@ -3406,10 +3368,7 @@ const ProfileBottomDrawer = ({
                   </View>
                 </View>
 
-                {/* Granted JMD-only users are not staff, but still need this panel
-                    to reach the Make/Remove Junior Mod chip. `isStaff` below keeps
-                    strike/mute/unban out of their hands. */}
-                {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod || canManageBabyMod) && (
+                {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod) && (
                   <View>
                     <TouchableOpacity
                       onPress={() => setShowModTools(prev => !prev)}
@@ -3440,7 +3399,6 @@ const ProfileBottomDrawer = ({
                         handleApplyStrike={handleApplyStrike}
                         handleMuteUser={handleMuteUser}
                         handleUnbanUser={handleUnbanUser}
-                        handlePromoteModerator={handlePromoteModerator}
                         handleDemoteModerator={handleDemoteModerator}
                         isBabyMod={!!user?.isBabyMod}
                         isModerator={!!user?.isModerator}
@@ -3450,9 +3408,11 @@ const ProfileBottomDrawer = ({
                         canManageBabyMod={canManageBabyMod}
                         canManageModerator={canManageModerator}
                         targetIsBabyMod={!!mergedUser?.isBabyMod}
-                        handleMakeBabyMod={handleMakeBabyMod}
                         handleRemoveBabyMod={handleRemoveBabyMod}
                         canManageBadges={canManageBadges}
+                        badgeAllowed={badgeAllowed}
+                        targetSquad={targetSquad}
+                        badgeMinSquad={BADGE_MIN_SQUAD}
                         targetIsTrusted={!!mergedUser?.isTrusted}
                         targetIsCMSR={!!mergedUser?.isCMSR}
                         targetIsHelper={!!mergedUser?.isHelper}

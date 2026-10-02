@@ -90,6 +90,10 @@ const rosters = require('./syncRosterMaintenance');
 exports.refreshAllRosters = rosters.refreshAllRosters;
 exports.seedAllRosters = rosters.seedAllRosters;
 
+// ── Staff elections (supabase/038): count closed races, apply MOD/JMD roles,
+// mirror squad sizes for the badge rule. See functions/runStaffElections.js.
+exports.runStaffElections = require('./runStaffElections').runStaffElections;
+
 // ── Moderation ────────────────────────────────────────────────────────
 // Stamps `bannedAt` onto any ban record that arrives without one. Needed
 // because old app builds still in the field write `appliedAt` only, and the

@@ -26,6 +26,7 @@ import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, s
 import SafeLottieView from '../Helper/SafeLottieView';
 import SquadBadge from '../Squad/SquadBadge';
 import { getPassCount, onSquadPassesChange } from '../Helper/squad';
+import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
@@ -80,7 +81,7 @@ const HOME_FOCUS_REFRESH_MS = 10 * 60 * 1000;
 const ownedPetsFocusCache = new Map(); // uid -> { ts, ownedPets }
 
 const HomeTabScreen = ({ selectedTheme }) => {
-  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
+  const { theme, user, tradingServerLink, appdatabase, firestoreDB, isUserBlocked, strikeInfo, deviceBanInfo, electionsEnabled } = useGlobalState();
   const { localState } = useLocalState();
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
@@ -214,6 +215,27 @@ const HomeTabScreen = ({ selectedTheme }) => {
     setSquadPasses(getPassCount(user?.id));
     return onSquadPassesChange(() => setSquadPasses(getPassCount(user?.id)));
   }, [user?.id]);
+
+  // 🗳️ Staff elections button. Behind the backend switch (RTDB
+  // /elections_enabled): OFF it is hidden and makes no calls. ON it opens
+  // Elections and shows the live race; the calendar is cached 6 h on the
+  // phone (staff_elections_brief), phase and countdown are worked out locally.
+  const [electionBrief, setElectionBrief] = useState([]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!electionsEnabled) { setElectionBrief([]); return undefined; }
+      let live = true;
+      getBrief().then((b) => { if (live) setElectionBrief(b); });
+      return () => { live = false; };
+    }, [electionsEnabled])
+  );
+  const liveElection = homeHighlight(electionBrief);
+  const electionLeft = (endMs) => {
+    const { d, h, m } = splitDuration(endMs - Date.now());
+    if (d > 0) return t('elections.time_dh', { d, h });
+    if (h > 0) return t('elections.time_hm', { h, m });
+    return t('elections.time_m', { m: Math.max(1, m) });
+  };
 
   // 🎯 Trade Match card: match count from the phone's cache (no network).
   const [tradeMatchCount, setTradeMatchCount] = useState(null);
@@ -577,6 +599,32 @@ const HomeTabScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ═══ STAFF ELECTIONS: slim button, only once the switch is on.
+              Until then admins reach it from Admin Dashboard → Elections. ═══ */}
+          {electionsEnabled && (
+            <TouchableOpacity
+              style={[styles.electionBtn, {
+                backgroundColor: isDarkMode ? 'rgba(124,58,237,0.16)' : '#F5F3FF',
+                borderColor: isDarkMode ? 'rgba(124,58,237,0.45)' : '#DDD6FE',
+              }]}
+              onPress={() => requireSignIn(() => navigation.navigate('Elections'), t('elections.sign_in'))}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.electionBtnEmoji}>🗳️</Text>
+              <Text style={[styles.electionBtnText, { color: selectedTheme.colors.text }]} numberOfLines={1}>
+                {t('elections.title')}
+              </Text>
+              {liveElection && (
+                <View style={[styles.electionBtnPill, { backgroundColor: '#10B98122' }]}>
+                  <Text style={[styles.electionBtnPillText, { color: '#059669' }]} numberOfLines={1}>
+                    {t(`elections.phase_${liveElection.phase}`)} · {electionLeft(liveElection.endsAt)}
+                  </Text>
+                </View>
+              )}
+              <FontAwesome name="chevron-right" size={12} color="#7C3AED" />
+            </TouchableOpacity>
+          )}
 
           {/* ═══ TRADE MATCH ═══ */}
           <TouchableOpacity
@@ -1091,6 +1139,21 @@ const styles = StyleSheet.create({
   },
   tradeMatchEmoji: { fontSize: 30 },
   tradeMatchTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  electionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  electionBtnEmoji: { fontSize: 16 },
+  electionBtnText: { flex: 1, fontSize: 14, fontWeight: '800' },
+  electionBtnPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, flexShrink: 1 },
+  electionBtnPillText: { fontSize: 11, fontWeight: '800' },
   tradeMatchSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2, lineHeight: 16 },
   tradeMatchNew: { backgroundColor: '#FDE68A', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   tradeMatchNewText: { color: '#6D28D9', fontSize: 9, fontWeight: '900' },

@@ -27,6 +27,7 @@ import {
   STEPS, RANKS, FRIEND_PRO_DAYS, rankFor, nextRank, nextStep, inviteLinks,
   getMySquad, getSquadLeaderboard, joinSquad, squadPing, activatePass, isSquadProActive,
 } from '../Helper/squad';
+import { ROLE_RULES, BADGE_MIN_SQUAD } from '../Helper/staffElections';
 
 const ACCENT = '#7C3AED';
 // A friend counts on any later UTC day (034 squad_ping), so "counts tomorrow"
@@ -56,7 +57,7 @@ export default function SquadScreen() {
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { user, theme } = useGlobalState();
+  const { user, theme, electionsEnabled } = useGlobalState();
   const { localState } = useLocalState();
   const isDark = theme === 'dark';
   const c = getThemeColors(isDark);
@@ -344,6 +345,32 @@ export default function SquadScreen() {
               );
             })}
           </Card>
+
+          {/* Squad size unlocks running for staff (038_staff_elections.sql).
+              Only once the backend switch /elections_enabled is on. */}
+          {electionsEnabled && (
+          <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('Elections')}>
+            <Card c={c}>
+              <View style={[styles.row, { gap: 8 }]}>
+                <Text style={{ fontSize: 18 }}>🗳️</Text>
+                <Text style={[styles.cardTitle, { color: c.text, flex: 1 }]}>{t('elections.squad_card_title')}</Text>
+                <Icon name="chevron-forward" size={18} color={c.textSecondary} />
+              </View>
+              {[
+                { n: BADGE_MIN_SQUAD, key: 'elections.squad_unlock_jmd' },
+                { n: ROLE_RULES.mod.minSquad, key: 'elections.squad_unlock_mod' },
+              ].map((u) => {
+                const done = direct >= u.n;
+                return (
+                  <View key={u.key} style={[styles.row, styles.ladderRow]}>
+                    <Icon name={done ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={done ? GREEN : c.textMuted} />
+                    <Text style={[styles.ladderText, { color: c.text }]}>{t(u.key, { count: u.n })}</Text>
+                  </View>
+                );
+              })}
+            </Card>
+          </TouchableOpacity>
+          )}
 
           {/* How it works */}
           <Card c={c}>

@@ -381,6 +381,7 @@ function App() {
           <Stack.Screen name="ModsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ModsScreen').default} />
           <Stack.Screen name="TradeMatch" options={{ headerShown: false }} getComponent={() => require('./Code/TradeMatch/TradeMatchScreen').default} />
           <Stack.Screen name="Squad" options={{ headerShown: false }} getComponent={() => require('./Code/Squad/SquadScreen').default} />
+          <Stack.Screen name="Elections" options={{ headerShown: false }} getComponent={() => require('./Code/Elections/ElectionsScreen').default} />
 
           <Stack.Screen name="ValueScreen" options={{ title: t('home_tab.action_pet_values'), ...headerOptions }}>
             {renderValueScreen}
