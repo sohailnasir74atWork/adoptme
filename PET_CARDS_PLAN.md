@@ -9,7 +9,7 @@ and a pull card to share.
 Companion file: **`PET_CARDS_ART_PROMPTS.md`** (every image asset, with ready-to-paste
 prompts, sizes, file names and the HD pipeline).
 
-Written 2026-10-01. Nothing here is deployed yet.
+Written 2026-10-01. **Parked 2026-10-02**: the app code is committed and the pet art is 74% uploaded, but nothing server-side is deployed. Resume from §10 at the bottom.
 
 ---
 
@@ -316,3 +316,62 @@ Same pattern as Squad and Trade Match: tables locked to the service role, `secur
 - [ ] No card trading between players.
 - [ ] Showcase shows only cards and score, never anything personal.
 - [ ] Disclaimer: fan-made, not affiliated with Uplift Games.
+
+---
+
+## 10. Where it stands (2026-10-02) and how to resume
+
+Parked on the owner's decision: ship the pending uploads and the app release
+first, then come back here. Everything below was checked on 2026-10-02, not
+taken from notes.
+
+### Done
+
+| Piece | State | Proof |
+|---|---|---|
+| App code (`Code/PetCards/*`, Home card, i18n ×6, tests) | Committed `7cb431b`, pushed on `bump-android-138` | `git log` |
+| Pet HD art on the CDN | **579 / 785 pets**, all three sizes (1024 / 512 / 2048), manifest `https://cardspull.b-cdn.net/v1/pets/index.json` | `python3 scripts/pet-cards/hd-art/gemini/status.py`; `verify_cdn.py` reported 0 missing / 0 different |
+| CDN zone | Storage zone `adoptme-cards`, pull zone **`cardspull.b-cdn.net`** (`CARDS_CDN` in `cardConfig.js`) | `curl -I https://cardspull.b-cdn.net/v1/pets/dalmatian.webp` → 200 |
+| SQL 037 tested | 50/50 on PGlite (`scripts/pet-cards/test037.mjs`) | — |
+| Bundled textures / holo patterns | 7 webp in `assets/pet-cards` (180 KB) | — |
+
+Safe to release the app before the rest: in release builds the Home card
+hides itself when `cards_state` fails (037 missing) or when no pack has cards,
+so players see nothing until the server side is ready. Dev builds fall back to
+`cardsMock.js` automatically.
+
+### Not done
+
+| Piece | State | Notes |
+|---|---|---|
+| Pet HD art, remaining | **206 pets**: 202 in the kit 2 queue + 4 refused by Gemini (`halloweengoldenmummycat`, `evilbasilisk`, `halloweenblackmummycat`, `monkeyking`; `businessmonkey` refused too) | Procedure, limits and the no-typing runner are in `scripts/pet-cards/hd-art/REDRAW_PROGRESS.md`. Free Gemini allows ~75 images per short-term window, so ~3 windows. Refused pets go through ChatGPT (3 a day). Launching with 579 is fine: only `hd_ready` cards can be pulled. |
+| Non-pet art (`PET_CARDS_ART_PROMPTS.md` §3–§11: backgrounds, card backs, packs, gems, emblems) | Never uploaded (`v1/index.json` is 404) | Optional polish. The app draws packs, backs, frames and gems procedurally (`PackArt.jsx`, `CardBack.jsx`, `RarityGem.jsx`). Upload later with `upload.py --dir <folder> --apply`; the app only requests art that the manifest lists. |
+| SQL 037 | **Not deployed** (no `card_*` tables live, 0 `cards_*` functions) | Additive; nothing in the app or RTDB depends on it until the Home card finds a pack. |
+| Catalog sync | Not run (needs 037) | `scripts/pet-cards/sync-card-catalog.js` fills `card_catalog` from the live values catalogue + `sets.json` (21 sets) + the CDN manifest (`hd_ready`). Dry run by default. |
+| Launch packs | Seeded by 037: `haunted26` (Haunted Carnival, **retires 2026-11-10**) and `all` (All Pets, no end) + 18 egg album pages | If the resume lands after 10 Nov, `haunted26` is already retired: pick a new seasonal pack or extend `ends_at` before launch. |
+| Device test | Not done since the last code changes | Use the `PetCardsTest` AVD (emulator-5556), not Pixel9; `dev-cdn.py` on :8765 + `adb reverse tcp:8765 tcp:8765` for local art. |
+
+### Resume checklist, in order
+
+1. **(Optional, any time) Finish the pet art.** Follow `hd-art/REDRAW_PROGRESS.md`
+   → `upload.py --apply` → `verify_cdn.py` → purge the three `index.json` URLs.
+   Can also continue after launch: new `hd_ready` pets join packs on the next
+   catalog sync.
+2. **Deploy 037** through the Management API in one transaction (same path as
+   038/040; PAT in `~/.supabase/access-token`). Re-run `test037.mjs` first if
+   the file changed. Check after: `card_sets` has `haunted26` + `all` + 18 pages.
+3. **Catalog sync.** Secrets from GCP Secret Manager:
+   `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/pet-cards/sync-card-catalog.js`
+   (dry run; expect ~785 rows, 579+ `hd_ready`), then `--apply`. Collector
+   numbers are assigned once and never change.
+4. **Check the packs open.** `select id, kind, starts_at, ends_at, active from card_sets where kind='pack'`;
+   fix `ends_at` on `haunted26` or add the season's pack. Confirm
+   `cards_state` returns a pack with `total > 0` for a test uid.
+5. **Device pass** on `PetCardsTest`: Home card → hub → open a pack → album →
+   viewer → share card → Wallpaper Studio, light and dark.
+6. **Release.** The Home card appears by itself once step 4 holds; no app flag
+   to flip. Watch `open_card_pack` error rate and the `pet_cards.err.*` keys
+   in analytics for the first days.
+7. **After launch:** the §9 kids-safety checklist, then §8 phase 3 (Squad
+   pack credits, leaderboard, Winter set).
+
