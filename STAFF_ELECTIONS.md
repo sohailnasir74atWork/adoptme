@@ -138,7 +138,7 @@ the mod log. 038 avoids it with `coalesce`. The live functions still need the fi
 | Supabase `038_staff_elections.sql` | **DEPLOYED 2026-10-02**, one transaction. 4 tables, 22 functions, cron job 14. Public API checked: anon `staff_elections_brief` returns `[]`, while anon `staff_due` and `staff_elections_get` are denied. |
 | `runStaffElections` | **DEPLOYED 2026-10-02** (new). Every 30 min, Node 20 1st gen, Supabase secrets attached. |
 | `notifySquadEvent` | **DEPLOYED 2026-10-02** (update). Before the deploy, live source equalled HEAD, so the only change is the `/squad_size` mirror. An unsigned call still returns 401. |
-| RTDB rules | **NOT deployed**, held until the Squad release (see below). |
+| RTDB rules | **DEPLOYED 2026-10-02** at the owner's request. Live was checked identical to the repo first, so only `users`, `squad_size` and `elections_enabled` changed. Checked after: `/elections_enabled` is public-read and denies anon writes, `/squad_size` denies reads. Squad isn't released yet, so **MODs can't give any badge** until players have 3+ squad friends. Admins still can. |
 | App | Not released |
 
 `functions-deploy/deploy.sh` was broken for every function. Since `functions/index.js`
@@ -150,7 +150,7 @@ It was fixed on 2026-10-02 by skipping index.js in discovery.
 
 1. ~~**Supabase 038.**~~ Done 2026-10-02.
 2. ~~**Functions:** `runStaffElections` and `notifySquadEvent`.~~ Done 2026-10-02.
-3. **RTDB rules.** These include the new `/elections_enabled` switch: public read,
+3. ~~**RTDB rules.**~~ Done 2026-10-02. These include the new `/elections_enabled` switch: public read,
    admin-only boolean write. This is a behaviour change, and it applies to every build in the field:
    - Nobody but admins can set `isModerator` / `isBabyMod`.
    - A badge grant needs `/squad_size >= 3`.
