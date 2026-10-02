@@ -7,17 +7,18 @@ to players with 3 or more squad friends.
 
 ---
 
-## On/off switch ("Coming soon")
+## On/off switch (admin-only until launch)
 
 The whole feature sits behind RTDB **`/elections_enabled`**, which is **off by
 default**. Only an explicit `true` turns it on.
 
 | | Switch OFF (default) | Switch ON |
 |---|---|---|
-| Home | Slim "🗳️ Staff Elections · Coming soon" button. A tap shows a "coming soon, grow your squad" message. No server calls. | Same slim button with the live race ("Voting open · 2d 4h") and a chevron. It opens Elections. |
-| Squad screen | "Your squad unlocks staff roles" card with a Coming soon pill. Kept so players start building squads before the first election. | The card opens Elections |
-| Moderators screen | Elections banner hidden | Banner shown |
-| Elections screen | Players see a Coming soon page. **Admins see everything**, with a "players can't see this yet" note, so they can start a race first. | Full screen |
+| Players | Nothing is visible: no Home button, no Squad card, no Moderators banner. No server calls. | A slim "🗳️ Staff Elections" button on Home under Pet Cards, with the live race ("Voting open · 2d 4h"). Plus the Squad screen card and the Moderators banner. |
+| Admins | **Admin Dashboard → Elections**: the on/off switch plus "Open Elections". That is the full screen, with a note that players can't see it yet, so a race can be started first. | Same, plus everything players see |
+
+If a player reaches the screen anyway (a push link, say) while the switch is off,
+they get a Coming soon page.
 
 To flip it, go to **Admin Dashboard → Elections → "Show Staff Elections to players"**.
 That needs the rules below deployed. Setting the key in the Firebase console also
