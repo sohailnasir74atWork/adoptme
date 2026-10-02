@@ -52,7 +52,10 @@ DANGER="sendDeprecationCountdown sendUpdateNoticeMessage notifyNewMessageLegacy 
 discover() {
   for f in "$SRC"/*.js; do
     base="$(basename "$f")"
-    case "$base" in _*|*.local.js) continue ;; esac
+    # index.js re-exports every module (it exists since the root firebase.json
+    # gained a "functions" key); mapping names to it made the staged index.js
+    # require itself and export undefined.
+    case "$base" in _*|*.local.js|index.js) continue ;; esac
     grep -o '^exports\.[A-Za-z0-9_]*' "$f" 2>/dev/null \
       | sed "s/^exports\.//" \
       | while read -r name; do [ -n "$name" ] && printf '%s\t%s\n' "$name" "$base"; done
