@@ -13,6 +13,19 @@ const AD_EXPIRY_MS = 4 * 60 * 60 * 1000;
 // flicking to another app for 5s and back) don't spam the user.
 const MIN_INTERVAL_MS = 2 * 60 * 1000;
 
+// ── Cold-start ad (ported from mm2values, 2026-10-01) ──
+// Shown FROM the splash screen, never over a usable Home: the splash is held
+// until the ad opens or COLD_START_BUDGET_MS after launch, whichever is first.
+// An ad that loads after the budget is dropped for this launch, because an ad
+// appearing once the user is already tapping around is exactly the
+// "encouraging accidental clicks" pattern AdMob penalises. Before this, the
+// first ad of every launch showed whenever it finished loading.
+const APP_START_AT = Date.now();          // module load ≈ JS start (App.js imports this at the top)
+const COLD_START_BUDGET_MS = 3000;
+const COLD_START_MIN_GAP_MS = 4 * 60 * 60 * 1000;
+const K_LAST_COLD_AD = 'appOpenLastColdStartAt';
+const K_LAUNCHED_BEFORE = 'appOpenHasLaunchedBefore';
+
 // isPro is read straight from MMKV so every foreground show respects the
 // latest purchase state without any React wiring into this singleton.
 let storage = null;
@@ -20,6 +33,23 @@ try {
   const { createMMKV } = require('react-native-mmkv');
   storage = createMMKV();
 } catch (_) {}
+// Read ONCE at module load, then flag this launch: a user's first-ever launch
+// never gets a cold-start ad (Google's guidance), and that includes the
+// session in which they finish onboarding.
+let launchedBefore = false;
+try {
+  // isAppReady: written on every launch by older builds too, so existing
+  // users are not mistaken for first-timers the first time this code runs.
+  launchedBefore = !!storage && (storage.getBoolean(K_LAUNCHED_BEFORE) === true ||
+    storage.getBoolean('isAppReady') === true);
+  storage?.set(K_LAUNCHED_BEFORE, true);
+} catch (_) {}
+
+// Resolves when the splash may hide: the cold-start ad has opened (it now
+// covers the screen), or there will be no cold-start ad this launch.
+let releaseSplash;
+const splashGate = new Promise((r) => { releaseSplash = r; });
+
 const isProUser = () => {
   try {
     return storage ? storage.getBoolean('isPro') === true : false;
@@ -54,15 +84,57 @@ class AppOpenAdManager {
   static appStateSub = null;
   static showWatchdog = null;
   static foregroundTimer = null;
+  static splashGate = splashGate;
+  static coldStartShowing = false;
+  static skipForegroundUntil = 0;
+
+  /**
+   * Our own trips out of the app (the Play / App Store purchase sheet) come
+   * back through 'active' exactly like a real return, and got an app-open ad:
+   * shown to someone who had just tried to BUY ad-free, before the purchase
+   * had even confirmed. Call right before leaving; the window only bounds how
+   * long an unused skip lingers (iOS's StoreKit sheet never backgrounds the
+   * app, so it is never consumed there).
+   */
+  static skipNextForeground(ms = 5 * 60 * 1000) {
+    this.skipForegroundUntil = Date.now() + ms;
+  }
+
+  /**
+   * Decide, at launch, whether this launch gets a cold-start ad, and arm the
+   * splash budget. Call before the splash hides. Always ends by releasing the
+   * splash — either when the ad opens or when the budget runs out.
+   */
+  static prepareColdStart() {
+    let lastCold = 0;
+    try { lastCold = Number(storage?.getString(K_LAST_COLD_AD)) || 0; } catch (_) {}
+    const eligible = launchedBefore && !isProUser() &&
+      Date.now() - lastCold >= COLD_START_MIN_GAP_MS;
+    if (!eligible) { releaseSplash(); return; }
+
+    this.showOnFirstLoad = true;
+    const remaining = Math.max(0, APP_START_AT + COLD_START_BUDGET_MS - Date.now());
+    setTimeout(() => {
+      // Budget spent without the ad opening: give up on it for this launch.
+      if (!this.coldStartShowing) {
+        this.showOnFirstLoad = false;
+        releaseSplash();
+      }
+    }, remaining);
+  }
+
+  static skipColdStart() {
+    this.showOnFirstLoad = false;
+    releaseSplash();
+  }
 
   // Call once after onboarding, for non-Pro users.
   static start() {
     if (this.hasStarted) return;
     this.hasStarted = true;
 
-    // Preserve the old behaviour of showing one ad on cold start, but now via
-    // the same guarded path (Pro / cap / expiry all respected).
-    this.showOnFirstLoad = true;
+    // Whether THIS launch shows a cold-start ad was decided by
+    // prepareColdStart(); start() only loads and wires the foreground shows.
 
     ensureAdsInitialized()
       .then(() => this._createAndLoad())
@@ -73,10 +145,19 @@ class AppOpenAdManager {
       // system prompts (ATT, consent, permission dialogs) WITHOUT ever hitting
       // 'background', so those never set the flag and never trigger a stray ad.
       if (next === 'background') {
-        this.wasBackgrounded = true;
+        // On Android a full-screen ad is its own Activity: showing one pauses
+        // ours, so RN reports 'background', and closing it reports 'active'.
+        // That read as a return to the app and fired this ad straight after
+        // every interstitial/rewarded ("i watched ad and after watching i get
+        // another ad"). Our own ad being on screen is how we tell them apart.
+        if (!isFullScreenAdVisible()) this.wasBackgrounded = true;
       } else if (next === 'active') {
         if (this.wasBackgrounded) {
           this.wasBackgrounded = false;
+          if (Date.now() < this.skipForegroundUntil) {
+            this.skipForegroundUntil = 0;
+            return;
+          }
           this._showOnForeground();
         }
       }
@@ -94,13 +175,22 @@ class AppOpenAdManager {
       this.retryCount = 0;
       if (this.showOnFirstLoad) {
         this.showOnFirstLoad = false;
-        this.showAdIfAvailable();
+        // Only while the splash is still up; a late ad waits for the next
+        // foreground return instead of jumping onto a Home in use.
+        if (Date.now() <= APP_START_AT + COLD_START_BUDGET_MS) {
+          this.coldStartShowing = true;
+          this.showAdIfAvailable();
+          if (!this.isShowing) { this.coldStartShowing = false; releaseSplash(); }
+        } else {
+          releaseSplash();
+        }
       }
     });
 
     const onError = this.ad.addAdEventListener(AdEventType.ERROR, () => {
       this.isLoaded = false;
       this.isLoading = false;
+      if (this.coldStartShowing) { this.coldStartShowing = false; releaseSplash(); }
       this._retryLoad();
     });
 
@@ -108,6 +198,13 @@ class AppOpenAdManager {
     // a legitimately-open ad isn't force-reset out from under the user.
     const onOpened = this.ad.addAdEventListener(AdEventType.OPENED, () => {
       this._clearShowWatchdog();
+      if (this.coldStartShowing) {
+        // The ad covers the screen now, so the splash can go underneath it;
+        // closing the ad lands straight on Home.
+        this.coldStartShowing = false;
+        try { storage?.set(K_LAST_COLD_AD, String(Date.now())); } catch (_) {}
+        releaseSplash();
+      }
     });
 
     const onClosed = this.ad.addAdEventListener(AdEventType.CLOSED, () => {
@@ -217,6 +314,7 @@ class AppOpenAdManager {
         // Nothing was displayed, so don't burn the 2-minute cap on an
         // impression the user never saw.
         this.lastShownAt = 0;
+        if (this.coldStartShowing) { this.coldStartShowing = false; releaseSplash(); }
         this._createAndLoad();
       }
     }, 10000);
@@ -228,6 +326,7 @@ class AppOpenAdManager {
       setFullScreenAdVisible(false);
       this.isShowing = false;
       this.lastShownAt = 0;
+      if (this.coldStartShowing) { this.coldStartShowing = false; releaseSplash(); }
       this._createAndLoad();
     }
   }

@@ -38,6 +38,7 @@ import {
   GoogleAuthProvider,
   AppleAuthProvider,
   signOut,
+  onAuthStateChanged,
 } from '@react-native-firebase/auth';
 
 // Map Firebase Auth error codes to translated, user-friendly messages.
@@ -108,12 +109,34 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
   useEffect(() => { if (!visible) setEmailUpdates(false); }, [visible]);
 
   const { triggerHapticFeedback } = useHaptic();
-  const { theme, robloxUsernameRef } = useGlobalState();
+  const { theme, robloxUsernameRef, user } = useGlobalState();
   const { t } = useTranslation();
 
   // 🔐 Modular Auth instance
   const app = getApp();
   const auth = getAuth(app);
+
+  // Opened while Firebase already holds a session whose profile is still
+  // loading (a slow login after the 3 s splash cap): this player IS signed in,
+  // so show "loading your account" instead of the sign-in form, and close by
+  // itself once the profile lands. Decided when the drawer opens only, so a
+  // sign-in that starts inside the drawer is never affected.
+  const [restoring, setRestoring] = useState(false);
+  useEffect(() => {
+    setRestoring(visible && !!auth.currentUser && !user?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+  useEffect(() => {
+    if (restoring && user?.id) {
+      setRestoring(false);
+      onClose?.();
+    }
+  }, [restoring, user?.id, onClose]);
+  useEffect(() => {
+    if (!restoring) return undefined;
+    // The session went away instead (e.g. unverified email): show the form.
+    return onAuthStateChanged(auth, (u) => { if (!u) setRestoring(false); });
+  }, [restoring, auth]);
 
   const isDarkMode = theme === 'dark';
 
@@ -359,6 +382,20 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
     }
   }, [auth, t, triggerHapticFeedback, onClose, screen, emailUpdates]);
 
+  if (visible && restoring) {
+    return (
+      <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+        <Pressable style={styles.modalOverlay} onPress={onClose} />
+        <SwipeableBottomDrawer onClose={onClose} isDarkMode={isDarkMode} style={[styles.drawer, { backgroundColor: isDarkMode ? '#3B404C' : 'white' }]}>
+          <View style={styles.restoringBox}>
+            <ActivityIndicator size="large" color={isDarkMode ? '#fff' : '#333'} />
+            <Text style={[styles.text, { color: selectedTheme.colors.text, marginTop: 12 }]}>{t('signin.restoring')}</Text>
+          </View>
+        </SwipeableBottomDrawer>
+      </Modal>
+    );
+  }
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={styles.modalOverlay} onPress={onClose} />
@@ -568,6 +605,11 @@ const styles = StyleSheet.create({
   },
   legalLink: {
     textDecorationLine: 'underline',
+  },
+  restoringBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
   },
   modalOverlay: {
     flex: 1,

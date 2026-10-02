@@ -28,6 +28,7 @@ import SquadBadge from '../Squad/SquadBadge';
 import { getPassCount, onSquadPassesChange } from '../Helper/squad';
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
+import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
   VALUE_SOURCE,
@@ -599,6 +600,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ═══ PET CARDS ═══ */}
+          <PetCardsHomeCard userId={user?.id} requireSignIn={requireSignIn} />
 
           {/* ═══ STAFF ELECTIONS: slim button, only once the switch is on.
               Until then admins reach it from Admin Dashboard → Elections. ═══ */}

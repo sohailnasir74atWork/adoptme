@@ -63,7 +63,11 @@ export const LocalStateProvider = ({ children }) => {
     mirageStock: safeParseJSON('mirageStock', []),
     prenormalStock: safeParseJSON('prenormalStock', []),
     premirageStock: safeParseJSON('premirageStock', []),
-    isAppReady: storage.getBoolean('isAppReady') ?? false,
+    // Per launch, never restored: it gates the boot splash on THIS launch's
+    // login. Read back from storage it was true from the 2nd launch on, so the
+    // splash hid before login and signed-in players saw a signed-out app.
+    // (Still written to storage; openApp.js reads that as "launched before".)
+    isAppReady: false,
     // lastActivity used to be stored as ISO string; switched to ms epoch.
     // Tolerate both during the transition release window (old MMKV reads
     // as a string, new writes as a number).
@@ -368,6 +372,9 @@ export const LocalStateProvider = ({ children }) => {
   const purchaseProduct = useCallback(async (packageToPurchase, setLoading, track) => {
     setLoading(true);
     try {
+      // Coming back from the store sheet must not open an App Open ad on
+      // someone who was just buying ad-free.
+      require('./Ads/openApp').default.skipNextForeground();
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
       const entitlements = customerInfo.entitlements.active;
       const proKey = Object.keys(entitlements).find(
