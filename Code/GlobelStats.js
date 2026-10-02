@@ -92,7 +92,7 @@ const GlobalStateContext = createContext();
 export const useGlobalState = () => useContext(GlobalStateContext);
 
 export const GlobalStateProvider = ({ children }) => {
-  const { localState, updateLocalState } = useLocalState()
+  const { localState, updateLocalState, catalogHydrated } = useLocalState()
 
   const colorScheme = useColorScheme(); // 'light' or 'dark' or null
 
@@ -261,36 +261,22 @@ export const GlobalStateProvider = ({ children }) => {
   const userFlageRef = useRef(user?.flage);
   useEffect(() => { userFlageRef.current = user?.flage; }, [user?.flage]);
 
+  // Country flag (Code/Helper/countryFlag.js): saved for every signed-in user,
+  // admins included, and refreshed when the device region changes. It is a
+  // moderation aid that only admins ever see, so there is no user switch and
+  // nothing is ever cleared. One write per sign-in at most; none when the
+  // stored flag already matches.
   useEffect(() => {
-    if (!isAdmin && user?.id && appdatabase) {
-      // ✅ Only set flag once per user.id to prevent infinite loop
-      if (flagSetForUserRef.current !== user.id) {
-        flagSetForUserRef.current = user.id;
-
-        // ✅ Only store flag if user wants to show it (saves Firebase data costs)
-        if (localState?.showFlag !== false) {
-          // User wants to show flag - store it
-          updateLocalStateAndDatabaseRef.current({ flage: getFlag() });
-        }
-        // If showFlag is false, don't store flag (saves data)
-      } else {
-        // ✅ Handle flag toggle changes after initial setup
-        const currentFlage = userFlageRef.current;
-        if (localState?.showFlag === false && currentFlage) {
-          // ✅ User toggled flag off - remove it from Firebase to save data
-          const userRef = ref(appdatabase, `users/${user.id}`);
-          update(userRef, { flage: null }).catch(() => { });
-          setUser((prev) => ({ ...prev, flage: null }));
-        } else if (localState?.showFlag !== false && !currentFlage) {
-          // ✅ User toggled flag on - add it
-          const flagValue = getFlag();
-          const userRef = ref(appdatabase, `users/${user.id}`);
-          update(userRef, { flage: flagValue }).catch(() => { });
-          setUser((prev) => ({ ...prev, flage: flagValue }));
-        }
-      }
+    if (!user?.id || !appdatabase) return;
+    const flagValue = getFlag();
+    if (!flagValue) return;
+    const alreadyChecked = flagSetForUserRef.current === user.id;
+    if (alreadyChecked && userFlageRef.current === flagValue) return;
+    flagSetForUserRef.current = user.id;
+    if (userFlageRef.current !== flagValue) {
+      updateLocalStateAndDatabaseRef.current({ flage: flagValue });
     }
-  }, [user?.id, isAdmin, localState?.showFlag, appdatabase]) // ✅ PERF FIX: Removed user?.flage — uses ref instead
+  }, [user?.id, appdatabase]);
 
   // ✅ Memoize resetUserState to prevent unnecessary re-renders
   const resetUserState = useCallback(() => {
@@ -412,7 +398,7 @@ export const GlobalStateProvider = ({ children }) => {
       const PROJECTION = [
         'createdAt',
         'displayName', 'avatar', 'userName',
-        'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper',
+        'isPro', 'admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper',
         'topBadge', 'flage', 'dateOfBirth', 'lastProfileEditAt',
         'rewardPoints', 'isPlaying',
         'chatOffTrade', 'chatOffGeneral',
@@ -481,12 +467,13 @@ export const GlobalStateProvider = ({ children }) => {
           existing.isBabyMod = rolesRow.isBabyMod;
           existing.isTrusted = rolesRow.isTrusted;
           existing.isCMSR = rolesRow.isCMSR;
+          existing.isArtCMSR = rolesRow.isArtCMSR;
           existing.isHelper = rolesRow.isHelper;
         }
         // Selective RTDB fallback for any table the mirror hasn't filled yet.
         const missing = [];
         if (!cosmeticsRow) missing.push('isPro', 'topBadge');
-        if (!rolesRow) missing.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper');
+        if (!rolesRow) missing.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper');
         if (missing.length) {
           const snaps = await Promise.all(
             missing.map((p) => withTimeout(get(ref(appdatabase, `users/${userId}/${p}`))).catch(() => null))
@@ -1121,14 +1108,19 @@ export const GlobalStateProvider = ({ children }) => {
     return catalogRefreshed;
   }, [appdatabase]); // ✅ Stable — only changes if appdatabase changes (once)
 
-  // ✅ Run the function only if needed
+  // Runs once the MMKV catalogues have hydrated. Without that gate this
+  // effect's idle callback was queued ahead of LocalGlobelStats' hydration
+  // (child effects register first), so fetchStockData saw `data: null`,
+  // treated the cache as empty, and re-downloaded, parsed and re-wrote both
+  // ~1.2 MB catalogues on every cold start — the 24 h TTL never applied.
   useEffect(() => {
+    if (!catalogHydrated) return undefined;
     const id = requestIdleCallback(() => {
       fetchStockData();
     });
 
     return () => cancelIdleCallback(id);
-  }, [fetchStockData]);
+  }, [fetchStockData, catalogHydrated]);
 
   const reload = useCallback(() => {
     return fetchStockData(true);
@@ -1379,7 +1371,10 @@ export const GlobalStateProvider = ({ children }) => {
     const THROTTLE_MS = 500; // ✅ Minimum 500ms between presence updates
 
     const setLocalOnline = (val) => {
-      setUser((prev) => (prev?.id ? { ...prev, online: val } : prev));
+      // Same value → same object. A new `user` identity re-renders every
+      // consumer of the global context, and this fires on each
+      // .info/connected flap and AppState change.
+      setUser((prev) => (prev?.id && prev.online !== val ? { ...prev, online: val } : prev));
     };
 
     const forceOffline = async () => {

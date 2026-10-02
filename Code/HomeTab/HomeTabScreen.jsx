@@ -12,7 +12,7 @@ import { doc, getDoc } from '@react-native-firebase/firestore';
 import config from '../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { setAppLanguage, loadLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native';
 
 import { getStarStatus } from '../Engagement/starUtils';
 import { getUserXP, getLevelFromXP, getXPProgress, getNextLevel } from '../Engagement/xpUtils';
@@ -25,7 +25,7 @@ import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
 import SafeLottieView from '../Helper/SafeLottieView';
 import SquadBadge from '../Squad/SquadBadge';
-import { getPassCount, onSquadPassesChange } from '../Helper/squad';
+import { getPassCount, onSquadPassesChange, canStillJoin } from '../Helper/squad';
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
@@ -39,22 +39,24 @@ import {
   formatValue as formatSourceValue,
 } from '../Helper/valueSources';
 
-// Lottie files for XP levels
+// Lottie files for XP levels. Thunks, not requires: only the current level's
+// animation is evaluated. Requiring all 14 (~620 KB of JSON) at module scope
+// built every one of them while the Home tab was first rendering.
 const LEVEL_LOTTIE = {
-  1: require('../../assets/lottie/levels/crack_egg.json'),
-  2: require('../../assets/lottie/levels/springing_chick.json'),
-  3: require('../../assets/lottie/levels/junior.json'),
-  5: require('../../assets/lottie/levels/exploral.json'),
-  7: require('../../assets/lottie/levels/adventurer.json'),
-  10: require('../../assets/lottie/levels/collector.json'),
-  12: require('../../assets/lottie/levels/fire.json'),
-  15: require('../../assets/lottie/levels/trader_pro.json'),
-  18: require('../../assets/lottie/levels/expert.json'),
-  20: require('../../assets/lottie/levels/rising_star.json'),
-  23: require('../../assets/lottie/levels/master.json'),
-  25: require('../../assets/lottie/levels/legend.json'),
-  28: require('../../assets/lottie/levels/elite.json'),
-  30: require('../../assets/lottie/levels/mythic.json'),
+  1: () => require('../../assets/lottie/levels/crack_egg.json'),
+  2: () => require('../../assets/lottie/levels/springing_chick.json'),
+  3: () => require('../../assets/lottie/levels/junior.json'),
+  5: () => require('../../assets/lottie/levels/exploral.json'),
+  7: () => require('../../assets/lottie/levels/adventurer.json'),
+  10: () => require('../../assets/lottie/levels/collector.json'),
+  12: () => require('../../assets/lottie/levels/fire.json'),
+  15: () => require('../../assets/lottie/levels/trader_pro.json'),
+  18: () => require('../../assets/lottie/levels/expert.json'),
+  20: () => require('../../assets/lottie/levels/rising_star.json'),
+  23: () => require('../../assets/lottie/levels/master.json'),
+  25: () => require('../../assets/lottie/levels/legend.json'),
+  28: () => require('../../assets/lottie/levels/elite.json'),
+  30: () => require('../../assets/lottie/levels/mythic.json'),
 };
 
 const { width } = Dimensions.get('window');
@@ -154,21 +156,14 @@ const HomeTabScreen = ({ selectedTheme }) => {
       }
     });
 
-    // Sync cosmetics from DB → update state
-    syncMyCosmetics(appdatabase, user.id).then(c => setMyCosmetics(c));
+    // Sync cosmetics from DB → update state. Forced like the app-start sync
+    // in MainTabs; cosmeticsCache shares one in-flight read per uid, so the
+    // two callers cost a single RTDB get and the hero shows the fresh result.
+    syncMyCosmetics(appdatabase, user.id, true).then(c => setMyCosmetics(c));
 
-
-    // Fetch owned pets for portfolio value
-    (async () => {
-      try {
-        let snap = await getDoc(doc(firestoreDB, 'user_profiles', user.id));
-        if (!snap.exists()) snap = await getDoc(doc(firestoreDB, 'reviews', user.id));
-        if (snap.exists()) {
-          const data = snap.data();
-          setOwnedPets(Array.isArray(data?.ownedPets) ? data.ownedPets : []);
-        }
-      } catch (e) { console.warn('[Home] fetch pets:', e?.message); }
-    })();
+    // Owned pets are read by the focus effect below (Home is focused when it
+    // mounts), which also primes ownedPetsFocusCache. A second read here only
+    // duplicated it on every mount.
 
     return () => unsubscribe(); // onValue returns the unsubscribe function directly
   }, [user?.id, appdatabase, firestoreDB]);
@@ -277,6 +272,20 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
   // ── XP computed values ──
   const currentLevel = useMemo(() => getLevelFromXP(userXP.total), [userXP.total]);
+  const levelLottie = useMemo(() => {
+    const load = LEVEL_LOTTIE[currentLevel.level];
+    return load ? load() : null;
+  }, [currentLevel.level]);
+  // Paused while another tab is in front. Tabs stay mounted, so the looping
+  // hero animation kept Android's animator ticking under Chat and Trades.
+  const isFocused = useIsFocused();
+  const levelLottieRef = useRef(null);
+  useEffect(() => {
+    const anim = levelLottieRef.current;
+    if (!anim) return;
+    if (isFocused) anim.play();
+    else anim.pause();
+  }, [isFocused, levelLottie]);
   const nextLevel = useMemo(() => getNextLevel(userXP.total), [userXP.total]);
   const xpProgress = useMemo(() => getXPProgress(userXP.total), [userXP.total]);
 
@@ -410,11 +419,12 @@ const HomeTabScreen = ({ selectedTheme }) => {
           <View style={[styles.xpCard]}>
             <View style={styles.xpCardRow}>
               <View style={styles.xpCardLeft}>
-                {LEVEL_LOTTIE[currentLevel.level] ? (
+                {levelLottie ? (
                   <View style={styles.xpLevelLottieWrap}>
                     <SafeLottieView
-                      source={LEVEL_LOTTIE[currentLevel.level]}
-                      autoPlay
+                      ref={levelLottieRef}
+                      source={levelLottie}
+                      autoPlay={isFocused}
                       loop
                       resizeMode="contain"
                       style={{ width: '100%', height: '100%' }}
@@ -668,7 +678,11 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 </View>
               </View>
               <Text style={styles.tradeMatchSub} numberOfLines={2}>
-                {squadPasses > 0 ? t('squad.home_passes', { count: squadPasses }) : t('squad.home_sub')}
+                {squadPasses > 0
+                  ? t('squad.home_passes', { count: squadPasses })
+                  : canStillJoin(user?.id, user?.createdAt)
+                    ? t('squad.home_have_code')
+                    : t('squad.home_sub')}
               </Text>
             </View>
             <FontAwesome name="chevron-right" size={14} color="#fff" />

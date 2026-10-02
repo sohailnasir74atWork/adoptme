@@ -51,7 +51,7 @@ const BATCH_SIZE = 500;      // rows per Supabase upsert
 const READ_CONCURRENCY = 40; // parallel RTDB leaf reads
 const CURSOR_FILE = path.join(__dirname, '.backfill-user-roles.cursor');
 
-const ROLE_FIELDS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper'];
+const ROLE_FIELDS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper'];
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -118,6 +118,7 @@ const ROLE_QUERIES = [
   ['isBabyMod', 'is_baby_mod'],
   ['isTrusted', 'is_trusted'],
   ['isCMSR', 'is_cmsr'],
+  ['isArtCMSR', 'is_art_cmsr'],
   ['isHelper', 'is_helper'],
 ];
 
@@ -146,6 +147,7 @@ function buildRow(uid, holders) {
     is_baby_mod: holders.is_baby_mod.has(uid),
     is_trusted: holders.is_trusted.has(uid),
     is_cmsr: holders.is_cmsr.has(uid),
+    is_art_cmsr: holders.is_art_cmsr.has(uid),
     is_helper: holders.is_helper.has(uid),
     updated_at: new Date().toISOString(),
   };

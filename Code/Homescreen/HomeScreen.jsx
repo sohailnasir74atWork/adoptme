@@ -1302,7 +1302,6 @@ const HomeScreen = ({ selectedTheme }) => {
         // ✅ Only include truthy profile fields (saves storage)
         ...(user?.avatar ? { avatar: user.avatar } : {}),
         ...(localState.isPro ? { isPro: true } : {}),
-        ...(user.flage ? { flage: user.flage } : {}),
         robloxUsername: robloxUsername.trim(),
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
@@ -1310,6 +1309,7 @@ const HomeScreen = ({ selectedTheme }) => {
         ...(user?.isModerator ? { isModerator: true } : {}),
         ...(user?.isTrusted ? { isTrusted: true } : {}),
         ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isArtCMSR ? { isArtCMSR: true } : {}),
         ...(user?.isHelper ? { isHelper: true } : {}),
         ...(user?.isBabyMod ? { isBabyMod: true } : {}),
         ...(myCosmetics?.profileFrame ? { profileFrame: myCosmetics.profileFrame } : {}),

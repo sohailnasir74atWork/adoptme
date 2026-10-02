@@ -1,6 +1,7 @@
 import {
   formatCompact, parseCatalog, buildValueIndex, setProgress, bestOwned, totalCopies,
   bestPull, revealTier, countdown, nextUtcMidnight, packsAvailable,
+  parseShowcase, toggleShowcase, isShowcased,
 } from '../Code/PetCards/cardMath';
 import { bgIdFor, themeIdFor, hashKey } from '../Code/PetCards/cardConfig';
 
@@ -97,5 +98,43 @@ describe('art choice', () => {
     expect(themeIdFor(catalog[0])).toBe('haunted');
     expect(themeIdFor(catalog[3])).toBe('island');
     expect(hashKey('abc')).toBe(hashKey('abc'));
+  });
+});
+
+describe('profile showcase', () => {
+  const stored = [
+    { k: 'shadowdragon', f: 'mega', s: 7, n: 'Shadow Dragon', r: 'legendary', no: 700, e: null, sets: ['haunted26'], bg: null },
+    { k: 'trex', f: 'classic', s: null, n: 'T-Rex', r: 'legendary', no: 650, e: 'fossil', sets: ['egg_fossil'] },
+    { k: 'old', f: 'holo', s: 3 },            // older shape without catalog fields
+  ];
+  it('parses stored entries into drawable cards and skips incomplete ones', () => {
+    const items = parseShowcase(stored);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({
+      card: { key: 'shadowdragon', name: 'Shadow Dragon', rarity: 'legendary', no: 700, egg: null, sets: ['haunted26'], bg: null },
+      finish: 'mega', serial: 7,
+    });
+    expect(items[1].card.egg).toBe('fossil');
+    expect(items[1].serial).toBeNull();
+    expect(parseShowcase(null)).toEqual([]);
+  });
+  it('knows what is pinned', () => {
+    expect(isShowcased(stored, 'shadowdragon', 'mega')).toBe(true);
+    expect(isShowcased(stored, 'shadowdragon', 'holo')).toBe(false);
+    expect(isShowcased(undefined, 'x', 'classic')).toBe(false);
+  });
+  it('pins newest first, replaces another finish of the same card, caps at 3, unpins on repeat', () => {
+    let list = toggleShowcase([], 'a', 'classic');
+    expect(list).toEqual([{ k: 'a', f: 'classic' }]);
+    list = toggleShowcase(list, 'b', 'holo');
+    list = toggleShowcase(list, 'c', 'foil');
+    expect(list.map((e) => e.k)).toEqual(['c', 'b', 'a']);
+    list = toggleShowcase(list, 'd', 'classic');            // 4th drops the oldest
+    expect(list.map((e) => e.k)).toEqual(['d', 'c', 'b']);
+    list = toggleShowcase(list, 'b', 'mega');               // other finish replaces the pin
+    expect(list).toEqual([{ k: 'b', f: 'mega' }, { k: 'd', f: 'classic' }, { k: 'c', f: 'foil' }]);
+    list = toggleShowcase(list, 'b', 'mega');               // same again unpins
+    expect(list.map((e) => e.k)).toEqual(['d', 'c']);
+    expect(toggleShowcase(stored, 'trex', 'classic')).toEqual([{ k: 'shadowdragon', f: 'mega' }, { k: 'old', f: 'holo' }]);
   });
 });

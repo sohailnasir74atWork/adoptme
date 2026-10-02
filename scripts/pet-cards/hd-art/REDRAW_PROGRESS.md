@@ -53,6 +53,17 @@ For live numbers, run `python3 scripts/pet-cards/hd-art/gemini/status.py`. It co
 
 The browser pane must stay open and visible, and the Mac awake (`caffeinate -dis -t <seconds>`). A hidden pane can't take input.
 
+## Resume log
+
+- **2026-10-02 23:15 PKT.** Checked: 579 local = 579 on the CDN (`verify_cdn` clean on
+  the 17:40 run), bucket `out/` and `q/` empty, 202 kit 2 pets left + 5 refused.
+  Gemini usage page showed 0% (window resets 02:17, weekly 0%). Started
+  `watch.sh` (log `/tmp/petwatch.log`) and `caffeinate -dis -t 21600`, ran
+  `make_run.sh` → run list **`125a09f5-68b8-41f1-bfc5-c388d90771eb`** (201 pets,
+  businessmonkey skipped; upload sessions valid until 2026-10-09). The Gemini
+  tab step (paste runner, `__petLoad`, `__petRun2`) was left for the owner: the
+  session's permission mode refused to script the signed-in Gemini page.
+
 ## Resume from here
 
 ```

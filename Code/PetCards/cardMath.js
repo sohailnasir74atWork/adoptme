@@ -107,3 +107,38 @@ export const packsAvailable = (wallet) => {
   if (!wallet) return 0;
   return (wallet.freeReady ? 1 : 0) + (wallet.bonusPacks || 0);
 };
+
+// ── Profile showcase (user_cosmetics.card_showcase, written by set_card_showcase) ──
+export const SHOWCASE_MAX = 3;
+
+/**
+ * Stored entries {k, f, s, n, r, no, e, sets, bg} → [{ card, finish, serial }] the
+ * card renderer can draw. Entries without catalog fields (older shape) are skipped.
+ */
+export const parseShowcase = (list) => (Array.isArray(list) ? list : [])
+  .filter((e) => e && e.k && e.f && e.n && e.r)
+  .slice(0, SHOWCASE_MAX)
+  .map((e) => ({
+    card: {
+      key: e.k, name: e.n, rarity: e.r, no: e.no ?? null, egg: e.e || null,
+      sets: Array.isArray(e.sets) ? e.sets : [], bg: e.bg || null,
+    },
+    finish: e.f,
+    serial: e.s ?? null,
+  }));
+
+export const isShowcased = (list, key, finish) =>
+  (Array.isArray(list) ? list : []).some((e) => e && e.k === key && e.f === finish);
+
+/**
+ * Pin or unpin one (card, finish). Returns the next list as [{k, f}], newest
+ * first. The same (card, finish) again unpins it; another finish of a pinned
+ * card replaces it; a 4th card drops the oldest.
+ */
+export const toggleShowcase = (list, key, finish) => {
+  const cur = (Array.isArray(list) ? list : [])
+    .filter((e) => e && e.k && e.f)
+    .map((e) => ({ k: e.k, f: e.f }));
+  if (cur.some((e) => e.k === key && e.f === finish)) return cur.filter((e) => e.k !== key);
+  return [{ k: key, f: finish }, ...cur.filter((e) => e.k !== key)].slice(0, SHOWCASE_MAX);
+};

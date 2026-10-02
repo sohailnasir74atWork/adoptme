@@ -101,7 +101,8 @@ export default function CardWallpaper() {
   const [background, setBackground] = useState(
     route.params?.setId === 'haunted26' ? { type: 'gradient', id: 'haunted' } : { type: 'gradient', id: 'cotton' },
   );
-  const [opts, setOpts] = useState({ sparkles: true, glow: true, title: true, values: true, watermark: true, clock: true, motif: 'stars' });
+  // Values are opt-in: a saved wallpaper is a still picture and values move weekly.
+  const [opts, setOpts] = useState({ sparkles: true, glow: true, title: true, values: false, watermark: true, clock: true, motif: 'stars' });
   const [saving, setSaving] = useState(false);
 
   const enrich = (c, b) => ({

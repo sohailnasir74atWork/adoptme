@@ -24,6 +24,10 @@ try {
 }
 const LocalStateContext = createContext();
 
+// MMKV blobs older builds wrote that nothing reads any more. They were still
+// JSON.parsed into state on every launch; the hydration callback removes them.
+const STALE_KEYS = ['normalStock', 'mirageStock', 'prenormalStock', 'premirageStock', 'postsCache'];
+
 export const useLocalState = () => useContext(LocalStateContext);
 
 export const LocalStateProvider = ({ children }) => {
@@ -58,11 +62,7 @@ export const LocalStateProvider = ({ children }) => {
     ggData: null,
 
     codes: safeParseJSON('codes', {}),
-    normalStock: safeParseJSON('normalStock', []),
     bannedUsers: safeParseJSON('bannedUsers', []),
-    mirageStock: safeParseJSON('mirageStock', []),
-    prenormalStock: safeParseJSON('prenormalStock', []),
-    premirageStock: safeParseJSON('premirageStock', []),
     // Per launch, never restored: it gates the boot splash on THIS launch's
     // login. Read back from storage it was true from the 2nd launch on, so the
     // splash hid before login and signed-in players saw a signed-out app.
@@ -98,10 +98,8 @@ export const LocalStateProvider = ({ children }) => {
     // it is what the app opened in before the choice was remembered.
     valueUnit: storage.getString('valueUnit') || 'shark',
     showAd1: storage.getBoolean('showAd1') ?? true,
-    postsCache: safeParseJSON('postsCache', []),
     tradingServerLink: storage.getString('tradingServerLink') || null,
     lastServerFetch: storage.getString('lastServerFetch') || null,
-    showFlag: storage.getBoolean('showFlag') ?? true, // ✅ Default true (show flag), user can hide to save data
     showOnlineStatus: storage.getBoolean('showOnlineStatus') ?? true, // ✅ Default true (show online), user can hide to save Firebase costs
     showReadReceipts: storage.getBoolean('showReadReceipts') ?? true, // ✅ Default true (show read ticks), user can toggle off/on
     // Device-level opt-out for chat pushes. Turning it on clears users/{uid}/fcmToken,
@@ -130,6 +128,9 @@ export const LocalStateProvider = ({ children }) => {
 
   // ✅ PERF: Load heavy pet data asynchronously after interactions to avoid blocking cold start
   const dataLoadedRef = useRef(false);
+  // Gates the catalogue fetch in GlobelStats: until the MMKV copy is in
+  // state, "no data" means "not hydrated yet", not "nothing cached".
+  const [catalogHydrated, setCatalogHydrated] = useState(false);
   useEffect(() => {
     const id = requestIdleCallback(() => {
       // Both catalogues hydrate in the same idle slot. A missing or corrupt
@@ -152,6 +153,10 @@ export const LocalStateProvider = ({ children }) => {
       }
       dataLoadedRef.current = true;
       setLocalState(prev => ({ ...prev, data: parsed, ggData: parsedGG }));
+      setCatalogHydrated(true);
+      STALE_KEYS.forEach((key) => {
+        try { storage.remove(key); } catch (_) {}
+      });
     });
     return () => cancelIdleCallback(id);
   }, []);
@@ -429,6 +434,7 @@ export const LocalStateProvider = ({ children }) => {
   const contextValue = useMemo(
     () => ({
       localState,
+      catalogHydrated,
       updateLocalState,
       clearKey,
       clearAll,
@@ -443,7 +449,7 @@ export const LocalStateProvider = ({ children }) => {
       getRemainingTranslationTries,
       toggleAd,
     }),
-    [localState, customerId, packages, mySubscriptions, updateLocalState, clearKey, clearAll, purchaseProduct, restorePurchases, checkEntitlements, canTranslate, incrementTranslationCount, getRemainingTranslationTries, toggleAd]
+    [localState, catalogHydrated, customerId, packages, mySubscriptions, updateLocalState, clearKey, clearAll, purchaseProduct, restorePurchases, checkEntitlements, canTranslate, incrementTranslationCount, getRemainingTranslationTries, toggleAd]
   );
 
   return (

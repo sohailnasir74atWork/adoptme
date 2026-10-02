@@ -10,9 +10,10 @@ const ProfileAdminActions = ({
   canManageBabyMod = false, targetIsBabyMod = false,
   canManageModerator = false,
   handleRemoveBabyMod,
-  canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsHelper = false,
+  canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsArtCMSR = false, targetIsHelper = false,
   badgeAllowed = true, targetSquad = 0, badgeMinSquad = 3,
-  handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR, handleMakeHelper, handleRemoveHelper,
+  handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
+  handleMakeArtCMSR, handleRemoveArtCMSR, handleMakeHelper, handleRemoveHelper,
   canResetAvatar = false, targetHasAvatar = false, handleResetAvatar,
   handleDeleteUserData, deletingUser = false,
   canDeleteUser = false,
@@ -98,9 +99,13 @@ const ProfileAdminActions = ({
         {canManageBadges && (targetIsTrusted
           ? <Chip label="Remove Trusted" color="#f59e0b" onPress={handleRemoveTrusted} />
           : showMakeBadge && <Chip label="Make Trusted" color="#10b981" onPress={handleMakeTrusted} />)}
+        {/* CMSR is two badges with one name: House (isCMSR) and Art (isArtCMSR). */}
         {canManageBadges && (targetIsCMSR
-          ? <Chip label="Remove CMSR" color="#f59e0b" onPress={handleRemoveCMSR} />
-          : showMakeBadge && <Chip label="Make CMSR" color="#6366f1" onPress={handleMakeCMSR} />)}
+          ? <Chip label="Remove House CMSR" color="#f59e0b" onPress={handleRemoveCMSR} />
+          : showMakeBadge && <Chip label="Make House CMSR" color="#6366f1" onPress={handleMakeCMSR} />)}
+        {canManageBadges && (targetIsArtCMSR
+          ? <Chip label="Remove Art CMSR" color="#f59e0b" onPress={handleRemoveArtCMSR} />
+          : showMakeBadge && <Chip label="Make Art CMSR" color="#e11d48" onPress={handleMakeArtCMSR} />)}
         {canManageBadges && (targetIsHelper
           ? <Chip label="Remove Helper" color="#f59e0b" onPress={handleRemoveHelper} />
           : showMakeBadge && <Chip label="Make Helper" color="#14b8a6" onPress={handleMakeHelper} />)}

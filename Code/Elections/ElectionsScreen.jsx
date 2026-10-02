@@ -7,8 +7,11 @@
  * Elections (040), and only approved candidates are on the ballot. Admins
  * can also start or cancel a race here and remove a candidate (long-press).
  *
- * All rules live on the server (supabase/038 + 040); this screen shows
- * them and reports the server's reason when an action fails.
+ * All rules live on the server (supabase/038 + 040 + 041); this screen
+ * shows them and reports the server's reason when an action fails. A closed
+ * race is only counted ('review' phase): votes become visible, and a seat
+ * changes hands only when an admin appoints or removes someone in Admin
+ * Dashboard → Elections (ElectionResultsPanel).
  * Reads: staff_elections_get (cached 2 min).
  */
 
@@ -37,11 +40,12 @@ const GOLD = '#F59E0B';
 const KNOWN_ERRORS = [
   'not_nominations', 'not_voting', 'squad', 'age', 'age_unknown', 'record', 'already_mod', 'other_race',
   'removed', 'rejected', 'closed', 'self', 'no_candidate', 'too_new', 'banned', 'device_used', 'device',
+  'review_pending',
 ];
 // My application (040): pending -> approved | rejected; expired = never decided.
 const APP_COLOR = { pending: GOLD, approved: GREEN, rejected: '#EF4444', expired: '#64748B' };
 const APP_ICON = { pending: 'hourglass-outline', approved: 'checkmark-circle', rejected: 'close-circle', expired: 'time-outline' };
-const PHASE_COLOR = { upcoming: '#64748B', nominations: GOLD, voting: GREEN, counting: '#0EA5E9', finalized: ACCENT };
+const PHASE_COLOR = { upcoming: '#64748B', nominations: GOLD, voting: GREEN, counting: '#0EA5E9', review: '#0EA5E9', finalized: ACCENT };
 
 const Avatar = ({ uri, size = 36, color = ACCENT }) => (uri
   ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
@@ -179,7 +183,7 @@ export default function ElectionsScreen() {
     { text: t('elections.admin_cancel'), style: 'destructive', onPress: () => act(`cancel_${e.id}`, () => adminCancel(uid, e.id)) },
   ]);
   const confirmDisqualify = (e, cand) => {
-    if (!me.isAdmin || e.phase === 'finalized') return;
+    if (!me.isAdmin || e.phase === 'finalized' || e.phase === 'review') return;
     Alert.alert(t('elections.admin_disqualify', { name: cand.name || t('chat.anonymous') }), undefined, [
       { text: t('home.cancel'), style: 'cancel' },
       { text: t('elections.admin_remove'), style: 'destructive', onPress: () => act(`dq_${cand.uid}`, () => adminDisqualify(uid, e.id, cand.uid)) },
@@ -237,7 +241,7 @@ export default function ElectionsScreen() {
               )}
           </TouchableOpacity>
         )}
-        {phase === 'finalized' && (
+        {(phase === 'finalized' || phase === 'review') && (
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <Text style={[styles.votes, { color: c.text }]}>{t('elections.votes_count', { count: cand.votes || 0 })}</Text>
             {cand.won && <Pill color={GREEN} text={t('elections.elected')} />}
@@ -272,6 +276,7 @@ export default function ElectionsScreen() {
               {phase === 'nominations' && t('elections.nominations_end', { time: fmtLeft(endsAt) })}
               {phase === 'voting' && t('elections.voting_end', { time: fmtLeft(endsAt) })}
               {phase === 'counting' && t('elections.counting_body')}
+              {phase === 'review' && t('elections.review_body')}
             </Text>
           </View>
         )}
@@ -341,7 +346,7 @@ export default function ElectionsScreen() {
         {/* Candidates */}
         <Text style={[styles.cardLabel, { color: c.textSecondary, marginTop: 14 }]}>
           {t('elections.candidates_title', { count: cands.length })}
-          {phase === 'voting' || phase === 'counting' ? `  ·  ${t('elections.turnout', { count: e.turnout || 0 })}` : ''}
+          {phase === 'voting' || phase === 'counting' || phase === 'review' ? `  ·  ${t('elections.turnout', { count: e.turnout || 0 })}` : ''}
         </Text>
         {cands.length === 0 ? (
           <Text style={[styles.muted, { color: c.textSecondary, marginTop: 6 }]}>
@@ -349,12 +354,16 @@ export default function ElectionsScreen() {
           </Text>
         ) : cands.map((cand) => renderCandidate(e, cand, phase))}
 
-        {phase === 'finalized' && !(cands.some((x) => x.won)) && (
-          <Text style={[styles.muted, { color: GOLD, marginTop: 8 }]}>{t('elections.no_winner', { count: e.minVotes })}</Text>
+        {phase === 'finalized' && !cands.some((x) => x.won) && (
+          <Text style={[styles.muted, { color: GOLD, marginTop: 8 }]}>
+            {cands.some((x) => x.qualified)
+              ? t('elections.no_appointed')                       // people met the bar; the admins kept the team
+              : t('elections.no_winner', { count: e.minVotes })}
+          </Text>
         )}
 
         {/* Admin */}
-        {me.isAdmin && phase !== 'finalized' && (
+        {me.isAdmin && phase !== 'finalized' && phase !== 'review' && (
           <View style={[styles.adminBox, { borderTopColor: c.border }]}>
             <Text style={[styles.muted, { color: c.textSecondary, flex: 1 }]}>{t('elections.admin_disqualify_hint')}</Text>
             <TouchableOpacity style={[styles.smallBtn, { borderColor: '#EF444466' }]} onPress={() => confirmCancel(e)} disabled={!!busy}>
@@ -452,6 +461,19 @@ export default function ElectionsScreen() {
               <Icon name="clipboard-outline" size={16} color={ACCENT} />
               <Text style={[styles.muted, { color: c.text, flex: 1, fontWeight: '700' }]}>
                 {t('elections.admin_review_link', { count: data?.pendingApplications || 0 })}
+              </Text>
+              <Icon name="chevron-forward" size={16} color={c.textSecondary} />
+            </TouchableOpacity>
+          )}
+          {me.isAdmin && (data?.reviewPending || 0) > 0 && (
+            <TouchableOpacity
+              style={[styles.hiddenNote, { borderColor: GOLD + '66', backgroundColor: GOLD + '14' }]}
+              onPress={() => navigation.navigate('AdminPanel', { initialTab: 'elections' })}
+              activeOpacity={0.8}
+            >
+              <Icon name="sparkles-outline" size={16} color={GOLD} />
+              <Text style={[styles.muted, { color: c.text, flex: 1, fontWeight: '700' }]}>
+                {t('elections.admin_results_link')}
               </Text>
               <Icon name="chevron-forward" size={16} color={c.textSecondary} />
             </TouchableOpacity>

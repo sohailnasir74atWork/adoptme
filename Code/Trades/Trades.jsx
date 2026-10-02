@@ -6,7 +6,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useGlobalState } from '../GlobelStats';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
-import UserBadgePill, { getFirstBadgeType } from '../Helper/UserBadgePill';
+import UserBadgeRail from '../Helper/UserBadgeRail';
 import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
 import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
@@ -51,9 +51,6 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import ShareTradeModal from './ShareTradeModal';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { getCachedProfile, warmProfileCache } from '../Helper/profileCache';
-import { rankFor as squadRankFor } from '../Helper/squad';
-import SquadBadge from '../Squad/SquadBadge';
-import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { saveTrade, unsaveTrade, fetchSavedTradeRefs, variantFilterToken, tradeMatchesVariants, tradeMatchesSearchWithVariants } from './tradeHelpers';
 import {
@@ -1719,51 +1716,19 @@ const TradeList = ({ route }) => {
               );
             })()}
             <View style={{ marginLeft: 10, flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                <Text style={styles.cardName} numberOfLines={1}>{item.traderName}</Text>
-                {item.isPro && <Image source={require('../../assets/pro.png')} style={badgeStyles.inlineIcon} />}
-                {item.robloxUsernameVerified && <Image source={require('../../assets/verification.png')} style={badgeStyles.inlineIcon} />}
-                {item.rating ? (
-                  <View style={badgeStyles.ratingBadge}>
-                    <Icon name="star" size={7} color="white" />
-                    <Text style={badgeStyles.ratingText}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
-                  </View>
-                ) : (
-                  <View style={[badgeStyles.ratingBadge, { backgroundColor: '#888' }]}>
-                    <Icon name="star-outline" size={7} color="white" />
-                    <Text style={badgeStyles.ratingText}>{t('trade.rating_na')}</Text>
-                  </View>
-                )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}>
+                <Text style={[styles.cardName, { minWidth: 0 }]} numberOfLines={1}>{item.traderName}</Text>
                 {(() => {
                   const p = getCachedProfile(item.userId) || {};
-                  const pIsAdmin = p.isAdmin ?? item.isAdmin;
-                  const pIsMod = p.isModerator ?? item.isModerator;
-                  const pIsTrusted = p.isTrusted ?? item.isTrusted;
-                  const pIsCMSR = p.isCMSR ?? item.isCMSR;
-                  const pIsHelper = p.isHelper ?? item.isHelper;
-                  const firstBadge = getFirstBadgeType({
-                    isAdmin: pIsAdmin, isModerator: pIsMod, isBabyMod: item.isBabyMod,
-                    isTrusted: pIsTrusted, isCMSR: pIsCMSR, isHelper: pIsHelper,
-                  });
                   return (
-                    <>
-                      {pIsAdmin && <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'admin'} />}
-                      {!pIsAdmin && pIsMod && <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'mod'} />}
-                      {!pIsAdmin && !pIsMod && item.isBabyMod && <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />}
-                      {pIsTrusted && <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />}
-                      {pIsCMSR && <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />}
-                      {pIsHelper && <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />}
-                      {/* Squad rank (3+ friends) — from the cached cosmetics row, no extra read. */}
-                      {(() => {
-                        const r = squadRankFor(p.squadCount);
-                        return r ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: r.color + '22', borderRadius: 999, paddingLeft: 2, paddingRight: 6, paddingVertical: 1 }}>
-                            <SquadBadge rankKey={r.key} size={13} />
-                            <Text style={{ fontSize: 9, fontWeight: '800', color: r.color }}>{p.squadCount}</Text>
-                          </View>
-                        ) : null;
-                      })()}
-                    </>
+                    <UserBadgeRail
+                      user={{
+                        isAdmin: p.isAdmin ?? item.isAdmin, isModerator: p.isModerator ?? item.isModerator, isBabyMod: item.isBabyMod,
+                        isTrusted: p.isTrusted ?? item.isTrusted, isCMSR: p.isCMSR ?? item.isCMSR, isArtCMSR: p.isArtCMSR ?? item.isArtCMSR, isHelper: p.isHelper ?? item.isHelper,
+                        isPro: item.isPro, robloxUsernameVerified: item.robloxUsernameVerified, squadCount: p.squadCount,
+                      }}
+                      isDarkMode={isDarkMode}
+                    />
                   );
                 })()}
               </View>
@@ -1788,6 +1753,14 @@ const TradeList = ({ route }) => {
                     </View>
                   );
                 })()}
+                {/* Rating is a trade signal, not an identity badge, so it sits with
+                    the time and price source. An unrated poster shows nothing. */}
+                {item.rating ? (
+                  <View style={badgeStyles.ratingBadge}>
+                    <Icon name="star" size={7} color="white" />
+                    <Text style={badgeStyles.ratingText}>{parseFloat(item.rating).toFixed(1)}({item.ratingCount})</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </TouchableOpacity>

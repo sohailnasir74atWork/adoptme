@@ -53,6 +53,9 @@ describe('phases and countdowns', () => {
     expect(el.phaseOf(race('mod', now, { nom: -2, vote: -1, close: 1 }), now)).toBe('voting');
     expect(el.phaseOf(race('mod', now, { nom: -3, vote: -2, close: -1 }), now)).toBe('counting');
     expect(el.phaseOf({ ...race('mod', now), phase: 'finalized' }, now)).toBe('finalized');
+    // Counted and waiting for an admin (041): the server's word wins over the calendar.
+    expect(el.phaseOf({ ...race('mod', now, { nom: -3, vote: -2, close: -1 }), phase: 'review' }, now)).toBe('review');
+    expect(el.phaseEndsAt({ ...race('mod', now), phase: 'review' }, now)).toBeNull();
     expect(el.phaseOf(null)).toBeNull();
   });
 
@@ -70,6 +73,7 @@ describe('phases and countdowns', () => {
 
   test('homeHighlight prefers voting, then MOD; ignores upcoming and closed races', () => {
     expect(el.homeHighlight([], now)).toBeNull();
+    expect(el.homeHighlight([{ ...race('mod', now), phase: 'review' }], now)).toBeNull();
     expect(el.homeHighlight([race('mod', now, { nom: 1, vote: 2, close: 3 })], now)).toBeNull();
     const nomMod = race('mod', now);
     const voteJmd = race('jmd', now, { nom: -2, vote: -1, close: 1 });
@@ -142,6 +146,16 @@ describe('RPC calls', () => {
     expect(brief.map((b) => b.role)).toEqual(['mod']); // finalized races are not on the Home card
   });
 
+  test('a race under review is not on the Home card', async () => {
+    const now = Date.now();
+    supabase.rpc.mockResolvedValueOnce({
+      data: { elections: [{ ...race('mod', now), phase: 'review' }, { ...race('jmd', now), phase: 'nominations' }] },
+      error: null,
+    });
+    await el.getElections('u9');
+    expect((await el.getBrief()).map((b) => b.role)).toEqual(['jmd']);
+  });
+
   test('castVote sends the device id and drops the cache', async () => {
     supabase.rpc.mockResolvedValueOnce({ data: { ok: true }, error: null });
     const res = await el.castVote('u1', 7, 'cand');
@@ -198,6 +212,62 @@ describe('RPC calls', () => {
     supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
     await el.getElections('a');
     expect(supabase.rpc).toHaveBeenCalledTimes(3); // refetched after the decision
+  });
+
+  test('review: adminResults, adminDecide, adminFinish (041)', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: null, error: null });
+    expect(await el.adminResults()).toEqual({ elections: [], termAlerts: [] });
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [{ id: 7 }], termAlerts: [{ uid: 'j' }] }, error: null });
+    expect(await el.adminResults()).toEqual({ elections: [{ id: 7 }], termAlerts: [{ uid: 'j' }] });
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_admin_results');
+
+    // A uid no earlier test cached, so the screen data really comes from the server here.
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
+    await el.getElections('z1');
+    await el.getElections('z1');
+    const before = supabase.rpc.mock.calls.length;
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: true, kind: 'appoint', role: 'mod' }, error: null });
+    expect(await el.adminDecide('z1', 7, 'cand', 'appoint')).toEqual({ ok: true, kind: 'appoint', role: 'mod' });
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_admin_decide', { p_election: 7, p_uid: 'cand', p_kind: 'appoint' });
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
+    await el.getElections('z1');
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_elections_get'); // cache dropped by the decision
+    expect(supabase.rpc.mock.calls.length).toBe(before + 2);
+
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: false, reason: 'decided', kind: 'remove' }, error: null });
+    expect((await el.adminDecide('z1', 7, 'cand', 'none')).reason).toBe('decided');
+
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: true, role: 'mod', appointed: 2, removed: 1 }, error: null });
+    expect(await el.adminFinish('z1', 7)).toEqual({ ok: true, role: 'mod', appointed: 2, removed: 1 });
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_admin_finish', { p_election: 7 });
+    expect(el.DECISION_KINDS).toEqual(['appoint', 'remove', 'none']);
+  });
+
+  test('reviewSuggestion words the server suggestion', () => {
+    const base = {
+      seats: 2, minVotes: 10,
+      candidates: [
+        { uid: 'a', name: 'Alice', votes: 14, qualified: true, check: {} },
+        { uid: 'b', name: 'Bob', votes: 11, qualified: true, check: {} },
+        { uid: 'e', name: 'Eve', votes: 10, qualified: true, check: { banned: true } },
+        { uid: 'c', name: 'Cat', votes: 3, qualified: false, check: {} },
+      ],
+      holders: [{ uid: 'm1', name: 'Mystic' }, { uid: 'm2', name: 'Nico' }],
+      suggestion: { appoint: ['a', 'b'], remove: ['m1', 'm2'] },
+    };
+    const s = el.reviewSuggestion(base);
+    expect(s.text).toBe('Suggestion: appoint Alice (14), Bob (11); remove Mystic, Nico (not re-elected). 2 of 2 seats would be filled. 1 qualified candidate is banned right now and left out. Nothing changes until you tap.');
+    expect(s.appoint.map((x) => x.uid)).toEqual(['a', 'b']);
+    expect(s.remove.map((x) => x.name)).toEqual(['Mystic', 'Nico']);
+    expect([s.filled, s.qualified, s.bannedOut]).toEqual([2, 3, 1]);
+
+    const none = el.reviewSuggestion({ ...base, candidates: [{ uid: 'c', name: 'Cat', votes: 3, qualified: false }], suggestion: { appoint: [], remove: ['m1'] } });
+    expect(none.text).toBe('Nobody reached 10 votes. Suggestion: keep the current team and start a new election when you are ready.');
+    expect(none.filled).toBe(0);
+
+    const one = el.reviewSuggestion({ seats: 1, minVotes: 3, candidates: [{ uid: 'a', name: 'Al', votes: 5, qualified: true }], holders: [], suggestion: { appoint: ['a'], remove: [] } });
+    expect(one.text).toBe('Suggestion: appoint Al (5). 1 of 1 seat would be filled. Nothing changes until you tap.');
+    expect(el.reviewSuggestion(null).text).toMatch(/^Nobody reached 0 votes/);
   });
 
   test('adminApplications returns a list; adminEligibility skips empty uids', async () => {

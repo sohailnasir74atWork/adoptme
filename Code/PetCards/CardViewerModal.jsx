@@ -1,6 +1,7 @@
 /**
  * CardViewerModal — one card, big. Drag to tilt; tap to turn it over for the
- * details (values, origin, every finish owned with counts and serials).
+ * details (origin, every finish owned with counts and serials, and today's
+ * values: the back is the only place on a card where live numbers appear).
  * Owned: switch finish, share, pin to the profile showcase.
  * Missing: the silhouette, where it drops, and Craft for shards.
  */
@@ -14,16 +15,17 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import PetCard from './PetCard';
 import CardShine from './CardShine';
 import CardShareSheet from './CardShareSheet';
+import CardIcon from './cardIcons';
 import { FINISHES, CRAFT_COST, RARITY_STYLE, FIRST_EDITION_MAX } from './cardConfig';
-import { bestOwned, formatCompact } from './cardMath';
+import { bestOwned, formatCompact, isShowcased } from './cardMath';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.65)';
 
 export default function CardViewerModal({
-  card, entries, values, total, shards = 0, onClose, onCraft, onShowcase, crafting = false,
+  card, entries, values, total, shards = 0, showcase = null, onClose, onCraft, onShowcase, crafting = false,
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { width: W } = useWindowDimensions();
   const visible = !!card;
   const owned = Array.isArray(entries) && entries.length > 0;
@@ -55,6 +57,7 @@ export default function CardViewerModal({
   const backRot = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['-90deg', '-90deg', '0deg'] });
 
   const ownedFinishes = FINISHES.filter((f) => (entries || []).some((e) => e[0] === f));
+  const pinned = isShowcased(showcase, card.key, finish);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -67,7 +70,7 @@ export default function CardViewerModal({
           <Animated.View style={{ position: 'absolute', transform: [{ perspective: 1000 }, { rotateY: frontRot }] }}>
             <CardShine width={cw} height={cw * 1.4} idle={owned} spin={owned && finish === 'mega'} onTap={() => flipTo(true)}>
               {(shine) => (
-                <PetCard card={card} finish={finish} serial={serial} width={cw} owned={owned} values={v} total={total} shine={shine} />
+                <PetCard card={card} finish={finish} serial={serial} width={cw} owned={owned} total={total} shine={shine} />
               )}
             </CardShine>
           </Animated.View>
@@ -80,6 +83,7 @@ export default function CardViewerModal({
                   <View style={styles.dRow}><Text style={styles.dLabel}>{t('pet_cards.stat_value')}</Text><Text style={styles.dVal}>{v.r != null ? formatCompact(v.r) : '—'}</Text></View>
                   <View style={styles.dRow}><Text style={styles.dLabel}>{t('pet_cards.stat_neon')}</Text><Text style={styles.dVal}>{v.n != null ? formatCompact(v.n) : '—'}</Text></View>
                   <View style={styles.dRow}><Text style={styles.dLabel}>{t('pet_cards.stat_mega')}</Text><Text style={styles.dVal}>{v.m != null ? formatCompact(v.m) : '—'}</Text></View>
+                  <Text style={styles.dAsOf}>{t('pet_cards.wp_as_of', { date: new Date().toLocaleDateString(i18n.language, { day: 'numeric', month: 'long', year: 'numeric' }) })}</Text>
                   <View style={styles.dRow}>
                     <Text style={styles.dLabel}>{t('pet_cards.origin')}</Text>
                     <Text style={styles.dVal}>
@@ -121,11 +125,13 @@ export default function CardViewerModal({
           {owned ? (
             <>
               <TouchableOpacity style={[styles.btn, { backgroundColor: rs.base }]} onPress={() => setShare({ ...card, finish, serial })}>
-                <Text style={styles.btnText}>📤 {t('pet_cards.share')}</Text>
+                <CardIcon name="share" size={16} />
+                <Text style={styles.btnText}>{t('pet_cards.share')}</Text>
               </TouchableOpacity>
               {onShowcase ? (
-                <TouchableOpacity style={[styles.btn, styles.ghost]} onPress={() => onShowcase({ ...card, finish })}>
-                  <Text style={[styles.btnText, { color: INK }]}>📌 {t('pet_cards.showcase')}</Text>
+                <TouchableOpacity style={[styles.btn, styles.ghost, pinned && styles.ghostOn]} onPress={() => onShowcase(card, finish)}>
+                  <CardIcon name={pinned ? 'pinOff' : 'pin'} size={16} />
+                  <Text style={[styles.btnText, { color: INK }]}>{t(pinned ? 'pet_cards.showcase_remove' : 'pet_cards.showcase')}</Text>
                 </TouchableOpacity>
               ) : null}
             </>
@@ -140,8 +146,9 @@ export default function CardViewerModal({
           )}
         </View>
         {!owned ? <Text style={styles.tip}>{t('pet_cards.craft_hint', { have: shards })}</Text> : null}
+        {owned && onShowcase ? <Text style={styles.tip}>{t('pet_cards.showcase_hint')}</Text> : null}
       </View>
-      <CardShareSheet card={share} values={v} total={total} onClose={() => setShare(null)} />
+      <CardShareSheet card={share} total={total} onClose={() => setShare(null)} />
     </Modal>
   );
 }
@@ -157,6 +164,7 @@ const styles = StyleSheet.create({
   dLabel: { color: MUTED, fontSize: 13, fontWeight: '700' },
   dVal: { color: INK, fontSize: 13, fontWeight: '900' },
   dMuted: { color: MUTED, fontSize: 13, marginTop: 4 },
+  dAsOf: { color: 'rgba(244,236,255,0.45)', fontSize: 10, fontWeight: '600', marginTop: 5 },
   dFan: { color: 'rgba(244,236,255,0.4)', fontSize: 10, marginTop: 16 },
   tip: { color: MUTED, fontSize: 12, fontWeight: '700', marginTop: 14 },
   finishes: { gap: 8, paddingHorizontal: 20, marginTop: 12 },
@@ -164,7 +172,8 @@ const styles = StyleSheet.create({
   fChipOn: { backgroundColor: '#FFD23F', borderColor: '#FFD23F' },
   fChipText: { color: INK, fontWeight: '800', fontSize: 12 },
   actions: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  btn: { height: 46, paddingHorizontal: 22, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  btn: { height: 46, paddingHorizontal: 20, borderRadius: 23, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   ghost: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  ghostOn: { borderColor: 'rgba(255,210,63,0.7)', backgroundColor: 'rgba(255,210,63,0.12)' },
   btnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
 });

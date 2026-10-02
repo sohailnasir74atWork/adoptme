@@ -208,7 +208,7 @@ async function mirrorRoblox(uid, before, after, supabase) {
 // unchanged — e.g. an admin re-removing a role whose Supabase copy went stale
 // while this function was down. Without it a repeat removal is a no-op write,
 // fires no trigger, and the stale `true` in user_roles lives forever.
-const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper', 'rolesUpdatedAt'];
+const ROLES_KEYS = ['admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper', 'rolesUpdatedAt'];
 // `isCreate` (2026-09-02, cost): an ordinary user never has ANY role key set,
 // so anyKeyChanged() was always false and NO user_roles row was ever written
 // for them. getRoles() then returned null on every client, and BottomDrawer's
@@ -228,6 +228,7 @@ async function mirrorRoles(uid, before, after, supabase, isCreate = false) {
     is_baby_mod: asBool(after.isBabyMod),
     is_trusted: asBool(after.isTrusted),
     is_cmsr: asBool(after.isCMSR),
+    is_art_cmsr: asBool(after.isArtCMSR),     // 042_art_cmsr.sql
     is_helper: asBool(after.isHelper),
     updated_at: nowIso(),
   };

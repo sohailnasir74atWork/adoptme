@@ -46,6 +46,7 @@ exports.sendUpdateNoticeMessage = functions
         isBabyMod: false,
         isTrusted: false,
         isCMSR: false,
+        isArtCMSR: false,
         isHelper: false,
       },
     };

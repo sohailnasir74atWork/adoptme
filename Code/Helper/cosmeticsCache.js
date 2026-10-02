@@ -74,9 +74,22 @@ export const updateMyCosmeticType = (type, value) => {
 //  purchase/activate/deactivate to ensure consistency.
 //  Skips if recently synced (within TTL).
 // ────────────────────────────────────────────────────────
-export const syncMyCosmetics = async (db, uid, force = false) => {
-  if (!db || !uid) return getMyCosmetics();
+// One RTDB read per uid at a time. The Home tab and MainTabs both sync at
+// app start; the second caller used to issue its own identical get.
+const inFlightSync = new Map(); // uid -> Promise<cosmetics>
 
+export const syncMyCosmetics = (db, uid, force = false) => {
+  if (!db || !uid) return Promise.resolve(getMyCosmetics());
+  const pending = inFlightSync.get(uid);
+  if (pending) return pending;
+  const run = syncMyCosmeticsNow(db, uid, force).finally(() => {
+    if (inFlightSync.get(uid) === run) inFlightSync.delete(uid);
+  });
+  inFlightSync.set(uid, run);
+  return run;
+};
+
+const syncMyCosmeticsNow = async (db, uid, force) => {
   // Skip if recently synced (unless forced)
   if (!force) {
     try {

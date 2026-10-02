@@ -80,6 +80,7 @@ import {
 } from '../Supabase/modLogBackend';
 import { useGlobalState } from '../GlobelStats';
 import { adminApplications, adminReview } from '../Helper/staffElections';
+import ElectionResultsPanel from '../Elections/ElectionResultsPanel';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1004,9 +1005,12 @@ const AdminDashboard = () => {
   const [reviewing, setReviewing] = useState(null);     // `${electionId}:${uid}` in flight
   const [rejectTarget, setRejectTarget] = useState(null); // application the note sheet is open for
   const [rejectNote, setRejectNote] = useState('');
+  // Bumped with every applications load so the results panel (041) reloads too.
+  const [resultsReload, setResultsReload] = useState(0);
   const loadApplications = useCallback(async () => {
     setAppsLoading(true);
     setAppsError(false);
+    setResultsReload((n) => n + 1);
     try {
       setApps(await adminApplications());
     } catch (e) {
@@ -3511,10 +3515,11 @@ const AdminDashboard = () => {
             />
           </View>
           <Text style={{ fontSize: 13, color: C.textMuted, lineHeight: 19 }}>
-            MODs and Junior Mods are elected by players. To apply, a player needs 5 squad friends and
-            18+ for MOD, or 3 squad friends and 16+ for JMD, with no strike or ban in the last 30 days.
-            Only applications you approve here go on the ballot. Start, watch or cancel a race from the
-            Elections screen.
+            MODs and Junior Mods are elected by players, and you have the final say. To apply, a player
+            needs 5 squad friends and 18+ for MOD, or 3 squad friends and 16+ for JMD, with no strike or
+            ban in the last 30 days. Only applications you approve here go on the ballot. When a race
+            closes, its count lands below with a suggestion; nobody gains or loses a role until you
+            appoint or remove them here. Start, watch or cancel a race from the Elections screen.
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Elections')}
@@ -3522,6 +3527,14 @@ const AdminDashboard = () => {
           >
             <Text style={{ color: '#fff', fontWeight: '800' }}>Open Elections</Text>
           </TouchableOpacity>
+
+          {/* Results of closed races: the admin decides (041) */}
+          <ElectionResultsPanel
+            isDark={isDark}
+            reloadToken={resultsReload}
+            navigation={navigation}
+            currentUser={currentUser}
+          />
 
           {/* Applications */}
           {(() => {

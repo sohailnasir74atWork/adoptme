@@ -22,7 +22,6 @@ import { useTranslation } from 'react-i18next';
 import { ref, update, increment } from '@react-native-firebase/database';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
-import { useLocalState } from '../LocalGlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { trackGrowthEvent } from '../Helper/growthAnalytics';
 import { getStarBalance, spendStars } from '../Engagement/starUtils';
@@ -31,8 +30,9 @@ import PetCard from './PetCard';
 import CardBack from './CardBack';
 import CardShine from './CardShine';
 import CardShareSheet from './CardShareSheet';
+import CardIcon from './cardIcons';
 import { openPack, errorKey, peekCardsState } from './cardsApi';
-import { buildValueIndex, bestPull, revealTier } from './cardMath';
+import { bestPull, revealTier } from './cardMath';
 import { RARITY_STYLE, STAR_PACK_COST, themeOf, FINISH_STYLE } from './cardConfig';
 
 const INK = '#F4ECFF';
@@ -106,7 +106,6 @@ export default function PackOpeningScreen() {
   const insets = useSafeAreaInsets();
   const { width: W, height: Hs } = useWindowDimensions();
   const { appdatabase, user } = useGlobalState();
-  const { localState } = useLocalState();
   const { triggerHapticFeedback } = useHaptic();
 
   const setId = params?.setId || 'all';
@@ -116,7 +115,6 @@ export default function PackOpeningScreen() {
   const set = st?.sets?.find((s) => s.id === setId);
   // Collector numbers count across every card (the "All Pets" set).
   const total = st?.sets?.find((s) => s.id === 'all')?.total || null;
-  const values = useMemo(() => buildValueIndex(localState?.data), [localState?.data]);
 
   const [phase, setPhase] = useState('sealed');
   const [result, setResult] = useState(null);
@@ -364,7 +362,7 @@ export default function PackOpeningScreen() {
                     {flipped ? (
                       <CardShine width={cw} height={cw * 1.4} interactive={false} idle={FINISH_STYLE[card.finish]?.mult > 1 || tier >= 1} spin={card.finish === 'mega'}>
                         {(shine) => (
-                          <PetCard card={card} finish={card.finish} serial={card.serial} width={cw} values={values.get(card.key)} total={total} shine={shine} />
+                          <PetCard card={card} finish={card.finish} serial={card.serial} width={cw} total={total} shine={shine} />
                         )}
                       </CardShine>
                     ) : null}
@@ -416,7 +414,8 @@ export default function PackOpeningScreen() {
           </View>
           {best ? (
             <TouchableOpacity style={[styles.cta, { backgroundColor: theme.accent }]} onPress={() => { setShare(best); trackGrowthEvent('card_share', { kind: 'pull' }); }}>
-              <Text style={styles.ctaText}>📤 {t('pet_cards.share_best')}</Text>
+              <CardIcon name="share" size={18} />
+              <Text style={styles.ctaText}>{t('pet_cards.share_best')}</Text>
             </TouchableOpacity>
           ) : null}
           <View style={{ flexDirection: 'row', gap: 10, alignSelf: 'stretch' }}>
@@ -442,7 +441,7 @@ export default function PackOpeningScreen() {
       ) : null}
 
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF', opacity: flash }]} />
-      <CardShareSheet card={share} values={share ? values.get(share.key) : null} total={total} onClose={() => setShare(null)} />
+      <CardShareSheet card={share} total={total} onClose={() => setShare(null)} />
     </View>
   );
 }
@@ -464,7 +463,7 @@ const styles = StyleSheet.create({
   hintSmall: { color: MUTED, fontSize: 12, fontWeight: '700', marginTop: 8 },
   tearTrack: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
   tearFill: { height: 4, borderRadius: 2 },
-  cta: { alignSelf: 'stretch', marginHorizontal: 32, marginTop: 18, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  cta: { alignSelf: 'stretch', marginHorizontal: 32, marginTop: 18, height: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ctaSmall: { marginTop: 10, height: 40, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   ctaText: { color: '#1A0E00', fontWeight: '900', fontSize: 16 },
   ghost: { marginTop: 10, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },

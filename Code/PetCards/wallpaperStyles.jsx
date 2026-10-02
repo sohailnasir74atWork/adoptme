@@ -21,7 +21,8 @@ import { petArtUrl, RARITY_STYLE } from './cardConfig';
 import { paintFor, assetUri, hasPetArt2k } from './cardArt';
 import { formatCompact } from './cardMath';
 
-export const WP_STYLES = ['peek', 'poster', 'board', 'squad', 'neon', 'scrapbook', 'pattern', 'cards'];
+// Value-led styles (poster, board) come last: values are opt-in (CardWallpaper.jsx).
+export const WP_STYLES = ['peek', 'squad', 'neon', 'scrapbook', 'pattern', 'cards', 'poster', 'board'];
 export const WP_MAX_PETS = { peek: 1, poster: 1, board: 6, squad: 5, neon: 3, scrapbook: 4, pattern: 6, cards: 5 };
 export const WP_STYLE_ICON = { peek: '👀', poster: '📊', board: '🏆', squad: '👯', neon: '🌆', scrapbook: '📸', pattern: '🔁', cards: '🃏' };
 export const WP_MOTIFS = ['none', 'crystals', 'candy', 'stars', 'hearts', 'bubbles', 'snow', 'paws', 'notes', 'sparkles'];
@@ -529,7 +530,7 @@ function Cards({ F, pets, bg, o, L }) {
         const off = i - (n - 1) / 2;
         return (
           <View key={p.key} style={{ position: 'absolute', left: F.w / 2 - cardW / 2 + off * spread, top: centerY - (cardW * 1.4) / 2 + Math.abs(off) * cardW * 0.08, transform: [{ rotate: `${off * (phone ? 9 : 5)}deg` }], zIndex: 10 - Math.abs(Math.round(off)) }}>
-            <PetCard card={p} finish={p.finish} serial={p.serial} width={cardW} values={p.values} total={L.total} />
+            <PetCard card={p} finish={p.finish} serial={p.serial} width={cardW} total={L.total} />
           </View>
         );
       })}

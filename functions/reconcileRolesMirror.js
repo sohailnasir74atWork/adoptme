@@ -27,6 +27,7 @@ const FLAGS = [
   { rtdb: 'isBabyMod',   col: 'is_baby_mod' },
   { rtdb: 'isTrusted',   col: 'is_trusted' },
   { rtdb: 'isCMSR',      col: 'is_cmsr' },
+  { rtdb: 'isArtCMSR',   col: 'is_art_cmsr' },
   { rtdb: 'isHelper',    col: 'is_helper' },
 ];
 

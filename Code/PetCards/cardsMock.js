@@ -244,13 +244,24 @@ export default {
 
   async get_card_collection() {
     const st = state();
-    return { cards: st.owned, score: st.wallet.score, uniqueCards: st.wallet.unique_cards, completed: st.wallet.completed };
+    return {
+      cards: st.owned, score: st.wallet.score, uniqueCards: st.wallet.unique_cards, completed: st.wallet.completed,
+      showcase: st.showcase || [],
+    };
   },
 
   async set_card_showcase({ p_cards }) {
+    await buildCatalog();
     const st = state();
-    st.showcase = p_cards.filter((x) => st.owned[x.k]?.some((e) => e[0] === x.f));
+    const list = [];
+    (Array.isArray(p_cards) ? p_cards : []).slice(0, 3).forEach((x) => {
+      const c = x && catalog.find((y) => y.key === x.k);
+      const e = c && (st.owned[x.k] || []).find((en) => en[0] === x.f);
+      if (!c || !e || list.some((l) => l.k === x.k)) return;
+      list.push({ k: c.key, f: x.f, s: e[2], n: c.name, r: c.rarity, no: c.no, e: c.egg, sets: c.sets, bg: c.bg });
+    });
+    st.showcase = list;
     save('state', st);
-    return st.showcase;
+    return list;
   },
 };

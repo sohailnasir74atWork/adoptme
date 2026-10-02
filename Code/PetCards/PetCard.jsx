@@ -1,15 +1,19 @@
 /**
  * PetCard — one trading card, drawn in code at any size (PET_CARDS_PLAN.md §3).
  *
- *   <PetCard card={c} finish="holo" serial={42} width={320} values={{ r, n, m }} total={787} />
+ *   <PetCard card={c} finish="holo" serial={42} width={320} total={787} />
+ *
+ * The front carries only what never changes: art, name, rarity, origin,
+ * finish, collector number, serial. Live values stay off the card (they move
+ * weekly; the viewer's back shows them with a date).
  *
  * Layers, back to front: frame (material by finish) → inner panel → art window
  * (painted background, holo, pet) → pop-out pet (Mega / Full Art) → text →
  * shine. `shine` = { x, y } Animated values in -1..1 from CardShine; without
  * it the card is static (album thumbnails).
  *
- * size="thumb" drops the type line and stat plate and uses the 512 px art,
- * so a 3-column album page stays light.
+ * size="thumb" drops the type line and uses the 512 px art, so a 3-column
+ * album page stays light.
  */
 
 import React, { memo, useState } from 'react';
@@ -19,8 +23,8 @@ import {
   RARITY_STYLE, FIRST_EDITION_MAX, THEMES, themeOf, themeIdFor, bgIdFor, petArtUrl,
 } from './cardConfig';
 import { paintFor, bgAssetId, assetUri, hasPetArt } from './cardArt';
-import { formatCompact } from './cardMath';
 import RarityGem from './RarityGem';
+import CardIcon from './cardIcons';
 
 const TEX = {
   conic: require('../../assets/pet-cards/t_conic.webp'),
@@ -62,7 +66,7 @@ const frameStyle = (finish, rs, theme) => {
 
 function PetCard({
   card, finish = 'classic', serial = null, width = 300, size = 'full', owned = true,
-  values = null, total = null, shine = null, style,
+  total = null, shine = null, style,
 }) {
   const { t } = useTranslation();
   const [petFailed, setPetFailed] = useState(false);
@@ -87,7 +91,7 @@ function PetCard({
   const border = f === 'neon' ? u * 2.4 : f === 'mega' ? u * 2.2 : fullArt ? 0 : u * 3.4;
   const radius = u * 4.6;
   const artTop = H * (thumb ? 0.15 : 0.135);
-  const artH = H * (thumb ? 0.66 : 0.58);
+  const artH = H * (thumb ? 0.66 : 0.705);
   const artX = border + u * 2.4;
   const artW = width - artX * 2;
 
@@ -103,7 +107,9 @@ function PetCard({
   const shineTy = shine ? shine.y.interpolate({ inputRange: [-1, 1], outputRange: [H * 0.5, -H * 0.5] }) : -H * 0.3;
   const holoTx = shine ? shine.x.interpolate({ inputRange: [-1, 1], outputRange: [-width * 0.6, width * 0.6] }) : 0;
 
-  const petSize = artH * 0.94;
+  const petSize = Math.min(artW, artH) * 0.94;
+  // Pop-out pets are drawn bigger than the window so they break out of its top.
+  const popScale = fullArt ? 1.12 : 1.2;
   const pet = petUri ? (
     <Image
       source={{ uri: petUri }}
@@ -116,7 +122,7 @@ function PetCard({
     />
   ) : (
     <View style={{ width: petSize, height: petSize, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: petSize * 0.35, opacity: owned ? 0.9 : 0.4 }}>🐾</Text>
+      <CardIcon name="cards" size={petSize * 0.35} style={{ opacity: owned ? 0.9 : 0.4 }} />
     </View>
   );
 
@@ -250,8 +256,8 @@ function PetCard({
           style={{
             position: 'absolute',
             left: (width - petSize) / 2,
-            top: fullArt ? H * 0.16 : artTop + artH - petSize * 1.12 - artH * 0.02,
-            transform: [{ scale: 1.12 }],
+            top: fullArt ? H * 0.13 : artTop + artH - petSize * popScale - artH * 0.02,
+            transform: [{ scale: popScale }],
           }}
         >
           {pet}
@@ -281,38 +287,17 @@ function PetCard({
       {!thumb ? (
         <>
           {/* Type line: origin · finish */}
-          <View style={{ position: 'absolute', left: artX, right: artX, top: artTop + artH + u * 1.6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text numberOfLines={1} style={[{ flex: 1, fontSize: u * 3.6, fontWeight: '800', color: subInk }, fullArt && plates.dark]}>
+          <View style={{ position: 'absolute', left: artX, right: artX, top: artTop + artH + u * 2.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text numberOfLines={1} style={[{ flex: 1, fontSize: u * 4.2, fontWeight: '800', color: subInk }, fullArt && plates.dark]}>
               {setLabel}
             </Text>
             {f !== 'classic' ? (
-              <View style={{ paddingHorizontal: u * 2, paddingVertical: u * 0.6, borderRadius: u * 3, backgroundImage: f === 'gilded' ? GOLD : RAINBOW, marginLeft: u }}>
-                <Text style={{ fontSize: u * 3, fontWeight: '900', color: '#1A1030', letterSpacing: 0.5 }}>
-                  ✦ {t(`pet_cards.finish.${f}`).toUpperCase()}
+              <View style={{ paddingHorizontal: u * 2.4, paddingVertical: u * 0.8, borderRadius: u * 3.2, backgroundImage: f === 'gilded' ? GOLD : RAINBOW, marginLeft: u }}>
+                <Text style={{ fontSize: u * 3.4, fontWeight: '900', color: '#1A1030', letterSpacing: 0.6 }}>
+                  {t(`pet_cards.finish.${f}`).toUpperCase()}
                 </Text>
               </View>
             ) : null}
-          </View>
-
-          {/* Stat plate: live values */}
-          <View
-            style={{
-              position: 'absolute', left: artX, right: artX, top: artTop + artH + u * 8.2, height: u * 15,
-              borderRadius: u * 2.2, flexDirection: 'row', alignItems: 'center',
-              backgroundColor: fullArt ? 'rgba(10,8,20,0.55)' : dark ? 'rgba(255,255,255,0.07)' : f === 'gilded' ? '#F3E3B5' : theme.plate,
-              borderWidth: Math.max(0.5, u * 0.3), borderColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
-            }}
-          >
-            {[['value', values?.r], ['neon', values?.n], ['mega', values?.m]].map(([k, v], i) => (
-              <View key={k} style={{ flex: i === 0 ? 1.3 : 1, alignItems: 'center' }}>
-                <Text style={{ fontSize: u * 2.7, fontWeight: '800', color: subInk, letterSpacing: 0.8, marginBottom: u * 0.4 }}>
-                  {t(`pet_cards.stat_${k}`).toUpperCase()}
-                </Text>
-                <Text style={{ fontSize: i === 0 ? u * 6.2 : u * 4.8, fontWeight: '900', color: i === 0 ? (dark ? rs.glow : rs.dark) : ink }}>
-                  {v != null ? formatCompact(v) : '—'}
-                </Text>
-              </View>
-            ))}
           </View>
         </>
       ) : null}

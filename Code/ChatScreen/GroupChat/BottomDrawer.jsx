@@ -21,7 +21,7 @@ import {
 import { useGlobalState } from '../../GlobelStats';
 import config from '../../Helper/Environment';
 import Icon from 'react-native-vector-icons/Ionicons';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import { getStyles } from '../../SettingScreen/settingstyle';
 import { useLocalState } from '../../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
@@ -69,11 +69,12 @@ import ProfilePostsSection from './ProfilePostsSection';
 import BadgeShowcase from './BadgeShowcase';
 import { computeBadges, checkInfluencerBadge, BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
 import XPBar from '../../Engagement/XPBar';
+import ProfileShowcase from '../../PetCards/ProfileShowcase';
 import { getUserXP } from '../../Engagement/xpUtils';
 import FramedAvatar from './FramedAvatar';
 import { getThemeColors } from '../../Helper/themeColors';
-import SquadBadge from '../../Squad/SquadBadge';
 import { getPublicProfile } from '../../Helper/publicProfile';
+import { canSeeCountryFlags } from '../../Helper/countryFlag';
 
 dayjs.extend(relativeTime);
 
@@ -263,6 +264,10 @@ const ProfileBottomDrawer = ({
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
+  // Self view (Setting.jsx "View my public profile"): the drawer renders
+  // exactly what another player sees, minus the actions that only make
+  // sense on someone else (block, chat, follow, mod tools).
+  const isOwnProfile = !!user?.id && (selectedUserId === user.id || selectedUserId === user.senderId);
 
   // ✅ FIXED: Real-time online status listener instead of stale one-shot prop
   const isOnline = useOnlineStatus(isVisible ? selectedUserId : null);
@@ -414,7 +419,9 @@ const ProfileBottomDrawer = ({
         isBabyMod: valOrNull('isBabyMod'),
         isTrusted: valOrNull('isTrusted'),
         isCMSR: valOrNull('isCMSR'),
+        isArtCMSR: valOrNull('isArtCMSR'),
         isHelper: valOrNull('isHelper'),
+        flage: valOrNull('flage'),
       };
     };
 
@@ -451,12 +458,13 @@ const ProfileBottomDrawer = ({
             // miss in the drawer header for those users.
             let roleFb = null;
             if (!rolesRow) {
-              const [adminSnap, modSnap, jmdSnap, trustedSnap, cmsrSnap, helperSnap] = await Promise.all([
+              const [adminSnap, modSnap, jmdSnap, trustedSnap, cmsrSnap, artCmsrSnap, helperSnap] = await Promise.all([
                 get(ref(appdatabase, `users/${selectedUserId}/admin`)).catch(() => null),
                 get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
                 get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
                 get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
                 get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+                get(ref(appdatabase, `users/${selectedUserId}/isArtCMSR`)).catch(() => null),
                 get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
               ]);
               if (!isMounted) return;
@@ -466,6 +474,7 @@ const ProfileBottomDrawer = ({
                 isBabyMod:   jmdSnap?.exists()     ? jmdSnap.val()     : null,
                 isTrusted:   trustedSnap?.exists() ? trustedSnap.val() : null,
                 isCMSR:      cmsrSnap?.exists()    ? cmsrSnap.val()    : null,
+                isArtCMSR:   artCmsrSnap?.exists() ? artCmsrSnap.val() : null,
                 isHelper:    helperSnap?.exists()  ? helperSnap.val()  : null,
               };
             }
@@ -478,15 +487,20 @@ const ProfileBottomDrawer = ({
               isPro:                   cosmeticsRow?.isPro               ?? false,
               topBadge:                cosmeticsRow?.topBadge            ?? null,
               squadCount:              cosmeticsRow?.squadCount          ?? 0,
+              // Pet Cards showcase + collector score (same cosmetics row, no extra read).
+              cardScore:               cosmeticsRow?.cardScore           ?? 0,
+              cardShowcase:            cosmeticsRow?.cardShowcase        ?? [],
               isAdmin:                 rolesRow?.isAdmin                 ?? roleFb?.isAdmin     ?? null,
               isModerator:             roleOv?.isModerator               ?? rolesRow?.isModerator ?? roleFb?.isModerator ?? null,
               isBabyMod:               roleOv?.isBabyMod                 ?? rolesRow?.isBabyMod ?? roleFb?.isBabyMod   ?? null,
               isTrusted:               rolesRow?.isTrusted               ?? roleFb?.isTrusted   ?? null,
               isCMSR:                  rolesRow?.isCMSR                  ?? roleFb?.isCMSR      ?? null,
+              isArtCMSR:               rolesRow?.isArtCMSR               ?? roleFb?.isArtCMSR   ?? null,
               isHelper:                rolesRow?.isHelper                ?? roleFb?.isHelper    ?? null,
               robloxUsername:          robloxRow?.robloxUsername         ?? null,
               robloxUserId:            robloxRow?.robloxUserId           ?? null,
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
+              flage:                   identityRow?.flag                 ?? null,
             };
           } else {
             // Full RTDB fallback — mirror lag or brand-new user.
@@ -523,6 +537,7 @@ const ProfileBottomDrawer = ({
             isBabyModSnap,
             isTrustedSnap,
             isCMSRSnap,
+            isArtCMSRSnap,
             isHelperSnap,
             supaBadgesMap,
             supaRobloxRow,
@@ -536,6 +551,7 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/isBabyMod`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isTrusted`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isCMSR`)).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/isArtCMSR`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
             getBadges(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
@@ -556,6 +572,7 @@ const ProfileBottomDrawer = ({
             isBabyMod: isBabyModSnap?.exists() ? isBabyModSnap.val() : null,
             isTrusted: isTrustedSnap?.exists() ? isTrustedSnap.val() : null,
             isCMSR: isCMSRSnap?.exists() ? isCMSRSnap.val() : null,
+            isArtCMSR: isArtCMSRSnap?.exists() ? isArtCMSRSnap.val() : null,
             isHelper: isHelperSnap?.exists() ? isHelperSnap.val() : null,
           };
           if (supaBadgesMap && supaBadgesMap.size > 0) {
@@ -569,6 +586,16 @@ const ProfileBottomDrawer = ({
 
         // Load saved badges
         setSavedBadges(badgesValue || {});
+
+        // Country flag, admin viewers only (Code/Helper/countryFlag.js). The
+        // identity mirror carries it as `flag`; when that is empty (mirror lag,
+        // kill-switch path) read the one RTDB leaf so an admin sees it on every
+        // profile, not just the ones opened from a message that embedded it.
+        if (canSeeCountryFlags(isAdmin) && !newUserData.flage) {
+          const flagSnap = await get(ref(appdatabase, `users/${selectedUserId}/flage`)).catch(() => null);
+          if (!isMounted) return;
+          newUserData.flage = flagSnap?.exists?.() ? (flagSnap.val() || null) : null;
+        }
 
         // Email + date of birth, and the ban status keyed by that email: staff
         // only (round 2). users_private is unreadable to everyone else, and the
@@ -640,7 +667,7 @@ const ProfileBottomDrawer = ({
     return () => {
       isMounted = false;
     };
-  }, [selectedUserId, selectedUser, appdatabase, isStaffViewer]);
+  }, [selectedUserId, selectedUser, appdatabase, isStaffViewer, isAdmin]);
 
   // ✅ Merge selectedUser (message data) with fetched userData (RTDB)
   // userData wins for fresh data, selectedUser provides instant preview
@@ -659,11 +686,15 @@ const ProfileBottomDrawer = ({
       email: selectedUser?.email || selectedUser?.decodedEmail || selectedUser?.user?.email || userData.email || userData.decodedEmail,
       topBadge: userData.topBadge || selectedUser?.topBadge || null,
       squadCount: userData.squadCount ?? selectedUser?.squadCount ?? 0,
+      cardScore: userData.cardScore ?? 0,
+      cardShowcase: userData.cardShowcase ?? [],
       isBabyMod: userData.isBabyMod ?? selectedUser?.isBabyMod ?? false,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      isArtCMSR: userData.isArtCMSR ?? selectedUser?.isArtCMSR ?? false,
       isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
       dateOfBirth: userData.dateOfBirth || null,
+      flage: userData.flage ?? selectedUser?.flage ?? null,
     };
   }, [selectedUser, userData]);
 
@@ -1362,7 +1393,7 @@ const ProfileBottomDrawer = ({
   const canManageBabyMod = isAdmin;
   const canManageModerator = isAdmin;
   const canManageBadges = isAdmin || !!user?.isModerator;
-  // Trusted / CMSR / Helper go only to players with BADGE_MIN_SQUAD squad
+  // Trusted / CMSR (house, art) / Helper go only to players with BADGE_MIN_SQUAD squad
   // friends (the RTDB rule checks /squad_size; this is the matching UI).
   const targetSquad = Number(mergedUser?.squadCount) || 0;
   const badgeAllowed = canGrantBadge({ isAdmin, targetSquad });
@@ -1444,11 +1475,14 @@ const ProfileBottomDrawer = ({
   };
 
   // ── CMSR badge handlers ──
+  // CMSR is two badges with one name: House CMSR (isCMSR, the original flag)
+  // and Art CMSR (isArtCMSR). A player can wear both. Each handler is one
+  // atomic update carrying the flag plus rolesUpdatedAt (see handleMakeHelper).
   const handleMakeCMSR = async () => {
     if (!selectedUserId || !appdatabase) return;
     if (badgeBlocked()) return;
     const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Commissioner', `Give ${userName} the CMSR badge?`, [
+      Alert.alert('Make Commissioner', `Give ${userName} the House CMSR badge?`, [
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
         { text: 'Confirm', onPress: () => resolve(true) }
       ]);
@@ -1459,16 +1493,16 @@ const ProfileBottomDrawer = ({
       invalidateFullProfile(selectedUserId);
       updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: true }));
-      Alert.alert('Success', `${userName} now has the CMSR badge`);
+      Alert.alert('Success', `${userName} now has the House CMSR badge`);
     } catch (err) {
-      Alert.alert('Error', 'Failed to set CMSR badge');
+      Alert.alert('Error', 'Failed to set House CMSR badge');
     }
   };
 
   const handleRemoveCMSR = async () => {
     if (!selectedUserId || !appdatabase) return;
     const confirm = await new Promise((resolve) => {
-      Alert.alert('Remove Commissioner', `Remove the CMSR badge from ${userName}?`, [
+      Alert.alert('Remove Commissioner', `Remove the House CMSR badge from ${userName}?`, [
         { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
         { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
       ]);
@@ -1479,9 +1513,50 @@ const ProfileBottomDrawer = ({
       invalidateFullProfile(selectedUserId);
       updateLocalState('cmsrRoster', null);
       setUserData(prev => ({ ...prev, isCMSR: false }));
-      Alert.alert('Success', `${userName} no longer has the CMSR badge`);
+      Alert.alert('Success', `${userName} no longer has the House CMSR badge`);
     } catch (err) {
-      Alert.alert('Error', 'Failed to remove CMSR badge');
+      Alert.alert('Error', 'Failed to remove House CMSR badge');
+    }
+  };
+
+  const handleMakeArtCMSR = async () => {
+    if (!selectedUserId || !appdatabase) return;
+    if (badgeBlocked()) return;
+    const confirm = await new Promise((resolve) => {
+      Alert.alert('Make Commissioner', `Give ${userName} the Art CMSR badge?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Confirm', onPress: () => resolve(true) }
+      ]);
+    });
+    if (!confirm) return;
+    try {
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isArtCMSR: true, rolesUpdatedAt: Date.now() });
+      invalidateFullProfile(selectedUserId);
+      updateLocalState('cmsrRoster', null);
+      setUserData(prev => ({ ...prev, isArtCMSR: true }));
+      Alert.alert('Success', `${userName} now has the Art CMSR badge`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to set Art CMSR badge');
+    }
+  };
+
+  const handleRemoveArtCMSR = async () => {
+    if (!selectedUserId || !appdatabase) return;
+    const confirm = await new Promise((resolve) => {
+      Alert.alert('Remove Commissioner', `Remove the Art CMSR badge from ${userName}?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
+      ]);
+    });
+    if (!confirm) return;
+    try {
+      await update(ref(appdatabase, `users/${selectedUserId}`), { isArtCMSR: null, rolesUpdatedAt: Date.now() });
+      invalidateFullProfile(selectedUserId);
+      updateLocalState('cmsrRoster', null);
+      setUserData(prev => ({ ...prev, isArtCMSR: false }));
+      Alert.alert('Success', `${userName} no longer has the Art CMSR badge`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to remove Art CMSR badge');
     }
   };
 
@@ -2888,21 +2963,36 @@ const ProfileBottomDrawer = ({
                   </View>
                 )}
 
-                {/* Ban/Block icon on banner */}
-                <TouchableOpacity
-                  onPress={handleBanToggle}
-                  style={{
+                {/* Ban/Block icon on banner; on your own profile a "public view" chip instead */}
+                {isOwnProfile ? (
+                  <View style={{
                     position: 'absolute', top: 12, left: 14,
-                    padding: 6, borderRadius: 999,
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                  }}
-                >
-                  <Icon
-                    name={isBlock ? 'shield-checkmark-outline' : 'ban-outline'}
-                    size={16}
-                    color="#fff"
-                  />
-                </TouchableOpacity>
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    paddingHorizontal: 10, paddingVertical: 4,
+                    borderRadius: 999,
+                  }}>
+                    <Icon name="eye-outline" size={12} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 }}>
+                      {t('profile.public_view')}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={handleBanToggle}
+                    style={{
+                      position: 'absolute', top: 12, left: 14,
+                      padding: 6, borderRadius: 999,
+                      backgroundColor: 'rgba(255,255,255,0.15)',
+                    }}
+                  >
+                    <Icon
+                      name={isBlock ? 'shield-checkmark-outline' : 'ban-outline'}
+                      size={16}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {/* ═══ CONTENT AREA (white/dark bg below banner) ═══ */}
@@ -2931,63 +3021,17 @@ const ProfileBottomDrawer = ({
                     >
                       {userName}
                     </Text>
-                    {selectedUser?.flage ? (
-                      <Text style={{ fontSize: 18 }}>{selectedUser.flage}</Text>
+                    {/* Country flag: admin viewers only (Code/Helper/countryFlag.js) */}
+                    {canSeeCountryFlags(isAdmin) && mergedUser?.flage ? (
+                      <Text style={{ fontSize: 18 }}>{mergedUser.flage}</Text>
                     ) : null}
                     <TouchableOpacity onPress={() => copyToClipboard(userName)} style={{ padding: 2 }}>
                       <Icon name="copy-outline" size={14} color={c.textMuted} />
                     </TouchableOpacity>
                   </View>
 
-                  {/* Badge pills */}
-                  {(() => {
-                    const firstBadge = getFirstBadgeType(mergedUser);
-                    return (
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 5 }}>
-                    {mergedUser?.isAdmin && (
-                      <UserBadgePill type="admin" size="md" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
-                    )}
-                    {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-                      <UserBadgePill type="mod" size="md" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
-                    )}
-                    {!mergedUser?.isAdmin && !mergedUser?.isModerator && mergedUser?.isBabyMod && (
-                      <UserBadgePill type="jmd" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
-                    )}
-                    {mergedUser?.isTrusted && (
-                      <UserBadgePill type="trusted" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
-                    )}
-                    {mergedUser?.isCMSR && (
-                      <UserBadgePill type="cmsr" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
-                    )}
-                    {mergedUser?.isHelper && (
-                      <UserBadgePill type="helper" size="md" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
-                    )}
-                    {mergedUser?.squadCount > 0 && (() => {
-                      return (
-                        <View style={{
-                          flexDirection: 'row', alignItems: 'center', gap: 4,
-                          backgroundColor: isDarkMode ? 'rgba(124,58,237,0.2)' : 'rgba(124,58,237,0.1)',
-                          borderWidth: 1, borderColor: isDarkMode ? 'rgba(167,139,250,0.4)' : 'rgba(124,58,237,0.25)',
-                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
-                        }}>
-                          <SquadBadge count={mergedUser.squadCount} size={14} />
-                          <Text style={{ fontSize: 9, fontWeight: '800', color: isDarkMode ? '#c4b5fd' : '#6d28d9' }}>
-                            {t('squad.pill', { count: mergedUser.squadCount })}
-                          </Text>
-                        </View>
-                      );
-                    })()}
-                    {mergedUser?.robloxUsernameVerified && (
-                      <View style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 4,
-                        backgroundColor: isDarkMode ? 'rgba(56,189,248,0.15)' : 'rgba(14,165,233,0.1)',
-                        borderWidth: 1, borderColor: isDarkMode ? 'rgba(56,189,248,0.3)' : 'rgba(14,165,233,0.25)',
-                        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
-                      }}>
-                        <Icon name="checkmark-circle" size={10} color={isDarkMode ? '#38bdf8' : '#0ea5e9'} />
-                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#38bdf8' : '#0ea5e9' }}>{t('profile.verified')}</Text>
-                      </View>
-                    )}
+                  {/* Badge pills: every badge with its label (Code/Helper/UserBadgeRail.jsx) */}
+                  <UserBadgeRail user={mergedUser} variant="full" isDarkMode={isDarkMode} style={{ marginTop: 5 }}>
                     {mergedUser?.robloxUsername && !mergedUser?.robloxUsernameVerified && (
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -2999,10 +3043,7 @@ const ProfileBottomDrawer = ({
                         <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>{t('profile.unverified')}</Text>
                       </View>
                     )}
-
-                  </View>
-                    );
-                  })()}
+                  </UserBadgeRail>
 
                   {/* Roblox username subtitle */}
                   {mergedUser?.robloxUsername && (
@@ -3098,6 +3139,11 @@ const ProfileBottomDrawer = ({
                       </Text>
                     </View>
                   </View>
+                )}
+
+                {/* ═══ PET CARDS: showcased cards + collector score (Code/PetCards/ProfileShowcase.jsx) ═══ */}
+                {loadDetails && !loadingRating && (
+                  <ProfileShowcase cards={mergedUser?.cardShowcase} score={mergedUser?.cardScore} isDarkMode={isDarkMode} />
                 )}
 
                 {/* ═══ AGE — admin/mod only ═══ */}
@@ -3241,7 +3287,7 @@ const ProfileBottomDrawer = ({
                   {/* Top row: Chat + Follow (or Chat + Roblox if no follow) */}
                   <View style={{ flexDirection: 'row', gap: 10 }}>
                     {/* Chat Action */}
-                    {!fromPvtChat && (
+                    {!fromPvtChat && !isOwnProfile && (
                       <TouchableOpacity
                         onPress={handleStartChat}
                         activeOpacity={0.85}
@@ -3369,7 +3415,7 @@ const ProfileBottomDrawer = ({
                   </View>
                 </View>
 
-                {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod) && (
+                {!loadDetails && !isOwnProfile && (isAdmin || user?.isModerator || user?.isBabyMod) && (
                   <View>
                     {/* Admin only (040): can this player apply for MOD / JMD, and
                         do they have an application waiting. */}
@@ -3421,11 +3467,14 @@ const ProfileBottomDrawer = ({
                         badgeMinSquad={BADGE_MIN_SQUAD}
                         targetIsTrusted={!!mergedUser?.isTrusted}
                         targetIsCMSR={!!mergedUser?.isCMSR}
+                        targetIsArtCMSR={!!mergedUser?.isArtCMSR}
                         targetIsHelper={!!mergedUser?.isHelper}
                         handleMakeTrusted={handleMakeTrusted}
                         handleRemoveTrusted={handleRemoveTrusted}
                         handleMakeCMSR={handleMakeCMSR}
                         handleRemoveCMSR={handleRemoveCMSR}
+                        handleMakeArtCMSR={handleMakeArtCMSR}
+                        handleRemoveArtCMSR={handleRemoveArtCMSR}
                         handleMakeHelper={handleMakeHelper}
                         handleRemoveHelper={handleRemoveHelper}
                         canResetAvatar={canManageBadges}

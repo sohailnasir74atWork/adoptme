@@ -10,9 +10,10 @@ import "dayjs/locale/de";
 import "dayjs/locale/ar";
 
 
-// ✅ Only import English at startup (fallback language)
+// Only English (the fallback) is evaluated eagerly. The user's own language
+// is required synchronously below, so it is on screen from the first frame
+// without the other bundles being built.
 import en from "./Code/Translation/en.json";
-import ru from "./Code/Translation/ru.json";
 
 // Initialize MMKV storage
 let storage;
@@ -73,15 +74,31 @@ const deviceLanguage = getDeviceLanguage();
 const initialLanguage = SUPPORTED_LANGUAGES.includes(savedLanguage) ? savedLanguage
   : SUPPORTED_LANGUAGES.includes(deviceLanguage) ? deviceLanguage : 'en';
 
-// Initialize i18next with only English
+// Each bundle is a JSON module in the app bundle; require() evaluates only
+// the one asked for (en is imported above).
+const requireLanguage = (langCode) => {
+  switch (langCode) {
+    case 'ru': return require('./Code/Translation/ru.json');
+    case 'es': return require('./Code/Translation/es.json');
+    case 'fr': return require('./Code/Translation/fr.json');
+    case 'de': return require('./Code/Translation/de.json');
+    case 'ar': return require('./Code/Translation/ar.json');
+    default: return null;
+  }
+};
+
+const resources = { en: { translation: en } };
+if (initialLanguage !== 'en') {
+  const bundle = requireLanguage(initialLanguage);
+  if (bundle) resources[initialLanguage] = { translation: bundle };
+}
+
+// Initialize i18next with English plus the user's language
 i18n
   .use(initReactI18next)
   .init({
     compatibilityJSON: "v3",
-    resources: {
-      en: { translation: en },
-      ru: { translation: ru },
-    },
+    resources,
     lng: initialLanguage,
     fallbackLng: "en",
     interpolation: {
@@ -107,17 +124,9 @@ export const loadLanguage = async (langCode) => {
   }
 
   try {
-    // Dynamic import of language file
-    let resources;
-    switch (langCode) {
-      case 'es': resources = await import('./Code/Translation/es.json'); break;
-      case 'fr': resources = await import('./Code/Translation/fr.json'); break;
-      case 'de': resources = await import('./Code/Translation/de.json'); break;
-      case 'ar': resources = await import('./Code/Translation/ar.json'); break;
-      default: return false;
-    }
-
-    i18n.addResourceBundle(langCode, 'translation', resources.default);
+    const bundle = requireLanguage(langCode);
+    if (!bundle) return false;
+    i18n.addResourceBundle(langCode, 'translation', bundle);
     return true;
   } catch (error) {
     console.error(`[i18n] Failed to load language ${langCode}:`, error);
@@ -135,12 +144,5 @@ export const setAppLanguage = async (languageCode) => {
   storage.set("appLanguage", languageCode);
   trackGrowthEvent("app_language_selected", {language: languageCode});
 };
-
-// ✅ Load initial language if not English
-if (initialLanguage !== 'en') {
-  loadLanguage(initialLanguage).then(loaded => {
-    if (loaded && i18n.language === initialLanguage) i18n.changeLanguage(initialLanguage);
-  });
-}
 
 export default i18n;

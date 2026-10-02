@@ -17,7 +17,7 @@
  * 🚀 WAVE 1+2 — moved to Supabase via userBackend:
  *   - displayName, avatar              → user_identity
  *   - isAdmin/isModerator/isBabyMod
- *     /isTrusted/isCMSR/isHelper       → user_roles
+ *     /isTrusted/isCMSR/isArtCMSR/isHelper → user_roles
  *   - isPro, topBadge                  → user_cosmetics
  *   RTDB falls back per-field if Supabase has no row (mirror lag, brand-new
  *   user, or backfill miss). The two game-win leaf reads per cold profile
@@ -133,7 +133,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
     // RTDB leaf for admin is `admin` (not `isAdmin`); Supabase exposes it
     // as `isAdmin` via fromRolesRow. Use the correct RTDB name here so the
     // fallback works when the mirror row is missing.
-    if (!rolesRow)     missingFields.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isHelper');
+    if (!rolesRow)     missingFields.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper');
     if (!cosmeticsRow) missingFields.push('isPro', 'topBadge');
     if (!robloxRow)    missingFields.push('robloxUsernameVerified');
     if (missingFields.length > 0) {
@@ -155,6 +155,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
     const isBabyMod               = rolesRow?.isBabyMod               ?? fb?.isBabyMod;
     const isTrusted               = rolesRow?.isTrusted               ?? fb?.isTrusted;
     const isCMSR                  = rolesRow?.isCMSR                  ?? fb?.isCMSR;
+    const isArtCMSR               = rolesRow?.isArtCMSR               ?? fb?.isArtCMSR;
     const isHelper                = rolesRow?.isHelper                ?? fb?.isHelper;
     const robloxUsernameVerified  = robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified;
 
@@ -196,6 +197,7 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
       isBabyMod: !!isBabyMod,
       isTrusted: !!isTrusted,
       isCMSR: !!isCMSR,
+      isArtCMSR: !!isArtCMSR,
       isHelper: !!isHelper,
       chatTextColor,
       profileFrame,
@@ -272,6 +274,7 @@ export const seedFromMessage = (msg) => {
     isBabyMod: !!msg.isBabyMod,
     isTrusted: !!msg.isTrusted,
     isCMSR: !!msg.isCMSR,
+    isArtCMSR: !!msg.isArtCMSR,
     isHelper: !!msg.isHelper,
     topBadge: msg.topBadge || null,
     profileFrame: msg.profileFrame || null,
@@ -285,7 +288,7 @@ export const seedFromMessage = (msg) => {
 //  This is the key "backwards compatible" resolver
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
-  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isHelper: false };
+  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isArtCMSR: false, isHelper: false, squadCount: 0 };
 
   const cached = getCachedProfile(msg.senderId);
 
@@ -299,12 +302,16 @@ export const resolveProfile = (msg) => {
     isBabyMod: msg.isBabyMod ?? cached?.isBabyMod ?? false,
     isTrusted: msg.isTrusted ?? cached?.isTrusted ?? false,
     isCMSR: msg.isCMSR ?? cached?.isCMSR ?? false,
+    isArtCMSR: msg.isArtCMSR ?? cached?.isArtCMSR ?? false,
     isHelper: msg.isHelper ?? cached?.isHelper ?? false,
     chatTextColor: msg.chatTextColor ?? cached?.chatTextColor ?? null,
     profileFrame: msg.profileFrame ?? cached?.profileFrame ?? null,
     tradeCardBg: cached?.tradeCardBg ?? null,
     chatBubbleBg: msg.chatBubbleBg ?? cached?.chatBubbleBg ?? null,
     topBadge: msg.topBadge ?? cached?.topBadge ?? null,
+    // Qualified squad friends: never on the message, always on the cached
+    // cosmetics row (034_squad.sql), so chat rows can show the squad rank.
+    squadCount: msg.squadCount ?? cached?.squadCount ?? 0,
   };
 };
 
@@ -416,6 +423,7 @@ export const seedCurrentUser = async (user, localState, db) => {
     isModerator: !!user.isModerator,
     isTrusted: !!user.isTrusted,
     isCMSR: !!user.isCMSR,
+    isArtCMSR: !!user.isArtCMSR,
     isHelper: !!user.isHelper,
     topBadge: user.topBadge || null,
     chatTextColor: null,

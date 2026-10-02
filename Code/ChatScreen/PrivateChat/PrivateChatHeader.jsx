@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useLocalState } from '../../LocalGlobelStats';
@@ -13,7 +13,7 @@ import { ref, get, set } from '@react-native-firebase/database';
 import { getRoblox, getRoles, getCosmetics } from '../../Supabase/userBackend';
 import { getCachedProfile } from '../../Helper/profileCache';
 import { getThemeColors } from '../../Helper/themeColors';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import FramedAvatar from '../GroupChat/FramedAvatar';
 
 // Partner roles / Pro / Roblox link, per uid, for this app session. These
@@ -91,7 +91,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         // as `isAdmin` via fromRolesRow. Use the correct RTDB leaf name in
         // the fallback so admin pills don't silently miss when the mirror
         // row is stale.
-        if (!rolesRow)     missing.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isHelper');
+        if (!rolesRow)     missing.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper');
         if (!cosmeticsRow) missing.push('isPro');
         if (!robloxRow)    missing.push('robloxUsername', 'robloxUserId', 'robloxUsernameVerified');
         let fb = null;
@@ -114,7 +114,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           isBabyMod:              !!(rolesRow?.isBabyMod            ?? fb?.isBabyMod),
           isTrusted:              !!(rolesRow?.isTrusted            ?? fb?.isTrusted),
           isCMSR:                 !!(rolesRow?.isCMSR               ?? fb?.isCMSR),
+          isArtCMSR:              !!(rolesRow?.isArtCMSR            ?? fb?.isArtCMSR),
           isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
+          squadCount:             Number(cosmeticsRow?.squadCount) || 0,
           profileFrame:           cached?.profileFrame ?? null,
         };
         headerUserCache.set(selectedUserId, { data, at: Date.now() });
@@ -147,7 +149,9 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
+      isArtCMSR: userData.isArtCMSR ?? selectedUser?.isArtCMSR ?? false,
       isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
+      squadCount: userData.squadCount ?? selectedUser?.squadCount ?? 0,
       profileFrame: selectedUser?.profileFrame || userData.profileFrame || null,
     };
   }, [selectedUser, userData]);
@@ -259,18 +263,13 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
 
       {/* Name + badges + status */}
       <TouchableOpacity style={styles.infoContainer} onPress={handleOpenDrawer} activeOpacity={0.7}>
-        {/* Top row: name + inline icons */}
+        {/* Top row: name + badge rail */}
         <View style={styles.nameRow}>
           <Text style={[styles.userName, { color: c.text }]} numberOfLines={1}>
             {userName}
           </Text>
 
-          {mergedUser?.isPro && (
-            <Image source={require('../../../assets/pro.png')} style={styles.inlineIcon} />
-          )}
-          {mergedUser?.robloxUsernameVerified && (
-            <Image source={require('../../../assets/verification.png')} style={styles.inlineIcon} />
-          )}
+          <UserBadgeRail user={mergedUser} isDarkMode={isDarkMode} />
 
           <TouchableOpacity
             onPress={() => copyToClipboard(userName)}
@@ -281,37 +280,12 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           </TouchableOpacity>
         </View>
 
-        {/* Bottom row: status + role badges */}
+        {/* Bottom row: online status */}
         <View style={styles.metaRow}>
           <Text style={[styles.statusText, { color: isOnline ? '#22c55e' : c.textMuted }]}>
             {isOnline ? t('chat.online') : t('chat.offline')}
           </Text>
 
-          {(() => {
-            const firstBadge = getFirstBadgeType(mergedUser, ['admin', 'mod', 'jmd', 'trusted', 'cmsr', 'helper']);
-            return (
-              <>
-                {mergedUser?.isAdmin && (
-                  <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
-                )}
-                {!mergedUser?.isAdmin && mergedUser?.isModerator && (
-                  <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
-                )}
-                {!mergedUser?.isAdmin && !mergedUser?.isModerator && mergedUser?.isBabyMod && (
-                  <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
-                )}
-                {mergedUser?.isTrusted && (
-                  <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
-                )}
-                {mergedUser?.isCMSR && (
-                  <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
-                )}
-                {mergedUser?.isHelper && (
-                  <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
-                )}
-              </>
-            );
-          })()}
         </View>
       </TouchableOpacity>
 

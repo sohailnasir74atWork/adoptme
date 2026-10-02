@@ -151,6 +151,7 @@ const FIELD_MAP = [
   ['isBabyMod',             'roles',     'is_baby_mod',          asBool],
   ['isTrusted',             'roles',     'is_trusted',           asBool],
   ['isCMSR',                'roles',     'is_cmsr',              asBool],
+  ['isArtCMSR',             'roles',     'is_art_cmsr',          asBool],
   // cosmetics
   ['topBadge',              'cosmetics', 'top_badge',            asString],
   ['isPro',                 'cosmetics', 'is_pro',               asBool],

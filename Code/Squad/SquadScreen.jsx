@@ -252,6 +252,45 @@ export default function SquadScreen() {
             )}
           </View>
 
+          {/* The squad I joined, or join one. First card while the account can
+              still use a code: a new player holding one should not have to scroll. */}
+          {squad.joined ? (
+            <Card c={c}>
+              <Text style={[styles.cardTitle, { color: c.text }]}>
+                {t('squad.in_squad_of', { name: squad.joined.inviterName || t('chat.anonymous') })}
+              </Text>
+              <Text style={[styles.muted, { color: squad.joined.status === 'pending' ? GOLD : GREEN, marginTop: 4 }]}>
+                {squad.joined.status === 'pending'
+                  ? t('squad.in_squad_pending', { pro: t('squad.pass_name', { count: FRIEND_PRO_DAYS }) })
+                  : t('squad.in_squad_counted')}
+              </Text>
+            </Card>
+          ) : squad.canJoin ? (
+            <Card c={c}>
+              <Text style={[styles.cardTitle, { color: c.text }]}>{t('squad.have_code')}</Text>
+              <View style={[styles.row, { gap: 8, marginTop: 10 }]}>
+                <TextInput
+                  value={codeInput}
+                  onChangeText={(v) => setCodeInput(v.toUpperCase())}
+                  placeholder="ABC123"
+                  placeholderTextColor={c.placeholder}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={8}
+                  style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
+                />
+                <TouchableOpacity
+                  style={[styles.primaryBtn, { paddingHorizontal: 18, opacity: codeInput.trim().length >= 6 && !joining ? 1 : 0.5 }]}
+                  onPress={submitCode}
+                  disabled={codeInput.trim().length < 6 || joining}
+                >
+                  {joining ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t('squad.join')}</Text>}
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.muted, { color: c.textSecondary, marginTop: 8 }]}>{t('squad.have_code_hint', { pro: t('squad.pass_name', { count: FRIEND_PRO_DAYS }) })}</Text>
+            </Card>
+          ) : null}
+
           {/* My Pro passes: started when the player chooses (036_squad_passes.sql) */}
           {(squad.passes || []).length > 0 && (
             <Card c={c} style={{ borderColor: GOLD }}>
@@ -383,43 +422,12 @@ export default function SquadScreen() {
             ))}
           </Card>
 
-          {/* The squad I joined, or join one */}
-          {squad.joined ? (
-            <Card c={c}>
-              <Text style={[styles.cardTitle, { color: c.text }]}>
-                {t('squad.in_squad_of', { name: squad.joined.inviterName || t('chat.anonymous') })}
-              </Text>
-              <Text style={[styles.muted, { color: squad.joined.status === 'pending' ? GOLD : GREEN, marginTop: 4 }]}>
-                {squad.joined.status === 'pending'
-                  ? t('squad.in_squad_pending', { pro: t('squad.pass_name', { count: FRIEND_PRO_DAYS }) })
-                  : t('squad.in_squad_counted')}
-              </Text>
-            </Card>
-          ) : squad.canJoin ? (
-            <Card c={c}>
-              <Text style={[styles.cardTitle, { color: c.text }]}>{t('squad.have_code')}</Text>
-              <View style={[styles.row, { gap: 8, marginTop: 10 }]}>
-                <TextInput
-                  value={codeInput}
-                  onChangeText={(v) => setCodeInput(v.toUpperCase())}
-                  placeholder="ABC123"
-                  placeholderTextColor={c.placeholder}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  maxLength={8}
-                  style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.bg }]}
-                />
-                <TouchableOpacity
-                  style={[styles.primaryBtn, { paddingHorizontal: 18, opacity: codeInput.trim().length >= 6 && !joining ? 1 : 0.5 }]}
-                  onPress={submitCode}
-                  disabled={codeInput.trim().length < 6 || joining}
-                >
-                  {joining ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t('squad.join')}</Text>}
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.muted, { color: c.textSecondary, marginTop: 8 }]}>{t('squad.have_code_hint', { pro: t('squad.pass_name', { count: FRIEND_PRO_DAYS }) })}</Text>
-            </Card>
-          ) : null}
+          {/* The window has closed for this account (034: 7 days from sign-up). */}
+          {!squad.joined && !squad.canJoin && (
+            <Text style={[styles.muted, { color: c.textMuted, marginTop: 12, textAlign: 'center' }]}>
+              {t('squad.join_window_closed')}
+            </Text>
+          )}
 
           {/* Members */}
           <Card c={c}>

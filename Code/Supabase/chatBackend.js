@@ -107,6 +107,7 @@ export function fromRow(row) {
     isBabyMod: !!flags.isBabyMod,
     isTrusted: !!flags.isTrusted,
     isCMSR: !!flags.isCMSR,
+    isArtCMSR: !!flags.isArtCMSR,
     isHelper: !!flags.isHelper,
 
     containsLink: !!row.contains_link,
@@ -149,6 +150,7 @@ function toInsertPayload(roomId, m) {
       isBabyMod: !!m.isBabyMod,
       isTrusted: !!m.isTrusted,
       isCMSR: !!m.isCMSR,
+      isArtCMSR: !!m.isArtCMSR,
       isHelper: !!m.isHelper,
     },
     contains_link: !!m.containsLink,

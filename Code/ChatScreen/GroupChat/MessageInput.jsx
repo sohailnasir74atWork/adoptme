@@ -47,8 +47,6 @@ const Emojies = [
 ];
 
 const MessageInput = ({
-  input,
-  setInput,
   handleSendMessage,
   selectedTheme,
   replyTo,
@@ -66,6 +64,10 @@ const MessageInput = ({
 
   const [isSending, setIsSending] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  // The draft lives here, not in Trader. Lifted up, every keystroke
+  // re-rendered the whole room and, through a fresh onReply prop, every
+  // message row. Trader only needs the trimmed text, which handleSend passes.
+  const [input, setInput] = useState('');
 
   const { triggerHapticFeedback } = useHaptic();
   const { t } = useTranslation();
@@ -114,11 +116,13 @@ const MessageInput = ({
       setIsSending(false);
     };
 
+    // Clear the draft before the send resolves so typing feels instant
+    // (Trader used to do this from its own copy of the state).
+    setInput('');
     try {
       await handleSendMessage(replyTo, trimmedInput, fruits, emojiToSend);
 
-      // Clear input + reply UI
-      setInput('');
+      // Clear reply UI
       setSelectedFruits([]);
       setSelectedEmoji(null)
       if (onCancelReply) onCancelReply();

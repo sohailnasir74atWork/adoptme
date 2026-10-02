@@ -179,18 +179,29 @@ export async function searchIdentityByEmail(emailOrEncoded, limit = 10) {
 // exist per supabase/004_users_split.sql). Two-step: pick uids by
 // role flag, then getIdentityBatch for displayName/avatar. Returns
 // rows shaped the same way the LeaderboardScreen UI already expects.
+// `roleColumn` may be a list: a row qualifies when any column is true
+// (the CMSR tab lists House and Art CMSRs together).
 // -----------------------------------------------------------------
 async function _getRoster(roleColumn, { limit, offset } = {}) {
+  const cols = Array.isArray(roleColumn) ? roleColumn : [roleColumn];
   const lim = Number.isFinite(limit) && limit > 0 ? limit : 25;
   const off = Number.isFinite(offset) && offset > 0 ? offset : 0;
-  const { data, error } = await supabase
+  const page = (columns) => supabase
     .from('user_roles')
     .select(`uid, updated_at`)
-    .eq(roleColumn, true)
+    .or(columns.map((c) => `${c}.eq.true`).join(','))
     .order('updated_at', { ascending: false })
     .range(off, off + lim - 1);
+  let { data, error } = await page(cols);
+  if (error && cols.length > 1) {
+    // A column this build knows but the database does not yet (migration
+    // not applied) is a 400: fall back to the first column alone rather
+    // than showing an empty tab.
+    console.warn(`[userBackend] _getRoster(${cols.join('|')}) error, retrying ${cols[0]}:`, error.message);
+    ({ data, error } = await page([cols[0]]));
+  }
   if (error) {
-    console.warn(`[userBackend] _getRoster(${roleColumn}) error:`, error.message);
+    console.warn(`[userBackend] _getRoster(${cols.join('|')}) error:`, error.message);
     return [];
   }
   const rows = data || [];
@@ -199,9 +210,9 @@ async function _getRoster(roleColumn, { limit, offset } = {}) {
   const uids = rows.map((r) => r.uid).filter(Boolean);
   const identityMap = await getIdentityBatch(uids).catch(() => new Map());
 
-  const roleLabel = roleColumn === 'is_trusted' ? 'trusted'
-    : roleColumn === 'is_cmsr' ? 'cmsr'
-    : roleColumn;
+  const roleLabel = cols[0] === 'is_trusted' ? 'trusted'
+    : cols[0] === 'is_cmsr' ? 'cmsr'
+    : cols[0];
 
   return rows.map((r) => {
     const ident = identityMap.get(r.uid);
@@ -221,8 +232,9 @@ export async function getTrustedRoster(opts = {}) {
   return _getRoster('is_trusted', opts);
 }
 
+// Both CMSR badges (House: is_cmsr, Art: is_art_cmsr) share the one tab.
 export async function getCmsrRoster(opts = {}) {
-  return _getRoster('is_cmsr', opts);
+  return _getRoster(['is_cmsr', 'is_art_cmsr'], opts);
 }
 
 export async function getHelperRoster(opts = {}) {
@@ -242,6 +254,7 @@ export function fromRolesRow(row) {
     isBabyMod: !!row.is_baby_mod,
     isTrusted: !!row.is_trusted,
     isCMSR: !!row.is_cmsr,
+    isArtCMSR: !!row.is_art_cmsr,
     isHelper: !!row.is_helper,
   };
 }
@@ -261,6 +274,10 @@ export function fromCosmeticsRow(row) {
     chatBubbleBg:  row.chat_bubble_bg  ?? null,
     // Qualified squad friends (supabase/034_squad.sql keeps it in step).
     squadCount:    Number(row.squad_count) || 0,
+    // Pet Cards (supabase/037_pet_cards.sql): collector score and the up-to-3
+    // showcased cards, drawn on the profile drawer (Code/PetCards/ProfileShowcase.jsx).
+    cardScore:     Number(row.card_score) || 0,
+    cardShowcase:  Array.isArray(row.card_showcase) ? row.card_showcase : [],
   };
 }
 

@@ -119,6 +119,7 @@ function rolesRow(uid, u) {
     is_baby_mod: asBool(u.isBabyMod),
     is_trusted: asBool(u.isTrusted),
     is_cmsr: asBool(u.isCMSR),
+    is_art_cmsr: asBool(u.isArtCMSR),
     updated_at: nowIso(),
   };
 }

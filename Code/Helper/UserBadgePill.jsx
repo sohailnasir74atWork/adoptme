@@ -6,7 +6,7 @@ import { getShimmerValue } from './shimmerDriver';
 // Single source of truth for role/badge pill styling across chat lists,
 // profile drawers, headers, post cards, and trade cards. Two visual tiers:
 //   - 'authority' (admin / mod / jmd) → solid fill, white text
-//   - 'community' (trusted / cmsr / helper) → soft tint, colored text + border
+//   - 'community' (trusted / cmsr_house / cmsr_art / helper) → soft tint, colored text + border
 // Both adapt to light/dark via per-type tokens.
 //
 // Optional `glow` prop adds a lightning-streak shimmer across the pill.
@@ -21,7 +21,10 @@ const TYPES = {
   mod:     { tier: 'authority', image: require('../../assets/role-badges/mod.png'),     labelKey: 'chat.mod',              color: '#6D28D9', rim: '#C4B5FD' },
   jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     labelKey: 'badges.roles.jmd',      color: '#D97706', rim: '#FDE68A' },
   trusted: { tier: 'community', image: require('../../assets/role-badges/trusted.png'), labelKey: 'badges.roles.trusted',  color: '#059669', rim: '#6EE7B7' },
-  cmsr:    { tier: 'community', image: require('../../assets/role-badges/cmsr.png'),    labelKey: 'badges.roles.cmsr',     color: '#EA580C', rim: '#FDBA74' },
+  // CMSR is two badges with one label ("CMSR"): House (isCMSR, the original
+  // flag) and Art (isArtCMSR). They differ by icon and tint only.
+  cmsr_house: { tier: 'community', image: require('../../assets/role-badges/cmsr_house.png'), labelKey: 'badges.roles.cmsr', color: '#EA580C', rim: '#FDBA74' },
+  cmsr_art:   { tier: 'community', image: require('../../assets/role-badges/cmsr_art.png'),   labelKey: 'badges.roles.cmsr', color: '#E11D48', rim: '#FDA4AF' },
   helper:  { tier: 'community', image: require('../../assets/role-badges/helper.png'),  labelKey: 'badges.roles.helper',   color: '#0F766E', rim: '#5EEAD4' },
 };
 
@@ -153,17 +156,18 @@ export const getPrimaryRoleType = (u) => {
 // gets the lightning glow when a user owns more than one badge.
 //
 // `allowed` lets each surface restrict the set — e.g. OnlineUsersList doesn't
-// render the JMD pill, so passing ['admin','mod','trusted','cmsr','helper']
+// render the JMD pill, so passing ['admin','mod','trusted','cmsr_house','cmsr_art','helper']
 // makes the helper skip jmd and treat the next visible badge as first.
 const HAS = {
   admin:   (u) => !!u.isAdmin,
   mod:     (u) => !u.isAdmin && !!u.isModerator,
   jmd:     (u) => !u.isAdmin && !u.isModerator && !!u.isBabyMod,
   trusted: (u) => !!u.isTrusted,
-  cmsr:    (u) => !!u.isCMSR,
+  cmsr_house: (u) => !!u.isCMSR,
+  cmsr_art: (u) => !!u.isArtCMSR,
   helper:  (u) => !!u.isHelper,
 };
-const DEFAULT_BADGE_ORDER = ['admin', 'mod', 'jmd', 'trusted', 'cmsr', 'helper'];
+const DEFAULT_BADGE_ORDER = ['admin', 'mod', 'jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper'];
 export const getFirstBadgeType = (u, allowed = DEFAULT_BADGE_ORDER) => {
   if (!u) return null;
   for (const t of allowed) {
@@ -173,7 +177,7 @@ export const getFirstBadgeType = (u, allowed = DEFAULT_BADGE_ORDER) => {
 };
 
 // Convenience: render every applicable pill for a user, in canonical order.
-// Authority (mutually exclusive) → Trusted → CMSR → Helper.
+// Authority (mutually exclusive) → Trusted → CMSR (house, art) → Helper.
 // Pass `include` to opt out of specific tiers (e.g. ['community'] to hide auth).
 export const UserRolePills = ({ user, size = 'md', isDarkMode = false, includeAuthority = true, includeCommunity = true, style, gap = 5 }) => {
   if (!user) return null;
@@ -184,7 +188,8 @@ export const UserRolePills = ({ user, size = 'md', isDarkMode = false, includeAu
   }
   if (includeCommunity) {
     if (user.isTrusted) pills.push('trusted');
-    if (user.isCMSR)    pills.push('cmsr');
+    if (user.isCMSR)    pills.push('cmsr_house');
+    if (user.isArtCMSR) pills.push('cmsr_art');
     if (user.isHelper)  pills.push('helper');
   }
   if (pills.length === 0) return null;

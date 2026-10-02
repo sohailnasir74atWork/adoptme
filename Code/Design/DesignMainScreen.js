@@ -621,7 +621,6 @@ const DesignFeedScreen = ({ route }) => {
         report: false,
         // ✅ Only include truthy profile fields (saves storage)
         ...(user?.avatar ? { avatar: user.avatar } : {}),
-        ...(user?.flage ? { flage: user.flage } : {}),
         ...(user?.robloxUsername ? { robloxUsername: user.robloxUsername } : {}),
         ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
@@ -629,6 +628,7 @@ const DesignFeedScreen = ({ route }) => {
         ...(user?.isModerator ? { isModerator: true } : {}),
         ...(user?.isTrusted ? { isTrusted: true } : {}),
         ...(user?.isCMSR ? { isCMSR: true } : {}),
+        ...(user?.isArtCMSR ? { isArtCMSR: true } : {}),
         ...(user?.isHelper ? { isHelper: true } : {}),
         ...(user?.isBabyMod ? { isBabyMod: true } : {}),
         ...(localState?.isPro ? { isPro: true } : {}),

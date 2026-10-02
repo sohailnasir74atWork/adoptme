@@ -38,7 +38,7 @@ import config from '../Helper/Environment';
 import notifee from '@notifee/react-native';
 import SubscriptionScreen from './OfferWall';
 import { ref, remove, get, update, set } from '@react-native-firebase/database';
-import { warmProfileCache, getCachedProfile, setCachedProfile } from '../Helper/profileCache';
+import { warmProfileCache, getCachedProfile, setCachedProfile, invalidateFullProfile } from '../Helper/profileCache';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 // useLanguage removed - using i18n from useTranslation hook
 import { useTranslation } from 'react-i18next';
@@ -51,6 +51,9 @@ import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { addXP, getUserXP, getLevelFromXP } from '../Engagement/xpUtils';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
+// The same drawer every other screen opens on a player: "View my public
+// profile" feeds it the signed-in user so they see exactly what others see.
+import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 
 
 import {
@@ -89,6 +92,8 @@ const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 // ~500 KB max for avatar (small, DP-friendly)
 const MAX_AVATAR_SIZE_BYTES = 500 * 1024;
+// You can't block yourself; a stable reference keeps the drawer's prop identity constant.
+const NO_BANNED_USERS = [];
 
 // Saved as the bio when a user leaves it empty. Stored in English, so the
 // editor starts empty for it and the profile shows the translated default.
@@ -492,6 +497,12 @@ export default function SettingsScreen({ selectedTheme }) {
   const insets = useSafeAreaInsets();
   const settingsNav = useNavigation();
   const [isDrawerVisible, setDrawerVisible] = useState(false);
+  // Public-profile preview. The drawer starts loading the moment it has a
+  // selectedUser (it does not wait for isVisible), so it is only mounted
+  // while open or sliding closed: target = who it shows, visible = open.
+  const [showPublicProfile, setShowPublicProfile] = useState(false);
+  const [publicProfileTarget, setPublicProfileTarget] = useState(null);
+  const publicProfileCloseTimer = useRef(null);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [openSingnin, setOpenSignin] = useState(false);
@@ -1368,6 +1379,9 @@ export default function SettingsScreen({ selectedTheme }) {
         });
         if (trimmedName) setCachedUsername(trimmedName);
         if (trimmedAvatar) setCachedAvatar(trimmedAvatar);
+        // The public-profile drawer reads the 30-min full-profile cache; drop
+        // it so the preview shows the new name/avatar right away.
+        invalidateFullProfile(user.id);
       }
 
       // 📅 2026-03-13: Bio dual-write to user_profiles (new primary) + reviews (backward compat).
@@ -2757,6 +2771,55 @@ export default function SettingsScreen({ selectedTheme }) {
   };
 
 
+  // ── View my public profile ──
+  // Same payload shape the chat/feed screens hand the drawer (senderId +
+  // sender + avatar); the drawer then loads the rest from the backend the way
+  // it does for anyone else. The flag rides along but the drawer only renders
+  // it for admin viewers (Code/Helper/countryFlag.js).
+  const publicProfileUser = useMemo(() => {
+    if (!user?.id) return null;
+    return {
+      id: user.id,
+      senderId: user.id,
+      sender: user.displayName || t('settings.profile.anonymous'),
+      displayName: user.displayName || t('settings.profile.anonymous'),
+      avatar: user.avatar || null,
+      flage: user.flage || null,
+      robloxUsername: user.robloxUsername || null,
+      robloxUsernameVerified: !!user.robloxUsernameVerified,
+      isPro: !!user.isPro,
+    };
+  }, [user?.id, user?.displayName, user?.avatar, user?.flage, user?.robloxUsername, user?.robloxUsernameVerified, user?.isPro, t]);
+
+  const handleViewPublicProfile = useCallback(() => {
+    triggerHapticFeedback('impactLight');
+    if (!publicProfileUser) {
+      showErrorMessage(t('settings.notice'), t('settings.login_to_customize_profile'));
+      return;
+    }
+    if (publicProfileCloseTimer.current) {
+      clearTimeout(publicProfileCloseTimer.current);
+      publicProfileCloseTimer.current = null;
+    }
+    setPublicProfileTarget(publicProfileUser);
+    setShowPublicProfile(true);
+  }, [publicProfileUser, triggerHapticFeedback, t]);
+
+  // Hide first so the Modal slides out, then unmount once the animation is
+  // done (same 400 ms the other unmount-on-close drawers in this app use).
+  const closePublicProfile = useCallback(() => {
+    setShowPublicProfile(false);
+    if (publicProfileCloseTimer.current) clearTimeout(publicProfileCloseTimer.current);
+    publicProfileCloseTimer.current = setTimeout(() => {
+      publicProfileCloseTimer.current = null;
+      setPublicProfileTarget(null);
+    }, 400);
+  }, []);
+
+  useEffect(() => () => {
+    if (publicProfileCloseTimer.current) clearTimeout(publicProfileCloseTimer.current);
+  }, []);
+
   const handleSelect = (lang) => {
     if (!localState.isPro) {
       setShowofferWall(true)
@@ -2819,12 +2882,6 @@ export default function SettingsScreen({ selectedTheme }) {
                   >
                     {!user?.id ? t("settings.login_register") : displayName}
                   </Text>
-                  {/* ✅ Country Flag */}
-                  {user?.id && user?.flage && localState?.showFlag !== false && (
-                    <Text style={{ fontSize: 14, marginLeft: 4 }}>
-                      {user.flage}
-                    </Text>
-                  )}
                   {user?.isPro &&
                     <Image
                       source={require('../../assets/pro.png')}
@@ -3018,6 +3075,15 @@ export default function SettingsScreen({ selectedTheme }) {
                 {bio || t('settings.roblox.default_bio')}
               </Text>
             </View>
+          )}
+
+          {/* 👁 View my public profile — opens the same drawer others see */}
+          {user?.id && (
+            <TouchableOpacity style={styles.option} onPress={handleViewPublicProfile}>
+              <Icon name="eye-outline" size={18} color={'white'} style={{ backgroundColor: '#0EA5E9', padding: 5, borderRadius: 5 }} />
+              <Text style={[styles.optionText, { flex: 1 }]} numberOfLines={1}>{t('settings.view_public_profile')}</Text>
+              <Icon name="chevron-forward" size={16} color={c.textMuted} />
+            </TouchableOpacity>
           )}
 
           {/* Read Receipts Toggle */}
@@ -3550,7 +3616,17 @@ export default function SettingsScreen({ selectedTheme }) {
 
         </ScrollView>}
 
-      {/* Bottom Drawer */}
+      {/* Public profile preview: the shared profile drawer pointed at yourself */}
+      {publicProfileTarget && (
+        <ProfileBottomDrawer
+          isVisible={showPublicProfile}
+          toggleModal={closePublicProfile}
+          selectedUser={publicProfileTarget}
+          isOnline={false}
+          bannedUsers={NO_BANNED_USERS}
+        />
+      )}
+
       {/* Bottom Drawer */}
       <Modal
         animationType="slide"

@@ -15,9 +15,12 @@ const ART = {
   mod: require('../../assets/role-badges/mod.png'),
   jmd: require('../../assets/role-badges/jmd.png'),
   trusted: require('../../assets/role-badges/trusted.png'),
-  cmsr: require('../../assets/role-badges/cmsr.png'),
+  cmsr_house: require('../../assets/role-badges/cmsr_house.png'),
+  cmsr_art: require('../../assets/role-badges/cmsr_art.png'),
   helper: require('../../assets/role-badges/helper.png'),
 };
+// Both CMSR badges share one name (badges.roles.cmsr); the icon and the blurb differ.
+const BADGE_NAME = { trusted: 'trusted', cmsr_house: 'cmsr', cmsr_art: 'cmsr', helper: 'helper' };
 export const ROLE_COLOR = { mod: '#3B82F6', jmd: '#8B5CF6' };
 const GREEN = '#10B981';
 const RED = '#EF4444';
@@ -87,11 +90,11 @@ export default function RoleCharter({ c, rules, limits }) {
         <Text style={[styles.muted, { color: c.textSecondary, marginTop: 4 }]}>
           {t('elections.badges_req', { count: badgeMin })}
         </Text>
-        {['trusted', 'cmsr', 'helper'].map((b) => (
+        {['trusted', 'cmsr_house', 'cmsr_art', 'helper'].map((b) => (
           <View key={b} style={[styles.row, { marginTop: 10, gap: 10 }]}>
             <Image source={ART[b]} style={styles.badgeArt} resizeMode="contain" />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.badgeName, { color: c.text }]}>{t(`badges.roles.${b}`)}</Text>
+              <Text style={[styles.badgeName, { color: c.text }]}>{t(`badges.roles.${BADGE_NAME[b]}`)}</Text>
               <Text style={[styles.muted, { color: c.textSecondary }]}>{t(`elections.badge_${b}`)}</Text>
             </View>
           </View>

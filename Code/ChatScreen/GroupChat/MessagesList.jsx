@@ -20,7 +20,7 @@ import { parseMessageText } from '../ChatHelper';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
@@ -35,7 +35,6 @@ import MessageActionDrawer from './MessageActionDrawer';
 import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 
 import FramedAvatar from './FramedAvatar';
-import { BADGE_IMAGES, BADGE_DEFINITIONS } from './badgeUtils';
 import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
 
 // Above this many items a message switches to the compact two-column grid.
@@ -419,41 +418,15 @@ const MessagesList = ({
                       <Text style={styles.userNameText}>{profile.displayName}</Text>
                     </TouchableOpacity>
 
-                    {profile.isPro && (
-                      <Image source={require('../../../assets/pro.png')} style={styles.icon} />
-                    )}
-                    {profile.robloxUsernameVerified && (
-                      <Image source={require('../../../assets/verification.png')} style={styles.icon} />
-                    )}
-
-                    {(() => {
-                      const firstBadge = getFirstBadgeType({
+                    <UserBadgeRail
+                      user={{
                         isAdmin: item.isAdmin, isModerator: item.isModerator, isBabyMod: item.isBabyMod,
-                        isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isHelper: profile.isHelper,
-                      });
-                      return (
-                        <>
-                          {!!item.isAdmin && (
-                            <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t("chat.admin")} glow={firstBadge === 'admin'} />
-                          )}
-                          {!item.isAdmin && item.isModerator && (
-                            <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t("chat.mod")} glow={firstBadge === 'mod'} />
-                          )}
-                          {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                            <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
-                          )}
-                          {profile.isTrusted && (
-                            <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
-                          )}
-                          {profile.isCMSR && (
-                            <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
-                          )}
-                          {profile.isHelper && (
-                            <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
-                          )}
-                        </>
-                      );
-                    })()}
+                        isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isArtCMSR: profile.isArtCMSR, isHelper: profile.isHelper,
+                        isPro: profile.isPro, robloxUsernameVerified: profile.robloxUsernameVerified,
+                        squadCount: profile.squadCount,
+                      }}
+                      isDarkMode={isDarkMode}
+                    />
 
                     {isAdmin && item.OS && (
                       <View style={styles.platformBadge}>
@@ -817,14 +790,16 @@ const messageLayoutStyles = StyleSheet.create({
   withItems: {
     flex: 1,
   },
+  // No wrap: the name ellipsizes and the badge rail is capped (UserBadgeRail),
+  // so badges never spill onto a second line under a message.
   nameRow: {
-    flexWrap: 'wrap',
-    rowGap: 4,
+    flexWrap: 'nowrap',
     marginBottom: 3,
   },
   name: {
     maxWidth: '100%',
     flexShrink: 1,
+    minWidth: 0,
   },
 });
 

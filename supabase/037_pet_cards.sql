@@ -601,7 +601,8 @@ $$;
 -- ---------------------------------------------------------------------
 -- get_card_collection: compact owned list. Other players' albums are
 -- readable on purpose (showing off is the point); nothing personal is in it.
---   -> {"cards": {"<key>": [["holo", 2, 42], ["classic", 1, null]]}, "score":…, "uniqueCards":…}
+--   -> {"cards": {"<key>": [["holo", 2, 42], ["classic", 1, null]]}, "score":…, "uniqueCards":…,
+--       "showcase": [<set_card_showcase entries>]}
 -- ---------------------------------------------------------------------
 create or replace function public.get_card_collection(p_uid text default null)
 returns jsonb
@@ -628,13 +629,19 @@ begin
 
   return jsonb_build_object('cards', v_cards,
                             'score', coalesce(w.score, 0), 'uniqueCards', coalesce(w.unique_cards, 0),
-                            'completed', to_jsonb(coalesce(w.completed, '{}'::text[])));
+                            'completed', to_jsonb(coalesce(w.completed, '{}'::text[])),
+                            'showcase', coalesce((select card_showcase from public.user_cosmetics where uid = v_who),
+                                                 '[]'::jsonb));
 end
 $$;
 
 -- ---------------------------------------------------------------------
--- set_card_showcase: up to 3 owned cards on the profile.
+-- set_card_showcase: up to 3 owned cards on the profile, in the given order.
 --   p_cards = [{"k": "shadowdragon", "f": "mega"}, …]
+-- Each stored entry carries the catalog fields the profile drawer needs to
+-- draw the card without another read:
+--   {"k", "f", "s" (best serial), "n" (name), "r" (rarity), "no", "e" (egg), "sets", "bg"}
+-- Unowned pairs are dropped; a card appears once (its first finish wins).
 -- ---------------------------------------------------------------------
 create or replace function public.set_card_showcase(p_cards jsonb)
 returns jsonb
@@ -646,7 +653,7 @@ declare
   v_uid text := public.firebase_uid();
   v_out jsonb := '[]'::jsonb;
   e jsonb;
-  r public.card_collection;
+  v_entry jsonb;
 begin
   if v_uid is null then
     raise exception 'sign in required' using errcode = '42501';
@@ -655,10 +662,18 @@ begin
     raise exception 'up to 3 cards' using errcode = '22023';
   end if;
   for e in select value from jsonb_array_elements(p_cards) loop
-    select * into r from public.card_collection
-     where uid = v_uid and card_key = e ->> 'k' and finish = e ->> 'f';
+    if jsonb_typeof(e) <> 'object' or v_out @> jsonb_build_array(jsonb_build_object('k', e ->> 'k')) then
+      continue;
+    end if;
+    select jsonb_build_object('k', cc.card_key, 'f', cc.finish, 's', cc.best_serial,
+                              'n', c.name, 'r', c.rarity, 'no', c.no, 'e', c.egg,
+                              'sets', to_jsonb(c.sets), 'bg', c.bg)
+      into v_entry
+      from public.card_collection cc
+      join public.card_catalog c on c.key = cc.card_key
+     where cc.uid = v_uid and cc.card_key = e ->> 'k' and cc.finish = e ->> 'f';
     if found then
-      v_out := v_out || jsonb_build_object('k', r.card_key, 'f', r.finish, 's', r.best_serial);
+      v_out := v_out || v_entry;
     end if;
   end loop;
   insert into public.user_cosmetics (uid, card_showcase) values (v_uid, v_out)

@@ -92,7 +92,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   setModalVisibleChatinfo, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
   const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail, strikeInfo, isUserBlocked } = useGlobalState();
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -567,7 +566,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     setPendingMessages([]);
     setLastLoadedKey(null);
     setReplyTo(null);
-    setInput('');
     newestMessageIdRef.current = null;
     hasInitializedRef.current = false;
     initialLoadDoneRef.current = false;
@@ -850,7 +848,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
     }
   }, [roomId, user?.id, t]);
 
-  const handlePinMessage = async (message) => {
+  // MessagesList is memoised and lists these in its renderItem deps, so each
+  // one must keep its identity between renders or every row re-renders.
+  const handlePinMessage = useCallback(async (message) => {
     if (!roomId || !message?.id || !user?.id) return;
     try {
       await sbPinMessage(roomId, message.id, user.id);
@@ -859,7 +859,12 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       console.error('[pin] failed:', error?.message || error);
       Alert.alert(t('home.alert.error'), t('chat.pin_error'));
     }
-  };
+  }, [roomId, user?.id, fetchPinned, t]);
+
+  const handleReply = useCallback((message) => {
+    setReplyTo(message); // Pass selected message to MessageInput
+    triggerHapticFeedback('impactLight');
+  }, [triggerHapticFeedback]);
 
   const unpinSingleMessage = async (pinId) => {
     if (!pinId) return;
@@ -889,7 +894,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
 
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     // RefreshControl already shows progress; don't also blank the list.
     await loadMessages(true, { silent: true });
@@ -908,7 +913,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       }
     }
     setRefreshing(false);
-  };
+  }, [loadMessages]);
 
   // Handle reaction to a message
   const handleReaction = useCallback(async (messageId, emoji) => {
@@ -1114,11 +1119,11 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
       isBabyMod: !!user?.isBabyMod,
       isTrusted: !!user?.isTrusted,
       isCMSR: !!user?.isCMSR,
+      isArtCMSR: !!user?.isArtCMSR,
       isHelper: !!user?.isHelper,
       strikeCount: strikeInfo?.strikeCount ?? null,
       fruits: hasFruits ? fruits : [],
       gif: hasEmoji ? emojiUrl : null,
-      flage: user.flage || null,
       OS: Platform.OS,
     };
 
@@ -1137,8 +1142,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
 
     setMessages(prev => [optimistic, ...prev]);
 
-    // Reset input immediately so typing feels instant.
-    setInput('');
+    // MessageInput owns the draft and clears it before this resolves.
     setReplyTo(null);
     lastSentMessageRef.current = currentMessage;
     setIsCooldown(true);
@@ -1242,7 +1246,7 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
                 onRefresh={handleRefresh}
                 onDeleteAllMessage={handleDeleteAllFromSender}
                 handleLoadMore={handleLoadMore}
-                onReply={(message) => { setReplyTo(message); triggerHapticFeedback('impactLight'); }} // Pass selected message to MessageInput
+                onReply={handleReply}
                 banUser={banUser}
                 // makeadmin={makeAdmin}
                 // onReport={onReport}
@@ -1282,8 +1286,6 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
             )}
             {user.id ? (
               <MessageInput
-                input={input}
-                setInput={setInput}
                 handleSendMessage={handleSendMessage}
                 selectedTheme={selectedTheme}
                 replyTo={replyTo} // Pass reply context to MessageInput

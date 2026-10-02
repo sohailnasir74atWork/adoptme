@@ -90,8 +90,10 @@ const rosters = require('./syncRosterMaintenance');
 exports.refreshAllRosters = rosters.refreshAllRosters;
 exports.seedAllRosters = rosters.seedAllRosters;
 
-// ── Staff elections (supabase/038): count closed races, apply MOD/JMD roles,
-// mirror squad sizes for the badge rule. See functions/runStaffElections.js.
+// ── Staff elections (supabase/038 + 040 + 041): count closed races, tell the
+// admins, apply the ADMIN's appoint / remove decisions to RTDB, mirror squad
+// sizes for the badge rule. Nothing is appointed without an admin.
+// See functions/runStaffElections.js.
 exports.runStaffElections = require('./runStaffElections').runStaffElections;
 
 // ── Moderation ────────────────────────────────────────────────────────

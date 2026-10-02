@@ -12,6 +12,13 @@ approved candidates appear on the ballot. Age gates were added (MOD 18+,
 JMD 16+) and the MOD squad bar dropped from 10 to 5. Admins also see a
 player's eligibility on their profile. Details in "Applications" below.
 
+**Revised again the same day (041): the admin has the final say.** A closed
+race is only *counted*. The tally, who met the bar, and a suggestion land in
+**Admin Dashboard → Elections**, and nobody gains or loses a role until an
+admin appoints or removes them there, one by one. Nothing is scheduled
+automatically any more: the admin starts the next election, and the panel
+says when a term has run out. Details in "Results and decisions" below.
+
 ---
 
 ## On/off switch (admin-only until launch)
@@ -41,16 +48,17 @@ offline, the app stays OFF.
 | To apply | **5 squad friends** and **18+** | **3 squad friends** (Squad "Recruiter" rank) and **16+** |
 | Also needed to apply | No strike or ban in the last 30 days; a date of birth on file | Same; sitting MODs can't apply for JMD |
 | Who decides who is on the ballot | An admin approves each application | Same |
+| Who hands out the seat | An admin, after the count (041). The vote qualifies; it does not appoint | Same |
 | Term | **60 days** | **30 days** |
 | Seats (default) | 4 | 6 |
-| Votes needed to win | 10 | 3 |
+| Votes needed to qualify | 10 | 3 |
 
 ### What a MOD can do
 - Strike rule breakers: 12 h, then 24 h, then a permanent ban
 - Mute for 5 min up to 2 h, and lift bans
 - Delete rule-breaking chat messages, posts, trades, statuses and groups
 - Reset an offensive profile picture
-- **Give and remove Trusted, CMSR and Helper badges.** The player needs 3+ squad
+- **Give and remove Trusted, CMSR (House and Art) and Helper badges.** The player needs 3+ squad
   friends. Meeting the bar doesn't guarantee a badge; it's the MOD's call.
 - Use the mod dashboard and the mod log
 
@@ -76,6 +84,10 @@ offline, the app stays OFF.
   above Mod Tools): squad, age, record, seat held, and any open application.
 - Start or cancel an election, and remove a candidate (long-press) from the
   Elections screen. The Admin Dashboard "Elections" tab links there.
+- **Decide the results (041).** Once a race is counted it appears in Admin
+  Dashboard → Elections as "Results waiting for your decision" with a
+  suggestion. Appoint or remove people one by one, then "Finish review".
+  Nothing changes until you tap.
 - Emergency removal of a MOD or JMD who abuses the role: Mod Tools → Remove Mod
   / Remove Junior Mod. The function then closes their term.
 - Admins can no longer appoint by hand from the app. The old "JMD Access" tab is
@@ -98,19 +110,32 @@ offline, the app stays OFF.
    vote. Accounts must be 7+ days old. Nobody can vote for themselves or from the
    candidate's own phone. Only approved candidates can receive a vote. Votes can
    be changed until close. Counts stay hidden until the end.
-4. **Count.** The top `seats` approved candidates with at least the minimum
-   votes win. A tie goes to the bigger squad, then to whoever applied first.
-5. **Take office.** Winners get the role, and everyone else holding that role
-   loses it. Admins are never touched. A JMD elected MOD drops the JMD flag.
-6. **Next election.** It is scheduled automatically to end exactly when the new
-   term ends, so the cycle runs on its own once an admin starts the first one.
-7. **Nobody wins** (no candidates, or nobody reached the minimum): the sitting
-   team stays and a fresh election opens at once.
+4. **Count.** Within 30 minutes of the close, `runStaffElections` freezes each
+   approved candidate's votes and marks who reached the minimum (status
+   `counted`, phase "review"). Players now see the votes. Nobody is appointed.
+   Every admin with a push token hears that results are waiting.
+5. **Admin review (041).** Admin Dashboard → Elections shows the tally, the
+   sitting team and a **suggestion**: the top `seats` qualified candidates
+   (banned ones left out; ties go to the bigger squad, then to whoever applied
+   first), and the holders who are not among them. The admin decides per
+   player: **Appoint** (qualified, not banned now), **Remove** (a current
+   holder, never an admin), or no change. Appoint and remove are final for
+   that election. A JMD appointed MOD drops the JMD flag.
+6. **Take office.** The admin app writes the role into RTDB at once;
+   `runStaffElections` repeats the same write within 30 minutes and sends the
+   winner's push. The admin taps **Finish review** to close the election.
+7. **Next election.** Started by an admin, never automatically. While a race
+   is under review, no new race for that role can open. When a term runs out
+   with no race open, the dashboard flags it ("Terms that have run out").
+8. **Nobody qualifies** (no candidates, or nobody reached the minimum): the
+   election still goes to the dashboard, suggesting to keep the team. The admin
+   finishes it and starts a new one when ready.
 
-**The first finalized election for each role replaces the hand-picked team.**
-On 2026-10-02 that team was 3 MODs and 2 JMDs. They can run like anyone else.
-Existing badges (32 Trusted, 12 CMSR, 2 Helper) are kept. The 3-squad rule only
-applies to new grants, and removing a badge is always allowed.
+**No election replaces the team by itself.** On 2026-10-02 the hand-picked
+team was 3 MODs and 2 JMDs. They can run like anyone else, and they keep their
+role until an admin removes them. Existing badges (32 Trusted, 12 CMSR, 2
+Helper) are kept. The 3-squad rule only applies to new grants, and removing a
+badge is always allowed.
 
 ---
 
@@ -143,13 +168,49 @@ live squad/age/record next to the numbers frozen at entry),
 `staff_admin_eligibility(uid)`. All three raise `42501` for non-admins; anon
 has no execute grant.
 
+## Results and decisions (041)
+
+| Election status | Phase shown | What it means |
+|---|---|---|
+| `open` | upcoming / nominations / voting / counting | the race is running; "counting" = closed, waiting for the 30-minute count |
+| `counted` | review | votes frozen and visible; waiting for an admin in the dashboard |
+| `finalized` | finalized | the admin finished the review; `winners` = who they appointed |
+| `cancelled` | — | an open race an admin cancelled (a counted one is finished, not cancelled) |
+
+One live election per role means `open` or `counted`: `staff_admin_open`
+refuses with `review_pending` until the review is finished.
+
+`staff_decisions` holds one row per player and election: `kind` is
+`appoint`, `remove` or `none`, with `decided_by`, `applied_at` (RTDB flag
+written) and `notified_at` (winner push sent). `staff_admin_decide` refuses
+`not_qualified` (below the bar, or not an approved candidate), `banned`,
+`is_admin`, `not_holder`, `not_in_election`, and `decided` once appoint /
+remove was recorded. Appoint ends the player's previous term for that role as
+`reelected` and starts a new one of `term_days` from now; remove ends it as
+`replaced`. `staff_admin_finish` closes the election; nothing is scheduled.
+
+The server also keeps `staff_candidates.votes` / `qualified` frozen at the
+count, so the tally does not move if votes are later purged by retention.
+
+Admin RPCs: `staff_admin_results()` (counted elections with tally, holders,
+suggestion, decisions so far, plus `termAlerts`), `staff_admin_decide(election,
+uid, kind)`, `staff_admin_finish(election)`. Service role only:
+`staff_pending_apply()`, `staff_decision_applied(id)`,
+`staff_decision_notified(id)`, `staff_terms_open()` (active terms whose
+appointment is already in RTDB, so a fresh appointment is never read as
+"removed"). `staff_mark_applied` is gone.
+
 ## Where it lives
 
 | Piece | File |
 |---|---|
 | Rules, voting, counting, terms | `supabase/038_staff_elections.sql` |
 | Applications, admin approval, age gates, MOD bar 5, profile eligibility | `supabase/040_staff_applications.sql` |
-| Applies results to RTDB, mirrors squad sizes, pushes winners | `functions/runStaffElections.js` (every 30 min) |
+| Count only, admin decisions, finish, review phase, term alerts | `supabase/041_staff_admin_final.sql` |
+| Counts closed races, pushes admins, applies admin decisions to RTDB, pushes winners | `functions/runStaffElections.js` (every 30 min) |
+| Admin: results panel (suggestion, Appoint / Remove / Finish review, term alerts) | `Code/Elections/ElectionResultsPanel.jsx`, mounted in the Admin Dashboard Elections tab |
+| Apply 041 to the linked project + post-checks | `scripts/staff-elections/apply041.sh` (`--check` for read-only) |
+| 041 tests | `scripts/staff-elections/test041.mjs` (PGlite), `__tests__/runStaffElections.cf.test.js`, `__tests__/staffElections.test.js` |
 | Instant squad-size mirror when a friend counts | `functions/notifySquadEvent.js` |
 | MOD/JMD elected only; badge needs `/squad_size >= 3` | `database.rules.json` (`/users/$userId`, `/squad_size`) |
 | Elections screen + roles charter | `Code/Elections/ElectionsScreen.jsx`, `Code/Elections/RoleCharter.jsx` |
@@ -171,6 +232,19 @@ can also be changed per election from the admin stepper.
 
 ## Tests
 
+- 041 SQL: `node scripts/staff-elections/test041.mjs` — 109/109 on PGlite
+  (038 + 040 + 041 loaded in order, 041 twice). One race end to end: open,
+  apply, approve, 46 votes, count, suggestion, every refusal reason, appoint /
+  remove / none, final decisions, pending-apply and terms-open for the Cloud
+  Function, finish, no auto-open, a no-winner race, term alerts, grants.
+- 041 Cloud Function: `npx jest __tests__/runStaffElections.cf.test.js` —
+  10/10 against an in-memory RTDB and a fake Supabase: count + admin push,
+  nobody-qualified wording, appoint / remove / JMD→MOD flag, idempotent
+  second run, deleted account, failed mark retried, dead token, Mod Tools
+  removals, a failing count does not block decisions.
+- 041 client: `__tests__/staffElections.test.js` — 22/22 (review phase, Home
+  card ignores a race under review, adminResults / adminDecide / adminFinish,
+  reviewSuggestion wording).
 - 040 SQL: 82/82 on PGlite (eligibility matrix, apply/approve/reject/flip,
   pitch lock, withdraw-and-return, vote refusal for pending, expiry at close,
   admin-only RPCs, grants). A full flow dry run on live Postgres with
@@ -201,10 +275,12 @@ the mod log. 038 avoids it with `coalesce`. The live functions still need the fi
 |---|---|
 | Supabase `038_staff_elections.sql` | **DEPLOYED 2026-10-02**, one transaction. 4 tables, 22 functions, cron job 14. Public API checked: anon `staff_elections_brief` returns `[]`, while anon `staff_due` and `staff_elections_get` are denied. |
 | Supabase `040_staff_applications.sql` | **DEPLOYED 2026-10-02** (one transaction, at the owner's request, after a rolled-back dry run on live). Additive: 5 columns, 3 new RPCs, 6 replaced; the tables were empty, so no backfill. Checked after: `_staff_rules` 5/18 and 3/16, anon has no execute on the admin RPCs or the internal helpers. |
-| `runStaffElections` | **DEPLOYED 2026-10-02** (new). Every 30 min, Node 20 1st gen, Supabase secrets attached. |
+| Supabase `041_staff_admin_final.sql` | **DEPLOYED 2026-10-02** by the owner via `scripts/staff-elections/apply041.sh` (Management API, one transaction). Post-checks passed: 24 `staff*` functions, `staff_mark_applied` gone, status check lists `counted`, `staff_elections_one_live` replaces `one_open`, `staff_decisions` with RLS, admin RPCs authenticated-only, service RPCs service-role-only, all tables still at 0 rows. |
+| `runStaffElections` | **REDEPLOYED 2026-10-02** by the owner (`./functions-deploy/deploy.sh runStaffElections`, Node 20 1st gen, us-central1, successful update). This is the 041 version: count, tell the admins, apply admin decisions, push winners. Note the deploy warning: the Node.js 20 runtime is decommissioned on 2026-10-30; every function needs a runtime bump before then. |
 | `notifySquadEvent` | **DEPLOYED 2026-10-02** (update). Before the deploy, live source equalled HEAD, so the only change is the `/squad_size` mirror. An unsigned call still returns 401. |
 | RTDB rules | **DEPLOYED 2026-10-02** at the owner's request. Live was checked identical to the repo first, so only `users`, `squad_size` and `elections_enabled` changed. Checked after: `/elections_enabled` is public-read and denies anon writes, `/squad_size` denies reads. Squad isn't released yet, so **MODs can't give any badge** until players have 3+ squad friends. Admins still can. |
-| App | Not released |
+| App | Not released. The Elections screens, the results panel and the new strings are only in this working tree. |
+| `/elections_enabled` | **ON** on 2026-10-02 (owner: for testing only). Players on today's store build see nothing either way, since their build has no Elections screens. Flip it from Admin Dashboard → Elections when the new build is out and squads have grown. |
 
 `functions-deploy/deploy.sh` was broken for every function. Since `functions/index.js`
 exists, discovery mapped each name to index.js, so the staged index required
@@ -214,7 +290,22 @@ It was fixed on 2026-10-02 by skipping index.js in discovery.
 ## Deploy order
 
 1. ~~**Supabase 038.**~~ Done 2026-10-02. ~~**Supabase 040.**~~ Done 2026-10-02.
+   ~~**Supabase 041** (admin has the final say).~~ Done 2026-10-02. Was: run
+   `./scripts/staff-elections/apply041.sh` (Management API, one transaction,
+   prints the post-checks), or paste the file into the SQL editor. Afterwards
+   `staff_admin_results`, `staff_admin_decide`, `staff_admin_finish`,
+   `staff_pending_apply`, `staff_terms_open` exist and `staff_mark_applied`
+   is gone. Live was checked on 2026-10-02 before writing it: constraint
+   `staff_elections_status_check` and index `staff_elections_one_open` have
+   exactly the names 041 replaces, and every election table had 0 rows.
 2. ~~**Functions:** `runStaffElections` and `notifySquadEvent`.~~ Done 2026-10-02.
+   ~~**Redeploy `runStaffElections`** right after 041.~~ Done 2026-10-02.
+   To check a run, either wait for the half-hour tick
+   or fire it once with `gcloud scheduler jobs run
+   firebase-schedule-runStaffElections-us-central1 --location us-central1
+   --project adoptme-7b50c`, and read `firebase functions:log --project
+   adoptme-7b50c --only runStaffElections`: a clean run logs nothing, or
+   `squad_size: N change(s)`; an RPC name in an error means 041 is missing.
 3. ~~**RTDB rules.**~~ Done 2026-10-02. These include the new `/elections_enabled` switch: public read,
    admin-only boolean write. This is a behaviour change, and it applies to every build in the field:
    - Nobody but admins can set `isModerator` / `isBabyMod`.

@@ -138,7 +138,16 @@ ok(colOther.uniqueCards === col.uniqueCards, 'other player readable');
 ok((await rpcErr('set_card_showcase', [JSON.stringify([1, 2, 3, 4])], 'C')) === 'up to 3 cards', 'max 3');
 let sc = await rpc('set_card_showcase', [JSON.stringify([{ k: 'hlegendary0', f: 'holo' }, { k: 'hrare0', f: 'mega' }])], 'C');
 ok(sc.length === 1 && sc[0].s === s1.serial, 'showcase keeps only owned');
+ok(sc[0].n === 'H legendary 0' && sc[0].r === 'legendary' && sc[0].no === 45 && Array.isArray(sc[0].sets), 'showcase entry carries catalog fields');
 ok((await one(`select card_showcase from user_cosmetics where uid='C'`)).card_showcase.length === 1, 'showcase mirrored');
+// order kept, one entry per card, scalars ignored, collection returns it
+sc = await rpc('set_card_showcase', [JSON.stringify([{ k: 'arare0', f: 'classic' }, { k: 'hlegendary0', f: 'classic' }, { k: 'hlegendary0', f: 'holo' }])], 'C');
+ok(sc.length === 2 && sc[0].k === 'arare0' && sc[1].k === 'hlegendary0' && sc[1].f === 'classic', `showcase ordered, one per card (${JSON.stringify(sc.map((x) => [x.k, x.f]))})`);
+ok((await rpc('set_card_showcase', [JSON.stringify([1, { k: 'arare0', f: 'classic' }])], 'C')).length === 1, 'scalar entries skipped');
+col = await rpc('get_card_collection', [null], 'C');
+ok(Array.isArray(col.showcase) && col.showcase.length === 1 && col.showcase[0].k === 'arare0', 'collection returns the showcase');
+ok(Array.isArray((await rpc('get_card_collection', [null], 'A')).showcase), 'collection showcase defaults to []');
+ok((await rpc('set_card_showcase', ['[]'], 'C')).length === 0, 'showcase can be cleared');
 
 // volume: never pulls the no-HD card; rough odds
 await q(`insert into card_wallet(uid, bonus_packs) values ('E', 3000) on conflict (uid) do update set bonus_packs = 3000`);

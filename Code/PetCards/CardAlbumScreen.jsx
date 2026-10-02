@@ -17,7 +17,7 @@ import { showErrorMessage, showSuccessMessage } from '../Helper/MessageHelper';
 import usePetCards from './usePetCards';
 import PetCard from './PetCard';
 import CardViewerModal from './CardViewerModal';
-import { setProgress, cardsInSet, bestOwned, totalCopies, byNumber } from './cardMath';
+import { setProgress, cardsInSet, bestOwned, totalCopies, byNumber, toggleShowcase, isShowcased } from './cardMath';
 import { themeOf } from './cardConfig';
 import { craftCard, setShowcase, errorKey } from './cardsApi';
 import { setName } from './PetCardsScreen';
@@ -38,7 +38,8 @@ export default function CardAlbumScreen() {
   const [filter, setFilter] = useState('all');
   const [open, setOpen] = useState(null);
   const [crafting, setCrafting] = useState(false);
-  const [showcase, setShowcaseState] = useState([]);
+  // The profile showcase as the server holds it (get_card_collection.showcase).
+  const showcase = useMemo(() => collection?.showcase || [], [collection?.showcase]);
 
   useEffect(() => {
     const k = route.params?.openKey;
@@ -81,16 +82,17 @@ export default function CardAlbumScreen() {
     }
   }, [t, reload, setCollection]);
 
-  const onShowcase = useCallback(async (card) => {
-    const next = [card, ...showcase.filter((c) => c.key !== card.key)].slice(0, 3);
+  // Pin (or unpin) one card+finish on the profile; the server returns the stored list.
+  const onShowcase = useCallback(async (card, finish) => {
+    const pinned = isShowcased(showcase, card.key, finish);
     try {
-      await setShowcase(next);
-      setShowcaseState(next);
-      showSuccessMessage(t('pet_cards.showcased', { pet: card.name }));
+      const next = await setShowcase(toggleShowcase(showcase, card.key, finish));
+      setCollection((prev) => ({ ...(prev || {}), showcase: Array.isArray(next) ? next : [] }));
+      showSuccessMessage(t(pinned ? 'pet_cards.showcase_removed' : 'pet_cards.showcased', { pet: card.name }));
     } catch (e) {
       showErrorMessage(t(`pet_cards.err.${errorKey(e)}`));
     }
-  }, [showcase, t]);
+  }, [showcase, t, setCollection]);
 
   const renderItem = useCallback(({ item }) => {
     const entries = owned[item.key];
@@ -165,6 +167,7 @@ export default function CardAlbumScreen() {
         values={open ? values.get(open.key) : null}
         total={total}
         shards={wallet?.shards || 0}
+        showcase={showcase}
         crafting={crafting}
         onClose={() => setOpen(null)}
         onCraft={onCraft}

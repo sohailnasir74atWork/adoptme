@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import { getStyles } from '../Style';
 import { useTranslation } from 'react-i18next';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -293,49 +293,31 @@ const GroupMessageList = ({
                   activeOpacity={0.7}
                   style={{ alignSelf: 'flex-start' }}
                 >
-                  <View style={styles.nameRow}>
+                  <View style={[styles.nameRow, { flexWrap: 'nowrap' }]}>
                     <Text
-                      style={[styles.userNameText, { flexShrink: 1 }]}
+                      style={[styles.userNameText, { flexShrink: 1, minWidth: 0 }]}
                       numberOfLines={1}
                       ellipsizeMode="tail"
                     >
                       {senderName}
                     </Text>
 
-                    {profile.isPro && (
-                      <Image source={require('../../../assets/pro.png')} style={styles.icon} />
-                    )}
-                    {profile.robloxUsernameVerified && (
-                      <Image source={require('../../../assets/verification.png')} style={styles.icon} />
-                    )}
-
+                    {/* Group chats never flag app-wide Admin/Mod; the rest as everywhere. */}
+                    <UserBadgeRail
+                      user={{
+                        isAdmin: item.isAdmin, isModerator: item.isModerator, isBabyMod: item.isBabyMod,
+                        isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isArtCMSR: profile.isArtCMSR, isHelper: profile.isHelper,
+                        isPro: profile.isPro, robloxUsernameVerified: profile.robloxUsernameVerified,
+                        squadCount: profile.squadCount,
+                      }}
+                      allowed={['jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified']}
+                      isDarkMode={isDarkMode}
+                    />
                     {item?.isCreator && (
                       <View style={[styles.roleBadge, { backgroundColor: '#8B5CF6' }]}>
                         <Text style={styles.roleBadgeText}>{t('chat.role_creator')}</Text>
                       </View>
                     )}
-                    {(() => {
-                      const firstBadge = getFirstBadgeType(
-                        { isBabyMod: item.isBabyMod, isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isHelper: profile.isHelper },
-                        ['jmd', 'trusted', 'cmsr', 'helper'],
-                      );
-                      return (
-                        <>
-                          {!item.isAdmin && !item.isModerator && item.isBabyMod && (
-                            <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
-                          )}
-                          {profile.isTrusted && (
-                            <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
-                          )}
-                          {profile.isCMSR && (
-                            <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
-                          )}
-                          {profile.isHelper && (
-                            <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
-                          )}
-                        </>
-                      );
-                    })()}
                   </View>
                 </TouchableOpacity>
                 {/* Images - Support multiple images */}

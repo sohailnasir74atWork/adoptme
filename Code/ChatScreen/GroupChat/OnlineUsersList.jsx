@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Modal,
   FlatList,
-  Image,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -16,7 +15,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import { ref, get, query, orderByValue, equalTo } from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -145,6 +144,7 @@ const OnlineUsersList = ({
           isBabyMod: roles?.isBabyMod ?? false,
           isTrusted: roles?.isTrusted ?? false,
           isCMSR: roles?.isCMSR ?? false,
+          isArtCMSR: roles?.isArtCMSR ?? false,
           isHelper: roles?.isHelper ?? false,
         };
       }).filter((u) => u !== null);
@@ -314,6 +314,7 @@ const OnlineUsersList = ({
           isBabyMod: roles?.isBabyMod ?? false,
           isTrusted: roles?.isTrusted ?? false,
           isCMSR: roles?.isCMSR ?? false,
+          isArtCMSR: roles?.isArtCMSR ?? false,
           isHelper: roles?.isHelper ?? false,
           isOnline: allOnlineUserIds.includes(ident.uid),
         };
@@ -517,64 +518,17 @@ const OnlineUsersList = ({
           })()}
         </View>
         <View style={styles.userInfo}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Text style={styles.userName} numberOfLines={1}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+            <Text style={[styles.userName, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1}>
               {`${item.displayName || t('chat.anonymous')}`}
             </Text>
 
-            {/* Pro badge */}
-            {item?.isPro && (
-              <Image
-                source={require('../../../assets/pro.png')}
-                style={{ width: 11, height: 11, marginLeft: 4 }}
-              />
-            )}
-
-            {/* Verified badge */}
-            {item?.robloxUsernameVerified && (
-              <Image
-                source={require('../../../assets/verification.png')}
-                style={{ width: 11, height: 11, marginLeft: 4 }}
-              />
-            )}
-
-            {(() => {
-              const firstBadge = getFirstBadgeType(item, ['admin', 'mod', 'jmd', 'trusted', 'cmsr', 'helper']);
-              return (
-                <>
-                  {item?.isAdmin && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="admin" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.admin')} glow={firstBadge === 'admin'} />
-                    </View>
-                  )}
-                  {!item?.isAdmin && item?.isModerator && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="mod" size="sm" isDarkMode={isDarkMode} labelOverride={t('chat.mod')} glow={firstBadge === 'mod'} />
-                    </View>
-                  )}
-                  {!item?.isAdmin && !item?.isModerator && item?.isBabyMod && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="jmd" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'jmd'} />
-                    </View>
-                  )}
-                  {item?.isTrusted && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="trusted" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'trusted'} />
-                    </View>
-                  )}
-                  {item?.isCMSR && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="cmsr" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'cmsr'} />
-                    </View>
-                  )}
-                  {item?.isHelper && (
-                    <View style={{ marginLeft: 6 }}>
-                      <UserBadgePill type="helper" size="sm" isDarkMode={isDarkMode} glow={firstBadge === 'helper'} />
-                    </View>
-                  )}
-                </>
-              );
-            })()}
+            {/* Squad count rides on the cached cosmetics row; no extra read. */}
+            <UserBadgeRail
+              user={{ ...item, squadCount: getCachedProfile(item.id)?.squadCount }}
+              isDarkMode={isDarkMode}
+              style={{ marginLeft: 4 }}
+            />
 
             {/* Platform badge (for admins) */}
             {item?.isAdmin && item?.OS && (

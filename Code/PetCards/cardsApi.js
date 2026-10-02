@@ -132,6 +132,11 @@ export async function craftCard(key) {
   return data;
 }
 
-export async function setShowcase(cards) {
-  return call('set_card_showcase', { p_cards: cards.slice(0, 3).map((c) => ({ k: c.key, f: c.finish })) });
+/** entries: [{ k, f }] (see cardMath.toggleShowcase). Returns the stored list. */
+export async function setShowcase(entries) {
+  const data = await call('set_card_showcase', { p_cards: entries.slice(0, 3).map((e) => ({ k: e.k, f: e.f })) });
+  // Keep the cached collection in step, so the album sees the new pins at once.
+  const hit = collectionCache.get(currentUid || 'me');
+  if (hit && hit.data) hit.data = { ...hit.data, showcase: data };
+  return data;
 }

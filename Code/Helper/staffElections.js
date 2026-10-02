@@ -2,8 +2,11 @@
  * staffElections.js — Staff elections (MOD / JMD) client helpers.
  *
  * Server side: supabase/038_staff_elections.sql + 040_staff_applications.sql
- * decide everything (who may apply, who may vote, who wins);
- * functions/runStaffElections.js writes the winners' roles into RTDB. This
+ * + 041_staff_admin_final.sql decide everything (who may apply, who may vote,
+ * who met the bar). A closed race is only counted ('review' phase): an admin
+ * appoints or removes people one by one in Admin Dashboard → Elections
+ * (adminResults / adminDecide / adminFinish below), and
+ * functions/runStaffElections.js writes those decisions into RTDB. This
  * file only calls the RPCs, caches the screen data, and works out
  * phases/countdowns for display.
  *
@@ -41,6 +44,9 @@ export const ROLE_RULES = {
 };
 export const ROLES = ['mod', 'jmd'];
 export const APPLICATION_STATUSES = ['pending', 'approved', 'rejected', 'expired'];
+// What an admin can decide about one player once a race is counted (041).
+// 'appoint' and 'remove' are final for that election; 'none' can change later.
+export const DECISION_KINDS = ['appoint', 'remove', 'none'];
 export const BADGE_MIN_SQUAD = 3;
 export const VOTER_MIN_DAYS = 7;
 export const CLEAN_RECORD_DAYS = 30;
@@ -65,7 +71,9 @@ const ms = (iso) => {
  */
 export const phaseOf = (e, now = Date.now()) => {
   if (!e) return null;
-  if (e.phase === 'finalized' || e.phase === 'cancelled') return e.phase;
+  // 'review' = counted, waiting for an admin (041). Like the two others it
+  // comes from the server's status, not from the calendar.
+  if (e.phase === 'finalized' || e.phase === 'cancelled' || e.phase === 'review') return e.phase;
   if (now < ms(e.nominationsAt)) return 'upcoming';
   if (now < ms(e.votingAt)) return 'nominations';
   if (now < ms(e.closesAt)) return 'voting';
@@ -209,7 +217,7 @@ export const getElections = async (uid, { force = false } = {}) => {
   writeCache(`get_${uid}`, data);
   // The screen just saw every open election; the Home card can reuse it.
   writeCache('brief', (data?.elections || [])
-    .filter((e) => e.phase !== 'finalized' && e.phase !== 'cancelled')
+    .filter((e) => e.phase !== 'finalized' && e.phase !== 'cancelled' && e.phase !== 'review')
     .map(({ id, role, nominationsAt, votingAt, closesAt }) => ({ id, role, nominationsAt, votingAt, closesAt })));
   return data;
 };
@@ -308,6 +316,71 @@ export const adminReview = async (uid, electionId, candidateUid, approve, note) 
   dropCaches(uid);
   const res = data || { ok: false, reason: 'unknown' };
   track('election_review', { ok: res.ok ? 1 : 0, decision: approve ? 'approve' : 'reject' });
+  return res;
+};
+
+/**
+ * The suggestion line for one counted election (041), from the server's
+ * `suggestion` plus names. Pure: the panel renders it, the test checks it.
+ * Only a suggestion: the admin appoints and removes by hand.
+ */
+export const reviewSuggestion = (el) => {
+  const cands = Array.isArray(el?.candidates) ? el.candidates : [];
+  const holders = Array.isArray(el?.holders) ? el.holders : [];
+  const name = (uid) => (cands.find((c) => c.uid === uid) || holders.find((h) => h.uid === uid) || {}).name || uid;
+  const appoint = (el?.suggestion?.appoint || []).map((uid) => ({ uid, name: name(uid), votes: (cands.find((c) => c.uid === uid) || {}).votes || 0 }));
+  const remove = (el?.suggestion?.remove || []).map((uid) => ({ uid, name: name(uid) }));
+  const qualified = cands.filter((c) => c.qualified);
+  const bannedOut = qualified.filter((c) => c.check?.banned).length;
+  const seats = Number(el?.seats) || 0;
+  const minVotes = Number(el?.minVotes) || 0;
+  let text;
+  if (qualified.length === 0) {
+    text = `Nobody reached ${minVotes} votes. Suggestion: keep the current team and start a new election when you are ready.`;
+  } else {
+    const who = appoint.map((a) => `${a.name} (${a.votes})`).join(', ');
+    text = appoint.length
+      ? `Suggestion: appoint ${who}`
+      : 'Suggestion: appoint nobody';
+    if (remove.length) text += `; remove ${remove.map((r) => r.name).join(', ')} (not re-elected)`;
+    text += `. ${appoint.length} of ${seats} seat${seats === 1 ? '' : 's'} would be filled.`;
+    if (bannedOut) text += ` ${bannedOut} qualified candidate${bannedOut === 1 ? ' is' : 's are'} banned right now and left out.`;
+    text += ' Nothing changes until you tap.';
+  }
+  return { text, appoint, remove, seats, filled: appoint.length, qualified: qualified.length, bannedOut };
+};
+
+/** Counted elections waiting for a decision, with the suggestion, plus terms that ran out (admin panel). */
+export const adminResults = async () => {
+  const { data, error } = await supabase.rpc('staff_admin_results');
+  if (error) throw error;
+  return {
+    elections: Array.isArray(data?.elections) ? data.elections : [],
+    termAlerts: Array.isArray(data?.termAlerts) ? data.termAlerts : [],
+  };
+};
+
+/** One decision about one player in a counted election: 'appoint' | 'remove' | 'none'. */
+export const adminDecide = async (uid, electionId, targetUid, kind) => {
+  const { data, error } = await supabase.rpc('staff_admin_decide', {
+    p_election: electionId,
+    p_uid: targetUid,
+    p_kind: kind,
+  });
+  if (error) throw error;
+  dropCaches(uid);
+  const res = data || { ok: false, reason: 'unknown' };
+  track('election_decide', { ok: res.ok ? 1 : 0, kind: String(kind), reason: res.ok ? 'ok' : String(res.reason || 'unknown') });
+  return res;
+};
+
+/** Close the review of a counted election. Nothing is scheduled; an admin starts the next race. */
+export const adminFinish = async (uid, electionId) => {
+  const { data, error } = await supabase.rpc('staff_admin_finish', { p_election: electionId });
+  if (error) throw error;
+  dropCaches(uid);
+  const res = data || { ok: false, reason: 'unknown' };
+  track('election_finish', { ok: res.ok ? 1 : 0, appointed: Number(res.appointed) || 0, removed: Number(res.removed) || 0 });
   return res;
 };
 

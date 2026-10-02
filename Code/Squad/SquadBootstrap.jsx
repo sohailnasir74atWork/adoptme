@@ -11,10 +11,10 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useGlobalState } from '../GlobelStats';
-import { showSuccessMessage } from '../Helper/MessageHelper';
+import { showSuccessMessage, showInfoMessage } from '../Helper/MessageHelper';
 import {
   captureInstallReferrer, applyPendingCode, squadPing, setSquadUser,
-  getSquadProUntil, onSquadProChange, refreshSquadPro, FRIEND_PRO_DAYS,
+  getSquadProUntil, onSquadProChange, refreshSquadPro, FRIEND_PRO_DAYS, takeCodeNudge,
 } from '../Helper/squad';
 
 const MAX_TIMEOUT = 2 ** 31 - 1;
@@ -23,6 +23,7 @@ export default function SquadBootstrap() {
   const { user } = useGlobalState();
   const { t } = useTranslation();
   const uid = user?.id || null;
+  const createdAt = user?.createdAt || null;
 
   useEffect(() => { captureInstallReferrer(); }, []);
 
@@ -52,6 +53,11 @@ export default function SquadBootstrap() {
           t('squad.joined_toast_title'),
           t('squad.joined_toast_body', { name: res.inviterName || t('chat.anonymous'), pro: t('squad.pass_name', { count: FRIEND_PRO_DAYS }) }),
         );
+      } else if (!cancelled && takeCodeNudge(uid, createdAt)) {
+        // A new player with no install-link code (every iPhone, and Android
+        // installs that didn't come through the Play link): say once where
+        // the code goes. Non-blocking flash message, never a modal.
+        showInfoMessage(t('squad.ask_code_title'), t('squad.ask_code_body'));
       }
       if (!cancelled) await ping();
     })();
@@ -59,7 +65,7 @@ export default function SquadBootstrap() {
       if (state === 'active') ping();
     });
     return () => { cancelled = true; sub.remove(); };
-  }, [uid, t]);
+  }, [uid, createdAt, t]);
 
   // Earned Squad Pro can run out while the app is open.
   useEffect(() => {

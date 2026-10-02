@@ -17,7 +17,7 @@ import { RARITY_STYLE, themeIdFor, themeOf } from './cardConfig';
 
 const SITE = 'adoptmevalues.app';
 
-export default function CardShareSheet({ card, values, total, onClose }) {
+export default function CardShareSheet({ card, total, onClose }) {
   const { t } = useTranslation();
   const shot = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -77,7 +77,7 @@ export default function CardShareSheet({ card, values, total, onClose }) {
             <Text style={styles.kicker}>{t('pet_cards.title').toUpperCase()}</Text>
             <Text style={styles.headline} numberOfLines={2}>{headline}</Text>
             <View style={styles.cardSlot}>
-              <PetCard card={card} finish={card.finish} serial={card.serial} width={250} values={values} total={total} />
+              <PetCard card={card} finish={card.finish} serial={card.serial} width={250} total={total} />
             </View>
             <View style={styles.footer}>
               <Text style={styles.app}>{config.appName}</Text>

@@ -56,6 +56,8 @@ const PING_EVERY_MS = 12 * 60 * 60 * 1000;
 // reward push ("your Pro is already on") is true by the time they look.
 const PING_AWAITING_MS = 30 * 60 * 1000;
 const AWAIT_MS = 3 * 24 * 60 * 60 * 1000;
+// Kept in step with join_squad / get_my_squad in 034_squad.sql (7 days from sign-up).
+const JOIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const utcDay = (ms) => Math.floor(ms / 86400000);
 const SQUAD_TTL_MS = 5 * 60 * 1000;
 const BOARD_TTL_MS = 30 * 60 * 1000;
@@ -141,6 +143,31 @@ const saveStatus = (uid, data, { participant = true } = {}) => {
   if (typeof data.pending === 'boolean') storage.set(`pending_${uid}`, data.pending);
   if (participant) storage.set(`participant_${uid}`, true);
   if (before !== getSquadProUntil(uid)) emit();
+};
+
+// ── A new player who can still use a friend's code ───────────────────────
+
+/**
+ * True while this account is inside the 7-day join window and is not yet in
+ * any squad (nor an inviter). The server has the final say (canJoin); this
+ * only decides what the Home card and the first-launch nudge say.
+ */
+export const canStillJoin = (uid, createdAtMs) => {
+  if (!uid) return false;
+  const created = Number(createdAtMs) || 0;
+  if (!created || Date.now() - created > JOIN_WINDOW_MS) return false;
+  return !storage.getBoolean(`participant_${uid}`);
+};
+
+/**
+ * Once per account: point a new player at the code field. Not when an
+ * install link already carries a code (that is applied for them).
+ */
+export const takeCodeNudge = (uid, createdAtMs) => {
+  if (!canStillJoin(uid, createdAtMs)) return false;
+  if (storage.getBoolean(`nudged_${uid}`) || getPendingCode()) return false;
+  storage.set(`nudged_${uid}`, true);
+  return true;
 };
 
 // ── Device id (anti self-invite) ──────────────────────────────────────────

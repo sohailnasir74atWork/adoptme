@@ -132,16 +132,15 @@ Wallpapers are **composed by the app from the player's own pets**, so every kid'
 ┌───────────────────────────────┐  outer frame — material depends on finish
 │ SHADOW DRAGON            ◆    │  header 4–13%: name (left) · rarity gem (right)
 │ ┌───────────────────────────┐ │
-│ │                           │ │  art window 13–66%: set/egg background art
+│ │                           │ │  art window 13–84%: set/egg background art
 │ │        [ pet 1024px ]     │ │  + HD pet; Mega/Full Art pets break out of the top
 │ │                           │ │
 │ └───────────────────────────┘ │
-│ ⬢ Halloween 2019 · ✦ HOLO     │  type line 66–71%: set emblem · origin · finish
-│ VALUE 675   Neon 2.4K  Mega 9K│  stat plate 71–90%: values from the live feed
-│ ⚡ Sells fast                  │  demand (existing tradeAdvice tags)
+│ ⬢ Halloween 2019 · HOLO       │  type line 85–90%: origin · finish
 │ 112/787      #0042 1st Edition│  footer 92–97%: collector no. · serial
 └───────────────────────────────┘
 ```
+- **No values on the front, ever** (decided 2026-10-02). Values move weekly and a collectible should not; a card reading "Legendary" next to "VALUE 0.38" argues with itself. The viewer's back shows Value / Neon / Mega with an "as of" date, the Wallpaper Studio shows values only when the player turns the Values extra on (value-led styles sit last in the picker), and the share image carries the card only.
 - All text is real text, in the player's language. Arabic mirrors the layout.
 - The tiny footer line reads "Fan-made · not affiliated with Uplift Games".
 - The card design is our own: no yellow Pokémon border, no energy symbols, no Adopt Me logo.
@@ -330,6 +329,7 @@ taken from notes.
 | Piece | State | Proof |
 |---|---|---|
 | App code (`Code/PetCards/*`, Home card, i18n ×6, tests) | Committed `7cb431b`, pushed on `bump-android-138` | `git log` |
+| Profile showcase (2026-10-02, uncommitted) | `ProfileShowcase.jsx` draws the 3 pinned cards + collector score on the profile drawer from the cosmetics row (`fromCosmeticsRow` maps `card_score` / `card_showcase`). The viewer pins/unpins (`toggleShowcase`), the album keeps the server list (`get_card_collection.showcase`). `set_card_showcase` now stores the catalog fields with each entry, so 037 changed: `test037.mjs` 56/56. Emoji glyphs on these buttons replaced by image icons from `scripts/pet-cards/make-icons.mjs` (`assets/pet-cards/icons/`). | `__tests__/petCards.test.js` 14/14 |
 | Pet HD art on the CDN | **579 / 785 pets**, all three sizes (1024 / 512 / 2048), manifest `https://cardspull.b-cdn.net/v1/pets/index.json` | `python3 scripts/pet-cards/hd-art/gemini/status.py`; `verify_cdn.py` reported 0 missing / 0 different |
 | CDN zone | Storage zone `adoptme-cards`, pull zone **`cardspull.b-cdn.net`** (`CARDS_CDN` in `cardConfig.js`) | `curl -I https://cardspull.b-cdn.net/v1/pets/dalmatian.webp` → 200 |
 | SQL 037 tested | 50/50 on PGlite (`scripts/pet-cards/test037.mjs`) | — |
@@ -344,6 +344,7 @@ so players see nothing until the server side is ready. Dev builds fall back to
 
 | Piece | State | Notes |
 |---|---|---|
+| Plan items still missing (audit 2026-10-02) | Daily local reminder (notifee), the "you own this card" mark on the Values pet sheet, the RTDB feature flag, and set rewards beyond shards (frame / card back) | Audit also found: collector numbers print as `no/HD-count` (e.g. 700/579), the fallback pick can repeat a card inside one pack, card tables are not in the account-delete job, streak display goes stale, star button ignores the balance. |
 | Pet HD art, remaining | **206 pets**: 202 in the kit 2 queue + 4 refused by Gemini (`halloweengoldenmummycat`, `evilbasilisk`, `halloweenblackmummycat`, `monkeyking`; `businessmonkey` refused too) | Procedure, limits and the no-typing runner are in `scripts/pet-cards/hd-art/REDRAW_PROGRESS.md`. Free Gemini allows ~75 images per short-term window, so ~3 windows. Refused pets go through ChatGPT (3 a day). Launching with 579 is fine: only `hd_ready` cards can be pulled. |
 | Non-pet art (`PET_CARDS_ART_PROMPTS.md` §3–§11: backgrounds, card backs, packs, gems, emblems) | Never uploaded (`v1/index.json` is 404) | Optional polish. The app draws packs, backs, frames and gems procedurally (`PackArt.jsx`, `CardBack.jsx`, `RarityGem.jsx`). Upload later with `upload.py --dir <folder> --apply`; the app only requests art that the manifest lists. |
 | SQL 037 | **Not deployed** (no `card_*` tables live, 0 `cards_*` functions) | Additive; nothing in the app or RTDB depends on it until the Home card finds a pack. |

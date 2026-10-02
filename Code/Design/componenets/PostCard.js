@@ -12,12 +12,11 @@ import { useGlobalState } from '../../GlobelStats';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import { showMessage } from 'react-native-flash-message';
 import ReportModal from './ReportModal';
-import UserBadgePill, { getFirstBadgeType } from '../../Helper/UserBadgePill';
+import UserBadgeRail from '../../Helper/UserBadgeRail';
 import dayjs from 'dayjs';
 import { get, getDatabase, ref, set } from '@react-native-firebase/database';
 import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
 import { useTranslation } from 'react-i18next';
-import { BADGE_IMAGES, BADGE_DEFINITIONS } from '../../ChatScreen/GroupChat/badgeUtils';
 import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
 
@@ -155,34 +154,19 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
         </TouchableOpacity>
 
         <TouchableOpacity style={{ marginLeft: 10, flex: 1 }} onPress={openProfileDrawer} activeOpacity={0.8}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3 }}>
-            <Text style={s.name} numberOfLines={1}>{item.displayName}</Text>
-            {item.isPro && (
-              <Image source={require('../../../assets/pro.png')} style={s.badge} />
-            )}
-            {item.robloxUsernameVerified && (
-              <Image source={require('../../../assets/verification.png')} style={s.badge} />
-            )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', gap: 3 }}>
+            <Text style={[s.name, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1}>{item.displayName}</Text>
             {(() => {
               const p = getCachedProfile(item.userId) || {};
-              const pIsAdmin = p.isAdmin ?? item.isAdmin;
-              const pIsMod = p.isModerator ?? item.isModerator;
-              const pIsTrusted = p.isTrusted ?? item.isTrusted;
-              const pIsCMSR = p.isCMSR ?? item.isCMSR;
-              const pIsHelper = p.isHelper ?? item.isHelper;
-              const firstBadge = getFirstBadgeType({
-                isAdmin: pIsAdmin, isModerator: pIsMod, isBabyMod: item.isBabyMod,
-                isTrusted: pIsTrusted, isCMSR: pIsCMSR, isHelper: pIsHelper,
-              });
               return (
-                <>
-                  {pIsAdmin && <UserBadgePill type="admin" size="sm" isDarkMode={isDark} glow={firstBadge === 'admin'} />}
-                  {!pIsAdmin && pIsMod && <UserBadgePill type="mod" size="sm" isDarkMode={isDark} glow={firstBadge === 'mod'} />}
-                  {!pIsAdmin && !pIsMod && item.isBabyMod && <UserBadgePill type="jmd" size="sm" isDarkMode={isDark} glow={firstBadge === 'jmd'} />}
-                  {pIsTrusted && <UserBadgePill type="trusted" size="sm" isDarkMode={isDark} glow={firstBadge === 'trusted'} />}
-                  {pIsCMSR && <UserBadgePill type="cmsr" size="sm" isDarkMode={isDark} glow={firstBadge === 'cmsr'} />}
-                  {pIsHelper && <UserBadgePill type="helper" size="sm" isDarkMode={isDark} glow={firstBadge === 'helper'} />}
-                </>
+                <UserBadgeRail
+                  user={{
+                    isAdmin: p.isAdmin ?? item.isAdmin, isModerator: p.isModerator ?? item.isModerator, isBabyMod: item.isBabyMod,
+                    isTrusted: p.isTrusted ?? item.isTrusted, isCMSR: p.isCMSR ?? item.isCMSR, isArtCMSR: p.isArtCMSR ?? item.isArtCMSR, isHelper: p.isHelper ?? item.isHelper,
+                    isPro: item.isPro, robloxUsernameVerified: item.robloxUsernameVerified, squadCount: p.squadCount,
+                  }}
+                  isDarkMode={isDark}
+                />
               );
             })()}
           </View>
