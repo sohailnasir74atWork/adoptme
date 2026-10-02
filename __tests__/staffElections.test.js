@@ -83,18 +83,45 @@ describe('phases and countdowns', () => {
 
 describe('eligibility', () => {
   const data = (me) => ({ me, rules: el.ROLE_RULES, limits: { voterMinDays: 7 } });
+  test('rules: MOD 5 squad + 18, JMD 3 squad + 16', () => {
+    expect([el.ROLE_RULES.mod.minSquad, el.ROLE_RULES.mod.minAge]).toEqual([5, 18]);
+    expect([el.ROLE_RULES.jmd.minSquad, el.ROLE_RULES.jmd.minAge]).toEqual([3, 16]);
+  });
   test('squad bar per role', () => {
-    const e = el.eligibility(data({ squad: 4, accountDays: 30, cleanRecord: true }));
-    expect(e.jmd).toEqual({ need: 0, ok: true });
-    expect(e.mod).toEqual({ need: 6, ok: false });
+    const e = el.eligibility(data({ squad: 4, age: 20, accountDays: 30, cleanRecord: true }));
+    expect(e.jmd).toEqual({ need: 0, ok: true, reasons: [], minAge: 16 });
+    expect(e.mod).toEqual({ need: 1, ok: false, reasons: ['squad'], minAge: 18 });
     expect(e.vote).toEqual({ ok: true, daysLeft: 0 });
   });
+  test('age gates', () => {
+    expect(el.eligibility(data({ squad: 5, age: 17, cleanRecord: true })).mod.reasons).toEqual(['age']);
+    expect(el.eligibility(data({ squad: 5, age: 17, cleanRecord: true })).jmd.ok).toBe(true);
+    expect(el.eligibility(data({ squad: 5, age: 15, cleanRecord: true })).jmd.reasons).toEqual(['age']);
+    expect(el.eligibility(data({ squad: 5, age: null, cleanRecord: true })).mod.reasons).toEqual(['age_unknown']);
+    expect(el.eligibility(data({ squad: 5, cleanRecord: true })).mod.reasons).toEqual(['age_unknown']);
+    expect(el.eligibility(data({ squad: 2, age: 15, cleanRecord: false })).jmd.reasons).toEqual(['squad', 'age', 'record']);
+  });
   test('record, sitting MOD and account age', () => {
-    expect(el.eligibility(data({ squad: 12, cleanRecord: false, accountDays: 30 })).mod.ok).toBe(false);
-    expect(el.eligibility(data({ squad: 12, cleanRecord: true, isMod: true, accountDays: 30 })).jmd.ok).toBe(false);
-    expect(el.eligibility(data({ squad: 12, cleanRecord: true, isMod: true, accountDays: 30 })).mod.ok).toBe(true);
+    expect(el.eligibility(data({ squad: 12, age: 30, cleanRecord: false, accountDays: 30 })).mod.ok).toBe(false);
+    expect(el.eligibility(data({ squad: 12, age: 30, cleanRecord: true, isMod: true, accountDays: 30 })).jmd.ok).toBe(false);
+    expect(el.eligibility(data({ squad: 12, age: 30, cleanRecord: true, isMod: true, accountDays: 30 })).mod.ok).toBe(true);
     expect(el.eligibility(data({ squad: 0, accountDays: 3 })).vote).toEqual({ ok: false, daysLeft: 4 });
     expect(el.eligibility(data({ squad: 0, accountDays: 30, banned: true })).vote.ok).toBe(false);
+  });
+  test('the server verdict wins over the local calculation', () => {
+    const me = { squad: 1, age: 12, eligible: { mod: { ok: true, reasons: [], squad: 7, minSquad: 5, minAge: 18 }, jmd: { ok: false, reasons: ['record'], squad: 7, minSquad: 3, minAge: 16 } } };
+    const e = el.eligibility(data(me));
+    expect(e.mod).toEqual({ ok: true, reasons: [], need: 0, minAge: 18 });
+    expect(e.jmd).toEqual({ ok: false, reasons: ['record'], need: 0, minAge: 16 });
+  });
+  test('blockReasonKey picks the first reason', () => {
+    const e = el.eligibility(data({ squad: 2, age: 15, cleanRecord: true }));
+    expect(el.blockReasonKey(e, 'mod')).toEqual({ key: 'elections.need_more_mod', count: 3 });
+    expect(el.blockReasonKey(el.eligibility(data({ squad: 5, age: 15 })), 'jmd')).toEqual({ key: 'elections.need_age_jmd', count: 16 });
+    expect(el.blockReasonKey(el.eligibility(data({ squad: 5 })), 'mod')).toEqual({ key: 'elections.need_dob' });
+    expect(el.blockReasonKey(el.eligibility(data({ squad: 5, age: 30, isMod: true })), 'jmd')).toEqual({ key: 'elections.err_already_mod' });
+    expect(el.blockReasonKey(el.eligibility(data({ squad: 5, age: 30, banned: true })), 'mod')).toEqual({ key: 'elections.err_record' });
+    expect(el.blockReasonKey(el.eligibility(data({ squad: 5, age: 30, cleanRecord: true })), 'mod')).toBeNull();
   });
 });
 
@@ -132,9 +159,9 @@ describe('RPC calls', () => {
   });
 
   test('runForRole trims the pitch to PITCH_MAX and passes server reasons through', async () => {
-    supabase.rpc.mockResolvedValueOnce({ data: { ok: false, reason: 'squad', need: 10, have: 4 }, error: null });
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: false, reason: 'squad', need: 5, have: 4 }, error: null });
     const res = await el.runForRole('u1', 3, 'x'.repeat(400));
-    expect(res).toEqual({ ok: false, reason: 'squad', need: 10, have: 4 });
+    expect(res).toEqual({ ok: false, reason: 'squad', need: 5, have: 4 });
     expect(supabase.rpc.mock.calls[0][1].p_pitch).toHaveLength(el.PITCH_MAX);
   });
 
@@ -150,10 +177,38 @@ describe('RPC calls', () => {
     await el.adminOpen('a', 'jmd', 5);
     await el.adminCancel('a', 9);
     await el.adminDisqualify('a', 9, 'bad');
+    await el.adminReview('a', 9, 'cand', false, '  Too many warnings  ');
+    await el.adminReview('a', 9, 'cand', true, '');
     expect(supabase.rpc.mock.calls).toEqual([
       ['staff_admin_open', { p_role: 'jmd', p_seats: 5 }],
       ['staff_admin_cancel', { p_election: 9 }],
       ['staff_admin_disqualify', { p_election: 9, p_uid: 'bad' }],
+      ['staff_admin_review', { p_election: 9, p_uid: 'cand', p_approve: false, p_note: 'Too many warnings' }],
+      ['staff_admin_review', { p_election: 9, p_uid: 'cand', p_approve: true, p_note: null }],
     ]);
+  });
+
+  test('adminReview trims the note to 200 chars and drops the screen cache', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
+    await el.getElections('a');
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: true, status: 'rejected' }, error: null });
+    const res = await el.adminReview('a', 9, 'cand', false, 'x'.repeat(300));
+    expect(res).toEqual({ ok: true, status: 'rejected' });
+    expect(supabase.rpc.mock.calls[1][1].p_note).toHaveLength(200);
+    supabase.rpc.mockResolvedValueOnce({ data: { elections: [] }, error: null });
+    await el.getElections('a');
+    expect(supabase.rpc).toHaveBeenCalledTimes(3); // refetched after the decision
+  });
+
+  test('adminApplications returns a list; adminEligibility skips empty uids', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: null, error: null });
+    expect(await el.adminApplications()).toEqual([]);
+    supabase.rpc.mockResolvedValueOnce({ data: [{ uid: 'x', status: 'pending' }], error: null });
+    expect(await el.adminApplications()).toEqual([{ uid: 'x', status: 'pending' }]);
+    expect(await el.adminEligibility('')).toBeNull();
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+    supabase.rpc.mockResolvedValueOnce({ data: { squad: 3 }, error: null });
+    expect(await el.adminEligibility('u')).toEqual({ squad: 3 });
+    expect(supabase.rpc).toHaveBeenLastCalledWith('staff_admin_eligibility', { p_uid: 'u' });
   });
 });

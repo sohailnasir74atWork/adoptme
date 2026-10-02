@@ -2,11 +2,13 @@
  * ElectionsScreen — players elect the MODs and Junior Mods (JMD).
  *
  * Per role: the live race (nominations -> voting -> counting) or the last
- * result, the sitting team, and the roles charter. Admins can start or
- * cancel a race and remove a candidate (long-press).
+ * result, the sitting team, and the roles charter. Players apply during
+ * nominations; an admin approves applications in Admin Dashboard →
+ * Elections (040), and only approved candidates are on the ballot. Admins
+ * can also start or cancel a race here and remove a candidate (long-press).
  *
- * All rules live on the server (supabase/038_staff_elections.sql); this
- * screen shows them and reports the server's reason when an action fails.
+ * All rules live on the server (supabase/038 + 040); this screen shows
+ * them and reports the server's reason when an action fails.
  * Reads: staff_elections_get (cached 2 min).
  */
 
@@ -25,7 +27,7 @@ import { showErrorMessage, showSuccessMessage } from '../Helper/MessageHelper';
 import SquadBadge from '../Squad/SquadBadge';
 import RoleCharter, { ROLE_COLOR } from './RoleCharter';
 import {
-  ROLES, ROLE_RULES, PITCH_MAX, phaseOf, phaseEndsAt, splitDuration, eligibility,
+  ROLES, ROLE_RULES, PITCH_MAX, phaseOf, phaseEndsAt, splitDuration, eligibility, blockReasonKey,
   getElections, runForRole, withdraw, castVote, adminOpen, adminCancel, adminDisqualify,
 } from '../Helper/staffElections';
 
@@ -33,9 +35,12 @@ const ACCENT = '#7C3AED';
 const GREEN = '#10B981';
 const GOLD = '#F59E0B';
 const KNOWN_ERRORS = [
-  'not_nominations', 'not_voting', 'squad', 'record', 'already_mod', 'other_race', 'removed',
-  'self', 'no_candidate', 'too_new', 'banned', 'device_used', 'device',
+  'not_nominations', 'not_voting', 'squad', 'age', 'age_unknown', 'record', 'already_mod', 'other_race',
+  'removed', 'rejected', 'closed', 'self', 'no_candidate', 'too_new', 'banned', 'device_used', 'device',
 ];
+// My application (040): pending -> approved | rejected; expired = never decided.
+const APP_COLOR = { pending: GOLD, approved: GREEN, rejected: '#EF4444', expired: '#64748B' };
+const APP_ICON = { pending: 'hourglass-outline', approved: 'checkmark-circle', rejected: 'close-circle', expired: 'time-outline' };
 const PHASE_COLOR = { upcoming: '#64748B', nominations: GOLD, voting: GREEN, counting: '#0EA5E9', finalized: ACCENT };
 
 const Avatar = ({ uri, size = 36, color = ACCENT }) => (uri
@@ -183,11 +188,10 @@ export default function ElectionsScreen() {
 
   // ── pieces ──
   const runBlockReason = (e) => {
+    if (e.myApplication?.status === 'rejected') return t('elections.err_rejected');
     if (me.raceId && me.raceId !== e.id) return t('elections.err_other_race');
-    if (e.role === 'jmd' && me.isMod) return t('elections.err_already_mod');
-    if (me.cleanRecord === false) return t('elections.err_record');
-    if (elig[e.role]?.need > 0) return t(`elections.need_more_${e.role}`, { count: elig[e.role].need });
-    return null;
+    const br = blockReasonKey(elig, e.role);
+    return br ? t(br.key, { count: br.count }) : null;
   };
 
   // Render functions, not components: the 30 s countdown tick would remount
@@ -250,8 +254,9 @@ export default function ElectionsScreen() {
     const blocked = runBlockReason(e);
     return (
       <Card key={e.id} c={c} style={{ borderColor: ROLE_COLOR[e.role] + '66' }}>
-        <View style={[styles.row, { justifyContent: 'space-between' }]}>
-          <Text style={[styles.cardTitle, { color: c.text }]}>{t(`elections.race_${e.role}`)}</Text>
+        <View style={[styles.row, { justifyContent: 'space-between', gap: 6 }]}>
+          <Text style={[styles.cardTitle, { color: c.text, flex: 1 }]}>{t(`elections.race_${e.role}`)}</Text>
+          {me.isAdmin && e.pending > 0 && <Pill color={GOLD} text={t('elections.admin_pending_pill', { count: e.pending })} />}
           <Pill color={PHASE_COLOR[phase] || ACCENT} text={t(`elections.phase_${phase}`)} />
         </View>
 
@@ -276,23 +281,39 @@ export default function ElectionsScreen() {
           {t('elections.min_votes', { count: e.minVotes })}
         </Text>
 
-        {/* Running / run button */}
-        {(phase === 'nominations' || phase === 'voting') && e.running && (
-          <View style={[styles.runningBox, { borderColor: GREEN + '55' }]}>
-            <Text style={[styles.runningText, { color: GREEN }]}>✓ {t('elections.running_badge')}</Text>
-            <View style={[styles.row, { gap: 8 }]}>
-              {phase === 'nominations' && (
-                <TouchableOpacity style={[styles.smallBtn, { borderColor: c.border }]} onPress={() => openRun(e)}>
-                  <Text style={[styles.smallBtnText, { color: c.text }]}>{t('elections.edit_pitch')}</Text>
-                </TouchableOpacity>
+        {/* My application: pending (admin reviewing), approved (on the ballot),
+            rejected (no re-apply this election), expired (never decided). */}
+        {phase !== 'finalized' && e.myApplication && (() => {
+          const st = e.myApplication.status;
+          const color = APP_COLOR[st] || ACCENT;
+          return (
+            <View style={[styles.appBox, { borderColor: color + '55', backgroundColor: color + '0D' }]}>
+              <View style={[styles.row, { gap: 6 }]}>
+                <Icon name={APP_ICON[st] || 'ellipse'} size={16} color={color} />
+                <Text style={[styles.runningText, { color }]}>{t(`elections.app_${st}_title`)}</Text>
+              </View>
+              <Text style={[styles.muted, { color: c.textSecondary, marginTop: 4 }]}>{t(`elections.app_${st}_body`)}</Text>
+              {!!e.myApplication.note && (
+                <Text style={[styles.muted, { color: c.text, marginTop: 4, fontStyle: 'italic' }]}>
+                  {t('elections.app_note', { note: e.myApplication.note })}
+                </Text>
               )}
-              <TouchableOpacity style={[styles.smallBtn, { borderColor: '#EF444466' }]} onPress={() => confirmWithdraw(e)} disabled={!!busy}>
-                <Text style={[styles.smallBtnText, { color: '#EF4444' }]}>{t('elections.withdraw')}</Text>
-              </TouchableOpacity>
+              {e.running && (phase === 'nominations' || phase === 'voting') && (
+                <View style={[styles.row, { gap: 8, marginTop: 10 }]}>
+                  {phase === 'nominations' && st === 'pending' && (
+                    <TouchableOpacity style={[styles.smallBtn, { borderColor: c.border }]} onPress={() => openRun(e)}>
+                      <Text style={[styles.smallBtnText, { color: c.text }]}>{t('elections.edit_pitch')}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={[styles.smallBtn, { borderColor: '#EF444466' }]} onPress={() => confirmWithdraw(e)} disabled={!!busy}>
+                    <Text style={[styles.smallBtnText, { color: '#EF4444' }]}>{t('elections.withdraw')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-          </View>
-        )}
-        {phase === 'nominations' && !e.running && (
+          );
+        })()}
+        {phase === 'nominations' && !e.running && e.myApplication?.status !== 'rejected' && (
           <View style={{ marginTop: 12 }}>
             <TouchableOpacity
               style={[styles.primaryBtn, { backgroundColor: ROLE_COLOR[e.role] }, blocked && { opacity: 0.45 }]}
@@ -304,7 +325,7 @@ export default function ElectionsScreen() {
                 : <Text style={styles.primaryText}>{t(`elections.run_button_${e.role}`)}</Text>}
             </TouchableOpacity>
             <Text style={[styles.muted, { color: blocked ? GOLD : c.textSecondary, marginTop: 6 }]}>
-              {blocked || t('elections.req_run', { count: e.minSquad })}
+              {blocked || t('elections.req_run', { count: e.minSquad, age: e.minAge || ROLE_RULES[e.role].minAge })}
             </Text>
           </View>
         )}
@@ -422,6 +443,19 @@ export default function ElectionsScreen() {
               <Text style={[styles.muted, { color: c.text, flex: 1 }]}>{t('elections.admin_hidden')}</Text>
             </View>
           )}
+          {me.isAdmin && (
+            <TouchableOpacity
+              style={[styles.hiddenNote, { borderColor: ACCENT + '66', backgroundColor: ACCENT + '14' }]}
+              onPress={() => navigation.navigate('AdminPanel', { initialTab: 'elections' })}
+              activeOpacity={0.8}
+            >
+              <Icon name="clipboard-outline" size={16} color={ACCENT} />
+              <Text style={[styles.muted, { color: c.text, flex: 1, fontWeight: '700' }]}>
+                {t('elections.admin_review_link', { count: data?.pendingApplications || 0 })}
+              </Text>
+              <Icon name="chevron-forward" size={16} color={c.textSecondary} />
+            </TouchableOpacity>
+          )}
 
           {/* Me: can I run, can I vote */}
           <View style={styles.hero}>
@@ -430,18 +464,18 @@ export default function ElectionsScreen() {
               <SquadBadge count={me.squad || 0} rankKey={me.squad ? undefined : 'squad'} size={34} />
               <Text style={styles.heroSquad}>{t('elections.my_squad', { count: me.squad || 0 })}</Text>
             </View>
-            {ROLES.map((role) => (
-              <View key={role} style={[styles.row, { gap: 6, marginTop: 6 }]}>
-                <Icon name={elig[role].ok ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={elig[role].ok ? '#A7F3D0' : 'rgba(255,255,255,0.7)'} />
-                <Text style={styles.heroLine}>
-                  {elig[role].ok
-                    ? t(`elections.can_run_${role}`)
-                    : elig[role].need > 0
-                      ? t(`elections.need_more_${role}`, { count: elig[role].need })
-                      : role === 'jmd' && me.isMod ? t('elections.err_already_mod') : t('elections.err_record')}
-                </Text>
-              </View>
-            ))}
+            {me.age !== null && me.age !== undefined && (
+              <Text style={[styles.heroLine, { marginTop: 2, opacity: 0.85 }]}>{t('elections.my_age', { count: me.age })}</Text>
+            )}
+            {ROLES.map((role) => {
+              const br = blockReasonKey(elig, role);
+              return (
+                <View key={role} style={[styles.row, { gap: 6, marginTop: 6 }]}>
+                  <Icon name={br ? 'ellipse-outline' : 'checkmark-circle'} size={16} color={br ? 'rgba(255,255,255,0.7)' : '#A7F3D0'} />
+                  <Text style={styles.heroLine}>{br ? t(br.key, { count: br.count }) : t(`elections.can_run_${role}`)}</Text>
+                </View>
+              );
+            })}
             <View style={[styles.row, { gap: 6, marginTop: 6 }]}>
               <Icon name={elig.vote.ok ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={elig.vote.ok ? '#A7F3D0' : 'rgba(255,255,255,0.7)'} />
               <Text style={styles.heroLine}>
@@ -560,7 +594,7 @@ const styles = StyleSheet.create({
   smallBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   smallBtnText: { fontSize: 12, fontWeight: '700' },
   stepBtn: { borderWidth: 1, borderRadius: 8, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  runningBox: { marginTop: 12, borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  appBox: { marginTop: 12, borderWidth: 1, borderRadius: 12, padding: 10 },
   runningText: { fontWeight: '800', fontSize: 13, flex: 1 },
   candRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 8, borderRadius: 8 },
   candName: { fontSize: 14, fontWeight: '800', flexShrink: 1 },

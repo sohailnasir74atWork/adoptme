@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   StatusBar,
@@ -10,6 +10,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { navigationRef } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
+// Imported at the top on purpose: its launch clock is the cold-start ad budget.
+import AppOpenAdManager from './Code/Ads/openApp';
 import { useLocalState } from './Code/LocalGlobelStats';
 import { AdsConsent } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
@@ -382,6 +384,13 @@ function App() {
           <Stack.Screen name="TradeMatch" options={{ headerShown: false }} getComponent={() => require('./Code/TradeMatch/TradeMatchScreen').default} />
           <Stack.Screen name="Squad" options={{ headerShown: false }} getComponent={() => require('./Code/Squad/SquadScreen').default} />
           <Stack.Screen name="Elections" options={{ headerShown: false }} getComponent={() => require('./Code/Elections/ElectionsScreen').default} />
+          {/* The Admin Dashboard lives in ChatNavigator; this root entry lets the
+              Elections screen and profile drawers reach it (params: initialTab). */}
+          <Stack.Screen name="AdminPanel" options={{ title: 'Admin Dashboard' }} getComponent={() => require('./Code/AppHelper/AdminDashboard').default} />
+          <Stack.Screen name="PetCards" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/PetCardsScreen').default} />
+          <Stack.Screen name="PackOpening" options={{ headerShown: false, animation: 'fade', gestureEnabled: false }} getComponent={() => require('./Code/PetCards/PackOpeningScreen').default} />
+          <Stack.Screen name="CardAlbum" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/CardAlbumScreen').default} />
+          <Stack.Screen name="CardWallpaper" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/CardWallpaper').default} />
 
           <Stack.Screen name="ValueScreen" options={{ title: t('home_tab.action_pet_values'), ...headerOptions }}>
             {renderValueScreen}
@@ -432,30 +441,61 @@ function App() {
   );
 }
 
+// The splash waits for login (isAppReady) but never longer than this from JS
+// start: most logins take 0.2-2.5 s; a slower one lets the app open and the
+// profile fill in behind it (GlobelStats reloads it, SigninDrawer never asks a
+// signed-in player to sign in meanwhile).
+const SPLASH_LOGIN_CAP_MS = 3000;
+const JS_STARTED_AT = Date.now();
+
 export default function AppWrapper() {
   const { localState, updateLocalState } = useLocalState();
   const { theme } = useGlobalState();
+
+  // Cold-start App Open ad: decided once per launch, shown FROM the splash or
+  // not at all (budget, first-launch and 4 h rules live in Code/Ads/openApp.js).
+  const [splashAdGateOpen, setSplashAdGateOpen] = useState(false);
+  const [splashCapReached, setSplashCapReached] = useState(false);
+  const coldStartPrepared = useRef(false);
   useEffect(() => {
-    if (localState.isAppReady) {
-      const id = requestIdleCallback(() => {
+    if (!coldStartPrepared.current) {
+      coldStartPrepared.current = true;
+      if (localState.showOnBoardingScreen || localState.isPro) {
+        AppOpenAdManager.skipColdStart();
+      } else {
+        AppOpenAdManager.prepareColdStart();
+      }
+      AppOpenAdManager.splashGate.then(() => setSplashAdGateOpen(true));
+      // Belt and braces: whatever the ad SDK does, the splash never stays
+      // more than 6 s.
+      setTimeout(() => setSplashAdGateOpen(true), 6000);
+    }
+    if (localState.showOnBoardingScreen || localState.isPro) return undefined;
+    // Registers the AppState listener so the App Open ad shows on every
+    // background→foreground return (capped + Pro-gated), not just once.
+    AppOpenAdManager.start();
+    return undefined;
+  }, [localState.isPro, localState.showOnBoardingScreen]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setSplashCapReached(true),
+      Math.max(0, JS_STARTED_AT + SPLASH_LOGIN_CAP_MS - Date.now()));
+    return () => clearTimeout(id);
+  }, []);
+
+  // Hide the splash once login is done (or the cap passed) AND the cold-start
+  // ad has either opened over it or been skipped. rAF, not
+  // requestIdleCallback: an idle callback can be starved and leave the splash
+  // stuck on screen.
+  useEffect(() => {
+    if ((localState.isAppReady || splashCapReached) && splashAdGateOpen) {
+      const raf = requestAnimationFrame(() => {
         RNBootSplash.hide({ fade: true });
       });
-      return () => cancelIdleCallback(id);
+      return () => cancelAnimationFrame(raf);
     }
-  }, [localState.isAppReady]);
-  useEffect(() => {
-    if (!localState.showOnBoardingScreen && !localState.isPro) {
-      const id = requestIdleCallback(() => {
-        try {
-          const AppOpenAdManager = require('./Code/Ads/openApp').default;
-          // Registers the AppState listener so the App Open ad shows on every
-          // background→foreground return (capped + Pro-gated), not just once.
-          AppOpenAdManager.start();
-        } catch (_) {}
-      });
-      return () => cancelIdleCallback(id);
-    }
-  }, [localState.isPro, localState.showOnBoardingScreen]);
+    return undefined;
+  }, [localState.isAppReady, splashCapReached, splashAdGateOpen]);
 
   const selectedTheme = useMemo(() => {
     if (!theme) {

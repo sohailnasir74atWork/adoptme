@@ -62,6 +62,7 @@ import { uploadEvidence } from '../../Helper/modEvidenceUpload';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import CompactPortfolio from './CompactPortfolio';
 import ProfileAdminActions from './ProfileAdminActions';
+import StaffEligibilityCard from '../../Elections/StaffEligibilityCard';
 import ProfileReviewsSection from './ProfileReviewsSection';
 import ProfileTradesSection from './ProfileTradesSection';
 import ProfilePostsSection from './ProfilePostsSection';
@@ -3370,6 +3371,11 @@ const ProfileBottomDrawer = ({
 
                 {!loadDetails && (isAdmin || user?.isModerator || user?.isBabyMod) && (
                   <View>
+                    {/* Admin only (040): can this player apply for MOD / JMD, and
+                        do they have an application waiting. */}
+                    {isAdmin && !!selectedUserId && (
+                      <StaffEligibilityCard uid={selectedUserId} isDarkMode={isDarkMode} />
+                    )}
                     <TouchableOpacity
                       onPress={() => setShowModTools(prev => !prev)}
                       style={{

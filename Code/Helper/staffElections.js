@@ -1,10 +1,17 @@
 /**
  * staffElections.js — Staff elections (MOD / JMD) client helpers.
  *
- * Server side: supabase/038_staff_elections.sql decides everything (who may
- * run, who may vote, who wins); functions/runStaffElections.js writes the
- * winners' roles into RTDB. This file only calls the RPCs, caches the
- * screen data, and works out phases/countdowns for display.
+ * Server side: supabase/038_staff_elections.sql + 040_staff_applications.sql
+ * decide everything (who may apply, who may vote, who wins);
+ * functions/runStaffElections.js writes the winners' roles into RTDB. This
+ * file only calls the RPCs, caches the screen data, and works out
+ * phases/countdowns for display.
+ *
+ * Applying (040): a player who meets the bar (squad friends, minimum age,
+ * clean record) submits an application. It is 'pending' until an admin
+ * approves it in Admin Dashboard → Elections; only 'approved' candidates
+ * are on the ballot. 'rejected' can't re-apply in that election; 'expired'
+ * means nobody decided before the election closed.
  *
  * Badges: a MOD may give Trusted / CMSR / Helper only to a player with
  * BADGE_MIN_SQUAD squad friends. The RTDB rule enforces it (from
@@ -26,13 +33,14 @@ try {
   };
 }
 
-// Kept in step with _staff_rules / _staff_limits in 038_staff_elections.sql.
+// Kept in step with _staff_rules / _staff_limits in 040_staff_applications.sql.
 // The screen prefers the server's copy (staff_elections_get returns both).
 export const ROLE_RULES = {
-  mod: { seats: 4, minSquad: 10, minVotes: 10, termDays: 60, nominateHours: 72, voteHours: 96 },
-  jmd: { seats: 6, minSquad: 3, minVotes: 3, termDays: 30, nominateHours: 72, voteHours: 96 },
+  mod: { seats: 4, minSquad: 5, minAge: 18, minVotes: 10, termDays: 60, nominateHours: 72, voteHours: 96 },
+  jmd: { seats: 6, minSquad: 3, minAge: 16, minVotes: 3, termDays: 30, nominateHours: 72, voteHours: 96 },
 };
 export const ROLES = ['mod', 'jmd'];
+export const APPLICATION_STATUSES = ['pending', 'approved', 'rejected', 'expired'];
 export const BADGE_MIN_SQUAD = 3;
 export const VOTER_MIN_DAYS = 7;
 export const CLEAN_RECORD_DAYS = 30;
@@ -95,18 +103,39 @@ export const homeHighlight = (brief, now = Date.now()) => {
   return { ...live[0], endsAt: phaseEndsAt(live[0], now) };
 };
 
-/** How far the caller is from running for each role. */
+/**
+ * Can the caller apply for each role, and why not. The server's verdict
+ * (me.eligible, 040) wins; the local calculation covers cached data from
+ * before it existed. `reasons` uses the server's words: squad, age,
+ * age_unknown, record, already_mod.
+ */
 export const eligibility = (data) => {
   const me = data?.me || {};
   const rules = data?.rules || ROLE_RULES;
   const squad = Number(me.squad) || 0;
+  const age = me.age === null || me.age === undefined || !Number.isFinite(Number(me.age)) ? null : Number(me.age);
   const out = {};
   for (const role of ROLES) {
-    const need = Math.max(0, (rules[role]?.minSquad ?? ROLE_RULES[role].minSquad) - squad);
-    out[role] = {
-      need,
-      ok: need === 0 && me.cleanRecord !== false && !(role === 'jmd' && me.isMod),
-    };
+    const minSquad = rules[role]?.minSquad ?? ROLE_RULES[role].minSquad;
+    const minAge = rules[role]?.minAge ?? ROLE_RULES[role].minAge;
+    const server = me.eligible?.[role];
+    if (server && Array.isArray(server.reasons)) {
+      out[role] = {
+        ok: !!server.ok,
+        reasons: server.reasons,
+        need: Math.max(0, (server.minSquad ?? minSquad) - (Number(server.squad) || squad)),
+        minAge: server.minAge ?? minAge,
+      };
+      continue;
+    }
+    const reasons = [];
+    const need = Math.max(0, minSquad - squad);
+    if (need > 0) reasons.push('squad');
+    if (age === null) reasons.push('age_unknown');
+    else if (age < minAge) reasons.push('age');
+    if (me.cleanRecord === false || me.banned) reasons.push('record');
+    if (role === 'jmd' && me.isMod) reasons.push('already_mod');
+    out[role] = { ok: reasons.length === 0, reasons, need, minAge };
   }
   const minDays = data?.limits?.voterMinDays ?? VOTER_MIN_DAYS;
   out.vote = {
@@ -114,6 +143,23 @@ export const eligibility = (data) => {
     daysLeft: Math.max(0, minDays - (Number(me.accountDays) || 0)),
   };
   return out;
+};
+
+/**
+ * The one line to show for a role's eligibility: the first blocking reason
+ * as an i18n key + params, or null when the player may apply.
+ */
+export const blockReasonKey = (elig, role) => {
+  const e = elig?.[role];
+  if (!e || e.ok) return null;
+  switch (e.reasons?.[0]) {
+    case 'squad': return { key: `elections.need_more_${role}`, count: e.need };
+    case 'age': return { key: `elections.need_age_${role}`, count: e.minAge };
+    case 'age_unknown': return { key: 'elections.need_dob' };
+    case 'already_mod': return { key: 'elections.err_already_mod' };
+    case 'record': return { key: 'elections.err_record' };
+    default: return { key: 'elections.err_generic' };
+  }
 };
 
 // ── Cache ─────────────────────────────────────────────────────────────────
@@ -241,4 +287,34 @@ export const adminDisqualify = async (uid, electionId, candidateUid) => {
   if (error) throw error;
   dropCaches(uid);
   return data || { ok: false };
+};
+
+/** Every application in an open election, pending first (admin panel). */
+export const adminApplications = async () => {
+  const { data, error } = await supabase.rpc('staff_admin_applications');
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+};
+
+/** Approve or reject an application; the decision can be changed while the election is open. */
+export const adminReview = async (uid, electionId, candidateUid, approve, note) => {
+  const { data, error } = await supabase.rpc('staff_admin_review', {
+    p_election: electionId,
+    p_uid: candidateUid,
+    p_approve: !!approve,
+    p_note: String(note || '').trim().slice(0, 200) || null,
+  });
+  if (error) throw error;
+  dropCaches(uid);
+  const res = data || { ok: false, reason: 'unknown' };
+  track('election_review', { ok: res.ok ? 1 : 0, decision: approve ? 'approve' : 'reject' });
+  return res;
+};
+
+/** A player's standing (squad, age, record, roles, open application). Admins only; the server checks. */
+export const adminEligibility = async (targetUid) => {
+  if (!targetUid) return null;
+  const { data, error } = await supabase.rpc('staff_admin_eligibility', { p_uid: targetUid });
+  if (error) throw error;
+  return data || null;
 };

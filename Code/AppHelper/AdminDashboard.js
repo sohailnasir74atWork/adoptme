@@ -79,8 +79,9 @@ import {
   fetchRecentModActions,
 } from '../Supabase/modLogBackend';
 import { useGlobalState } from '../GlobelStats';
+import { adminApplications, adminReview } from '../Helper/staffElections';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
@@ -285,6 +286,8 @@ const AdminDashboard = () => {
   // Moderator ban/mute powers can be disabled by an admin. Admins are never blocked.
   const canBanMute = canStaffBanMute({ isAdmin, isModerator, isBabyMod, modControlsEnabled });
   const navigation = useNavigation();
+  // Opened from the Elections screen or a profile drawer with a tab to land on.
+  const route = useRoute();
   // targetSdk 36 means Android draws edge-to-edge and nothing is inset for
   // us. This screen handled insets nowhere, so the bottom of every list —
   // and, worst of all, the strike buttons in the user modal — sat behind
@@ -295,7 +298,7 @@ const AdminDashboard = () => {
   const C = isDark ? palette.dark : palette.light;
 
   // Tabs
-  const [activeTab, setActiveTab] = useState('banned');
+  const [activeTab, setActiveTab] = useState(route?.params?.initialTab || 'banned');
 
   // ── Status Feed (admin moderation) ──
   const STATUS_PAGE_SIZE = 10;
@@ -992,6 +995,51 @@ const AdminDashboard = () => {
       Alert.alert('Error', 'Could not update the elections switch. Check your write permissions.');
     }
   }, [db]);
+
+  // ── Elections: applications (040). Players apply during nominations; only
+  // what an admin approves here goes on the ballot. ──
+  const [apps, setApps] = useState([]);
+  const [appsLoading, setAppsLoading] = useState(false);
+  const [appsError, setAppsError] = useState(false);
+  const [reviewing, setReviewing] = useState(null);     // `${electionId}:${uid}` in flight
+  const [rejectTarget, setRejectTarget] = useState(null); // application the note sheet is open for
+  const [rejectNote, setRejectNote] = useState('');
+  const loadApplications = useCallback(async () => {
+    setAppsLoading(true);
+    setAppsError(false);
+    try {
+      setApps(await adminApplications());
+    } catch (e) {
+      console.warn('[AdminDashboard] applications failed:', e?.message);
+      setAppsError(true);
+    } finally {
+      setAppsLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (activeTab === 'elections' && isAdmin) loadApplications();
+  }, [activeTab, isAdmin, loadApplications]);
+  const decideApplication = useCallback(async (a, approve, note) => {
+    const key = `${a.electionId}:${a.uid}`;
+    if (reviewing) return;
+    setReviewing(key);
+    try {
+      const res = await adminReview(currentUser?.id, a.electionId, a.uid, approve, note);
+      if (!res?.ok) {
+        const why = {
+          closed: 'This election has already closed.',
+          no_candidate: 'This application was withdrawn.',
+          banned: 'This player is banned right now and cannot be approved.',
+        }[res?.reason] || 'Could not save the decision. Try again.';
+        Alert.alert('Not saved', why);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not reach the server. Try again.');
+    } finally {
+      setReviewing(null);
+      loadApplications();
+    }
+  }, [reviewing, currentUser?.id, loadApplications]);
 
   // ─────────────────────────────────────────────
   // ✅ Fallback compute rating summary directly from reviews (Fix rating 0 issue)
@@ -3431,7 +3479,10 @@ const AdminDashboard = () => {
           )}
         </View>
       ) : activeTab === 'elections' && isAdmin ? (
-        <View style={{ padding: 16 }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
+          refreshControl={<RefreshControl refreshing={appsLoading} onRefresh={loadApplications} tintColor={HUE.accent} />}
+        >
           <View
             style={{
               flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10,
@@ -3449,7 +3500,7 @@ const AdminDashboard = () => {
             <View style={{ flex: 1, paddingRight: SPACE.md }}>
               <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>Show Staff Elections to players</Text>
               <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
-                {electionsEnabled ? 'Live: players can open, run and vote' : 'Off: players see "Coming soon"'}
+                {electionsEnabled ? 'Live: players can open, apply and vote' : 'Off: players see "Coming soon"'}
               </Text>
             </View>
             <Switch
@@ -3460,8 +3511,10 @@ const AdminDashboard = () => {
             />
           </View>
           <Text style={{ fontSize: 13, color: C.textMuted, lineHeight: 19 }}>
-            MODs and Junior Mods are elected by players now. Start, watch or cancel a race,
-            and remove a candidate (long-press), from the Elections screen.
+            MODs and Junior Mods are elected by players. To apply, a player needs 5 squad friends and
+            18+ for MOD, or 3 squad friends and 16+ for JMD, with no strike or ban in the last 30 days.
+            Only applications you approve here go on the ballot. Start, watch or cancel a race from the
+            Elections screen.
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Elections')}
@@ -3469,7 +3522,139 @@ const AdminDashboard = () => {
           >
             <Text style={{ color: '#fff', fontWeight: '800' }}>Open Elections</Text>
           </TouchableOpacity>
-        </View>
+
+          {/* Applications */}
+          {(() => {
+            const pending = apps.filter((a) => a.status === 'pending').length;
+            const ElPill = ({ text, color }) => (
+              <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.pill, backgroundColor: tint(color, '22') }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color }}>{text}</Text>
+              </View>
+            );
+            const renderApplication = (a) => {
+              const key = `${a.electionId}:${a.uid}`;
+              const chk = a.check || {};
+              const minSquad = chk.minSquad ?? a.minSquad;
+              const minAge = chk.minAge ?? a.minAge;
+              const squad = chk.squad ?? a.squadAtEntry;
+              const age = chk.age ?? a.ageAtEntry;
+              const statusHue = { pending: HUE.warn, approved: HUE.success, rejected: HUE.danger }[a.status] || HUE.mute;
+              const roleHue = a.role === 'mod' ? '#3B82F6' : '#8B5CF6';
+              const busy = reviewing === key;
+              const checks = [
+                { ok: squad >= minSquad, label: `Squad ${squad}/${minSquad}` },
+                { ok: age != null && age >= minAge, label: age == null ? 'No birthday on file' : `Age ${age} (${minAge}+)` },
+                { ok: chk.cleanRecord !== false, label: chk.banned ? 'Banned now' : chk.cleanRecord === false ? 'Strike/ban in 30 days' : 'Clean record' },
+                { ok: true, label: `Account ${a.accountDays ?? '?'}d` },
+              ];
+              return (
+                <View key={key} style={{ borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: RADIUS.md, padding: 12, marginTop: SPACE.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Image source={{ uri: getAvatarSafe(a) }} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.fieldBg }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: C.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{a.name || 'Unknown'}</Text>
+                      <Text style={{ color: C.textMuted, fontSize: 11.5, marginTop: 1 }}>
+                        Applied {timeAgo(Date.parse(a.appliedAt))}{a.phase === 'voting' ? ' · voting is open' : ''}
+                      </Text>
+                    </View>
+                    <ElPill text={a.role === 'mod' ? 'MOD' : 'JMD'} color={roleHue} />
+                    <ElPill text={a.status.charAt(0).toUpperCase() + a.status.slice(1)} color={statusHue} />
+                  </View>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {checks.map((x) => (
+                      <View key={x.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.pill, backgroundColor: tint(x.ok ? HUE.success : HUE.danger, '1A') }}>
+                        <Ionicons name={x.ok ? 'checkmark-circle' : 'close-circle'} size={12} color={x.ok ? HUE.success : HUE.danger} />
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: C.text }}>{x.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {!!a.pitch && (
+                    <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 10, fontStyle: 'italic' }}>“{a.pitch}”</Text>
+                  )}
+                  {!!a.note && <Text style={{ color: C.textMuted, fontSize: 12, marginTop: 6 }}>Your note: {a.note}</Text>}
+                  {a.status === 'pending' && a.phase === 'voting' && (
+                    <Text style={{ color: HUE.warn, fontSize: 12, marginTop: 6 }}>Voting has started: approving now puts them on the ballot late.</Text>
+                  )}
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    {a.status !== 'approved' && (
+                      <TouchableOpacity
+                        disabled={!!reviewing}
+                        onPress={() => decideApplication(a, true)}
+                        style={{ flex: 1, backgroundColor: HUE.success, borderRadius: RADIUS.sm, paddingVertical: 10, alignItems: 'center', opacity: reviewing && !busy ? 0.5 : 1 }}
+                      >
+                        {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Approve</Text>}
+                      </TouchableOpacity>
+                    )}
+                    {a.status !== 'rejected' && (
+                      <TouchableOpacity
+                        disabled={!!reviewing}
+                        onPress={() => { setRejectTarget(a); setRejectNote(''); }}
+                        style={{ flex: 1, borderWidth: 1.5, borderColor: HUE.danger, borderRadius: RADIUS.sm, paddingVertical: 10, alignItems: 'center', opacity: reviewing ? 0.5 : 1 }}
+                      >
+                        <Text style={{ color: HUE.danger, fontWeight: '800', fontSize: 13 }}>{a.status === 'approved' ? 'Remove from ballot' : 'Reject'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              );
+            };
+            return (
+              <View style={{ marginTop: SPACE.xl }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.text, flex: 1 }}>Applications</Text>
+                  {pending > 0 && <ElPill text={`${pending} to review`} color={HUE.warn} />}
+                  <TouchableOpacity onPress={loadApplications} disabled={appsLoading} style={{ padding: 4 }}>
+                    <Ionicons name="refresh" size={18} color={C.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {appsLoading && apps.length === 0 ? (
+                  <ActivityIndicator style={{ marginTop: 16 }} color={HUE.accent} />
+                ) : appsError ? (
+                  <Text style={{ color: HUE.danger, fontSize: 13, marginTop: 8 }}>Couldn't load the applications. Pull to retry.</Text>
+                ) : apps.length === 0 ? (
+                  <Text style={{ color: C.textMuted, fontSize: 13, lineHeight: 19, marginTop: 8 }}>
+                    No applications. Players apply from the Elections screen while nominations are open; they show up here.
+                  </Text>
+                ) : apps.map(renderApplication)}
+              </View>
+            );
+          })()}
+
+          {/* Reject: optional note the applicant sees */}
+          <Modal visible={!!rejectTarget} transparent animationType="fade" onRequestClose={() => setRejectTarget(null)}>
+            <View style={{ flex: 1, backgroundColor: C.overlay, justifyContent: 'center', padding: 24 }}>
+              <View style={{ backgroundColor: C.surface, borderRadius: RADIUS.lg, padding: 16 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: C.text }}>
+                  {rejectTarget?.status === 'approved' ? 'Remove' : 'Reject'} {rejectTarget?.name || 'this player'}'s application?
+                </Text>
+                <Text style={{ fontSize: 13, color: C.textMuted, marginTop: 6, lineHeight: 18 }}>
+                  They can't apply again in this election. The note is optional and the player sees it.
+                </Text>
+                <TextInput
+                  value={rejectNote}
+                  onChangeText={(v) => setRejectNote(v.slice(0, 200))}
+                  placeholder="e.g. Several recent warnings in chat"
+                  placeholderTextColor={C.textFaint}
+                  multiline
+                  maxLength={200}
+                  style={{ marginTop: 12, borderWidth: 1, borderColor: C.border, borderRadius: RADIUS.sm, backgroundColor: C.fieldBg, color: C.text, padding: 10, minHeight: 70, textAlignVertical: 'top', fontSize: 14 }}
+                />
+                <Text style={{ fontSize: 11, color: C.textFaint, alignSelf: 'flex-end', marginTop: 4 }}>{rejectNote.length}/200</Text>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <TouchableOpacity onPress={() => setRejectTarget(null)} style={{ flex: 1, borderWidth: 1, borderColor: C.border, borderRadius: RADIUS.sm, paddingVertical: 11, alignItems: 'center' }}>
+                    <Text style={{ color: C.text, fontWeight: '700' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => { const a = rejectTarget; setRejectTarget(null); if (a) decideApplication(a, false, rejectNote); }}
+                    style={{ flex: 1, backgroundColor: HUE.danger, borderRadius: RADIUS.sm, paddingVertical: 11, alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '800' }}>{rejectTarget?.status === 'approved' ? 'Remove' : 'Reject'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
       ) : null}
 
       {/* Modal */}

@@ -1,6 +1,6 @@
 /**
- * RoleCharter — what a MOD and a JMD can and can't do, the badges MODs give,
- * and how elections run. Every line here matches a gate the app or the
+ * RoleCharter — what a MOD and a JMD can and can't do, the bar to apply
+ * (squad friends + minimum age), the badges MODs give, and how elections run. Every line here matches a gate the app or the
  * server actually enforces (ProfileAdminActions, utils.js canSanctionTarget,
  * database.rules.json /users, 038_staff_elections.sql).
  */
@@ -61,7 +61,7 @@ const RoleCard = ({ role, rules, c, t }) => {
         <View style={{ flex: 1 }}>
           <Text style={[styles.roleTitle, { color: c.text }]}>{t(`elections.role_${role}`)}</Text>
           <Text style={[styles.roleMeta, { color: ROLE_COLOR[role] }]}>
-            {t('elections.role_req', { count: r.minSquad, days: r.termDays })}
+            {t('elections.role_req', { count: r.minSquad, age: r.minAge ?? ROLE_RULES[role].minAge, days: r.termDays })}
           </Text>
         </View>
       </View>
