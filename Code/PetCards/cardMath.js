@@ -3,7 +3,7 @@
  * No React, no network.
  */
 
-import { FINISHES, RARITIES } from './cardConfig';
+import { FINISHES, RARITIES, FUSE_NEXT, FUSE_COPIES } from './cardConfig';
 
 /** 675 → "675", 2430 → "2.4K", 9100000 → "9.1M", 3.25 → "3.25". */
 export const formatCompact = (n) => {
@@ -108,6 +108,28 @@ export const packsAvailable = (wallet) => {
   return (wallet.freeReady ? 1 : 0) + (wallet.bonusPacks || 0);
 };
 
+// ── Neon fusion (fuse_card, supabase/044) ──
+
+/** What fusing one finish of a card would make: { to, have, need, ready } or null. */
+export const fusionOf = (entries, finish) => {
+  const to = FUSE_NEXT[finish];
+  if (!to) return null;
+  const e = (Array.isArray(entries) ? entries : []).find((x) => x[0] === finish);
+  const have = e ? e[1] || 0 : 0;
+  return { to, have, need: FUSE_COPIES, ready: have >= FUSE_COPIES };
+};
+
+/** The owned entries after a fusion: 4 of `from` used (row gone at 0), one `to` added with no serial. */
+export const applyFusion = (entries, from, to) => {
+  const list = (Array.isArray(entries) ? entries : [])
+    .map((e) => (e[0] === from ? [e[0], (e[1] || 0) - FUSE_COPIES, e[2] ?? null] : e))
+    .filter((e) => e[1] > 0);
+  const i = list.findIndex((e) => e[0] === to);
+  if (i >= 0) list[i] = [to, list[i][1] + 1, list[i][2] ?? null];
+  else list.push([to, 1, null]);
+  return list;
+};
+
 // ── Profile showcase (user_cosmetics.card_showcase, written by set_card_showcase) ──
 export const SHOWCASE_MAX = 3;
 
@@ -141,4 +163,60 @@ export const toggleShowcase = (list, key, finish) => {
     .map((e) => ({ k: e.k, f: e.f }));
   if (cur.some((e) => e.k === key && e.f === finish)) return cur.filter((e) => e.k !== key);
   return [{ k: key, f: finish }, ...cur.filter((e) => e.k !== key)].slice(0, SHOWCASE_MAX);
+};
+
+// ── "Match my pet" backgrounds (Wallpaper Studio) ──
+const hexToHsl = (hex) => {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  if (!Number.isFinite(n)) return { h: 0, s: 0, l: 0.5 };
+  // eslint-disable-next-line no-bitwise
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { h: h / 6, s, l };
+};
+
+const hsl = (h, s, l, a = 1) => {
+  const deg = Math.round(h * 360) % 360;
+  const pct = (x) => `${Math.round(Math.max(0, Math.min(1, x)) * 100)}%`;
+  return a < 1 ? `hsla(${deg}, ${pct(s)}, ${pct(l)}, ${a})` : `hsl(${deg}, ${pct(s)}, ${pct(l)})`;
+};
+
+// A grey pet (Dalmatian, Crow) stays grey; any colour gets enough saturation to read.
+const sat = (c, lo, hi) => (c.s < 0.1 ? c.s : Math.max(lo, Math.min(hi, c.s)));
+
+/**
+ * A pet's colours [main, second, accent] (petColors.json) → a wallpaper
+ * background { css, accent, dark } in the same shape as the colour themes.
+ * Only the hues come from the pet: lightness is set by the tone, so a black
+ * pet still gets a pastel light background and a pale one a deep dark one.
+ */
+export const matchPalette = (colors, tone = 'light') => {
+  const list = Array.isArray(colors) && colors.length ? colors : ['#9AA8B8'];
+  const [main, second, accent] = [0, 1, 2].map((i) => hexToHsl(list[i] || list[0]));
+  if (tone === 'dark') {
+    return {
+      dark: true,
+      accent: hsl(accent.h, sat(accent, 0.7, 1), 0.66),
+      css: [
+        `radial-gradient(ellipse 70% 45% at 30% 28%, ${hsl(accent.h, sat(accent, 0.7, 1), 0.55, 0.5)} 0%, ${hsl(accent.h, sat(accent, 0.7, 1), 0.55, 0)} 70%)`,
+        `radial-gradient(ellipse 65% 40% at 75% 75%, ${hsl(second.h, sat(second, 0.5, 0.9), 0.5, 0.35)} 0%, ${hsl(second.h, sat(second, 0.5, 0.9), 0.5, 0)} 70%)`,
+        `linear-gradient(170deg, ${hsl(main.h, sat(main, 0.3, 0.7), 0.1)} 0%, ${hsl(second.h, sat(second, 0.35, 0.7), 0.2)} 55%, ${hsl(main.h, sat(main, 0.3, 0.7), 0.05)} 100%)`,
+      ].join(', '),
+    };
+  }
+  return {
+    dark: false,
+    accent: hsl(accent.h, sat(accent, 0.6, 1), 0.5),
+    css: [
+      'radial-gradient(ellipse 70% 42% at 25% 18%, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0) 70%)',
+      `radial-gradient(ellipse 60% 40% at 80% 85%, ${hsl(accent.h, sat(accent, 0.5, 0.9), 0.75, 0.6)} 0%, ${hsl(accent.h, sat(accent, 0.5, 0.9), 0.75, 0)} 70%)`,
+      `linear-gradient(170deg, ${hsl(main.h, sat(main, 0.35, 0.75), 0.93)} 0%, ${hsl(second.h, sat(second, 0.35, 0.7), 0.83)} 50%, ${hsl(accent.h, sat(accent, 0.45, 0.8), 0.73)} 100%)`,
+    ].join(', '),
+  };
 };

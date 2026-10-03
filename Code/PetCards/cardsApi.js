@@ -59,6 +59,7 @@ export const errorKey = (e) => {
   if (/no cards in this pack/.test(m)) return 'pack_empty';
   if (/not enough shards/.test(m)) return 'shards';
   if (/already owned/.test(m)) return 'owned';
+  if (/not enough copies/.test(m)) return 'fuse_copies';
   if (/sign in required/.test(m)) return 'sign_in';
   return 'generic';
 };
@@ -128,6 +129,13 @@ export async function openPack(setId, source) {
 
 export async function craftCard(key) {
   const data = await call('craft_card', { p_key: key });
+  afterChange(data?.wallet);
+  return data;
+}
+
+/** 4 copies of (key, from) -> 1 of the next finish (supabase/044). */
+export async function fuseCard(key, from) {
+  const data = await call('fuse_card', { p_key: key, p_from: from });
   afterChange(data?.wallet);
   return data;
 }

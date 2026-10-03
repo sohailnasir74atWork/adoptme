@@ -1,7 +1,7 @@
 import {
   formatCompact, parseCatalog, buildValueIndex, setProgress, bestOwned, totalCopies,
   bestPull, revealTier, countdown, nextUtcMidnight, packsAvailable,
-  parseShowcase, toggleShowcase, isShowcased,
+  parseShowcase, toggleShowcase, isShowcased, matchPalette, fusionOf, applyFusion,
 } from '../Code/PetCards/cardMath';
 import { bgIdFor, themeIdFor, hashKey } from '../Code/PetCards/cardConfig';
 
@@ -136,5 +136,37 @@ describe('profile showcase', () => {
     list = toggleShowcase(list, 'b', 'mega');               // same again unpins
     expect(list.map((e) => e.k)).toEqual(['d', 'c']);
     expect(toggleShowcase(stored, 'trex', 'classic')).toEqual([{ k: 'shadowdragon', f: 'mega' }, { k: 'old', f: 'holo' }]);
+  });
+});
+
+describe('match my pet', () => {
+  it('keeps the pet hue and sets lightness by tone', () => {
+    const red = ['#E50F10', '#1B212C', '#CC110F'];            // Evil Unicorn
+    const light = matchPalette(red, 'light');
+    expect(light.dark).toBe(false);
+    expect(light.css).toContain('hsl(0, 75%, 93%)');            // pastel of the red
+    const dark = matchPalette(red, 'dark');
+    expect(dark.dark).toBe(true);
+    expect(dark.css).toContain('hsl(0, 70%, 10%)');             // deep of the red
+    expect(dark.accent).toBe('hsl(1, 86%, 66%)');      // the vivid red, lifted to glow
+  });
+  it('leaves grey pets grey and survives missing colours', () => {
+    expect(matchPalette(['#808080'], 'light').css).toContain('hsl(0, 0%, 93%)');
+    expect(matchPalette(null, 'dark').css).toContain('linear-gradient');
+  });
+});
+
+describe('neon fusion', () => {
+  it('knows what a finish fuses into and whether 4 copies are there', () => {
+    const e = [['classic', 5, null], ['neon', 2, null], ['holo', 1, 7]];
+    expect(fusionOf(e, 'classic')).toEqual({ to: 'neon', have: 5, need: 4, ready: true });
+    expect(fusionOf(e, 'neon')).toEqual({ to: 'mega', have: 2, need: 4, ready: false });
+    expect(fusionOf(e, 'holo')).toBeNull();                   // only Classic and Neon fuse
+    expect(fusionOf(null, 'classic')).toEqual({ to: 'neon', have: 0, need: 4, ready: false });
+  });
+  it('uses 4 copies, drops an emptied finish, adds one serial-less copy', () => {
+    expect(applyFusion([['classic', 5, null]], 'classic', 'neon')).toEqual([['classic', 1, null], ['neon', 1, null]]);
+    expect(applyFusion([['classic', 4, null], ['neon', 1, null]], 'classic', 'neon')).toEqual([['neon', 2, null]]);
+    expect(applyFusion([['neon', 4, null], ['mega', 1, 12]], 'neon', 'mega')).toEqual([['mega', 2, 12]]);   // pulled serial kept
   });
 });

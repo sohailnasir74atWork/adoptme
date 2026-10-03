@@ -9,7 +9,8 @@
  * (scripts/pet-cards/dev-cdn.py) to see the real HD pet art.
  */
 
-import { DEFAULT_ODDS, DUPE_SHARDS, CRAFT_COST, RARITY_POINTS, FINISH_STYLE, cdnBase } from './cardConfig';
+import { DEFAULT_ODDS, DUPE_SHARDS, CRAFT_COST, RARITY_POINTS, FINISH_STYLE, FUSE_NEXT, FUSE_COPIES, cdnBase } from './cardConfig';
+import { applyFusion } from './cardMath';
 
 const wiki = require('../../scripts/pet-cards/sets.json');
 
@@ -240,6 +241,30 @@ export default {
     const s = settle(st, [p_key]);
     save('state', st);
     return { card, wallet: walletJson(st.wallet), ...s };
+  },
+
+  async fuse_card({ p_key, p_from }) {
+    await buildCatalog();
+    const st = state();
+    const to = FUSE_NEXT[p_from];
+    if (!to) fail('cannot fuse');
+    const c = catalog.find((x) => x.key === p_key);
+    if (!c) fail('unknown card');
+    const entries = st.owned[p_key] || [];
+    const e = entries.find((x) => x[0] === p_from);
+    if (!e || e[1] < FUSE_COPIES) fail('not enough copies');
+    const hadTo = entries.some((x) => x[0] === to);
+    const pts = (f) => RARITY_POINTS[c.rarity] * FINISH_STYLE[f].mult;
+    if (e[1] === FUSE_COPIES) st.wallet.score -= pts(p_from);
+    if (!hadTo) st.wallet.score += pts(to);
+    st.owned[p_key] = applyFusion(entries, p_from, to);
+    save('state', st);
+    const left = (st.owned[p_key].find((x) => x[0] === p_from) || [null, 0])[1];
+    return {
+      card: { key: c.key, name: c.name, rarity: c.rarity, no: c.no, egg: c.egg, sets: c.sets, finish: to, serial: null,
+        fused: true, new: false, newFinish: !hadTo, dupe: hadTo, shards: 0 },
+      left, wallet: walletJson(st.wallet),
+    };
   },
 
   async get_card_collection() {

@@ -27,12 +27,13 @@ import { trackGrowthEvent } from '../Helper/growthAnalytics';
 import { fetchAnalyticsData, freshDiffEntries, valueChangeOf } from '../Helper/analyticsDataHelper';
 import usePetCards from './usePetCards';
 import PetCard from './PetCard';
-import { bestOwned } from './cardMath';
-import { FINISHES, RARITIES, bgIdFor } from './cardConfig';
+import { bestOwned, matchPalette } from './cardMath';
+import { FINISHES, RARITIES, RARITY_STYLE, bgIdFor } from './cardConfig';
 import { paintFor } from './cardArt';
 import {
   WallpaperArt, WP_STYLES, WP_MAX_PETS, WP_STYLE_ICON, WP_GRADIENTS, WP_LIGHT, WP_DARK, WP_SCENES, WP_MOTIFS, WP_MOTIF_ICON,
 } from './wallpaperStyles';
+import PET_COLORS from './petColors.json';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.62)';
@@ -49,6 +50,14 @@ try {
   const { createMMKV } = require('react-native-mmkv');
   analyticsCache = createMMKV({ id: 'analytics-cache' });
 } catch (e) { /* trends are optional */ }
+
+// A pet's [main, second, accent] colours (scripts/pet-cards/hd-art/palette.py);
+// pets without HD art yet fall back to their rarity colours.
+const colorsFor = (pet) => {
+  if (PET_COLORS[pet?.key]) return PET_COLORS[pet.key];
+  const rs = RARITY_STYLE[pet?.rarity] || RARITY_STYLE.common;
+  return [rs.base, rs.light, rs.dark];
+};
 
 const keyOf = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -142,6 +151,11 @@ export default function CardWallpaper() {
     setPicked(cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key].slice(-max));
   };
 
+  // "Match my pet" follows the lead pet: change the pet and the colours follow.
+  const lead = pets[0] || null;
+  const leadColors = useMemo(() => colorsFor(lead), [lead]);
+  const bg = background.type === 'match' ? { ...background, colors: leadColors } : background;
+
   const F = FORMATS[format];
   const previewW = format === 'phone' ? Math.min(W * 0.62, 260) : Math.min(W - 32, 420);
   const scale = previewW / F.w;
@@ -206,7 +220,7 @@ export default function CardWallpaper() {
           <View style={{ width: F.w * scale, height: F.h * scale, borderRadius: format === 'phone' ? 26 : 10, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: '#000' }}>
             <View style={{ position: 'absolute', left: (F.w * scale - F.w) / 2, top: (F.h * scale - F.h) / 2, width: F.w, height: F.h, transform: [{ scale }] }}>
               <ViewShot ref={shot} options={{ format: 'jpg', quality: 0.95, width: F.out[0], height: F.out[1] }} style={{ width: F.w, height: F.h, overflow: 'hidden', backgroundColor: '#000' }}>
-                <WallpaperArt style={style} F={F} pets={pets} background={background} options={opts} labels={labels} />
+                <WallpaperArt style={style} F={F} pets={pets} background={bg} options={opts} labels={labels} />
               </ViewShot>
               {format === 'phone' && opts.clock ? (
                 <View pointerEvents="none" style={{ position: 'absolute', left: 0, width: F.w, top: F.h * 0.07, alignItems: 'center' }}>
@@ -275,6 +289,23 @@ export default function CardWallpaper() {
 
         {tab === 'background' ? (
           <>
+            {lead ? (
+              <>
+                <Text style={styles.sub}>{t('pet_cards.wp_match')}</Text>
+                <View style={[styles.row, { flexDirection: 'row' }]}>
+                  {['light', 'dark'].map((tone) => {
+                    const on = background.type === 'match' && background.tone === tone;
+                    return (
+                      <TouchableOpacity key={tone} onPress={() => setBackground({ type: 'match', tone })} style={{ alignItems: 'center', width: 64 }}>
+                        <View style={[styles.swatch, { backgroundImage: matchPalette(leadColors, tone).css }, on && styles.swatchOn]} />
+                        <Text numberOfLines={1} style={[styles.swatchName, on && { color: ACCENT }]}>{t(`pet_cards.wp_${tone}`)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <Text style={[styles.hint, { flex: 1, marginTop: 0, paddingHorizontal: 0 }]}>{t('pet_cards.wp_match_hint', { pet: lead.name })}</Text>
+                </View>
+              </>
+            ) : null}
             {[['light', WP_LIGHT], ['dark', WP_DARK]].map(([tone, ids]) => (
               <React.Fragment key={tone}>
                 <Text style={styles.sub}>{t(`pet_cards.wp_${tone}`)}</Text>

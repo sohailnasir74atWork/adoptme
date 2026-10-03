@@ -107,6 +107,18 @@ function PetCard({
   const shineTy = shine ? shine.y.interpolate({ inputRange: [-1, 1], outputRange: [H * 0.5, -H * 0.5] }) : -H * 0.3;
   const holoTx = shine ? shine.x.interpolate({ inputRange: [-1, 1], outputRange: [-width * 0.6, width * 0.6] }) : 0;
 
+  // Depth: while the finger tilts the card, the scenery slides against the
+  // tilt and the pet with it, so the pet seems to stand in front of a window
+  // instead of being printed on it. The scenery is drawn 8% larger so its
+  // edges never show.
+  const tilt = shine?.tilt;
+  const depth = (k) => (tilt ? [
+    { translateX: tilt.x.interpolate({ inputRange: [-1, 1], outputRange: [-u * k, u * k] }) },
+    { translateY: tilt.y.interpolate({ inputRange: [-1, 1], outputRange: [-u * k * 0.7, u * k * 0.7] }) },
+  ] : []);
+  const sceneryDepth = tilt ? [...depth(-2.4), { scale: 1.08 }] : [];
+  const petDepth = depth(2.2);
+
   const petSize = Math.min(artW, artH) * 0.94;
   // Pop-out pets are drawn bigger than the window so they break out of its top.
   const popScale = fullArt ? 1.12 : 1.2;
@@ -129,14 +141,16 @@ function PetCard({
   // Art background, shared by the window and Full Art.
   const artLayers = (w, h) => (
     <>
-      <View style={[StyleSheet.absoluteFill, { backgroundImage: paintFor(bgId) }]} />
-      {bgUri ? (
-        <Image
-          source={{ uri: bgUri }}
-          resizeMode="cover"
-          style={{ position: 'absolute', width: w, height: w * 1.4, left: 0, top: h >= w * 1.4 ? 0 : -(w * 1.4 - h) * 0.55 }}
-        />
-      ) : null}
+      <Animated.View style={[StyleSheet.absoluteFill, { transform: sceneryDepth }]}>
+        <View style={[StyleSheet.absoluteFill, { backgroundImage: paintFor(bgId) }]} />
+        {bgUri ? (
+          <Image
+            source={{ uri: bgUri }}
+            resizeMode="cover"
+            style={{ position: 'absolute', width: w, height: w * 1.4, left: 0, top: h >= w * 1.4 ? 0 : -(w * 1.4 - h) * 0.55 }}
+          />
+        ) : null}
+      </Animated.View>
       {f === 'neon' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,4,30,0.45)' }]} /> : null}
       {holo ? (
         <>
@@ -244,24 +258,24 @@ function PetCard({
         >
           {artLayers(artW, artH)}
           {!popOut ? (
-            <View style={{ position: 'absolute', left: (artW - petSize) / 2, bottom: artH * 0.02 }}>{pet}</View>
+            <Animated.View style={{ position: 'absolute', left: (artW - petSize) / 2, bottom: artH * 0.02, transform: petDepth }}>{pet}</Animated.View>
           ) : null}
         </View>
       ) : null}
 
       {/* Pop-out pet: breaks out over the top of the window */}
       {popOut ? (
-        <View
+        <Animated.View
           pointerEvents="none"
           style={{
             position: 'absolute',
             left: (width - petSize) / 2,
             top: fullArt ? H * 0.13 : artTop + artH - petSize * popScale - artH * 0.02,
-            transform: [{ scale: popScale }],
+            transform: [...petDepth, { scale: popScale }],
           }}
         >
           {pet}
-        </View>
+        </Animated.View>
       ) : null}
 
       {/* Header: name + gem */}
@@ -318,6 +332,12 @@ function PetCard({
               #{String(serial).padStart(4, '0')}
             </Text>
           </View>
+        ) : null}
+        {serial == null && f === 'mega' && owned && !thumb ? (
+          // Pulled Megas always carry a serial; one without is fused (supabase/044).
+          <Text style={{ fontSize: u * 3.1, fontWeight: '900', color: rs.glow, letterSpacing: 0.6, ...glowText }}>
+            {t('pet_cards.fused_stamp').toUpperCase()}
+          </Text>
         ) : null}
       </View>
 

@@ -17,9 +17,11 @@ import { showErrorMessage, showSuccessMessage } from '../Helper/MessageHelper';
 import usePetCards from './usePetCards';
 import PetCard from './PetCard';
 import CardViewerModal from './CardViewerModal';
-import { setProgress, cardsInSet, bestOwned, totalCopies, byNumber, toggleShowcase, isShowcased } from './cardMath';
+import {
+  setProgress, cardsInSet, bestOwned, totalCopies, byNumber, toggleShowcase, isShowcased, applyFusion,
+} from './cardMath';
 import { themeOf } from './cardConfig';
-import { craftCard, setShowcase, errorKey } from './cardsApi';
+import { craftCard, fuseCard, setShowcase, errorKey } from './cardsApi';
 import { setName } from './PetCardsScreen';
 
 const INK = '#F4ECFF';
@@ -79,6 +81,26 @@ export default function CardAlbumScreen() {
       showErrorMessage(t(`pet_cards.err.${errorKey(e)}`));
     } finally {
       setCrafting(false);
+    }
+  }, [t, reload, setCollection]);
+
+  // 4 copies -> 1 of the next finish. Returns the new finish for the viewer to show.
+  const onFuse = useCallback(async (card, from) => {
+    try {
+      const r = await fuseCard(card.key, from);
+      const to = r?.card?.finish;
+      trackGrowthEvent('card_fuse', { rarity: card.rarity, from, to });
+      setCollection((prev) => {
+        const cards = { ...(prev?.cards || {}) };
+        cards[card.key] = applyFusion(cards[card.key], from, to);
+        return { ...(prev || {}), cards };
+      });
+      showSuccessMessage(t('pet_cards.fused', { pet: card.name, finish: t(`pet_cards.finish.${to}`) }));
+      reload();   // score, and a showcase the fusion moved
+      return to;
+    } catch (e) {
+      showErrorMessage(t(`pet_cards.err.${errorKey(e)}`));
+      return null;
     }
   }, [t, reload, setCollection]);
 
@@ -172,6 +194,7 @@ export default function CardAlbumScreen() {
         onClose={() => setOpen(null)}
         onCraft={onCraft}
         onShowcase={onShowcase}
+        onFuse={onFuse}
       />
     </View>
   );

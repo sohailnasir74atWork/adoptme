@@ -43,6 +43,9 @@ export const CRAFT_COST = { common: 40, uncommon: 80, rare: 200, ultra: 400, leg
 export const STAR_PACK_COST = 5;
 export const STAR_PACKS_PER_DAY = 2;
 export const STREAK_BONUS_EVERY = 7;
+// Neon fusion (supabase/044): 4 copies of one finish -> 1 of the next, as in Adopt Me.
+export const FUSE_NEXT = { classic: 'neon', neon: 'mega' };
+export const FUSE_COPIES = 4;
 
 // Fallback odds sheet (the server sends the real one in cards_state).
 export const DEFAULT_ODDS = {

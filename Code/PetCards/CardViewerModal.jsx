@@ -2,7 +2,8 @@
  * CardViewerModal — one card, big. Drag to tilt; tap to turn it over for the
  * details (origin, every finish owned with counts and serials, and today's
  * values: the back is the only place on a card where live numbers appear).
- * Owned: switch finish, share, pin to the profile showcase.
+ * Owned: switch finish, share, pin to the profile showcase, fuse 4 copies
+ * into the next finish (Classic -> Neon -> Mega, supabase/044).
  * Missing: the silhouette, where it drops, and Craft for shards.
  */
 
@@ -17,13 +18,16 @@ import CardShine from './CardShine';
 import CardShareSheet from './CardShareSheet';
 import CardIcon from './cardIcons';
 import { FINISHES, CRAFT_COST, RARITY_STYLE, FIRST_EDITION_MAX } from './cardConfig';
-import { bestOwned, formatCompact, isShowcased } from './cardMath';
+import { bestOwned, formatCompact, isShowcased, fusionOf } from './cardMath';
+import { useHaptic } from '../Helper/HepticFeedBack';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.65)';
+const FUSE_NEON = 'linear-gradient(100deg, #22E4FF 0%, #B455F6 55%, #FF2BD6 100%)';
+const FUSE_MEGA = 'linear-gradient(100deg, #FF5FA2 0%, #FFD45E 25%, #5EFFB4 50%, #5EC8FF 75%, #B45EFF 100%)';
 
 export default function CardViewerModal({
-  card, entries, values, total, shards = 0, showcase = null, onClose, onCraft, onShowcase, crafting = false,
+  card, entries, values, total, shards = 0, showcase = null, onClose, onCraft, onShowcase, onFuse, crafting = false,
 }) {
   const { t, i18n } = useTranslation();
   const { width: W } = useWindowDimensions();
@@ -33,13 +37,22 @@ export default function CardViewerModal({
   const [finish, setFinish] = useState(best?.finish || 'classic');
   const [details, setDetails] = useState(false);
   const [share, setShare] = useState(null);
+  const [fusing, setFusing] = useState(false);
   const turn = useRef(new Animated.Value(0)).current;
+  const flash = useRef(new Animated.Value(0)).current;
+  const { triggerHapticFeedback } = useHaptic();
 
   useEffect(() => {
     setFinish(best?.finish || 'classic');
     setDetails(false);
     turn.setValue(0);
-  }, [card?.key, best?.finish, turn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.key, turn]);
+
+  // A finish that is no longer owned (used up by a fusion) falls back to the best one.
+  useEffect(() => {
+    if (best && !(entries || []).some((e) => e[0] === finish)) setFinish(best.finish);
+  }, [entries, best, finish]);
 
   if (!card) return null;
   const cw = Math.min(W - 64, 340);
@@ -57,6 +70,25 @@ export default function CardViewerModal({
   const backRot = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['-90deg', '-90deg', '0deg'] });
 
   const ownedFinishes = FINISHES.filter((f) => (entries || []).some((e) => e[0] === f));
+  const fuse = owned && onFuse ? fusionOf(entries, finish) : null;
+
+  const doFuse = async () => {
+    if (!fuse?.ready || fusing) return;
+    setFusing(true);
+    try {
+      const to = await onFuse(card, finish);
+      if (to) {
+        setFinish(to);
+        triggerHapticFeedback('impactHeavy');
+        Animated.sequence([
+          Animated.timing(flash, { toValue: 1, duration: 120, useNativeDriver: true }),
+          Animated.timing(flash, { toValue: 0, duration: 650, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        ]).start();
+      }
+    } finally {
+      setFusing(false);
+    }
+  };
   const pinned = isShowcased(showcase, card.key, finish);
 
   return (
@@ -73,6 +105,7 @@ export default function CardViewerModal({
                 <PetCard card={card} finish={finish} serial={serial} width={cw} owned={owned} total={total} shine={shine} />
               )}
             </CardShine>
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: cw * 0.046, opacity: flash, backgroundImage: `radial-gradient(circle at 50% 45%, #FFFFFF 0%, ${rs.glow} 45%, rgba(255,255,255,0) 80%)` }]} />
           </Animated.View>
           <Animated.View style={{ position: 'absolute', transform: [{ perspective: 1000 }, { rotateY: backRot }] }} pointerEvents={details ? 'auto' : 'none'}>
             <TouchableOpacity activeOpacity={0.95} onPress={() => flipTo(false)}>
@@ -145,6 +178,26 @@ export default function CardViewerModal({
             </TouchableOpacity>
           )}
         </View>
+        {fuse && fuse.have > 0 ? (
+          <TouchableOpacity
+            disabled={!fuse.ready || fusing}
+            onPress={doFuse}
+            style={[styles.fuse, fuse.ready && { borderWidth: 0, backgroundImage: fuse.to === 'mega' ? FUSE_MEGA : FUSE_NEON, boxShadow: '0 0 14px rgba(180,85,246,0.6)' }]}
+          >
+            {fuse.ready ? (
+              <Text style={styles.btnText}>{t('pet_cards.fuse', { finish: t(`pet_cards.finish.${fuse.to}`) })}</Text>
+            ) : (
+              <>
+                <View style={styles.pips}>
+                  {Array.from({ length: fuse.need }, (_, i) => <View key={i} style={[styles.pip, i < fuse.have && styles.pipOn]} />)}
+                </View>
+                <Text style={[styles.btnText, { color: MUTED, fontSize: 12 }]}>
+                  {t('pet_cards.fuse_progress', { have: fuse.have, need: fuse.need, finish: t(`pet_cards.finish.${fuse.to}`) })}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : null}
         {!owned ? <Text style={styles.tip}>{t('pet_cards.craft_hint', { have: shards })}</Text> : null}
         {owned && onShowcase ? <Text style={styles.tip}>{t('pet_cards.showcase_hint')}</Text> : null}
       </View>
@@ -176,4 +229,8 @@ const styles = StyleSheet.create({
   ghost: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
   ghostOn: { borderColor: 'rgba(255,210,63,0.7)', backgroundColor: 'rgba(255,210,63,0.12)' },
   btnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
+  fuse: { marginTop: 12, minHeight: 42, paddingHorizontal: 18, borderRadius: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  pips: { flexDirection: 'row', gap: 4 },
+  pip: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' },
+  pipOn: { backgroundColor: '#22E4FF', borderColor: '#22E4FF' },
 });

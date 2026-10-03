@@ -19,7 +19,7 @@ import PetCard from './PetCard';
 import RarityGem from './RarityGem';
 import { petArtUrl, RARITY_STYLE } from './cardConfig';
 import { paintFor, assetUri, hasPetArt2k } from './cardArt';
-import { formatCompact } from './cardMath';
+import { formatCompact, matchPalette } from './cardMath';
 
 // Value-led styles (poster, board) come last: values are opt-in (CardWallpaper.jsx).
 export const WP_STYLES = ['peek', 'squad', 'neon', 'scrapbook', 'pattern', 'cards', 'poster', 'board'];
@@ -69,8 +69,10 @@ export const WP_SCENES = [
 ];
 const SCENE_ACCENT = (id) => (id.startsWith('haunted') ? '#FF9A3C' : id === 'island_night' || id === 'egg_moon' ? '#9CB2FF' : '#FFD166');
 
-/** Background descriptor → { css, image, accent, dark } */
+/** Background descriptor ({ type: 'gradient' | 'scene' | 'match', … }) → { css, image, accent, dark } */
 export const resolveBackground = (bg) => {
+  // "Match my pet": colours from the lead pet (bg.colors, petColors.json).
+  if (bg?.type === 'match') return { ...matchPalette(bg.colors, bg.tone), image: null };
   if (bg?.type === 'scene') {
     return { css: paintFor(bg.id), image: assetUri(`WB-${bg.id.toUpperCase().replace(/_/g, '-')}`), accent: SCENE_ACCENT(bg.id), dark: true };
   }

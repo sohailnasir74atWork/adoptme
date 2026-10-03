@@ -87,6 +87,7 @@ Written 2026-10-01. **Parked 2026-10-02**: the app code is committed and the pet
 - **Finish multiplier on shards:** Classic ×1 · Foil ×2 · Neon ×3 · Holo ×5 · Gilded ×10 · Mega ×20 · Full Art ×40.
 - **Crafting** makes any *Classic* card the player is missing. Cost: Common 40 · Uncommon 80 · Rare 200 · Ultra-Rare 400 · Legendary 1,000.
 - Fancy finishes stay luck-only; Full Art can never be crafted. Crafting means no kid is stuck at 69/70 forever.
+- **Neon fusion** (2026-10-03, `supabase/044_pet_cards_fusion.sql`, `fuse_card`): 4 copies of one finish become 1 of the next, all 4 used, as in Adopt Me: **4 Classic → Neon, 4 Neon → Mega**. Fused cards get no serial and pay no shards (the copies were already paid when pulled), so a serial Mega from a pack stays rarer; a Mega with no serial shows a "Fused" stamp. A finish used up to 0 copies loses its score points, and a showcased copy that gets used up moves to the fused card. The card viewer shows a 4-pip progress button. Tested on PGlite: `scripts/pet-cards/test044.mjs` (30/30). **Not deployed yet**: until 044 runs, the button shows but fusing returns the generic error.
 
 ### 2.6 Collector score
 Each unique (card, finish) the player owns scores rarity points × the finish multiplier, with rarity points C 1 · U 2 · R 4 · UR 8 · L 16. The score shows on the profile pill and the weekly leaderboard (phase 3).
@@ -119,6 +120,7 @@ Wallpapers are **composed by the app from the player's own pets**, so every kid'
   - 20 painted scenes.
   - 10 motif patterns: crystals, candy, stars, hearts, bubbles, snow, paws, notes, sparkles, none.
   - Each theme is drawn in code (layered gradients) until its painted `WB-*` backdrop is uploaded (prompts §11.7).
+- **Match my pet** (2026-10-03): a light and a dark background built from the lead pet's own colours. `scripts/pet-cards/hd-art/palette.py` reads `out/512/*.webp` and writes the bundled `Code/PetCards/petColors.json` (25 KB, [main, second, accent] per pet); `matchPalette()` in `cardMath.js` keeps the hues and sets lightness by tone. Pets missing from the file use their rarity colours. **Re-run `palette.py` whenever new pets get HD art, before a release.**
 - **Extras:** sparkles, glow, title, values, app name, and a lock-screen clock preview (preview only, never saved).
 - **Formats:** phone 1290×2796 and desktop 3840×2160 (4K), saved straight to the photo library.
 - **Sharpness:** big pets use the 2048 px art (`process.py --x2k`), so they stay sharp at 4K.
@@ -173,6 +175,7 @@ Wallpapers are **composed by the app from the player's own pets**, so every kid'
 ### 3.4 Motion (no Reanimated: it was removed for app size)
 - **Tilt.** A PanResponder drives `Animated` rotateX/rotateY with `perspective`, using the native driver. On release the card springs back.
 - **Shine.** A large rainbow/specular strip, clipped by the card, moves opposite to the finger.
+- **Depth** (2026-10-03). While the finger tilts the card, the scenery slides against the tilt (drawn 8% larger so no edge shows) and the pet slides with it, so the pet stands in front of the window. Finger only (`shine.tilt`), not the idle shimmer; still cards and thumbnails don't move.
 - **Idle.** Rare+ cards run a slow 6 s shine loop, so they look alive in screenshots and screen recordings.
 - **Mega border.** `T-CONIC` rotates behind an inset card body (native driver, 60 fps).
 - **Reveal.** A flip (`rotateY` 180° with a backface swap), a rarity-tinted radial flash using `backgroundImage: radial-gradient`, and haptics from `react-native-haptic-feedback`.

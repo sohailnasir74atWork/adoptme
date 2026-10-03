@@ -69,6 +69,8 @@ export default function CardShine({
     x: Animated.add(dragX, idleV),
     y: dragY,
     spin: spinV.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }),
+    // The finger alone (no idle drift): PetCard moves its layers by this for depth.
+    tilt: { x: dragX, y: dragY },
   }), [dragX, dragY, idleV, spinV]);
 
   const transform = [
