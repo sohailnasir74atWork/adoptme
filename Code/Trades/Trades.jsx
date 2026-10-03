@@ -10,7 +10,7 @@ import UserBadgeRail from '../Helper/UserBadgeRail';
 import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
 import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
-import { adviseTrade, VERDICT_STYLE } from '../Helper/tradeAdvice';
+import { adviseTrade, feedNudge, FEED_TONE_STYLE } from '../Helper/tradeAdvice';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -1723,7 +1723,7 @@ const TradeList = ({ route }) => {
                   return (
                     <UserBadgeRail
                       user={{
-                        isAdmin: p.isAdmin ?? item.isAdmin, isModerator: p.isModerator ?? item.isModerator, isBabyMod: item.isBabyMod,
+                        isAdmin: p.isAdmin ?? item.isAdmin, isModerator: p.isModerator ?? item.isModerator, isBabyMod: p.isBabyMod ?? item.isBabyMod,
                         isTrusted: p.isTrusted ?? item.isTrusted, isCMSR: p.isCMSR ?? item.isCMSR, isArtCMSR: p.isArtCMSR ?? item.isArtCMSR, isHelper: p.isHelper ?? item.isHelper,
                         isPro: item.isPro, robloxUsernameVerified: item.robloxUsernameVerified, squadCount: p.squadCount,
                       }}
@@ -1925,17 +1925,24 @@ const TradeList = ({ route }) => {
             // value + how-easily-it-trades parts.
             maps: gg ? { marketMap: analyticsMaps?.marketMap } : (analyticsMaps || {}),
           });
-          if (!advice) return null;
-          const vs = VERDICT_STYLE[advice.verdict];
-          const reason = advice.reasons.find((r) => !r.key.startsWith('value_')) || advice.reasons[0];
+          const nudge = feedNudge(advice, { giveTotal: item.wantsTotal, getTotal: item.hasTotal });
+          if (!nudge) return null;
+          const ts = FEED_TONE_STYLE[nudge.tone];
+          const { reason } = nudge;
+          const params = reason?.params?.amount != null
+            ? { ...reason.params, amount: formatValue(reason.params.amount) }
+            : reason?.params;
           return (
-            <View style={[styles.adviceRow, { backgroundColor: vs.color + '14' }]}>
-              <Text style={[styles.adviceVerdict, { color: vs.color }]} numberOfLines={1}>
-                {vs.emoji} {t('trade_advice.if_you_accept')}: {t(`trade_advice.verdict_${advice.verdict}`)}
-              </Text>
+            <View style={[styles.adviceRow, { backgroundColor: ts.color + '14' }]}>
+              <View style={styles.adviceHead}>
+                <Icon name={ts.icon} size={12} color={ts.color} />
+                <Text style={[styles.adviceVerdict, { color: ts.color }]} numberOfLines={1}>
+                  {t(`trade_advice.feed.tone_${nudge.tone}`)}
+                </Text>
+              </View>
               {reason && (
                 <Text style={styles.adviceReason} numberOfLines={1}>
-                  {t(`trade_advice.${reason.key}`, reason.params)}
+                  {t(`trade_advice.feed.${reason.key}`, params)}
                 </Text>
               )}
             </View>
@@ -2612,9 +2619,15 @@ const getStyles = (isDarkMode, c) => {
       paddingHorizontal: 8,
       paddingVertical: 5,
     },
+    adviceHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
     adviceVerdict: {
       fontSize: 11,
       fontWeight: '800',
+      flexShrink: 1,
     },
     adviceReason: {
       fontSize: 10,

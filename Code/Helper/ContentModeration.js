@@ -2,6 +2,7 @@ import Filter from 'leo-profanity';
 import { ACTIVE_BLOCKLIST, ALLOWED_TOKENS } from './blocklist';
 import { moderationTokens, moderationSquash } from './textNormalize';
 import i18n from '../../i18n';
+import { areLinksAllowed } from './linksSwitch';
 
 /**
  * Content moderation for chat, posts and comments.
@@ -195,8 +196,9 @@ export const validateContent = (text, options = {}) => {
     };
   }
 
-  // Check links (skip for admins/mods)
-  if (!options.skipLinkCheck && containsLink(text)) {
+  // Check links (skip for admins/mods, or for everyone while the admin's
+  // "links & emails in chat" switch is on — see linksSwitch.js)
+  if (!options.skipLinkCheck && !areLinksAllowed() && containsLink(text)) {
     return {
       isValid: false,
       category: 'link',

@@ -18,7 +18,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import PetCard from './PetCard';
 import RarityGem from './RarityGem';
 import { petArtUrl, RARITY_STYLE } from './cardConfig';
-import { paintFor, assetUri, hasPetArt2k } from './cardArt';
+import { paintFor, assetUri } from './cardArt';
 import { formatCompact, matchPalette } from './cardMath';
 
 // Value-led styles (poster, board) come last: values are opt-in (CardWallpaper.jsx).
@@ -186,9 +186,12 @@ function Sparkles({ w, h, color = '#FFFFFF', count = 22, seed = 7, top = 0 }) {
 }
 
 /** A pet cut-out (bottom-centre at x,y) with optional glow, outline and floor shadow. */
-// Saved files are 3x the layout (1290/430, 3840/1280): a pet drawn over ~366 pt
-// needs more than the 1024 art to stay sharp, so it takes the 2048 when it exists.
-const artFor = (key, size) => petArtUrl(key, size > 366 && hasPetArt2k(key) ? 2048 : size > 160 ? 1024 : 512);
+// Saved files are 3x the layout (1290/430, 3840/1280). The 2048 art used to be
+// taken for pets drawn over ~366 pt; one decoded 2048 image is 16 MB and a
+// wallpaper holds several, which evicted the Home screen's own images and
+// left it stuttering after a visit (2026-10-03). 1024 is the cap now: a pet
+// at 400 pt lands at 1200 px in the 4K file, a scale-up nobody will see.
+const artFor = (key, size) => petArtUrl(key, size > 160 ? 1024 : 512);
 
 function Pet({ pet, size, x, y, glow, glowColor, shadow = true, outline = null }) {
   const uri = artFor(pet.key, size);

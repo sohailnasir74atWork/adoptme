@@ -28,9 +28,9 @@ tiny PNGs like every other UI icon (no vector-icon glyphs, no emoji).
 
 - Rail keys `cmsr_house` and `cmsr_art` (`Code/Helper/badgeRail.js`). Order:
   `admin > mod > jmd > trusted > cmsr_house > cmsr_art > helper > squad > verified`.
-- Icons `assets/role-badges/cmsr_house.png` (orange disc, white house) and
-  `cmsr_art.png` (rose disc, white palette), with @2x/@3x, drawn by
-  `scripts/role-badges/make-cmsr-icons.mjs` (same approach as the Pet Cards
+- Icons `assets/role-badges/cmsr_house.png` (orange coin, roof over a keyhole) and
+  `cmsr_art.png` (rose coin, brush and stroke), with @2x/@3x, drawn by
+  `scripts/role-badges/make-role-icons.mjs` (same approach as the Pet Cards
   icons). The old medal `cmsr.png` is deleted; nothing referenced it.
 - Both pills use the one label `badges.roles.cmsr` ("CMSR"). Tints: house
   orange `#EA580C`, art rose `#E11D48` (`Code/Helper/UserBadgePill.jsx`).

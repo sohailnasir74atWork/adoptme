@@ -60,12 +60,14 @@ offline, the app stays OFF.
 - Reset an offensive profile picture
 - **Give and remove Trusted, CMSR (House and Art) and Helper badges.** The player needs 3+ squad
   friends. Meeting the bar doesn't guarantee a badge; it's the MOD's call.
+  A MOD an admin lists under Badge Access (below) skips the squad bar.
 - Use the mod dashboard and the mod log
 
 ### What a MOD can't do
 - Punish other staff (admins only, as before)
 - Make MODs or JMDs (only elections do)
-- Badge a player with fewer than 3 squad friends (the server rejects it)
+- Badge a player with fewer than 3 squad friends (the server rejects it),
+  unless an admin put them on Badge Access
 
 ### What a JMD can do / can't do
 - Can mute rule breakers for 5 min up to 2 h, and wears the JMD badge
@@ -90,8 +92,28 @@ offline, the app stays OFF.
   Nothing changes until you tap.
 - Emergency removal of a MOD or JMD who abuses the role: Mod Tools → Remove Mod
   / Remove Junior Mod. The function then closes their term.
-- Admins can no longer appoint by hand from the app. The old "JMD Access" tab is
-  gone, and the RTDB rule no longer honours `/jmd_granters`.
+- **Appoint by hand (back since 2026-10-03).** Mod Tools → Make Mod / Make
+  Junior Mod on any profile. No squad, age or record bar applies: the owner
+  found the election bar kept blocking appointments. The `/users` RTDB rule
+  already lets admins write the flags. A hand-appointed MOD/JMD has no
+  `staff_terms` row, so no term expiry and no winner push; removing one from
+  Mod Tools just clears the flag.
+- **Staff Access tab** (Admin Dashboard, admin-only): delegate exactly those
+  two chips to any user. The grant lives at RTDB `/jmd_granters/{uid}`
+  (profile + grantedAt/grantedBy), GlobelStats live-subscribes the signed-in
+  user's leaf into `canGrantJmd`, and the `/users` rule carries the matching
+  carve-out for `isModerator` and `isBabyMod`. A granter who is not staff sees
+  a "Staff Access" Mod Tools panel with only Make/Remove Mod and Make/Remove
+  Junior Mod: no strikes, mutes, badges or deletes.
+- **Badge Access tab** (Admin Dashboard, admin-only, added 2026-10-03): lets a
+  MOD give Trusted, CMSR (House and Art) and Helper to players with fewer than
+  3 squad friends. Same screen as Staff Access, pointed at RTDB
+  `/badge_granters/{uid}`; GlobelStats live-subscribes the signed-in user's
+  leaf into `canGrantBadgeAnySquad`, `canGrantBadge({ anySquad })` drops the
+  bar in Mod Tools, and the `/users` rule accepts the four badge flags from a
+  listed MOD whatever `/squad_size` says. It does nothing for a non-MOD: the
+  rule still requires `isModerator`. Rules deployed 2026-10-03; the tab and
+  chips need an app build.
 
 ---
 
@@ -212,14 +234,16 @@ appointment is already in RTDB, so a fresh appointment is never read as
 | Apply 041 to the linked project + post-checks | `scripts/staff-elections/apply041.sh` (`--check` for read-only) |
 | 041 tests | `scripts/staff-elections/test041.mjs` (PGlite), `__tests__/runStaffElections.cf.test.js`, `__tests__/staffElections.test.js` |
 | Instant squad-size mirror when a friend counts | `functions/notifySquadEvent.js` |
-| MOD/JMD elected only; badge needs `/squad_size >= 3` | `database.rules.json` (`/users/$userId`, `/squad_size`) |
+| MOD/JMD flags: admins and `/jmd_granters` may write them; badge needs `/squad_size >= 3` unless the MOD is in `/badge_granters` | `database.rules.json` (`/users/$userId`, `/jmd_granters`, `/badge_granters`, `/squad_size`) |
 | Elections screen + roles charter | `Code/Elections/ElectionsScreen.jsx`, `Code/Elections/RoleCharter.jsx` |
 | Admin: applications panel (approve / reject with note) | `Code/AppHelper/AdminDashboard.js` (Elections tab; opens on `initialTab: 'elections'`) |
 | Admin: eligibility card on a profile | `Code/Elections/StaffEligibilityCard.jsx`, mounted in `BottomDrawer.jsx` above Mod Tools |
 | Root route so screens outside the chat stack can open the dashboard | `App.js` (`AdminPanel`) |
 | Client helper | `Code/Helper/staffElections.js` |
 | Entry points | Home card (only while a race is live), Squad screen card, Moderators screen banner, Admin Dashboard tab, winner push (`route: Elections`) |
-| Mod Tools changes | `ProfileAdminActions.jsx`, `BottomDrawer.jsx`: no Make Mod/JMD, badge chips gated on squad |
+| Mod Tools changes | `ProfileAdminActions.jsx`, `BottomDrawer.jsx`: Make/Remove Mod and Junior Mod chips for admins and Staff Access granters (no bar), badge chips gated on squad |
+| Admin: Staff Access tab (grant / revoke `/jmd_granters`) | `Code/AppHelper/AdminDashboard.js` (`staffAccess` tab) |
+| Admin: Badge Access tab (grant / revoke `/badge_granters`) | `Code/AppHelper/AdminDashboard.js` (`badgeAccess` tab, shares `ACCESS_LISTS` with Staff Access) |
 | Strings | `elections.*` in all 6 languages |
 
 **To change the rules** (seats, squad bar, minimum age, term, minimum votes,
@@ -279,7 +303,8 @@ the mod log. 038 avoids it with `coalesce`. The live functions still need the fi
 | `runStaffElections` | **REDEPLOYED 2026-10-02** by the owner (`./functions-deploy/deploy.sh runStaffElections`, Node 20 1st gen, us-central1, successful update). This is the 041 version: count, tell the admins, apply admin decisions, push winners. Note the deploy warning: the Node.js 20 runtime is decommissioned on 2026-10-30; every function needs a runtime bump before then. |
 | `notifySquadEvent` | **DEPLOYED 2026-10-02** (update). Before the deploy, live source equalled HEAD, so the only change is the `/squad_size` mirror. An unsigned call still returns 401. |
 | RTDB rules | **DEPLOYED 2026-10-02** at the owner's request. Live was checked identical to the repo first, so only `users`, `squad_size` and `elections_enabled` changed. Checked after: `/elections_enabled` is public-read and denies anon writes, `/squad_size` denies reads. Squad isn't released yet, so **MODs can't give any badge** until players have 3+ squad friends. Admins still can. |
-| App | Not released. The Elections screens, the results panel and the new strings are only in this working tree. |
+| RTDB rules, 2026-10-03 change (`/jmd_granters` carve-out for `isModerator` / `isBabyMod`, new `/links_allowed` switch) | **DEPLOYED 2026-10-03** by the owner. Live was checked identical to the repo before the edit and again after the deploy. See HANDOFF_2026-10-03_STAFF_ACCESS_LINKS.md. |
+| App | Not released. The Elections screens, the results panel and the new strings are only in this working tree. 1.15.45 (171) built 2026-10-03 with the hand-appointment chips, Staff Access tab and links switch. |
 | `/elections_enabled` | **ON** on 2026-10-02 (owner: for testing only). Players on today's store build see nothing either way, since their build has no Elections screens. Flip it from Admin Dashboard → Elections when the new build is out and squads have grown. |
 
 `functions-deploy/deploy.sh` was broken for every function. Since `functions/index.js`
@@ -308,7 +333,8 @@ It was fixed on 2026-10-02 by skipping index.js in discovery.
    `squad_size: N change(s)`; an RPC name in an error means 041 is missing.
 3. ~~**RTDB rules.**~~ Done 2026-10-02. These include the new `/elections_enabled` switch: public read,
    admin-only boolean write. This is a behaviour change, and it applies to every build in the field:
-   - Nobody but admins can set `isModerator` / `isBabyMod`.
+   - Nobody but admins can set `isModerator` / `isBabyMod` (since 2026-10-03,
+     also users listed in `/jmd_granters`; deployed the same day).
    - A badge grant needs `/squad_size >= 3`.
    - Squad isn't released yet, so nobody has squad friends. Until players build
      squads, **MODs won't be able to give any badge**. Ship the rules with or

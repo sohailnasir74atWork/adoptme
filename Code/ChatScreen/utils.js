@@ -1090,7 +1090,9 @@ export const makeModerator = async (userId) => {
     const userRef = ref(db, `users/${userId}`);
     // rolesUpdatedAt forces the Supabase mirror to run even if the flag value
     // is unchanged (see functions/mirrorUsersToSupabase.js ROLES_KEYS).
-    await update(userRef, { isModerator: true, rolesUpdatedAt: Date.now() });
+    // A Junior Mod promoted to MOD leaves the JMD seat (same as
+    // functions/runStaffElections.js applyDecisions); `null` deletes the key.
+    await update(userRef, { isModerator: true, isBabyMod: null, rolesUpdatedAt: Date.now() });
     Alert.alert('Success', 'User is now a moderator.');
     return true;
   } catch (error) {

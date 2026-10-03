@@ -7,7 +7,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { getCardsState, setCardsUser } from './cardsApi';
@@ -15,12 +15,15 @@ import { packsAvailable } from './cardMath';
 import { themeOf } from './cardConfig';
 import PackArt from './PackArt';
 
+const PULSE_CYCLES = 4;
+
 export default function PetCardsHomeCard({ userId, requireSignIn }) {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const [info, setInfo] = useState(null);     // { ready, theme, setName }
   const [hidden, setHidden] = useState(false);
   const pulse = useRef(new Animated.Value(0)).current;
+  const isFocused = useIsFocused();
 
   useFocusEffect(useCallback(() => {
     if (!userId) {
@@ -40,15 +43,19 @@ export default function PetCardsHomeCard({ userId, requireSignIn }) {
     return () => { live = false; };
   }, [userId]));
 
+  // A few beats when Home comes into view, then still. The loop used to run
+  // for as long as a pack was ready (most of the day), under the other tabs
+  // and under the card screens too, and the scaled view carries a blurred
+  // shadow that Android re-rasterises every frame (2026-10-03 gfxinfo pass).
   useEffect(() => {
-    if (!info?.ready) return undefined;
+    if (!info?.ready || !isFocused) { pulse.setValue(0); return undefined; }
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
       Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
-    ]));
+    ]), { iterations: PULSE_CYCLES });
     loop.start();
     return () => loop.stop();
-  }, [info?.ready, pulse]);
+  }, [info?.ready, isFocused, pulse]);
 
   if (hidden) return null;
   const theme = themeOf(info?.theme || 'haunted');

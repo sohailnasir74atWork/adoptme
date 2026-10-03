@@ -2,7 +2,7 @@ jest.mock('react-native-mmkv', () => ({
   createMMKV: () => ({ getString: () => undefined, getNumber: () => undefined, set: () => {}, remove: () => {} }),
 }));
 
-const { adviseTrade } = require('../Code/Helper/tradeAdvice');
+const { adviseTrade, feedNudge } = require('../Code/Helper/tradeAdvice');
 const { liquidityFor } = require('../Code/Helper/analyticsDataHelper');
 
 const maps = {
@@ -62,5 +62,34 @@ describe('adviseTrade', () => {
   it('works with no analytics at all (value only)', () => {
     const r = adviseTrade({ give: [pet('A')], receive: [pet('B')], giveTotal: 10, getTotal: 14, maps: {} });
     expect(r).toMatchObject({ verdict: 'take', reasons: [{ key: 'value_win', params: { pct: 29 } }] });
+  });
+});
+
+describe('feedNudge', () => {
+  const nudge = (args) => feedNudge(adviseTrade({ maps, ...args }), { giveTotal: args.giveTotal, getTotal: args.getTotal });
+
+  it('turns a short deal into a counter-offer with the amount to ask for', () => {
+    const r = nudge({ give: [pet('Cow')], receive: [pet('Catte')], giveTotal: 10, getTotal: 8.5 });
+    expect(r).toEqual({ tone: 'counter', reason: { key: 'ask_more', params: { amount: 1.5 } } });
+  });
+
+  it('suggests offering less when the gap is big', () => {
+    const r = nudge({ give: [pet('Crystal Egg')], receive: [pet('Throwback Egg')], giveTotal: 20, getTotal: 10 });
+    expect(r).toEqual({ tone: 'counter', reason: { key: 'ask_more_big', params: { amount: 10 } } });
+  });
+
+  it('never says skip: an even trade of slow, falling pets is still a counter', () => {
+    const r = nudge({ give: [pet('Cow')], receive: [pet('Catte'), pet('Dirty Ducky')], giveTotal: 10, getTotal: 10 });
+    expect(r.tone).toBe('counter');
+    expect(['get_slow', 'get_dropping']).toContain(r.reason.key);
+  });
+
+  it('leads a good deal with what the totals cannot show', () => {
+    const r = nudge({ give: [pet('Cow')], receive: [pet('Crystal Egg')], giveTotal: 10, getTotal: 12 });
+    expect(r).toEqual({ tone: 'good', reason: { key: 'get_fast', params: { name: 'Crystal Egg', count: 175 } } });
+  });
+
+  it('is null when there is no advice', () => {
+    expect(feedNudge(null)).toBeNull();
   });
 });

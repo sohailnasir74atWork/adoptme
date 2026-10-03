@@ -18,7 +18,9 @@
  *
  * Badges: a MOD may give Trusted / CMSR / Helper only to a player with
  * BADGE_MIN_SQUAD squad friends. The RTDB rule enforces it (from
- * /squad_size); canGrantBadge() is the matching UI check.
+ * /squad_size); canGrantBadge() is the matching UI check. A MOD an admin
+ * lists in Admin Dashboard → Badge Access (RTDB /badge_granters/{uid}) skips
+ * the squad bar, like an admin.
  */
 
 import { supabase } from '../Supabase/client';
@@ -56,8 +58,8 @@ const GET_TTL_MS = 2 * 60 * 1000;
 const BRIEF_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Can this viewer give a badge to a player with `targetSquad` squad friends? */
-export const canGrantBadge = ({ isAdmin = false, targetSquad = 0 } = {}) =>
-  !!isAdmin || (Number(targetSquad) || 0) >= BADGE_MIN_SQUAD;
+export const canGrantBadge = ({ isAdmin = false, anySquad = false, targetSquad = 0 } = {}) =>
+  !!isAdmin || !!anySquad || (Number(targetSquad) || 0) >= BADGE_MIN_SQUAD;
 
 const ms = (iso) => {
   const t = Date.parse(iso);

@@ -17,9 +17,11 @@ import { getShimmerValue } from './shimmerDriver';
 
 // labelKey is translated at render time (see UserBadgePill).
 const TYPES = {
-  admin:   { tier: 'authority', image: require('../../assets/role-badges/admin.png'),   labelKey: 'chat.admin',            color: '#B91C1C', rim: '#F8D66D' },
+  // Icons are round coins (scripts/role-badges/make-role-icons.mjs); the
+  // authority chip is a solid fill with a light rim of the same hue.
+  admin:   { tier: 'authority', image: require('../../assets/role-badges/admin.png'),   labelKey: 'chat.admin',            color: '#B91C1C', rim: '#FCA5A5' },
   mod:     { tier: 'authority', image: require('../../assets/role-badges/mod.png'),     labelKey: 'chat.mod',              color: '#6D28D9', rim: '#C4B5FD' },
-  jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     labelKey: 'badges.roles.jmd',      color: '#D97706', rim: '#FDE68A' },
+  jmd:     { tier: 'authority', image: require('../../assets/role-badges/jmd.png'),     labelKey: 'badges.roles.jmd',      color: '#B45309', rim: '#FCD34D' },
   trusted: { tier: 'community', image: require('../../assets/role-badges/trusted.png'), labelKey: 'badges.roles.trusted',  color: '#059669', rim: '#6EE7B7' },
   // CMSR is two badges with one label ("CMSR"): House (isCMSR, the original
   // flag) and Art (isArtCMSR). They differ by icon and tint only.
@@ -28,10 +30,11 @@ const TYPES = {
   helper:  { tier: 'community', image: require('../../assets/role-badges/helper.png'),  labelKey: 'badges.roles.helper',   color: '#0F766E', rim: '#5EEAD4' },
 };
 
+// pl: the round icon nests near the left edge; ph pads the label side.
 const SIZES = {
-  sm: { fs: 9,  ic: 15, ph: 6,  pv: 2, gap: 3, br: 999 },
-  md: { fs: 10, ic: 17, ph: 8,  pv: 3, gap: 4, br: 999 },
-  lg: { fs: 11, ic: 19, ph: 10, pv: 4, gap: 5, br: 999 },
+  sm: { fs: 9,  ic: 15, pl: 2, ph: 7,  pv: 2, gap: 4, br: 999 },
+  md: { fs: 10, ic: 17, pl: 3, ph: 9,  pv: 3, gap: 5, br: 999 },
+  lg: { fs: 11, ic: 19, pl: 4, ph: 11, pv: 4, gap: 6, br: 999 },
 };
 
 const hexAlpha = (hex, alphaHex) => `${hex}${alphaHex}`;
@@ -97,7 +100,8 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
           backgroundColor: def.color,
           borderWidth: 1,
           borderColor: def.rim,
-          paddingHorizontal: s.ph,
+          paddingLeft: s.pl,
+          paddingRight: s.ph,
           paddingVertical: s.pv,
           borderRadius: s.br,
           gap: s.gap,
@@ -124,7 +128,8 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
         backgroundColor: bg,
         borderWidth: 1,
         borderColor: border,
-        paddingHorizontal: s.ph,
+        paddingLeft: s.pl,
+        paddingRight: s.ph,
         paddingVertical: s.pv,
         borderRadius: s.br,
         gap: s.gap,

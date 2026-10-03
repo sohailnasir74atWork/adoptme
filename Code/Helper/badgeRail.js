@@ -1,12 +1,14 @@
 /**
  * badgeRail.js — which badges a player wears, in priority order.
  *
- * One list for every surface (UserBadgeRail.jsx draws it). The first entries
- * win when a row runs out of room, so this order is the product decision:
+ * One list for every surface (UserBadgeRail.jsx draws it), in this order:
  *
  *   authority role (admin > mod > jmd) → trusted → cmsr (house, then art)
  *   → helper → squad rank (3+ friends inline; any friend on the profile)
  *   → verified
+ *
+ * Inline rows show every badge (no cap) as icons and move the one labelled
+ * authority chip to the end (inlineOrder); the profile drawer keeps ORDER.
  *
  * CMSR is two badges with one name: House CMSR (`isCMSR`, the original flag)
  * and Art CMSR (`isArtCMSR`). Same "CMSR" label, different icon; a player can
@@ -20,8 +22,6 @@ import { rankFor } from './squad';
 
 export const ORDER = ['admin', 'mod', 'jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified'];
 export const AUTHORITY = ['admin', 'mod', 'jmd'];
-/** Glyphs an inline row shows before it collapses the rest into "+N". */
-export const INLINE_MAX = 3;
 
 const count = (u) => Number(u.squadCount) || 0;
 
@@ -51,9 +51,8 @@ export const badgeKeysFor = (u, { allowed = ORDER, squad = 'rank' } = {}) => {
   return ORDER.filter((k) => allowed.includes(k) && HAS[k](u, opts));
 };
 
-/** The first `max` keys and how many were cut (the "+N" chip). */
-export const splitRail = (keys, max = INLINE_MAX) => {
-  if (!Array.isArray(keys)) return { shown: [], hidden: 0 };
-  if (max <= 0 || keys.length <= max) return { shown: keys, hidden: 0 };
-  return { shown: keys.slice(0, max), hidden: keys.length - max };
+/** Inline order: the icon badges in ORDER, then the authority chip last. */
+export const inlineOrder = (keys) => {
+  if (!Array.isArray(keys)) return [];
+  return [...keys.filter((k) => !AUTHORITY.includes(k)), ...keys.filter((k) => AUTHORITY.includes(k))];
 };

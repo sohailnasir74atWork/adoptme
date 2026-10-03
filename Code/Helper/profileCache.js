@@ -21,7 +21,7 @@
  *   - isPro, topBadge                  → user_cosmetics
  *   RTDB falls back per-field if Supabase has no row (mirror lag, brand-new
  *   user, or backfill miss). The two game-win leaf reads per cold profile
- *   were removed with the mini-games (2026-09-29).
+ *   were removed with the 2-player mini-games (2026-09-29).
  */
 
 

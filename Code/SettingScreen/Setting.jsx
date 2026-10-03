@@ -48,6 +48,7 @@ import { setAppLanguage, loadLanguage } from '../../i18n';
 import { safeCompressImage } from '../Helper/safeCompressImage';
 import RNFS from 'react-native-fs';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
+import UserBadgeRail from '../Helper/UserBadgeRail';
 import { getMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { addXP, getUserXP, getLevelFromXP } from '../Engagement/xpUtils';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
@@ -506,7 +507,7 @@ export default function SettingsScreen({ selectedTheme }) {
   const [newDisplayName, setNewDisplayName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [openSingnin, setOpenSignin] = useState(false);
-  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, firestoreDB, single_offer_wall } = useGlobalState()
+  const { user, theme, updateLocalStateAndDatabase, setUser, appdatabase, firestoreDB, single_offer_wall, isAdmin } = useGlobalState()
   const { updateLocalState, localState, mySubscriptions } = useLocalState()
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [showOfferWall, setShowofferWall] = useState(false);
@@ -2783,6 +2784,14 @@ export default function SettingsScreen({ selectedTheme }) {
   // sender + avatar); the drawer then loads the rest from the backend the way
   // it does for anyone else. The flag rides along but the drawer only renders
   // it for admin viewers (Code/Helper/countryFlag.js).
+  // Own badges for the profile header. Admin lives in global state (the RTDB
+  // leaf is `admin`); the squad count rides on the cached cosmetics row.
+  const myBadgeUser = useMemo(() => (user?.id ? {
+    ...user,
+    isAdmin: !!isAdmin || !!user.admin,
+    squadCount: getCachedProfile(user.id)?.squadCount ?? 0,
+  } : null), [user, isAdmin]);
+
   const publicProfileUser = useMemo(() => {
     if (!user?.id) return null;
     return {
@@ -2892,24 +2901,33 @@ export default function SettingsScreen({ selectedTheme }) {
                   {user?.isPro &&
                     <Image
                       source={require('../../assets/pro.png')}
-                      style={{ width: 11, height: 11, marginLeft: 4 }}
+                      style={{ width: 14, height: 14, marginLeft: 4 }}
                     />
                   }
-                  {/* ✅ Roblox Verification Badge */}
-                  {user?.id && user?.robloxUsername && (
-                    <View style={{
-                      marginLeft: 6,
-                      backgroundColor: user?.robloxUsernameVerified ? '#4CAF50' : '#FFA500',
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                      borderRadius: 4
-                    }}>
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>
-                        {user?.robloxUsernameVerified ? t('profile.verified') : t('profile.unverified')}
-                      </Text>
-                    </View>
-                  )}
                 </View>
+
+                {/* Every badge as a labelled chip, as on the profile drawer
+                    (Code/Helper/UserBadgeRail.jsx); Unverified rides along. */}
+                {user?.id && (
+                  <UserBadgeRail
+                    user={myBadgeUser}
+                    variant="full"
+                    isDarkMode={isDarkMode}
+                    style={{ justifyContent: 'flex-start', marginTop: 4 }}
+                  >
+                    {user?.robloxUsername && !user?.robloxUsernameVerified && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: isDarkMode ? 'rgba(251,191,36,0.15)' : 'rgba(217,119,6,0.1)',
+                        borderWidth: 1, borderColor: isDarkMode ? 'rgba(251,191,36,0.3)' : 'rgba(217,119,6,0.25)',
+                        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+                      }}>
+                        <Icon name="alert-circle-outline" size={10} color={isDarkMode ? '#fbbf24' : '#d97706'} />
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>{t('profile.unverified')}</Text>
+                      </View>
+                    )}
+                  </UserBadgeRail>
+                )}
 
                 {/* Roblox Username Display */}
                 {user?.id && user?.robloxUsername && (

@@ -110,6 +110,41 @@ export const adviseTrade = ({ give = [], receive = [], giveTotal = 0, getTotal =
   return { verdict, score, reasons: ordered.slice(0, 2) };
 };
 
+/**
+ * The trade feed's take on adviseTrade's result, for someone browsing another
+ * player's post. A red "Skip it" there read as a judgement on the post, and
+ * people scrolled past without opening it, so the feed never says no: a short
+ * deal becomes "worth a counter-offer" with the amount to ask for.
+ *
+ * giveTotal / getTotal: the same totals passed to adviseTrade.
+ * Returns { tone: 'good' | 'close' | 'counter', reason: { key, params } } or
+ * null. The ask_more* reasons carry the raw `amount`; the caller formats it.
+ */
+const BIG_ASK = 0.4; // past this gap, "ask for more" alone sounds hopeless
+
+export const feedNudge = (advice, { giveTotal = 0, getTotal = 0 } = {}) => {
+  if (!advice) return null;
+  const short = (Number(giveTotal) || 0) - (Number(getTotal) || 0);
+  const lose = advice.reasons.find((r) => r.key === 'value_lose');
+  const tone = advice.verdict === 'take' ? 'good' : (lose || advice.verdict === 'skip') ? 'counter' : 'close';
+
+  let reason;
+  if (lose && short > 0) {
+    reason = { key: lose.params.pct >= BIG_ASK * 100 ? 'ask_more_big' : 'ask_more', params: { amount: short } };
+  } else {
+    // The card already shows the value difference next to the totals, so
+    // lead with what the numbers can't say.
+    reason = advice.reasons.find((r) => !r.key.startsWith('value_')) || advice.reasons[0];
+  }
+  return { tone, reason };
+};
+
+export const FEED_TONE_STYLE = {
+  good: { icon: 'thumbs-up-outline', color: '#10B981' },
+  close: { icon: 'swap-horizontal-outline', color: '#F59E0B' },
+  counter: { icon: 'chatbubbles-outline', color: '#3B82F6' },
+};
+
 export const VERDICT_STYLE = {
   take: { emoji: '✅', color: '#10B981' },
   think: { emoji: '🤔', color: '#F59E0B' },

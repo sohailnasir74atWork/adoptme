@@ -18,6 +18,10 @@ const NotificationHandler = React.lazy(() =>
   import('./Code/Firebase/FrontendNotificationHandling'),
 );
 const SquadBootstrap = React.lazy(() => import('./Code/Squad/SquadBootstrap'));
+// Game invite banner (Quiz Battle / Trade Showdown): listens for invites on any screen.
+const GlobalInviteToast = React.lazy(() =>
+  import('./Code/ValuesScreen/PetGuessingGame/components/GlobalInviteToast'),
+);
 
 const STATUS_BAR_HEIGHT =
   Platform.OS === 'android' ? StatusBar.currentHeight || 18 : 44;
@@ -66,6 +70,7 @@ const App = React.memo(() => (
           <React.Suspense fallback={null}>
             <NotificationHandler />
             <SquadBootstrap />
+            <GlobalInviteToast />
           </React.Suspense>
         </GlobalStateProvider>
       </LocalStateProvider>

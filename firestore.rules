@@ -267,13 +267,14 @@ service cloud.firestore {
       allow delete: if isStaff();
     }
 
-    // ── Mini games: removed from the app, but builds on phones still run them ──
+    // ── Mini games (restored 2026-10-03): games/{uid} is each player's daily game state;
+    //    petGuessingGame_* are the Quiz Battle / Trade Showdown rooms and invites (old builds use them too). ──
     match /games/{uid} {
       allow read, write: if signedIn() && me() == uid;
     }
     match /game_stats/{uid} {
       allow read: if true;
-      // The winner's stats are written by whoever runs the match.
+      // New builds write only their own wins; old builds wrote the winner's from either client.
       allow create, update: if signedIn() && request.resource.data.keys().hasOnly(['petGameWins']);
       allow delete: if isStaff();
     }

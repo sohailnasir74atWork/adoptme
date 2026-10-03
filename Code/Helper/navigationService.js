@@ -3,6 +3,13 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
+/** Navigate from outside a screen (the global game-invite banner). No-op until the navigator is ready. */
+export function navigate(name, params) {
+  if (navigationRef.isReady()) {
+    navigationRef.navigate(name, params);
+  }
+}
+
 // Routes a push notification may open (data.route). Anything else is ignored.
 const PUSH_ROUTES = new Set(['TradeMatch', 'Squad', 'Elections']);
 

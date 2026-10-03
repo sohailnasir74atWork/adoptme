@@ -68,9 +68,11 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
     }
   };
 
+  // Every first-run path ends on the offer wall: welcome → sign in (or guest)
+  // → offer wall → home. The wall's own close button is what calls onFinish.
   const handleGuest = () => {
     trackGrowthEvent("onboarding_guest_continue");
-    onFinish(); // Let users try values and the calculator before an offer.
+    setScreenIndex(2);
   };
 
   const handleLoginSuccess = () => {
@@ -132,11 +134,6 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
               <Text style={[styles.text, {color: isDarkMode ? '#ccc' : '#666'}]}>
                 {t('first.utility_note')}
               </Text>
-              <TouchableOpacity accessibilityRole="button" onPress={handleGuest} style={{padding: 14}}>
-                <Text style={{color: isDarkMode ? '#93c5fd' : '#1d4ed8', textAlign: 'center', fontWeight: '700'}}>
-                  {t('first.try_values')}
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
         );
@@ -189,7 +186,7 @@ const OnboardingScreen = ({ onFinish, selectedTheme }) => {
 
 
 
-          <TouchableOpacity style={styles.button} onPress={screenIndex === 1 && user?.id ? handleGuest : handleNext}>
+          <TouchableOpacity style={styles.button} onPress={handleNext}>
             <Text style={styles.buttonText}>{screenIndex === 1 && !user.id ? t("signin.button_signin") : t("first.continue")}</Text>
           </TouchableOpacity>
           {screenIndex === 1 && !user?.id && (

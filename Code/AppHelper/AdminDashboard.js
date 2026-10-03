@@ -214,6 +214,36 @@ const STRIKE_TIERS = [
 ];
 const BAD_KEYS = new Set(['undefined', 'onloaduser', '', null, undefined]);
 const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+
+// The two admin-only delegation lists. One screen serves both; the RTDB rules
+// read the same paths (/users write rule).
+const ACCESS_LISTS = {
+  staffAccess: {
+    path: 'jmd_granters',
+    label: 'Staff Access',
+    power: 'make MODs and Junior Mods',
+    intro: "Anyone listed here can make and remove MODs and Junior Mods from a user's profile "
+      + '(Mod Tools), with no squad, age or record requirement — the same as you. It grants '
+      + 'no other staff power, and you can revoke it at any time.',
+    listTitle: 'Allowed to make MODs & Junior Mods',
+    already: 'can already make MODs and Junior Mods',
+    granted: 'can now make MODs and Junior Mods',
+    confirm: (u) => `Allow ${u.displayName} to make and remove MODs and Junior Mods?\n\nThis gives them no other staff power.`,
+  },
+  badgeAccess: {
+    path: 'badge_granters',
+    label: 'Badge Access',
+    power: 'give badges without the squad requirement',
+    intro: 'A MOD listed here can give Trusted, CMSR (House and Art) and Helper to any player, '
+      + 'with no 3-squad-friend requirement — the same as you. It only works while they are a '
+      + 'MOD, and you can revoke it at any time.',
+    listTitle: 'Can give badges without the squad rule',
+    already: 'can already give badges without the squad requirement',
+    granted: 'can now give badges without the squad requirement',
+    confirm: (u) => `Allow ${u.displayName} to give Trusted, CMSR and Helper badges to players with fewer than 3 squad friends?`
+      + (u.isModerator || u.isAdmin ? '' : '\n\nThey are not a MOD yet, so this does nothing until they are.'),
+  },
+};
 const USER_CHATS_PAGE_SIZE = 20;
 
 
@@ -260,6 +290,8 @@ const parseRatingSafe = (r) => {
 };
 
 const getAvatarSafe = (obj) => obj?.avatar || DEFAULT_AVATAR;
+// Strip chars invalid in Firebase RTDB queries (Staff Access name search).
+const sanitizeSearchQuery = (q) => q.replace(/[.#$[\]/\\]/g, '');
 
 const timeAgo = (v) => {
   const ms = toMillisSafe(v);
@@ -276,7 +308,7 @@ const timeAgo = (v) => {
 };
 
 const AdminDashboard = () => {
-  const { theme, user: currentUser, isAdmin, modControlsEnabled, electionsEnabled } = useGlobalState();
+  const { theme, user: currentUser, isAdmin, modControlsEnabled, electionsEnabled, linksAllowed } = useGlobalState();
   const isDark = theme === 'dark';
   const db = useMemo(() => getDatabase(), []);
   // Moderator status lives on the user object (GlobelStats context has no isModerator
@@ -996,6 +1028,202 @@ const AdminDashboard = () => {
       Alert.alert('Error', 'Could not update the elections switch. Check your write permissions.');
     }
   }, [db]);
+
+  // Admin-only: let every player share links and emails in chat (RTDB
+  // /links_allowed). GlobelStats live-subscribes and mirrors it into
+  // Helper/linksSwitch.js, so the change reaches open apps at once.
+  const handleToggleLinks = useCallback(async (next) => {
+    try {
+      await set(ref(db, 'links_allowed'), next);
+    } catch (e) {
+      Alert.alert('Error', 'Could not update the links switch. Check your write permissions.');
+    }
+  }, [db]);
+
+  // ── Staff Access (admin only): delegate the "Make MOD / Junior Mod" power.
+  // Source of truth is RTDB /jmd_granters/{uid}; every device live-subscribes
+  // to its own leaf in GlobelStats (canGrantJmd), so grants and revokes take
+  // effect immediately, and the /users rule honours the same list. A granter
+  // gets only the Make/Remove Mod and Junior Mod chips in Mod Tools.
+  // The Badge Access tab is the same screen pointed at /badge_granters/{uid}:
+  // a MOD on that list may give Trusted / CMSR / Helper under the squad bar
+  // (canGrantBadgeAnySquad in GlobelStats; the /users rule honours it too). ──
+  const accessList = ACCESS_LISTS[activeTab] || ACCESS_LISTS.staffAccess;
+  const accessPathRef = React.useRef(accessList.path);
+  accessPathRef.current = accessList.path;
+  const [jmdGranters, setJmdGranters] = useState([]);
+  const [jmdGrantersLoading, setJmdGrantersLoading] = useState(false);
+  const [jmdSearchQuery, setJmdSearchQuery] = useState('');
+  const [jmdSearchResults, setJmdSearchResults] = useState([]);
+  const [jmdSearching, setJmdSearching] = useState(false);
+  const [jmdSaving, setJmdSaving] = useState(null); // uid currently being written
+
+  const fetchJmdGranters = useCallback(async () => {
+    const path = accessList.path;
+    setJmdGrantersLoading(true);
+    try {
+      const snap = await get(ref(db, path));
+      // Switched tabs while loading: this list belongs to the other one.
+      if (accessPathRef.current !== path) return;
+      const val = snap.exists() ? snap.val() : {};
+      const rows = Object.entries(val || {})
+        .filter(([uid, v]) => uid && !BAD_KEYS.has(uid) && v !== false && v != null)
+        .map(([uid, v]) => ({
+          id: uid,
+          // Legacy/plain `true` values carry no profile — fall back to the UID.
+          displayName: (typeof v === 'object' && v.displayName) || uid,
+          avatar: (typeof v === 'object' && v.avatar) || DEFAULT_AVATAR,
+          grantedAt: (typeof v === 'object' && v.grantedAt) || null,
+          grantedByName: (typeof v === 'object' && v.grantedByName) || null,
+        }))
+        .sort((a, b) => (toMillisSafe(b.grantedAt) || 0) - (toMillisSafe(a.grantedAt) || 0));
+      setJmdGranters(rows);
+    } catch (err) {
+      Alert.alert('Error', `Could not load the ${accessList.label} list. Check your read permissions.`);
+    } finally {
+      setJmdGrantersLoading(false);
+    }
+  }, [db, accessList]);
+
+  // Name-prefix search (same indexed query the chat viewer uses) plus a direct
+  // UID lookup, so the owner can paste a user ID copied from a profile.
+  const searchJmdUser = useCallback(async (text) => {
+    const raw = (text || '').trim();
+    if (!raw) { setJmdSearchResults([]); return; }
+    Keyboard.dismiss();
+    setJmdSearching(true);
+    try {
+      const seen = new Set();
+      const results = [];
+
+      if (looksLikeUserId(raw)) {
+        const snap = await get(ref(db, `users/${raw}`));
+        if (snap.exists()) {
+          const u = snap.val();
+          const id = u.id || raw;
+          seen.add(id);
+          results.push({
+            id,
+            displayName: u.displayName || u.userName || 'Unknown',
+            avatar: getAvatarSafe(u),
+            isModerator: !!u.isModerator,
+            isAdmin: !!u.admin,
+          });
+        }
+      }
+
+      const lower = sanitizeSearchQuery(raw.toLowerCase());
+      if (lower) {
+        const upperFirst = lower.charAt(0).toUpperCase() + lower.slice(1);
+        const variants = lower === upperFirst ? [lower] : [lower, upperFirst];
+        for (const v of variants) {
+          const q = query(
+            ref(db, 'users'),
+            orderByChild('displayName'),
+            startAt(v),
+            endAt(v + ''),
+            limitToFirst(10)
+          );
+          const snapshot = await get(q);
+          if (!snapshot.exists()) continue;
+          for (const u of Object.values(snapshot.val() || {})) {
+            const id = u?.id;
+            if (!id || BAD_KEYS.has(id) || seen.has(id)) continue;
+            seen.add(id);
+            results.push({
+              id,
+              displayName: u.displayName || u.userName || 'Unknown',
+              avatar: getAvatarSafe(u),
+              isModerator: !!u.isModerator,
+              isAdmin: !!u.admin,
+            });
+          }
+        }
+      }
+
+      setJmdSearchResults(results.slice(0, 10));
+    } catch (err) {
+      Alert.alert('Error', 'Search failed. Try a user ID instead.');
+    } finally {
+      setJmdSearching(false);
+    }
+  }, [db]);
+
+  const handleGrantJmdAccess = useCallback(async (userItem) => {
+    if (!userItem?.id) return;
+    if (jmdGranters.some((g) => g.id === userItem.id)) {
+      Alert.alert('Already granted', `${userItem.displayName} ${accessList.already}.`);
+      return;
+    }
+    const confirmed = await new Promise((resolve) => {
+      Alert.alert(
+        `Grant ${accessList.label}`,
+        accessList.confirm(userItem),
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Grant', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirmed) return;
+
+    setJmdSaving(userItem.id);
+    try {
+      await set(ref(db, `${accessList.path}/${userItem.id}`), {
+        displayName: userItem.displayName || 'Unknown',
+        avatar: userItem.avatar || DEFAULT_AVATAR,
+        grantedAt: Date.now(),
+        grantedBy: currentUser?.id || null,
+        grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+      });
+      setJmdGranters((prev) => [
+        {
+          id: userItem.id,
+          displayName: userItem.displayName || 'Unknown',
+          avatar: userItem.avatar || DEFAULT_AVATAR,
+          grantedAt: Date.now(),
+          grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+        },
+        ...prev,
+      ]);
+      setJmdSearchResults([]);
+      setJmdSearchQuery('');
+      Alert.alert('Granted', `${userItem.displayName} ${accessList.granted}.`);
+    } catch (err) {
+      Alert.alert('Error', 'Could not grant access. Check your write permissions.');
+    } finally {
+      setJmdSaving(null);
+    }
+  }, [db, jmdGranters, currentUser, accessList]);
+
+  const handleRevokeJmdAccess = useCallback(async (granter) => {
+    if (!granter?.id) return;
+    const confirmed = await new Promise((resolve) => {
+      Alert.alert(`Revoke ${accessList.label}`, `Remove ${granter.displayName}'s permission to ${accessList.power}?`, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Revoke', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+    if (!confirmed) return;
+
+    setJmdSaving(granter.id);
+    try {
+      await set(ref(db, `${accessList.path}/${granter.id}`), null);
+      setJmdGranters((prev) => prev.filter((g) => g.id !== granter.id));
+    } catch (err) {
+      Alert.alert('Error', 'Could not revoke access. Check your write permissions.');
+    } finally {
+      setJmdSaving(null);
+    }
+  }, [db, accessList]);
+
+  useEffect(() => {
+    if (!ACCESS_LISTS[activeTab] || !isAdmin) return;
+    // Clear the other tab's rows so they never show under this tab's title.
+    setJmdGranters([]);
+    setJmdSearchResults([]);
+    fetchJmdGranters();
+  }, [activeTab, isAdmin, fetchJmdGranters]);
 
   // ── Elections: applications (040). Players apply during nominations; only
   // what an admin approves here goes on the ballot. ──
@@ -2318,8 +2546,11 @@ const AdminDashboard = () => {
           { key: 'userChats',  label: 'User Chats', adminOnly: true },
           { key: 'polls',      label: 'Polls' },
           { key: 'statusFeed', label: 'Statuses' },
-          // MOD / JMD are elected now; the old "JMD Access" grants are gone
-          // (the /users rule no longer honours /jmd_granters).
+          // Admins appoint MOD / JMD by hand again (2026-10-03) and can delegate
+          // that power here; the /users rule honours /jmd_granters.
+          { key: 'staffAccess', label: 'Staff Access', adminOnly: true },
+          // MODs on this list may badge players under the 3-squad bar (/badge_granters).
+          { key: 'badgeAccess', label: 'Badge Access', adminOnly: true },
           { key: 'elections',  label: 'Elections', adminOnly: true },
         ]
           .filter((t) => !t.adminOnly || isAdmin)
@@ -2382,6 +2613,49 @@ const AdminDashboard = () => {
             value={modControlsEnabled}
             onValueChange={handleToggleModControls}
             trackColor={{ false: '#767577', true: HUE.success }}
+            thumbColor="#FFF"
+          />
+        </View>
+      )}
+
+      {/* Admin-only: let every player share links and emails in chat
+          (RTDB /links_allowed). ON is the unusual state — the link filter is
+          off for everyone — so that is the one tinted. */}
+      {isAdmin && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            marginHorizontal: SPACE.lg,
+            marginBottom: SPACE.md,
+            borderRadius: RADIUS.md,
+            borderWidth: 1,
+            borderColor: linksAllowed ? tint(HUE.warn, '55') : C.border,
+            backgroundColor: linksAllowed ? tint(HUE.warn, '12') : C.surface,
+          }}
+        >
+          <Ionicons
+            name={linksAllowed ? 'link' : 'link-outline'}
+            size={18}
+            color={linksAllowed ? HUE.warn : C.textMuted}
+            style={{ marginRight: 10 }}
+          />
+          <View style={{ flex: 1, paddingRight: SPACE.md }}>
+            <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>
+              Links &amp; emails in chat
+            </Text>
+            <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
+              {linksAllowed
+                ? 'Everyone can share links and email addresses'
+                : 'Blocked for players (YouTube & TikTok only) — staff unaffected'}
+            </Text>
+          </View>
+          <Switch
+            value={!!linksAllowed}
+            onValueChange={handleToggleLinks}
+            trackColor={{ false: '#767577', true: HUE.warn }}
             thumbColor="#FFF"
           />
         </View>
@@ -3482,6 +3756,127 @@ const AdminDashboard = () => {
             />
           )}
         </View>
+      ) : ACCESS_LISTS[activeTab] && isAdmin ? (
+        <View style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 }}>
+            <Text style={{ fontSize: 12, color: C.textMuted, lineHeight: 17 }}>
+              {accessList.intro}
+            </Text>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <TextInput
+              value={jmdSearchQuery}
+              onChangeText={setJmdSearchQuery}
+              placeholder="Search by display name or paste a user ID..."
+              placeholderTextColor={C.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.searchInput, { backgroundColor: C.surface, color: C.text }]}
+              returnKeyType="search"
+              onSubmitEditing={() => searchJmdUser(jmdSearchQuery)}
+            />
+            <TouchableOpacity onPress={() => searchJmdUser(jmdSearchQuery)} style={styles.searchBtn}>
+              <Ionicons name="search" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+
+          {jmdSearching && <ActivityIndicator size="small" color="#007AFF" style={{ marginBottom: 8 }} />}
+
+          {jmdSearchResults.length > 0 && (
+            <View style={{ paddingHorizontal: 12, marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+                Search results
+              </Text>
+              {jmdSearchResults.map((u) => {
+                const alreadyGranted = jmdGranters.some((g) => g.id === u.id);
+                return (
+                  <View
+                    key={u.id}
+                    style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
+                  >
+                    <Image source={{ uri: getAvatarSafe(u) }} style={styles.avatar} />
+                    <View style={styles.cardContent}>
+                      <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
+                        {u.displayName}
+                      </Text>
+                      <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
+                        {u.isAdmin ? 'Admin' : u.isModerator ? 'Moderator' : 'Member'} · {u.id}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      disabled={alreadyGranted || jmdSaving === u.id}
+                      onPress={() => handleGrantJmdAccess(u)}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
+                        backgroundColor: alreadyGranted ? C.border : HUE.accent,
+                        opacity: jmdSaving === u.id ? 0.5 : 1,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: alreadyGranted ? C.textMuted : '#FFF' }}>
+                        {alreadyGranted ? 'Granted' : 'Grant'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              {accessList.listTitle} · {jmdGranters.length}
+            </Text>
+          </View>
+
+          {jmdGrantersLoading && jmdGranters.length === 0 ? (
+            <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 24 }} />
+          ) : (
+            <FlatList
+              removeClippedSubviews={false}
+              data={jmdGranters}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 40 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={jmdGrantersLoading}
+                  onRefresh={fetchJmdGranters}
+                  tintColor={C.text}
+                />
+              }
+              ListEmptyComponent={
+                <Text style={{ color: C.textMuted, textAlign: 'center', marginTop: 32, fontSize: 13 }}>
+                  Nobody has this permission yet.{'\n'}Search a user above to grant it.
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  <Image source={{ uri: getAvatarSafe(item) }} style={styles.avatar} />
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
+                      {item.displayName}
+                    </Text>
+                    <Text style={[styles.email, { color: C.textMuted }]} numberOfLines={1}>
+                      {item.grantedAt ? `Granted ${timeAgo(item.grantedAt)}` : 'Granted'}
+                      {item.grantedByName ? ` by ${item.grantedByName}` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    disabled={jmdSaving === item.id}
+                    onPress={() => handleRevokeJmdAccess(item)}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
+                      backgroundColor: '#FF3B3015', borderWidth: 1, borderColor: '#FF3B3040',
+                      opacity: jmdSaving === item.id ? 0.5 : 1,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: HUE.danger }}>Revoke</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          )}
+        </View>
       ) : activeTab === 'elections' && isAdmin ? (
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
@@ -3515,7 +3910,9 @@ const AdminDashboard = () => {
             />
           </View>
           <Text style={{ fontSize: 13, color: C.textMuted, lineHeight: 19 }}>
-            MODs and Junior Mods are elected by players, and you have the final say. To apply, a player
+            MODs and Junior Mods are elected by players, and you have the final say. You can also appoint
+            or remove one by hand from any profile's Mod Tools (no requirements apply), or let someone
+            else do that from the Staff Access tab. To apply for an election, a player
             needs 5 squad friends and 18+ for MOD, or 3 squad friends and 16+ for JMD, with no strike or
             ban in the last 30 days. Only applications you approve here go on the ballot. When a race
             closes, its count lands below with a suggestion; nobody gains or loses a role until you

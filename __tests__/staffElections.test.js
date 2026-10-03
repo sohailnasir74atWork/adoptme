@@ -35,6 +35,11 @@ beforeEach(() => {
 });
 
 describe('badge eligibility (mirrors the RTDB rule)', () => {
+  test('Badge Access granters skip the squad bar', () => {
+    expect(el.canGrantBadge({ anySquad: true, targetSquad: 0 })).toBe(true);
+    expect(el.canGrantBadge({ anySquad: false, targetSquad: 0 })).toBe(false);
+  });
+
   test('needs BADGE_MIN_SQUAD squad friends; admins exempt', () => {
     expect(el.BADGE_MIN_SQUAD).toBe(3);
     expect(el.canGrantBadge({ targetSquad: 2 })).toBe(false);

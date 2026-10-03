@@ -11,7 +11,7 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useGlobalState } from '../../GlobelStats';
 import { ref, get, set } from '@react-native-firebase/database';
 import { getRoblox, getRoles, getCosmetics } from '../../Supabase/userBackend';
-import { getCachedProfile } from '../../Helper/profileCache';
+import { getCachedProfile, getRoleOverride } from '../../Helper/profileCache';
 import { getThemeColors } from '../../Helper/themeColors';
 import UserBadgeRail from '../../Helper/UserBadgeRail';
 import FramedAvatar from '../GroupChat/FramedAvatar';
@@ -49,16 +49,12 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     showSuccessMessage(t("value.copy"), t('chat.copied_clipboard'));
   }, [triggerHapticFeedback, t]);
 
-  // ✅ Fetch user data from Firebase if roblox data is missing
+  // Fetch the partner's roles / Pro / Roblox link. Always: a trade card
+  // passes robloxUsername in the route but never the roles, so skipping the
+  // fetch when Roblox is present left trade DMs with no badges at all.
   useEffect(() => {
     const selectedUserId = selectedUser?.senderId || selectedUser?.id;
     if (!selectedUserId || !appdatabase) return;
-
-    // Only fetch if robloxUsername is not already in selectedUser
-    if (selectedUser?.robloxUsername || selectedUser?.robloxUserId) {
-      setUserData(null); // Clear fetched data if already in selectedUser
-      return;
-    }
 
     let isMounted = true;
 
@@ -91,7 +87,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         // as `isAdmin` via fromRolesRow. Use the correct RTDB leaf name in
         // the fallback so admin pills don't silently miss when the mirror
         // row is stale.
-        if (!rolesRow)     missing.push('admin', 'isModerator', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper');
+        if (!rolesRow)     missing.push('admin', 'isModerator', 'isBabyMod', 'isTrusted', 'isCMSR', 'isArtCMSR', 'isHelper');
         if (!cosmeticsRow) missing.push('isPro');
         if (!robloxRow)    missing.push('robloxUsername', 'robloxUserId', 'robloxUsernameVerified');
         let fb = null;
@@ -132,11 +128,12 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
     return () => {
       isMounted = false;
     };
-  }, [selectedUser?.senderId, selectedUser?.id, selectedUser?.robloxUsername, selectedUser?.robloxUserId, appdatabase]);
+  }, [selectedUser?.senderId, selectedUser?.id, appdatabase]);
 
   // ✅ Merge selectedUser with fetched userData
   const mergedUser = useMemo(() => {
     if (!userData) return selectedUser;
+    const roleOv = getRoleOverride(selectedUserId);
     return {
       ...selectedUser,
       robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
@@ -145,8 +142,12 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
         ? selectedUser.robloxUsernameVerified
         : userData.robloxUsernameVerified,
       isPro: selectedUser?.isPro !== undefined ? selectedUser.isPro : userData.isPro,
-      isAdmin: selectedUser?.isAdmin !== undefined ? selectedUser.isAdmin : userData.isAdmin,
-      isModerator: selectedUser?.isModerator !== undefined ? selectedUser.isModerator : userData.isModerator,
+      // Roles: the fresh read wins over whatever the route carried (often a
+      // flag frozen into an old message), as in BottomDrawer. A role granted
+      // or revoked this session (getRoleOverride) wins over both.
+      isAdmin: roleOv?.isAdmin ?? userData.isAdmin ?? selectedUser?.isAdmin ?? false,
+      isModerator: roleOv?.isModerator ?? userData.isModerator ?? selectedUser?.isModerator ?? false,
+      isBabyMod: roleOv?.isBabyMod ?? userData.isBabyMod ?? selectedUser?.isBabyMod ?? false,
       isTrusted: userData.isTrusted ?? selectedUser?.isTrusted ?? false,
       isCMSR: userData.isCMSR ?? selectedUser?.isCMSR ?? false,
       isArtCMSR: userData.isArtCMSR ?? selectedUser?.isArtCMSR ?? false,
@@ -154,7 +155,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       squadCount: userData.squadCount ?? selectedUser?.squadCount ?? 0,
       profileFrame: selectedUser?.profileFrame || userData.profileFrame || null,
     };
-  }, [selectedUser, userData]);
+  }, [selectedUser, userData, selectedUserId]);
 
   // ✅ Memoize avatarUri and userName
   // Prefer the freshest identity from profileCache (user_identity mirror,

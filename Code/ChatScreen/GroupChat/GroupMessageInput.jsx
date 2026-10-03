@@ -71,7 +71,7 @@ const GroupMessageInput = ({
   const [imageUris, setImageUris] = useState([]); // Array to hold up to 3 images
 
   const { localState } = useLocalState();
-  const { theme, user, isAdmin } = useGlobalState();
+  const { theme, user, isAdmin, linksAllowed } = useGlobalState();
   const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
   const { t } = useTranslation();
@@ -224,7 +224,8 @@ const GroupMessageInput = ({
 
     if (textToSend) {
       // If message contains a link, only allow YouTube and TikTok for everyone; block everything else
-      if (containsLink(textToSend) && !isAllowedLink(textToSend) && !canBypassModeration) {
+      // — unless an admin turned on "Links & emails in chat" (RTDB /links_allowed).
+      if (containsLink(textToSend) && !isAllowedLink(textToSend) && !canBypassModeration && !linksAllowed) {
         showMessage({ message: t('chat.only_youtube_tiktok_links'), type: 'danger', duration: 3000 });
         return;
       }

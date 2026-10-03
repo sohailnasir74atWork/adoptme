@@ -38,6 +38,89 @@ import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 const INITIAL_LOAD = 15; // ✅ Initial chats to display
 const LOAD_MORE = 10; // ✅ Load 10 more on scroll
 
+const DEFAULT_AVATAR = 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
+
+// One inbox row. Memoized on primitive props so a streak/profile/mute update
+// re-renders only the rows it touches — before this, every one of those
+// (and every realtime batch) re-rendered every row, framed SVG avatar and
+// popup Menu on screen, which is what made opening a long inbox stall.
+const ChatRow = React.memo(({
+  chatId, otherUserId, otherUserName, otherUserLabel, otherUserAvatar, frame,
+  lastMessage, unreadCount, streak, muted, isDarkMode, styles, deleteLabel,
+  onOpen, onToggleMute, onDelete,
+}) => (
+  <View style={styles.itemContainer}>
+    <TouchableOpacity
+      style={styles.chatItem}
+      onPress={() => onOpen(chatId, otherUserId, otherUserName, otherUserAvatar)}
+    >
+      <View style={{ marginRight: 10 }}>
+        <FramedAvatar
+          avatarUri={otherUserAvatar}
+          frame={frame}
+          isDarkMode={isDarkMode}
+          avatarSize={46}
+          forceDetail
+        />
+      </View>
+      <View style={styles.textContainer}>
+        <Text style={styles.userName}>{otherUserLabel}</Text>
+        {streak >= 2 && (
+          <Text style={{ fontSize: 12, marginTop: 2, color: isDarkMode ? '#fff' : '#000' }}>🔥 {streak}</Text>
+        )}
+        <Text style={styles.lastMessage} numberOfLines={1}>
+          {lastMessage}
+        </Text>
+      </View>
+      {unreadCount > 0 && (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+    <TouchableOpacity
+      onPress={() => onToggleMute(otherUserId, otherUserLabel)}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      style={{ paddingHorizontal: 6 }}
+    >
+      <Icon
+        name={muted ? 'notifications-off' : 'notifications-outline'}
+        size={20}
+        color={muted ? '#EF4444' : (isDarkMode ? '#94A3B8' : '#64748B')}
+      />
+    </TouchableOpacity>
+    <Menu>
+      <MenuTrigger>
+        <Icon
+          name="ellipsis-vertical-outline"
+          size={20}
+          color={config.colors.primary}
+          style={{ paddingLeft: 10 }}
+        />
+      </MenuTrigger>
+      <MenuOptions customStyles={{
+        optionsContainer: {
+          borderRadius: 8,
+          padding: 4,
+          backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.15,
+          shadowRadius: 4,
+          elevation: 5,
+          width: 150,
+        },
+      }}>
+        <MenuOption onSelect={() => onDelete(chatId)}>
+          <Text style={{ color: 'red', fontSize: 16, padding: 10 }}> {deleteLabel}</Text>
+        </MenuOption>
+      </MenuOptions>
+    </Menu>
+  </View>
+));
+
 const InboxScreen = ({ bannedUsers }) => {
   const navigation = useNavigation();
   const { user, theme, appdatabase, firestoreDB } = useGlobalState();
@@ -226,6 +309,22 @@ const InboxScreen = ({ bannedUsers }) => {
     // bannedUsers intentionally omitted: read via bannedUsersRef / getBanned().
   }, [user?.id, appdatabase]);
 
+  // Hold the first row mount until the push animation ends. Mounting a page
+  // of framed SVG avatars, images and popup Menus mid-fade is what stalled
+  // the transition from the public chat; the skeleton is cheap to draw. The
+  // timeout covers a transitionEnd that never fires (e.g. no animation).
+  const [transitionDone, setTransitionDone] = useState(false);
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('transitionEnd', (e) => {
+      if (!e?.data?.closing) setTransitionDone(true);
+    });
+    const fallback = setTimeout(() => setTransitionDone(true), 400);
+    return () => {
+      unsubscribe();
+      clearTimeout(fallback);
+    };
+  }, [navigation]);
+
   // 🔥 Fetch streaks on mount
   useEffect(() => {
     if (!user?.id || !firestoreDB) return;
@@ -249,10 +348,18 @@ const InboxScreen = ({ bannedUsers }) => {
     }
   }, [user?.id, refreshing]);
 
+  // Latest mute map / chat list via refs so the row handlers below keep a
+  // stable identity — otherwise every mute flip or realtime batch hands each
+  // memoized ChatRow a new callback and re-renders the whole list.
+  const mutedChatsRef = useRef(mutedChats);
+  mutedChatsRef.current = mutedChats;
+  const localChatsRef = useRef(localChats);
+  localChatsRef.current = localChats;
+
   // 🔔 Toggle mute for a private chat
   const handleToggleMute = useCallback(async (otherUserId, otherUserName) => {
     if (!user?.id || !otherUserId) return;
-    const currentMuted = mutedChats[otherUserId] || false;
+    const currentMuted = mutedChatsRef.current[otherUserId] || false;
     const newMuted = !currentMuted;
     try {
       await setChatMuted(user.id, otherUserId, newMuted);
@@ -267,10 +374,10 @@ const InboxScreen = ({ bannedUsers }) => {
       console.warn('[Inbox] toggle mute error:', error?.message);
       showError(t('chat.error'), t('inbox.errors.mute_failed'));
     }
-  }, [user?.id, mutedChats, t]);
+  }, [user?.id, t]);
 
   const allChats = localChats;
-  const displayLoading = localLoading;
+  const displayLoading = localLoading || !transitionDone;
 
   // Safety: ban-filter + dedup-by-chatId so the FlatList never sees two rows
   // with the same key (can happen if upstream meta delivery double-fires
@@ -355,12 +462,13 @@ const InboxScreen = ({ bannedUsers }) => {
                 return;
               }
 
-              if (!Array.isArray(allChats) || allChats.length === 0) {
+              const chats = localChatsRef.current;
+              if (!Array.isArray(chats) || chats.length === 0) {
                 console.error('❌ Chats array not available');
                 return;
               }
 
-              const chatToDelete = allChats.find(chat => chat?.chatId === chatId);
+              const chatToDelete = chats.find(chat => chat?.chatId === chatId);
               if (!chatToDelete) {
                 console.error('❌ Chat not found');
                 return;
@@ -391,7 +499,7 @@ const InboxScreen = ({ bannedUsers }) => {
       ],
       { cancelable: true }
     );
-  }, [allChats, user?.id, t]);
+  }, [user?.id, t]);
 
 
 
@@ -443,12 +551,12 @@ const InboxScreen = ({ bannedUsers }) => {
 
 
 
-  // ✅ Memoize renderChatItem with useCallback
+  // Rows read the props they need; ChatRow's memo skips the unchanged ones.
+  // profileCacheVersion isn't referenced here; the FlatList `extraData`
+  // prop below carries it so rows pick up the warmed cache.
   const renderChatItem = useCallback(({ item }) => {
-    // ✅ Safety checks
     if (!item || typeof item !== 'object') return null;
 
-    const chatId = item.chatId;
     const otherUserId = item.otherUserId;
     // Prefer the freshest identity from profileCache (user_identity mirror)
     // over the denormalized receiverName/receiverAvatar snapshot in the
@@ -462,94 +570,29 @@ const InboxScreen = ({ bannedUsers }) => {
     // otherUserName is data (passed on as the chat partner's name); 'Anonymous'
     // is the stored placeholder, so only the on-screen label is translated.
     const otherUserName = cachedName || item.otherUserName || 'Anonymous';
-    const otherUserLabel = otherUserName === 'Anonymous' ? t('chat.anonymous') : otherUserName;
-    const otherUserAvatar = cachedProfile?.avatar || item.otherUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-    const userAvatar = user?.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png';
-    const lastMessage = item.lastMessage || t('inbox.no_messages_yet');
-    const unreadCount = item.unreadCount || 0;
-    const isOnline = item.isOnline || false;
-    const isBanned = item.isBanned || false;
+    const otherUserAvatar = cachedProfile?.avatar || item.otherUserAvatar || DEFAULT_AVATAR;
 
     return (
-      <View style={styles.itemContainer}>
-        <TouchableOpacity
-          style={styles.chatItem}
-          onPress={() => handleOpenChat(chatId, otherUserId, otherUserName, otherUserAvatar)}
-        >
-          <View style={{ marginRight: 10 }}>
-            <FramedAvatar
-              avatarUri={otherUserId !== user?.id ? otherUserAvatar : userAvatar}
-              frame={cachedProfile?.profileFrame || null}
-              isDarkMode={isDarkMode}
-              avatarSize={46}
-              forceDetail
-            />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.userName}>
-              {otherUserLabel}
-              {isOnline && !isBanned && (
-                <Text style={{ color: '#22c55e' }}> - {t('chat.online')}</Text>
-              )}
-            </Text>
-            {streaks.get(otherUserId) >= 2 && (
-              <Text style={{ fontSize: 12, marginTop: 2, color: isDarkMode ? '#fff' : '#000' }}>🔥 {streaks.get(otherUserId)}</Text>
-            )}
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {lastMessage}
-            </Text>
-          </View>
-          {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleToggleMute(otherUserId, otherUserLabel)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={{ paddingHorizontal: 6 }}
-        >
-          <Icon
-            name={mutedChats[otherUserId] ? 'notifications-off' : 'notifications-outline'}
-            size={20}
-            color={mutedChats[otherUserId] ? '#EF4444' : (isDarkMode ? '#94A3B8' : '#64748B')}
-          />
-        </TouchableOpacity>
-        <Menu>
-          <MenuTrigger>
-            <Icon
-              name="ellipsis-vertical-outline"
-              size={20}
-              color={config.colors.primary}
-              style={{ paddingLeft: 10 }}
-            />
-          </MenuTrigger>
-          <MenuOptions customStyles={{
-            optionsContainer: {
-              borderRadius: 8,
-              padding: 4,
-              backgroundColor: isDarkMode ? '#1e293b' : '#fff',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 5,
-              width: 150,
-            },
-          }}>
-            <MenuOption onSelect={() => handleDelete(chatId)}>
-              <Text style={{ color: 'red', fontSize: 16, padding: 10 }}> {t("chat.delete")}</Text>
-            </MenuOption>
-          </MenuOptions>
-        </Menu>
-      </View>
+      <ChatRow
+        chatId={item.chatId}
+        otherUserId={otherUserId}
+        otherUserName={otherUserName}
+        otherUserLabel={otherUserName === 'Anonymous' ? t('chat.anonymous') : otherUserName}
+        otherUserAvatar={otherUserId !== user?.id ? otherUserAvatar : (user?.avatar || DEFAULT_AVATAR)}
+        frame={cachedProfile?.profileFrame || null}
+        lastMessage={item.lastMessage || t('inbox.no_messages_yet')}
+        unreadCount={item.unreadCount || 0}
+        streak={streaks.get(otherUserId) || 0}
+        muted={!!mutedChats[otherUserId]}
+        isDarkMode={isDarkMode}
+        styles={styles}
+        deleteLabel={t('chat.delete')}
+        onOpen={handleOpenChat}
+        onToggleMute={handleToggleMute}
+        onDelete={handleDelete}
+      />
     );
-    // profileCacheVersion isn't referenced here; the FlatList `extraData`
-    // prop below carries it and re-renders rows once the cache warms.
-  }, [styles, user, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t, streaks]);
+  }, [styles, user?.id, user?.avatar, handleOpenChat, handleDelete, handleToggleMute, mutedChats, isDarkMode, t, streaks]);
 
   // Shared pull-to-refresh control — used on both the list and the empty
   // state so a missing new chat can always be recovered with a pull.

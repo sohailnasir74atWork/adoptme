@@ -29,6 +29,7 @@ import { getPassCount, onSquadPassesChange, canStillJoin } from '../Helper/squad
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
+import { GAMES, GAME_ICONS, openMiniGame } from '../Engagement/miniGames';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
   VALUE_SOURCE,
@@ -81,6 +82,10 @@ const formatPlain = (v) => {
 // instead; the first focus for a uid (and any uid change) still reads
 // immediately and the screen shows the same data.
 const HOME_FOCUS_REFRESH_MS = 10 * 60 * 1000;
+// How long the hero Lottie plays after Home gains focus, and how many beats
+// the attention pulses (star badge, pack card) run before resting.
+const HERO_LOTTIE_PLAY_MS = 5000;
+const HOME_PULSE_CYCLES = 4;
 const ownedPetsFocusCache = new Map(); // uid -> { ts, ownedPets }
 
 const HomeTabScreen = ({ selectedTheme }) => {
@@ -241,19 +246,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
     }, [user?.id])
   );
 
-  // ⭐ Star badge pulse animation
-  useEffect(() => {
-    if (canClaimStar) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(starPulse, { toValue: 1.4, duration: 500, useNativeDriver: true }),
-          Animated.timing(starPulse, { toValue: 1, duration: 500, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [canClaimStar]);
 
   // ⭐ Check if daily star is claimable
   useEffect(() => {
@@ -278,14 +270,36 @@ const HomeTabScreen = ({ selectedTheme }) => {
   }, [currentLevel.level]);
   // Paused while another tab is in front. Tabs stay mounted, so the looping
   // hero animation kept Android's animator ticking under Chat and Trades.
+  // 2026-10-03: measured with `dumpsys gfxinfo`, an idle Home drew ~55 frames
+  // a second, nonstop, because this Lottie and the two pulse loops below never
+  // rested while Home was in front. Now the hero plays for a few seconds each
+  // time Home gains focus and then holds its last frame; the pulses run a
+  // handful of cycles instead of forever. Everything stays on the native
+  // driver, so the JS thread is untouched either way.
   const isFocused = useIsFocused();
   const levelLottieRef = useRef(null);
   useEffect(() => {
     const anim = levelLottieRef.current;
-    if (!anim) return;
-    if (isFocused) anim.play();
-    else anim.pause();
+    if (!anim) return undefined;
+    if (!isFocused) { anim.pause(); return undefined; }
+    anim.play();
+    const id = setTimeout(() => { try { anim.pause(); } catch (e) { /* unmounted */ } }, HERO_LOTTIE_PLAY_MS);
+    return () => clearTimeout(id);
   }, [isFocused, levelLottie]);
+
+  // ⭐ Star badge pulse: a few beats when Home comes into view, then still.
+  useEffect(() => {
+    if (!canClaimStar || !isFocused) { starPulse.setValue(1); return undefined; }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(starPulse, { toValue: 1.4, duration: 500, useNativeDriver: true }),
+        Animated.timing(starPulse, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+      { iterations: HOME_PULSE_CYCLES },
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [canClaimStar, isFocused, starPulse]);
   const nextLevel = useMemo(() => getNextLevel(userXP.total), [userXP.total]);
   const xpProgress = useMemo(() => getXPProgress(userXP.total), [userXP.total]);
 
@@ -759,6 +773,40 @@ const HomeTabScreen = ({ selectedTheme }) => {
             </View>
           </View>
 
+          {/* ═══ MINI GAMES: the card opens the Game Hub, each icon opens its game ═══ */}
+          <View style={styles.miniGamesCard}>
+            <TouchableOpacity
+              style={styles.miniGamesHead}
+              onPress={() => requireSignIn(() => navigation.navigate('GameHub'), t('mini_games.sign_in'))}
+              activeOpacity={0.85}
+            >
+              <Image source={GAME_ICONS.controller} style={styles.miniGamesIcon} resizeMode="contain" />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.tradeMatchTitle}>{t('home_tab.mini_games_title')}</Text>
+                  <View style={styles.tradeMatchNew}>
+                    <Text style={styles.tradeMatchNewText}>{t('home_tab.new')}</Text>
+                  </View>
+                </View>
+                <Text style={styles.tradeMatchSub} numberOfLines={2}>{t('mini_games.home_sub')}</Text>
+              </View>
+              <FontAwesome name="chevron-right" size={14} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.miniGamesStrip}>
+              {GAMES.map((g) => (
+                <TouchableOpacity
+                  key={g.id}
+                  style={styles.miniGamesTile}
+                  onPress={() => requireSignIn(() => openMiniGame(navigation, g.id), t('mini_games.sign_in'))}
+                  activeOpacity={0.8}
+                >
+                  <Image source={GAME_ICONS[g.id]} style={styles.miniGamesTileIcon} resizeMode="contain" />
+                  <Text style={styles.miniGamesTileText} numberOfLines={1}>{t(`mini_games.${g.id}_short`)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {/* ═══ SECTION 4: Share Button ═══ */}
           <View style={styles.section}>
             <TouchableOpacity
@@ -1174,6 +1222,30 @@ const styles = StyleSheet.create({
   electionBtnPillText: { fontSize: 11, fontWeight: '800' },
   tradeMatchSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2, lineHeight: 16 },
   tradeMatchNew: { backgroundColor: '#FDE68A', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  miniGamesCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: '#6D28D9',
+    backgroundImage: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)',
+  },
+  miniGamesHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  miniGamesIcon: { width: 44, height: 44 },
+  miniGamesStrip: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  miniGamesTile: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    paddingTop: 6,
+    paddingBottom: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  miniGamesTileIcon: { width: 30, height: 30 },
+  miniGamesTileText: { color: '#fff', fontSize: 9, fontWeight: '700', paddingHorizontal: 2 },
   tradeMatchNewText: { color: '#6D28D9', fontSize: 9, fontWeight: '900' },
   section: {
     paddingHorizontal: 16,

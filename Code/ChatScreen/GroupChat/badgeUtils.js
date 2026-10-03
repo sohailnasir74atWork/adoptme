@@ -160,7 +160,6 @@ export const BADGE_DEFINITIONS = {
     get hint() { return i18n.t('badges.quiz_master.hint'); },
     tier: 2,
     phase: 3,
-    retired: true, // mini-games removed 2026-09-29; kept so earners still show it
   },
   memoryKing: {
     id: 'memoryKing',
@@ -173,7 +172,6 @@ export const BADGE_DEFINITIONS = {
     get hint() { return i18n.t('badges.memory_king.hint'); },
     tier: 2,
     phase: 3,
-    retired: true, // mini-games removed 2026-09-29; kept so earners still show it
   },
   nightOwl: {
     id: 'nightOwl',
@@ -520,6 +518,14 @@ export const MESSAGE_BADGE_THRESHOLDS = [
 export const REACTION_BADGE_THRESHOLDS = [
   { count: 100, badgeId: 'loved' },
   { count: 500, badgeId: 'popular' },
+];
+
+export const QUIZ_BADGE_THRESHOLDS = [
+  { count: 100, badgeId: 'quizMaster' },
+];
+
+export const MEMORY_BADGE_THRESHOLDS = [
+  { count: 25, badgeId: 'memoryKing' },
 ];
 
 export const NIGHT_TRADE_BADGE_THRESHOLDS = [

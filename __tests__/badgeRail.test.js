@@ -18,7 +18,7 @@ jest.mock('react-native-mmkv', () => {
   };
 });
 
-const { badgeKeysFor, splitRail, ORDER, INLINE_MAX } = require('../Code/Helper/badgeRail');
+const { badgeKeysFor, inlineOrder, ORDER } = require('../Code/Helper/badgeRail');
 const sq = require('../Code/Helper/squad');
 const DAY = 86400000;
 
@@ -66,22 +66,26 @@ describe('badgeKeysFor: one priority order for every surface', () => {
   });
 });
 
-describe('splitRail: inline cap and the "+N" chip', () => {
-  test('fits: everything shown, nothing hidden', () => {
-    expect(splitRail(['admin', 'trusted'])).toEqual({ shown: ['admin', 'trusted'], hidden: 0 });
-    expect(splitRail([])).toEqual({ shown: [], hidden: 0 });
+describe('inlineOrder: every badge as an icon, the authority chip last', () => {
+  test('icons keep ORDER and the authority chip moves to the end', () => {
+    const keys = ['jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified'];
+    expect(inlineOrder(keys)).toEqual(['trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified', 'jmd']);
+    expect(inlineOrder(['admin', 'verified'])).toEqual(['verified', 'admin']);
   });
 
-  test('over the cap: the first INLINE_MAX win, the rest are counted', () => {
-    const keys = ['admin', 'trusted', 'cmsr_house', 'helper', 'squad', 'verified'];
-    expect(splitRail(keys)).toEqual({ shown: ['admin', 'trusted', 'cmsr_house'], hidden: 3 });
-    expect(INLINE_MAX).toBe(3);
-    expect(splitRail(keys, 2)).toEqual({ shown: ['admin', 'trusted'], hidden: 4 });
+  test('nothing is cut: no cap on the inline row', () => {
+    const all = badgeKeysFor({
+      isModerator: true, isTrusted: true, isCMSR: true, isArtCMSR: true, isHelper: true,
+      squadCount: 50, robloxUsernameVerified: true,
+    });
+    expect(inlineOrder(all)).toHaveLength(all.length);
+    expect(inlineOrder(all)[all.length - 1]).toBe('mod');
   });
 
-  test('a cap of 0 or less means no cap', () => {
-    const keys = ['admin', 'trusted', 'cmsr_house', 'helper'];
-    expect(splitRail(keys, 0)).toEqual({ shown: keys, hidden: 0 });
+  test('no authority role, no keys, bad input', () => {
+    expect(inlineOrder(['trusted', 'helper'])).toEqual(['trusted', 'helper']);
+    expect(inlineOrder([])).toEqual([]);
+    expect(inlineOrder(null)).toEqual([]);
   });
 });
 

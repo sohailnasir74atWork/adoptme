@@ -50,10 +50,10 @@ const TEXT_MUTE = 'rgba(255,255,255,0.46)';
 const GLASS = 'rgba(255,255,255,0.06)';
 const GLASS_LINE = 'rgba(255,255,255,0.10)';
 
-// Seconds before the × appears. Kids close paywalls reflexively, so this is
-// short on purpose — long enough to read the headline, not long enough to feel
-// like a trap. Set to 0 to show the close button immediately.
-const CLOSE_TIMER_SECONDS = 2;
+// Seconds before the × appears. Nothing is shown in its place while it waits —
+// no countdown digits — the button simply fades in once the time is up. Set to
+// 0 to show the close button immediately.
+const CLOSE_TIMER_SECONDS = 5;
 
 // ── What Pro actually unlocks ──
 // Every line here is a real gate in the code, not a marketing claim:
@@ -408,9 +408,9 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
         </Animated.View>
       </ScrollView>
 
-      {/* ── Close / countdown — pinned, never scrolls away ── */}
-      <View style={[s.closeWrap, { top: insets.top + 10 }]} pointerEvents="box-none">
-        {canClose ? (
+      {/* ── Close — pinned, never scrolls away; absent until the timer ends ── */}
+      {canClose && (
+        <View style={[s.closeWrap, { top: insets.top + 10 }]} pointerEvents="box-none">
           <Animated.View style={{ opacity: closeFade }}>
             <TouchableOpacity
               onPress={onClose}
@@ -420,12 +420,8 @@ const SubscriptionScreen = ({ visible, onClose, track, showoffer, oneWallOnly, i
               <Icon name="close" size={19} color="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
           </Animated.View>
-        ) : (
-          <View style={s.closeBtn}>
-            <Text style={s.timerText}>{closeTimer}</Text>
-          </View>
-        )}
-      </View>
+        </View>
+      )}
 
       {/* ══ BOTTOM: the three offers, side by side, then one button ══ */}
       <View style={[s.dock, { paddingBottom: DOCK_PAD + insets.bottom }]}>
@@ -686,11 +682,6 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  timerText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '800',
   },
 
   // ══ Dock ══

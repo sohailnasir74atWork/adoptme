@@ -12,6 +12,7 @@ import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
 import { useColorScheme, AppState, Appearance } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
+import { setLinksAllowed } from './Helper/linksSwitch';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
 import { getCrashlytics, setUserId as setCrashlyticsUserId, setAttribute as setCrashlyticsAttribute, log as crashlyticsLog, recordError as crashlyticsRecordError } from '@react-native-firebase/crashlytics';
 import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
@@ -115,6 +116,18 @@ export const GlobalStateProvider = ({ children }) => {
   // soon" until an admin flips RTDB /elections_enabled = true (Admin
   // Dashboard → Elections), and only an explicit `true` turns it on.
   const [electionsEnabled, setElectionsEnabled] = useState(false);
+  // Delegated "Make MOD / Junior Mod" grant (RTDB /jmd_granters/{uid}), issued
+  // by an admin in Admin Dashboard → Staff Access. Admins never depend on it.
+  const [canGrantJmd, setCanGrantJmd] = useState(false);
+  // Badge Access (RTDB /badge_granters/{uid}), issued by an admin in Admin
+  // Dashboard → Badge Access: a MOD on the list may give Trusted / CMSR /
+  // Helper to players under the squad bar. Admins never depend on it.
+  const [canGrantBadgeAnySquad, setCanGrantBadgeAnySquad] = useState(false);
+  // "Links & emails in chat" switch (RTDB /links_allowed). OFF by default:
+  // links stay blocked for players until an admin turns it on in Admin
+  // Dashboard → Restrictions. Mirrored into Helper/linksSwitch.js so every
+  // validateContent call site honours it; this state is for the UI.
+  const [linksAllowed, setLinksAllowedState] = useState(false);
   const [tradingServerLink, setTradingServerLink] = useState(null); // Trading server link from admin servers
 
 
@@ -907,6 +920,49 @@ export const GlobalStateProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appdatabase]);
 
+  // "Links & emails in chat" switch: live, so flipping it reaches open apps
+  // at once. The module flag is what validateContent reads; the state drives
+  // the one explicit link check in GroupMessageInput. Denied/offline → OFF.
+  useEffect(() => {
+    if (!appdatabase) return;
+    const unsub = onValue(
+      ref(appdatabase, 'links_allowed'),
+      (snap) => {
+        const on = snap.val() === true;
+        setLinksAllowed(on);
+        setLinksAllowedState(on);
+      },
+      () => { setLinksAllowed(false); setLinksAllowedState(false); }
+    );
+    return () => { try { unsub(); } catch (e) { /* noop */ } };
+    // appdatabase is a module-level constant, not a reactive dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appdatabase]);
+
+  // Delegated MOD / JMD grant for the signed-in user. One leaf listener on
+  // /jmd_granters/{uid} — negligible RTDB cost, and a revoke reaches the
+  // device immediately. Denied/offline reads leave the flag OFF (fail closed).
+  useEffect(() => {
+    if (!appdatabase || !user?.id) { setCanGrantJmd(false); return; }
+    const unsub = onValue(
+      ref(appdatabase, `jmd_granters/${user.id}`),
+      (snap) => setCanGrantJmd(!!(snap && snap.exists() && snap.val() !== false)),
+      () => setCanGrantJmd(false),
+    );
+    return () => { try { unsub(); } catch (e) { /* noop */ } };
+  }, [user?.id]);
+
+  // Badge Access for the signed-in user — same one-leaf pattern, fail closed.
+  useEffect(() => {
+    if (!appdatabase || !user?.id) { setCanGrantBadgeAnySquad(false); return; }
+    const unsub = onValue(
+      ref(appdatabase, `badge_granters/${user.id}`),
+      (snap) => setCanGrantBadgeAnySquad(!!(snap && snap.exists() && snap.val() !== false)),
+      () => setCanGrantBadgeAnySquad(false),
+    );
+    return () => { try { unsub(); } catch (e) { /* noop */ } };
+  }, [user?.id]);
+
   // Live role flags for the signed-in user (2026-09-04): a demoted moderator /
   // junior mod loses the powers immediately instead of at next login. Two leaf
   // listeners for the whole session — negligible RTDB cost. Denied/offline
@@ -1535,8 +1591,11 @@ export const GlobalStateProvider = ({ children }) => {
       worldCupEnabled, // World Cup feature kill switch (RTDB /worldcup_enabled)
       electionsEnabled, // staff elections switch (RTDB /elections_enabled), OFF = "Coming soon"
       modControlsEnabled, // moderator ban/mute kill switch (RTDB /mod_controls_enabled)
+      canGrantJmd, // delegated "can make MOD / Junior Mod" grant (RTDB /jmd_granters/{uid})
+      canGrantBadgeAnySquad, // Badge Access: MOD may badge under the squad bar (RTDB /badge_granters/{uid})
+      linksAllowed, // links & emails allowed in chat for everyone (RTDB /links_allowed)
     }),
-    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, electionsEnabled]
+    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, electionsEnabled, canGrantJmd, canGrantBadgeAnySquad, linksAllowed]
   );
 
   return (

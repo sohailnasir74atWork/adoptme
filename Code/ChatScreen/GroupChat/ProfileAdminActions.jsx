@@ -5,11 +5,11 @@ import { View, Text, TouchableOpacity } from 'react-native';
 const ProfileAdminActions = ({
   isAdmin, isDarkMode, isBanned, mergedUser,
   handleApplyStrike, handleMuteUser, handleUnbanUser,
-  handleDemoteModerator,
+  handlePromoteModerator, handleDemoteModerator,
   isBabyMod = false, isModerator = false, isStaff = true,
   canManageBabyMod = false, targetIsBabyMod = false,
   canManageModerator = false,
-  handleRemoveBabyMod,
+  handleMakeBabyMod, handleRemoveBabyMod,
   canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsArtCMSR = false, targetIsHelper = false,
   badgeAllowed = true, targetSquad = 0, badgeMinSquad = 3,
   handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
@@ -24,7 +24,11 @@ const ProfileAdminActions = ({
   // 2026-09-20: staff are off-limits to non-admins. Folded into the same flag
   // the strike/mute/unban blocks already test, so there is one condition to
   // reason about rather than two overlapping ones.
-  const noSanctions = !isStaff || !canSanction;
+  // A user who only holds the Staff Access grant (Admin Dashboard) is not
+  // staff: no strikes, no mute, no unban, no badges, no delete. They get
+  // exactly two chips — Make/Remove Mod and Make/Remove Junior Mod.
+  const grantOnly = !isStaff;
+  const noSanctions = grantOnly || !canSanction;
   // Badges: a grant needs badgeMinSquad squad friends; removing never does.
   const showMakeBadge = canManageBadges && badgeAllowed;
 
@@ -46,7 +50,7 @@ const ProfileAdminActions = ({
 
       <Text style={{ fontSize: 10, fontWeight: '700', color: dim,
         textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : 'Junior Mod'}
+        {isAdmin ? 'Admin' : isModerator ? 'Moderator' : grantOnly ? 'Staff Access' : 'Junior Mod'}
       </Text>
 
       {targetIsStaff && !canSanction && (
@@ -88,13 +92,25 @@ const ProfileAdminActions = ({
         {!isBabyModOnly && !noSanctions && isBanned && (
           <Chip label="Unban" color="#10b981" onPress={handleUnbanUser} />
         )}
-        {/* MODs and JMDs are elected (Elections screen); nobody appoints them
-            by hand. Admins can still remove one who abuses the role. */}
-        {canManageModerator && mergedUser?.isModerator && (
-          <Chip label="Remove Mod" color="#f59e0b" onPress={handleDemoteModerator} />
+        {/* MOD / JMD: elected (Elections screen), or appointed right here by an
+            admin or by a user listed in Admin Dashboard → Staff Access — no
+            squad / age / record bar applies. Shown to grant-only users too:
+            appointing is the point of the grant, so these are the staff
+            actions that survive the `grantOnly` suppression above. */}
+        {canManageModerator && (
+          <Chip
+            label={mergedUser?.isModerator ? 'Remove Mod' : 'Make Mod'}
+            color={mergedUser?.isModerator ? '#f59e0b' : '#3b82f6'}
+            onPress={mergedUser?.isModerator ? handleDemoteModerator : handlePromoteModerator}
+          />
         )}
-        {canManageBabyMod && targetIsBabyMod && (
-          <Chip label="Remove Junior Mod" color="#f59e0b" onPress={handleRemoveBabyMod} />
+        {/* A sitting MOD is above JMD, so "Make Junior Mod" is not offered for one. */}
+        {canManageBabyMod && (targetIsBabyMod || !mergedUser?.isModerator) && (
+          <Chip
+            label={targetIsBabyMod ? 'Remove Junior Mod' : 'Make Junior Mod'}
+            color={targetIsBabyMod ? '#f59e0b' : '#3b82f6'}
+            onPress={targetIsBabyMod ? handleRemoveBabyMod : handleMakeBabyMod}
+          />
         )}
         {canManageBadges && (targetIsTrusted
           ? <Chip label="Remove Trusted" color="#f59e0b" onPress={handleRemoveTrusted} />
