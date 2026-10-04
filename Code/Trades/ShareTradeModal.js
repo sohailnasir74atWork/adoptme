@@ -9,17 +9,11 @@ import config from '../Helper/Environment';
 import { showErrorMessage } from '../Helper/MessageHelper';
 import InterstitialAdManager from '../Ads/IntAd';
 import { useTranslation } from 'react-i18next';
+import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 
-// Same verdict as the calculator (HomeScreen getTradeStatus). This used to
-// answer "fair" for every trade with both sides filled, so a 100-for-10 share
-// card said Fair while the calculator behind it said Lose.
-const getTradeStatus = (hasTotal, wantsTotal) => {
-    const has = Number(hasTotal) || 0;
-    const wants = Number(wantsTotal) || 0;
-    if (has > wants) return 'lose';
-    if (has < wants) return 'win';
-    return 'fair';
-};
+// Same verdict as the calculator: the shared rule, so the share card can't
+// disagree with the screen behind it.
+const getTradeStatus = (hasTotal, wantsTotal) => wflStatus(hasTotal, wantsTotal);
 
 const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wantsTotal, description }) => {
     const viewRef = useRef();

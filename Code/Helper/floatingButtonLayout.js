@@ -24,10 +24,8 @@
  * of the text field.
  */
 
-// Height reserved for the anchored adaptive banner. Matches the spacer views
-// the screens already use (`bannerBottomPos + 60`). Note the collapsible
-// format makes the FIRST impression taller than this; the buttons sit above
-// the ad in z-order, which is the behaviour the feed FAB already established.
+// Height reserved for the fixed 320x50 banner (plus a little slack). Matches
+// the spacer views the screens already use (`bannerBottomPos + 60`).
 export const BANNER_HEIGHT = 60;
 
 // Breathing room between the button's bottom edge and the furniture below it.

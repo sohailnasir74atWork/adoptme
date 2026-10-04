@@ -85,6 +85,7 @@ import GuidesScreen from './GuidesScreen';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { syncTradeInventory } from '../Helper/tradeMatch';
+import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 // Bunny avatar upload (same zone/keys as your post uploader)
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -150,13 +151,15 @@ const getTradeDeal = (hasTotal, wantsTotal) => {
   const tradeRatio = wantsValue ? wantsValue / hasValue : 0;
   let deal;
 
-  if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
-    deal = { label: "trade.best_deal", color: "#34C759" };
-  } else if (tradeRatio > 0.6 && tradeRatio <= 0.75) {
-    deal = { label: "trade.great_deal", color: "#32D74B" };
-  } else if (tradeRatio > 0.75 && tradeRatio <= 1.25) {
+  // Fair is the shared 5% rule (Helper/tradeStatus); great and decent
+  // stretch to meet it, as fair used to span 0.75-1.25 here.
+  if (wflStatus(hasValue, wantsValue) === 'fair') {
     deal = { label: "trade.fair_deal", color: "#FFCC00" };
-  } else if (tradeRatio > 1.25 && tradeRatio <= 1.4) {
+  } else if (tradeRatio >= 0.05 && tradeRatio <= 0.6) {
+    deal = { label: "trade.best_deal", color: "#34C759" };
+  } else if (tradeRatio > 0.6 && tradeRatio < 1) {
+    deal = { label: "trade.great_deal", color: "#32D74B" };
+  } else if (tradeRatio > 1 && tradeRatio <= 1.4) {
     deal = { label: "trade.decent_deal", color: "#FF9F0A" };
   } else if (tradeRatio > 1.4 && tradeRatio <= 1.55) {
     deal = { label: "trade.weak_deal", color: "#D65A31" };

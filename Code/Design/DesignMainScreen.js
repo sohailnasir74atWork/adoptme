@@ -865,7 +865,7 @@ const DesignFeedScreen = ({ route }) => {
         screen="Design"
         message={t('feed.signin_upload')}
       />
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      {!localState.isPro && <BannerAdComponent />}
 
     </View>
   );

@@ -1752,7 +1752,7 @@ const TradeJournal = ({
         {/* Sticky Banner Ad (outside tab content) — pad bottom for system nav */}
         {!localState?.isPro && (
           <View style={{ paddingBottom: insets.bottom }}>
-            <BannerAdComponent collapsible />
+            <BannerAdComponent />
           </View>
         )}
       </View>

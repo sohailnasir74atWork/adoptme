@@ -887,6 +887,15 @@
         "scammer_db": "Arnaqueurs",
         "news": "Actus"
     },
+    "more_hub": {
+        "subtitle": "Fonds d'écran, serveurs, sécurité et actus",
+        "wallpaper_desc": "Des fonds d'écran Adopt Me HD gratuits pour ton téléphone",
+        "browse": "Voir",
+        "servers_title": "Serveurs privés",
+        "servers_desc": "Rejoins un serveur privé en un clic",
+        "scammer_desc": "Vérifie un pseudo avant d'échanger",
+        "news_desc": "Mises à jour, sondages et tes idées"
+    },
     "chat": {
         "top_rated": "Mieux notés",
         "groups": "Groupes",
@@ -1396,7 +1405,13 @@
         "comment_count_one": "{{count}} commentaire",
         "comment_count_many": "{{count}} de commentaires",
         "comment_count_other": "{{count}} commentaires",
-        "delete_comment_title": "Supprimer le commentaire"
+        "delete_comment_title": "Supprimer le commentaire",
+        "save_image": "Enregistrer l'image",
+        "save_all_images": "Enregistrer toutes les images",
+        "image_saved": "Enregistrée dans ta galerie",
+        "images_saved": "Toutes les images sont dans ta galerie",
+        "save_failed": "Impossible d'enregistrer l'image. Vérifie ta connexion et réessaie.",
+        "save_permission": "Autorise l'accès au stockage pour enregistrer des images dans ta galerie."
     },
     "categories": {
         "ALL": "Tout",

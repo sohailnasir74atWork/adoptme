@@ -869,6 +869,15 @@
         "scammer_db": "Scammer-Liste",
         "news": "News"
     },
+    "more_hub": {
+        "subtitle": "Wallpaper, Server, Sicherheit und News",
+        "wallpaper_desc": "Kostenlose Adopt Me HD-Wallpaper fürs Handy",
+        "browse": "Ansehen",
+        "servers_title": "Private Server",
+        "servers_desc": "Mit einem Tipp einem privaten Server beitreten",
+        "scammer_desc": "Prüf den Namen vor dem Trade",
+        "news_desc": "Updates, Umfragen und deine Ideen"
+    },
     "chat": {
         "top_rated": "Top bewertet",
         "groups": "Gruppen",
@@ -1366,7 +1375,13 @@
         "reaction_count_other": "{{count}} Reaktionen",
         "comment_count_one": "{{count}} Kommentar",
         "comment_count_other": "{{count}} Kommentare",
-        "delete_comment_title": "Kommentar löschen"
+        "delete_comment_title": "Kommentar löschen",
+        "save_image": "Bild speichern",
+        "save_all_images": "Alle Bilder speichern",
+        "image_saved": "In deiner Galerie gespeichert",
+        "images_saved": "Alle Bilder sind in deiner Galerie",
+        "save_failed": "Das Bild konnte nicht gespeichert werden. Prüfe deine Verbindung und versuch es nochmal.",
+        "save_permission": "Erlaube den Speicherzugriff, um Bilder in deiner Galerie zu speichern."
     },
     "categories": {
         "ALL": "Alle",

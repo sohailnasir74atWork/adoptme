@@ -19,6 +19,9 @@ import ProfileBottomDrawer from '../../ChatScreen/GroupChat/BottomDrawer';
 import { useTranslation } from 'react-i18next';
 import FramedAvatar from '../../ChatScreen/GroupChat/FramedAvatar';
 import { getCachedProfile } from '../../Helper/profileCache';
+import { canSaveToGallery, saveImagesToGallery } from '../../Helper/saveImageToGallery';
+import { showErrorMessage, showSuccessMessage } from '../../Helper/MessageHelper';
+import { trackGrowthEvent } from '../../Helper/growthAnalytics';
 
 const REACTION_EMOJIS = ['❤️', '🔥', '😍', '💀', '🎯'];
 
@@ -138,6 +141,27 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
 
   const hasNoImages = !Array.isArray(item.imageUrl) || item.imageUrl.length === 0;
 
+  const [savingImages, setSavingImages] = useState(false);
+  const handleSaveImages = useCallback(async () => {
+    if (hasNoImages || savingImages) return;
+    setSavingImages(true);
+    try {
+      if (!(await canSaveToGallery())) {
+        showErrorMessage(t('feed.save_permission'));
+        return;
+      }
+      const saved = await saveImagesToGallery(item.imageUrl);
+      if (saved > 0) {
+        trackGrowthEvent('feed_image_save', { source: 'post_menu', count: saved });
+        showSuccessMessage(t(saved > 1 && saved === item.imageUrl.length ? 'feed.images_saved' : 'feed.image_saved'));
+      } else {
+        showErrorMessage(t('feed.save_failed'));
+      }
+    } finally {
+      setSavingImages(false);
+    }
+  }, [hasNoImages, savingImages, item.imageUrl, t]);
+
   return (
     <View style={s.card}>
       {/* ── Header ── */}
@@ -181,6 +205,16 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
             </View>
           </MenuTrigger>
           <MenuOptions customStyles={{ optionsContainer: { borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#1e293b' : '#fff', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, minWidth: 160 } }}>
+            {!hasNoImages && (
+              <MenuOption onSelect={handleSaveImages} disabled={savingImages}>
+                <View style={[s.menuItem, { borderBottomWidth: 1, borderBottomColor: isDark ? '#334155' : '#f1f5f9' }]}>
+                  <FontAwesome6 name="download" size={12} color={config.colors.primary} solid />
+                  <Text style={[s.menuItemText, { color: isDark ? '#e2e8f0' : '#0f172a' }]}>
+                    {item.imageUrl.length > 1 ? t('feed.save_all_images') : t('feed.save_image')}
+                  </Text>
+                </View>
+              </MenuOption>
+            )}
             <MenuOption onSelect={() => setShowReportModal(true)}>
               <View style={s.menuItem}>
                 <FontAwesome6 name="flag" size={12} color="#F59E0B" solid />

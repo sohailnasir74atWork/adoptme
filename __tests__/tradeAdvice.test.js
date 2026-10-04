@@ -78,9 +78,9 @@ describe('feedNudge', () => {
     expect(r).toEqual({ tone: 'counter', reason: { key: 'ask_more_big', params: { amount: 10 } } });
   });
 
-  it('never says skip: an even trade of slow, falling pets is still a counter', () => {
+  it('keeps an even trade of slow, falling pets at "could work", matching the fair marker', () => {
     const r = nudge({ give: [pet('Cow')], receive: [pet('Catte'), pet('Dirty Ducky')], giveTotal: 10, getTotal: 10 });
-    expect(r.tone).toBe('counter');
+    expect(r.tone).toBe('close');
     expect(['get_slow', 'get_dropping']).toContain(r.reason.key);
   });
 

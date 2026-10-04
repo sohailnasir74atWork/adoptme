@@ -822,6 +822,15 @@
         "scammer_db": "База скамеров",
         "news": "Новости"
     },
+    "more_hub": {
+        "subtitle": "Обои, серверы, защита и новости",
+        "wallpaper_desc": "Бесплатные HD-обои Adopt Me на телефон",
+        "browse": "Смотреть",
+        "servers_title": "Приватные серверы",
+        "servers_desc": "Заходи на приватный сервер в один тап",
+        "scammer_desc": "Проверь ник перед трейдом",
+        "news_desc": "Обновления, опросы и твои идеи"
+    },
     "chat": {
         "groups": "Группы",
         "community_chat": "Общий чат",
@@ -1266,7 +1275,13 @@
         "comment_count_few": "{{count}} комментария",
         "comment_count_many": "{{count}} комментариев",
         "comment_count_other": "{{count}} комментария",
-        "delete_comment_title": "Удалить комментарий"
+        "delete_comment_title": "Удалить комментарий",
+        "save_image": "Сохранить фото",
+        "save_all_images": "Сохранить все фото",
+        "image_saved": "Фото сохранено в галерею",
+        "images_saved": "Все фото сохранены в галерею",
+        "save_failed": "Не получилось сохранить фото. Проверь интернет и попробуй ещё раз.",
+        "save_permission": "Разреши доступ к памяти, чтобы сохранять фото в галерею."
     },
     "categories": {
         "ALL": "Все",

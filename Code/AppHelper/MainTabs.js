@@ -15,21 +15,36 @@ import { useGlobalState } from '../GlobelStats';
 import DesignUploader from '../Design/DesignMainScreen';
 import DesignStack from '../Design/DesignNavigation';
 import HomeTabScreen from '../HomeTab/HomeTabScreen';
-import CustomTopTabs from '../ValuesScreen/TopTabs';
+import { MoreStack } from '../More/MoreNavigator';
 import { setAppLanguage, loadLanguage } from '../../i18n';
 import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
 import { checkDailyStreak, syncReviewBadges } from '../ChatScreen/GroupChat/badgeUtils';
 const Tab = createBottomTabNavigator();
 
-const TabIcon = React.memo(({ iconName, color, size, focused }) => (
-  <FontAwesome
-    name={iconName}
-    size={size}
-    color={color}
-    solid={focused}
-  />
-));
+// Glossy tab icons from scripts/tab-icons/make-icons.mjs: colour when selected, soft grey otherwise.
+const TAB_IMAGES = {
+  Home: [require('../../assets/tab-icons/home.png'), require('../../assets/tab-icons/home-off.png')],
+  Calculator: [require('../../assets/tab-icons/calculator.png'), require('../../assets/tab-icons/calculator-off.png')],
+  Trade: [require('../../assets/tab-icons/trade.png'), require('../../assets/tab-icons/trade-off.png')],
+  Designs: [require('../../assets/tab-icons/feed.png'), require('../../assets/tab-icons/feed-off.png')],
+  Chat: [require('../../assets/tab-icons/chat.png'), require('../../assets/tab-icons/chat-off.png')],
+  More: [require('../../assets/tab-icons/more.png'), require('../../assets/tab-icons/more-off.png')],
+};
+
+const TabIcon = React.memo(({ routeName, iconName, color, size, focused }) => {
+  const images = TAB_IMAGES[routeName];
+  if (!images) {
+    return <FontAwesome name={iconName} size={size} color={color} solid={focused} />;
+  }
+  return (
+    <Image
+      source={focused ? images[0] : images[1]}
+      style={{ width: 26, height: 26, transform: [{ scale: focused ? 1.08 : 1 }] }}
+      resizeMode="contain"
+    />
+  );
+});
 
 
 // ✅ PERF: Extracted TabBarButton to avoid recreating inline component on every render
@@ -131,6 +146,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
     tabBarIcon: ({ focused }) => (
       <TabIcon
         focused={focused}
+        routeName={route.name}
         iconName={getTabIcon(route.name, focused)}
         color={focused ? config.colors.primary : (isDarkMode ? '#64748b' : '#94a3b8')}
         size={18}
@@ -184,7 +200,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
       setModalVisibleChatinfo={setModalVisibleChatinfo}
     />
   ), [selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo]);
-  const renderMore = useCallback(() => <CustomTopTabs selectedTheme={selectedTheme} />, [selectedTheme]);
+  const renderMore = useCallback(() => <MoreStack selectedTheme={selectedTheme} />, [selectedTheme]);
 
   return (
     <>

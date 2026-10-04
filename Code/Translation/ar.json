@@ -941,6 +941,15 @@
         "scammer_db": "قائمة النصّابين",
         "news": "الأخبار"
     },
+    "more_hub": {
+        "subtitle": "خلفيات وسيرفرات وأمان وأخبار",
+        "wallpaper_desc": "خلفيات Adopt Me بدقة HD مجانًا لجوالك",
+        "browse": "تصفّح",
+        "servers_title": "سيرفرات خاصة",
+        "servers_desc": "ادخل سيرفرًا خاصًا بلمسة واحدة",
+        "scammer_desc": "تحقّق من الاسم قبل التبادل",
+        "news_desc": "تحديثات واستطلاعات وأفكارك"
+    },
     "chat": {
         "top_rated": "الأعلى تقييماً",
         "groups": "المجموعات",
@@ -1486,7 +1495,13 @@
         "comment_count_few": "{{count}} تعليقات",
         "comment_count_many": "{{count}} تعليقًا",
         "comment_count_other": "{{count}} تعليق",
-        "delete_comment_title": "حذف التعليق"
+        "delete_comment_title": "حذف التعليق",
+        "save_image": "حفظ الصورة",
+        "save_all_images": "حفظ كل الصور",
+        "image_saved": "تم الحفظ في معرض الصور",
+        "images_saved": "تم حفظ كل الصور في معرض الصور",
+        "save_failed": "تعذّر حفظ الصورة. تأكد من اتصالك وحاول مرة أخرى.",
+        "save_permission": "اسمح بالوصول إلى التخزين لحفظ الصور في معرض الصور."
     },
     "categories": {
         "ALL": "الكل",

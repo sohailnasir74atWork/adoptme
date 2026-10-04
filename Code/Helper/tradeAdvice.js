@@ -12,8 +12,8 @@
  */
 
 import { normalizeName } from './analyticsDataHelper';
+import { FAIR_BAND, valueGap } from './tradeStatus';
 
-const FAIR_BAND = 0.05; // within 5% of each other = about even
 const BIG_GAP = 0.25;
 
 const nameOf = (item) => String(item?.name || item?.Name || '').trim();
@@ -58,12 +58,12 @@ export const adviseTrade = ({ give = [], receive = [], giveTotal = 0, getTotal =
   let score = 0;
 
   // ── Value ──
-  const gap = (tv - gv) / Math.max(gv, tv);
+  const gap = valueGap(gv, tv);
   const pct = Math.round(Math.abs(gap) * 100);
-  if (gap >= FAIR_BAND) {
+  if (gap > FAIR_BAND) {
     score += gap >= BIG_GAP ? 3 : 2;
     reasons.push({ key: 'value_win', params: { pct }, weight: 2 });
-  } else if (gap <= -FAIR_BAND) {
+  } else if (gap < -FAIR_BAND) {
     score -= gap <= -BIG_GAP ? 3 : 2;
     reasons.push({ key: 'value_lose', params: { pct }, weight: 3 });
   } else {
@@ -126,7 +126,9 @@ export const feedNudge = (advice, { giveTotal = 0, getTotal = 0 } = {}) => {
   if (!advice) return null;
   const short = (Number(giveTotal) || 0) - (Number(getTotal) || 0);
   const lose = advice.reasons.find((r) => r.key === 'value_lose');
-  const tone = advice.verdict === 'take' ? 'good' : (lose || advice.verdict === 'skip') ? 'counter' : 'close';
+  // Counter only when the values are short. A fair trade of slow pets stays
+  // "could work": the card's ⚖️ already says fair, and the two must agree.
+  const tone = lose ? 'counter' : advice.verdict === 'take' ? 'good' : 'close';
 
   let reason;
   if (lose && short > 0) {

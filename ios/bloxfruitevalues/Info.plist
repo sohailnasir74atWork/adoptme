@@ -12,6 +12,7 @@
 		<string>es</string>
 		<string>fr</string>
 		<string>ru</string>
+		<string>ko</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Petfolio: Adopt Me Values</string>
@@ -58,7 +59,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Petfolio opens your photo library only when you tap to add an image, so you can pick a photo or screenshot you already have — for example, choosing a saved picture as your profile photo, setting a group's icon, attaching a screenshot to a chat message, or uploading your artwork to the Designs feed.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Petfolio asks to save to Photos only when you tap Download on an HD wallpaper, so the wallpaper you chose is stored on your device — for example, saving a pet wallpaper so you can set it as your lock screen.</string>
+	<string>Petfolio saves to Photos only when you tap Download or Save, so the picture you chose is stored on your device — for example, saving an HD pet wallpaper to use as your lock screen, or saving an image from a post in the feed.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Petfolio uses this identifier to show ads relevant to you — for example, ads for other Roblox games instead of unrelated products — and to measure which ads work.</string>
 	<key>GADApplicationIdentifier</key>

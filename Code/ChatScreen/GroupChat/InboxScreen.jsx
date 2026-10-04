@@ -641,7 +641,7 @@ const InboxScreen = ({ bannedUsers }) => {
           }
         />
       )}
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      {!localState.isPro && <BannerAdComponent />}
     </View>
   );
 };

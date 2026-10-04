@@ -1290,7 +1290,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           }}
         />
       </GestureHandlerRootView>
-      {!localState.isPro && !fromChat && <BannerAdComponent collapsible />}
+      {!localState.isPro && !fromChat && <BannerAdComponent />}
     </>
   );
 });

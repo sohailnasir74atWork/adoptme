@@ -875,6 +875,15 @@
         "scammer_db": "Scammer DB",
         "news": "News"
     },
+    "more_hub": {
+        "subtitle": "Wallpapers, servers, safety and news",
+        "wallpaper_desc": "Free Adopt Me wallpapers in HD for your phone",
+        "browse": "Browse",
+        "servers_title": "Private Servers",
+        "servers_desc": "Join a private server in one tap",
+        "scammer_desc": "Check a username before you trade",
+        "news_desc": "Updates, polls and your ideas"
+    },
     "chat": {
         "top_rated": "Top Rated",
         "groups": "Groups",
@@ -1374,7 +1383,13 @@
         "reaction_count_other": "{{count}} reactions",
         "comment_count_one": "{{count}} comment",
         "comment_count_other": "{{count}} comments",
-        "delete_comment_title": "Delete Comment"
+        "delete_comment_title": "Delete Comment",
+        "save_image": "Save image",
+        "save_all_images": "Save all images",
+        "image_saved": "Saved to your gallery",
+        "images_saved": "All images saved to your gallery",
+        "save_failed": "Couldn't save the image. Check your connection and try again.",
+        "save_permission": "Allow storage access to save images to your gallery."
     },
     "categories": {
         "ALL": "All",

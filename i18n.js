@@ -8,6 +8,7 @@ import "dayjs/locale/es";
 import "dayjs/locale/fr";
 import "dayjs/locale/de";
 import "dayjs/locale/ar";
+import "dayjs/locale/ko";
 
 
 // Only English (the fallback) is evaluated eagerly. The user's own language
@@ -42,10 +43,11 @@ const countryToLanguage = {
   RU: "ru",
   IN: "en",
   AR: "ar",
+  KR: "ko",
 };
 
 // Languages supported by the app, independent of subscription status.
-const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'de', 'ar', 'ru'];
+const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'de', 'ar', 'ru', 'ko'];
 
 // ✅ Available languages with display names (for language selector UI)
 export const AVAILABLE_LANGUAGES = [
@@ -55,6 +57,7 @@ export const AVAILABLE_LANGUAGES = [
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
   { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
   { code: 'ar', name: 'العربية', flag: '🇸🇦' },
+  { code: 'ko', name: '한국어', flag: '🇰🇷' },
 ];
 
 // Function to get saved language from MMKV
@@ -83,6 +86,7 @@ const requireLanguage = (langCode) => {
     case 'fr': return require('./Code/Translation/fr.json');
     case 'de': return require('./Code/Translation/de.json');
     case 'ar': return require('./Code/Translation/ar.json');
+    case 'ko': return require('./Code/Translation/ko.json');
     default: return null;
   }
 };

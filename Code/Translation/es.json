@@ -887,6 +887,15 @@
         "scammer_db": "Estafadores",
         "news": "Noticias"
     },
+    "more_hub": {
+        "subtitle": "Fondos, servidores, seguridad y novedades",
+        "wallpaper_desc": "Fondos HD de Adopt Me gratis para tu celular",
+        "browse": "Ver",
+        "servers_title": "Servidores privados",
+        "servers_desc": "Entra a un servidor privado con un toque",
+        "scammer_desc": "Revisa un usuario antes de tradear",
+        "news_desc": "Novedades, encuestas y tus ideas"
+    },
     "chat": {
         "top_rated": "Mejor valorados",
         "groups": "Grupos",
@@ -1396,7 +1405,13 @@
         "comment_count_one": "{{count}} comentario",
         "comment_count_many": "{{count}} de comentarios",
         "comment_count_other": "{{count}} comentarios",
-        "delete_comment_title": "Eliminar comentario"
+        "delete_comment_title": "Eliminar comentario",
+        "save_image": "Guardar imagen",
+        "save_all_images": "Guardar todas las imágenes",
+        "image_saved": "Guardada en tu galería",
+        "images_saved": "Todas las imágenes están en tu galería",
+        "save_failed": "No se pudo guardar la imagen. Revisa tu conexión e inténtalo de nuevo.",
+        "save_permission": "Permite el acceso al almacenamiento para guardar imágenes en tu galería."
     },
     "categories": {
         "ALL": "Todo",

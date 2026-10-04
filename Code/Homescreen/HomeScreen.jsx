@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
 import { adviseTrade, VERDICT_STYLE } from '../Helper/tradeAdvice';
+import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import InterstitialAdManager from '../Ads/IntAd';
@@ -122,15 +123,8 @@ const itemValueLabel = (item, selectedValueType, isFly, isRide, isSharkMode, val
 const getTradeStatus = (hasTotal, wantsTotal) => {
   // If both are 0 (initial state), show WIN
   if (hasTotal === 0 && wantsTotal === 0) return 'win';
-
-  // If only has items are selected (wantsTotal is 0), show LOSE
-  if (hasTotal > wantsTotal) return 'lose';
-
-  // If only wants items are selected (hasTotal is 0), show WIN
-  if (hasTotal < wantsTotal) return 'win';
-
-  // If both have equal values, show FAIR
-  return 'fair';
+  // You give hasItems and get wantsItems; within 5% either way is fair.
+  return wflStatus(hasTotal, wantsTotal);
 };
 
 const HomeScreen = ({ selectedTheme }) => {
@@ -2197,7 +2191,7 @@ const HomeScreen = ({ selectedTheme }) => {
         </View>
         <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      {!localState.isPro && <BannerAdComponent />}
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}

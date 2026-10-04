@@ -1335,7 +1335,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
 
       {!isPro && (
         <View style={{ paddingBottom: Platform.OS === 'android' ? 24 : 0 }}>
-          <BannerAdComponent collapsible />
+          <BannerAdComponent />
         </View>
       )}
       <SubscriptionScreen

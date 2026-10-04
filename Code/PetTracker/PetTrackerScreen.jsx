@@ -224,7 +224,7 @@ const PetTrackerScreen = () => {
       )}
       </KeyboardAvoidingView>
 
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      {!localState.isPro && <BannerAdComponent />}
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: c.bg }} />
 
       <NewGrindModal

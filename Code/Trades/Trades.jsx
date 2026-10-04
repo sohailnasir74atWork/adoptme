@@ -11,6 +11,7 @@ import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
 import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
 import { adviseTrade, feedNudge, FEED_TONE_STYLE } from '../Helper/tradeAdvice';
+import { tradeStatus as wflStatus, BUYER_FILTER_LETTER } from '../Helper/tradeStatus';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -321,7 +322,7 @@ const TradeList = ({ route }) => {
         // ✅ Check status filter match
         let matchesStatus = true;
         if (statusFilters.length > 0) {
-          const statusMap = { win: 'w', lose: 'l', fair: 'f' };
+          const statusMap = BUYER_FILTER_LETTER;
           const statusValues = statusFilters.map(f => statusMap[f]);
           matchesStatus = trade.status && statusValues.includes(trade.status);
         }
@@ -799,7 +800,7 @@ const TradeList = ({ route }) => {
       // ✅ Get status filters and map to status values
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
       const statusValues = statusFilters.length > 0
-        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        ? statusFilters.map(f => BUYER_FILTER_LETTER[f])
         : null;
 
       // ✅ Build query for more normal trades (only last 7 days)
@@ -1001,7 +1002,7 @@ const TradeList = ({ route }) => {
       // ✅ Get status filters
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
       const statusValues = statusFilters.length > 0
-        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        ? statusFilters.map(f => BUYER_FILTER_LETTER[f])
         : null;
 
       const allResults = new Map();
@@ -1176,7 +1177,7 @@ const TradeList = ({ route }) => {
       // ✅ Get status filters (win, lose, fair) and map to status values (w, l, f)
       const statusFilters = selectedFilters.filter(f => ['win', 'lose', 'fair'].includes(f));
       const statusValues = statusFilters.length > 0
-        ? statusFilters.map(f => ({ win: 'w', lose: 'l', fair: 'f' }[f]))
+        ? statusFilters.map(f => BUYER_FILTER_LETTER[f])
         : null;
 
       // ✅ Build query for normal trades (only last 7 days)
@@ -1880,30 +1881,28 @@ const TradeList = ({ route }) => {
           )}
           <View style={styles.transfer}>
             {(item.hasItems && item.hasItems.length > 0 && item.wantsItems && item.wantsItems.length > 0) && (() => {
-                const diff = item.hasTotal - item.wantsTotal;
-                if (diff > 0) {
-                  return (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
-                      <Text style={[styles.priceText, { color: '#22c55e', backgroundColor: 'transparent' }]}>
-                        +{formatValue(diff)}
+                // Buyers read the card from their side: they give wantsItems and
+                // get hasItems, the opposite of the poster's calculator. The
+                // poster's own card stays on the seller's side, as when posted.
+                const mine = item.userId === user?.id;
+                const give = mine ? item.hasTotal : item.wantsTotal;
+                const get = mine ? item.wantsTotal : item.hasTotal;
+                const status = wflStatus(give, get);
+                const diff = (Number(get) || 0) - (Number(give) || 0);
+                const color = status === 'win' ? '#22c55e' : status === 'lose' ? '#ef4444' : '#F59E0B';
+                const shown = formatValue(Math.abs(diff));
+                // A gap that rounds to nothing would read "-0.00".
+                const showDiff = diff !== 0 && !/^0([.,]0*)?$/.test(String(shown));
+                return (
+                  <View style={[styles.wflPill, { backgroundColor: color + '1F' }]}>
+                    <Text style={[styles.wflWord, { color }]}>{t(`home.${status}`).toUpperCase()}</Text>
+                    {showDiff && (
+                      <Text style={[styles.wflDiff, { color }]}>
+                        {diff > 0 ? '+' : '-'}{shown}
                       </Text>
-                    </View>
-                  );
-                } else if (diff < 0) {
-                  return (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' }} />
-                      <Text style={[styles.priceText, { color: '#ef4444', backgroundColor: 'transparent' }]}>
-                        -{formatValue(Math.abs(diff))}
-                      </Text>
-                    </View>
-                  );
-                } else {
-                  return (
-                    <Text style={{ fontSize: 10 }}>⚖️</Text>
-                  );
-                }
+                    )}
+                  </View>
+                );
               })()}
           </View>
           {item.wantsItems && item.wantsItems.length > 0 && (
@@ -2286,7 +2285,7 @@ const TradeList = ({ route }) => {
 
       />
 
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      {!localState.isPro && <BannerAdComponent />}
 
       {/* {!isProStatus && <View style={{ alignSelf: 'center' }}>
         {isAdVisible && (
@@ -2618,6 +2617,22 @@ const getStyles = (isDarkMode, c) => {
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 5,
+    },
+    wflPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+    },
+    wflWord: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    wflDiff: {
+      fontSize: 10,
+      fontWeight: '700',
     },
     adviceHead: {
       flexDirection: 'row',
