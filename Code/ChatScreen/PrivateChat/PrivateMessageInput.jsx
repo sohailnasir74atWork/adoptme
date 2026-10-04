@@ -15,6 +15,7 @@ import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { CHAT_MESSAGES_PER_AD } from '../../Ads/adPolicy';
 import { useLocalState } from '../../LocalGlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
@@ -340,7 +341,8 @@ const PrivateMessageInput = ({
 
     setMessageCount(prevCount => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 12 === 0) {
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === CHAT_MESSAGES_PER_AD - 1) InterstitialAdManager.prepare();
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === 0) {
         InterstitialAdManager.showAd(() => { });
       }
       return newCount;

@@ -19,6 +19,7 @@ import {
   NO_FILL_RETRY_MS,
   INTERSTITIAL_EXPIRY_MS,
   POST_SHOW_RELOAD_MS,
+  INTERSTITIAL_COOLDOWN_MS,
   isNoFillError,
 } from './adPolicy';
 
@@ -83,7 +84,7 @@ class InterstitialAdManager {
   // ad-serving-limit risk. When inside the cooldown we skip the ad and run the
   // caller's callback immediately so content is never blocked.
   static lastShownAt = 0;
-  static COOLDOWN_MS = 30000;
+  static COOLDOWN_MS = INTERSTITIAL_COOLDOWN_MS;
 
   // ✅ How long to wait for OPENED before treating the presentation as failed.
   static SHOW_WATCHDOG_MS = 5000;

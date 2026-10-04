@@ -7,6 +7,7 @@ import { useHaptic } from '../../Helper/HepticFeedBack';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { CHAT_MESSAGES_PER_AD } from '../../Ads/adPolicy';
 import { useGlobalState } from '../../GlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
 import { showMessage } from 'react-native-flash-message';
@@ -131,8 +132,9 @@ const MessageInput = ({
       const newCount = messageCount + 1;
       setMessageCount(newCount);
 
-      if (!localState?.isPro && newCount % 12 === 0) {
-        // Show interstitial ad every 12th message for non-pro users
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === CHAT_MESSAGES_PER_AD - 1) InterstitialAdManager.prepare();
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === 0) {
+        // Show interstitial ad every CHAT_MESSAGES_PER_AD-th message for non-pro users
         InterstitialAdManager.showAd(adCallback);
       } else {
         setIsSending(false);

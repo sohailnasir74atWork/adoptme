@@ -6,6 +6,7 @@ import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useTranslation } from 'react-i18next';
 import InterstitialAdManager from '../../Ads/IntAd';
+import { CHAT_MESSAGES_PER_AD } from '../../Ads/adPolicy';
 import { useLocalState } from '../../LocalGlobelStats';
 import { safeCompressImage } from '../../Helper/safeCompressImage';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -246,8 +247,9 @@ const GroupMessageInput = ({
 
     setMessageCount((prevCount) => {
       const newCount = prevCount + 1;
-      if (!localState?.isPro && newCount % 12 === 0) {
-        // Show interstitial ad every 12th message for non-pro users
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === CHAT_MESSAGES_PER_AD - 1) InterstitialAdManager.prepare();
+      if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === 0) {
+        // Show interstitial ad every CHAT_MESSAGES_PER_AD-th message for non-pro users
         InterstitialAdManager.showAd(() => { });
       }
       return newCount;
