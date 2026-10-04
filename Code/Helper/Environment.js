@@ -28,7 +28,7 @@ const config = {
   // feed cards, 2026-10-04). Android lives on the other AdMob account
   // (pub-1340655056171083): until a banner unit is created there, ads.js falls
   // back to the anchored banner unit — same ads, just reported under it.
-  andriodFeedBanner: null,
+  andriodFeedBanner: isNoman ? 'ca-app-pub-1340655056171083/1946047534' : null, // feed_inline_banner (thinktech777 account)
   IOsFeedBanner: isNoman ? 'ca-app-pub-5740215782746766/3033924612' : '', // feed_inline_banner
 
   apiKey: isNoman ? rev_cat_id : rev_cat_id,
