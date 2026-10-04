@@ -27,7 +27,8 @@ import {
 } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { ensureAdsInitialized } from './init';
-import { setFullScreenAdVisible, whenModalSettled } from './adVisibility';
+import { setFullScreenAdVisible, whenModalSettled, markFullScreenAdShown } from './adVisibility';
+import { NO_FILL_RETRY_MS, isNoFillError } from './adPolicy';
 
 const adUnitId = getAdUnitId('rewarded');
 
@@ -37,7 +38,8 @@ class RewardedAdManager {
   static isLoading = false;
   static hasInitialized = false;
   static retryCount = 0;
-  static maxRetries = 5;
+  static maxRetries = 3;
+  static noFillRetried = false;
   static unsubscribeEvents = [];
 
   // Cooldown to prevent ad spam (minimum 30s between ads)
@@ -80,15 +82,16 @@ class RewardedAdManager {
         this.isLoaded = true;
         this.isLoading = false;
         this.retryCount = 0;
+        this.noFillRetried = false;
       },
     );
 
     const onError = this.ad.addAdEventListener(
       AdEventType.ERROR,
-      () => {
+      (error) => {
         this.isLoaded = false;
         this.isLoading = false;
-        this._retryLoad();
+        this._retryLoad(isNoFillError(error));
       },
     );
 
@@ -109,13 +112,20 @@ class RewardedAdManager {
     }
   }
 
-  // ── Retry with exponential backoff (1s, 2s, 4s, 8s, 16s), then STOP ──
+  // ── Retry with exponential backoff (1s, 2s, 4s), then STOP ──
   // The old 15s-forever loop kept filling rewarded ads in the background that
   // no one would ever tap to see (fills with <1% show rate are worse than no
   // fills — they depress bids and invite ad-serving limits). Loading resumes
   // on the next user signal: prepare() from a rewarded-surface mount, or a
-  // show attempt.
-  static _retryLoad() {
+  // show attempt. "No fill" is not transient, so it gets a single retry a
+  // minute later instead of the backoff (see adPolicy.js).
+  static _retryLoad(noFill) {
+    if (noFill) {
+      if (this.noFillRetried) return;
+      this.noFillRetried = true;
+      setTimeout(() => this._load(), NO_FILL_RETRY_MS);
+      return;
+    }
     if (this.retryCount >= this.maxRetries) return;
     const delay = Math.pow(2, this.retryCount) * 1000;
     setTimeout(() => {
@@ -261,6 +271,7 @@ class RewardedAdManager {
     // OPENED confirms the ad actually reached the screen; CLOSED is then the
     // real completion signal, so stand the watchdog down.
     unsubOpened = ad.addAdEventListener(AdEventType.OPENED, () => {
+      markFullScreenAdShown('rewarded');
       if (watchdog) {
         clearTimeout(watchdog);
         watchdog = null;

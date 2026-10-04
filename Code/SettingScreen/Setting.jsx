@@ -23,6 +23,7 @@ import { useGlobalState } from '../GlobelStats';
 import { getThemeColors } from '../Helper/themeColors';
 import { getStyles } from './settingstyle';
 import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRateApp, handleadoptme, handleShareApp, imageOptions, handleBloxFruit, handleRefresh, handleReport, handleOpenPrivacy, handleOpenChild } from './settinghelper';
+import { usePrivacyOptionsRequired, showPrivacyOptionsForm } from '../Ads/consentOptions';
 import EmailUpdatesRow from './EmailUpdatesRow';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -588,6 +589,9 @@ export default function SettingsScreen({ selectedTheme }) {
   const myActiveCosmetics = useMemo(() => getMyCosmetics(), [activeTab]);
 
   const { t, i18n } = useTranslation();
+  // EEA/UK/CH users must be able to revisit their ad-consent choice from the
+  // app menu (Google UMP requirement); everyone else never sees the row.
+  const privacyOptionsRequired = usePrivacyOptionsRequired();
   const language = i18n.language; // ✅ Using i18n directly
   // ✅ Custom changeLanguage that lazy-loads and persists
   const changeLanguage = async (langCode) => {
@@ -3552,6 +3556,14 @@ export default function SettingsScreen({ selectedTheme }) {
               <Icon name="link-outline" size={18} color={'white'} style={{ backgroundColor: 'green', padding: 5, borderRadius: 5 }} />
               <Text style={styles.optionText}>{t('settings.privacy_policy')}</Text>
             </TouchableOpacity>
+            {privacyOptionsRequired && (
+              <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
+                showPrivacyOptionsForm(); triggerHapticFeedback('impactLight');
+              }}>
+                <Icon name="shield-checkmark-outline" size={18} color={'white'} style={{ backgroundColor: 'green', padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>{t('settings.privacy_options', { defaultValue: 'Privacy options' })}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
               handleOpenChild(); triggerHapticFeedback('impactLight');
             }}>

@@ -18,6 +18,30 @@ export const setFullScreenAdVisible = (visible) => {
 
 export const isFullScreenAdVisible = () => state.fullScreenAdVisible;
 
+// ── Cross-format spacing ──────────────────────────────────────────────────
+//
+// Each manager caps ITSELF (interstitial cooldown, app-open interval, rewarded
+// cooldown) but none knew about the others, so an interstitial could follow an
+// app-open ad seconds later, or a rewarded video chain straight into an
+// interstitial. The managers record every ad that actually reached the screen
+// here (on OPENED) and consult it before presenting — see CROSS_FORMAT_GAP_MS
+// and NATURAL_BREAK.MIN_GAP_MS in adPolicy.js.
+let lastFullScreenAd = { at: 0, format: null };
+
+export const markFullScreenAdShown = (format) => {
+  lastFullScreenAd = { at: Date.now(), format };
+};
+
+// ms since the last full-screen ad of a DIFFERENT format (Infinity if none).
+export const msSinceOtherFullScreenAd = (format) =>
+  lastFullScreenAd.at && lastFullScreenAd.format !== format
+    ? Date.now() - lastFullScreenAd.at
+    : Infinity;
+
+// ms since the last full-screen ad of ANY format (Infinity if none).
+export const msSinceAnyFullScreenAd = () =>
+  lastFullScreenAd.at ? Date.now() - lastFullScreenAd.at : Infinity;
+
 // ── Modal presentation window ─────────────────────────────────────────────
 //
 // On iOS a React Native <Modal> is not a view in the React tree:

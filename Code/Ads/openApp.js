@@ -2,7 +2,14 @@ import { AppState } from 'react-native';
 import { AppOpenAd, AdEventType } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { ensureAdsInitialized } from './init';
-import { setFullScreenAdVisible, isFullScreenAdVisible, whenModalSettled } from './adVisibility';
+import {
+  setFullScreenAdVisible,
+  isFullScreenAdVisible,
+  whenModalSettled,
+  markFullScreenAdShown,
+  msSinceOtherFullScreenAd,
+} from './adVisibility';
+import { APP_OPEN_MIN_BACKGROUND_MS, CROSS_FORMAT_GAP_MS, POST_SHOW_RELOAD_MS, isNoFillError } from './adPolicy';
 
 const adUnitId = getAdUnitId('openapp');
 
@@ -78,8 +85,9 @@ class AppOpenAdManager {
   static hasStarted = false;
   static showOnFirstLoad = false;
   static wasBackgrounded = false;
+  static backgroundedAt = 0;
   static retryCount = 0;
-  static maxRetries = 5;
+  static maxRetries = 3;
   static unsubscribeEvents = [];
   static appStateSub = null;
   static showWatchdog = null;
@@ -150,7 +158,10 @@ class AppOpenAdManager {
         // That read as a return to the app and fired this ad straight after
         // every interstitial/rewarded ("i watched ad and after watching i get
         // another ad"). Our own ad being on screen is how we tell them apart.
-        if (!isFullScreenAdVisible()) this.wasBackgrounded = true;
+        if (!isFullScreenAdVisible()) {
+          this.wasBackgrounded = true;
+          this.backgroundedAt = Date.now();
+        }
       } else if (next === 'active') {
         if (this.wasBackgrounded) {
           this.wasBackgrounded = false;
@@ -158,6 +169,9 @@ class AppOpenAdManager {
             this.skipForegroundUntil = 0;
             return;
           }
+          // A quick flick to Roblox and back is not a new session — the user
+          // never left. Only a genuine absence earns an app-open ad.
+          if (Date.now() - this.backgroundedAt < APP_OPEN_MIN_BACKGROUND_MS) return;
           this._showOnForeground();
         }
       }
@@ -187,16 +201,17 @@ class AppOpenAdManager {
       }
     });
 
-    const onError = this.ad.addAdEventListener(AdEventType.ERROR, () => {
+    const onError = this.ad.addAdEventListener(AdEventType.ERROR, (error) => {
       this.isLoaded = false;
       this.isLoading = false;
       if (this.coldStartShowing) { this.coldStartShowing = false; releaseSplash(); }
-      this._retryLoad();
+      this._retryLoad(isNoFillError(error));
     });
 
     // OPENED confirms the ad actually presented — cancel the show watchdog so
     // a legitimately-open ad isn't force-reset out from under the user.
     const onOpened = this.ad.addAdEventListener(AdEventType.OPENED, () => {
+      markFullScreenAdShown('app_open');
       this._clearShowWatchdog();
       if (this.coldStartShowing) {
         // The ad covers the screen now, so the splash can go underneath it;
@@ -212,8 +227,10 @@ class AppOpenAdManager {
       setFullScreenAdVisible(false);
       this.isShowing = false;
       this.isLoaded = false;
-      // Warm up the next one for the next foreground return.
-      this._load();
+      // Warm up the next one for the next foreground return — after the
+      // AdMob cap window, or the request fails with "frequency cap reached"
+      // and nothing is ready for that return (see POST_SHOW_RELOAD_MS).
+      setTimeout(() => this._load(), POST_SHOW_RELOAD_MS);
     });
 
     this.unsubscribeEvents = [onLoaded, onError, onOpened, onClosed];
@@ -231,12 +248,16 @@ class AppOpenAdManager {
     }
   }
 
-  // Exponential backoff (1s,2s,4s,8s,16s), then STOP. The old 30s-forever
-  // loop burned no-fill requests all session in zero-fill geos. Every
+  // Exponential backoff (1s,2s,4s), then STOP. The old 30s-forever loop
+  // burned no-fill requests all session in zero-fill geos. Every
   // background→foreground return calls showAdIfAvailable(), which calls
   // _load() when nothing is loaded — that natural signal replaces the
-  // blind timer.
-  static _retryLoad() {
+  // blind timer. A "no fill" answer gets no retry at all: the auction had
+  // nothing for this user, and the 1→16s backoff used to answer that with
+  // five more identical requests per launch (AdMob: 2.8M requests for 812K
+  // app-open impressions in one app).
+  static _retryLoad(noFill) {
+    if (noFill) return;
     if (this.retryCount >= this.maxRetries) return;
     const delay = Math.pow(2, this.retryCount) * 1000;
     setTimeout(() => {
@@ -274,8 +295,10 @@ class AppOpenAdManager {
 
   static showAdIfAvailable() {
     if (isProUser()) return;
-    // Never stack on top of an interstitial/rewarded, or on ourselves.
+    // Never stack on top of an interstitial/rewarded, or on ourselves, and
+    // never follow one of them within the cross-format gap.
     if (this.isShowing || isFullScreenAdVisible()) return;
+    if (msSinceOtherFullScreenAd('app_open') < CROSS_FORMAT_GAP_MS) return;
     // Frequency cap.
     if (Date.now() - this.lastShownAt < MIN_INTERVAL_MS) return;
 

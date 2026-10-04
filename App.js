@@ -161,10 +161,12 @@ function App() {
     const id = requestIdleCallback(() => {
       try {
         const InterstitialAdManager = require('./Code/Ads/IntAd').default;
-        const RewardedAdManager = require('./Code/Ads/RewardedAdManager').default;
         const { checkForUpdate } = require('./Code/AppHelper/InAppUpdateChecker');
         InterstitialAdManager.init();
-        RewardedAdManager.init();
+        // No rewarded preload here: it ran for every user (Pro included) on
+        // every launch against a <1% show rate — 214K requests for 797
+        // impressions in a month on iOS. The reward surfaces call
+        // RewardedAdManager.prepare() on mount, which is early enough.
         checkForUpdate();
       } catch (_) {}
     });

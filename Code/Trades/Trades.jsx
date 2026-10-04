@@ -22,8 +22,7 @@ import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
-import NativeAdCard from '../Ads/NativeAdCard';
-import { releaseByPrefix as releaseNativeAds } from '../Ads/NativeAdManager';
+import FeedBannerAd from '../Ads/FeedBannerAd';
 import RewardedAdManager from '../Ads/RewardedAdManager';
 import { bannerAware, ABOVE_BANNER, FLOATING_BUTTON_ICON_SIZE, FLOATING_BUTTON_RIGHT } from '../Helper/floatingButtonLayout';
 
@@ -1620,9 +1619,9 @@ const TradeList = ({ route }) => {
     setIsSigninDrawerVisible(false);
   };
 
-  // Interleave a native ad every Nth trade for non-Pro users. Keys are
-  // `trade-ad-*` so they don't collide with the design feed's `ad-*` slots in
-  // the shared NativeAdManager cache.
+  // Interleave an in-feed ad (FeedBannerAd) every Nth trade for non-Pro
+  // users. Keys are `trade-ad-*` so they don't collide with the design feed's
+  // `ad-*` slots.
   const TRADE_AD_FREQUENCY = 8;
   const tradesWithAds = useMemo(() => {
     if (isProStatus || !Array.isArray(filteredTrades) || filteredTrades.length === 0) {
@@ -1640,13 +1639,10 @@ const TradeList = ({ route }) => {
     return out;
   }, [filteredTrades, isProStatus]);
 
-  // Free this screen's native ad handles on unmount.
-  useEffect(() => () => releaseNativeAds('trade-ad-'), []);
-
   const renderTrade = ({ item, index }) => {
-    // Native ad row (interleaved into the data below for non-Pro users).
+    // In-feed ad row (interleaved into the data below for non-Pro users).
     if (item?.__type === 'ad') {
-      return <NativeAdCard adKey={item.id} isDarkMode={isDarkMode} />;
+      return <FeedBannerAd adKey={item.id} isDarkMode={isDarkMode} />;
     }
     const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : t('trade.time_unknown');
     // Function to group items and count duplicates
