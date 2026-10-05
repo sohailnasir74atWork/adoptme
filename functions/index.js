@@ -55,16 +55,17 @@ exports.notifyPostReaction = require('./notifyPostReaction').notifyPostReaction;
 
 // ── Scheduled maintenance ──────────────────────────────────────────────
 exports.cleanupExpiredStatuses = require('./cleanupExpiredStatuses').cleanupExpiredStatuses;
-exports.cleanupGroupChatMessages = require('./cleanupGroupChatMessages').cleanupGroupChatMessages;
 exports.cleanupGroups = require('./cleanupGroups').cleanupGroups;
+// Retired 2026-10-05: cleanupGroupChatMessages, cleanupOldPrivateChats,
+// cleanupOldPublicChats and sendScheduledPromoMessageMM2 only touched the
+// RTDB chat paths that have been write-locked since the 2026-05 Supabase
+// cut-over (the promo posted where no client reads). Supabase retention is
+// pg_cron (supabase/025_chat_retention.sql).
 exports.cleanupOldPosts = require('./cleanupOldPosts').cleanupOldPosts;
-exports.cleanupOldPrivateChats = require('./cleanupOldPrivateChats').cleanupOldPrivateChats;
-exports.cleanupOldPublicChats = require('./cleanupOldPublicChats').cleanupOldPublicChats;
 exports.cleanupOldTrades = require('./cleanupOldTrades').cleanupOldTrades;
 exports.expireFeaturedTrades = require('./expireFeaturedTrades').expireFeaturedTrades;
 exports.clearPresenceNode = require('./clearPresenceNode').clearPresenceNode;
 exports.scheduledFunction = require('./scheduledFunction').scheduledFunction;
-exports.sendScheduledPromoMessageMM2 = require('./sendScheduledPromoMessageMM2').sendScheduledPromoMessageMM2;
 
 // ── Feeds, leaderboards, analytics ────────────────────────────────────
 exports.computeFeedRanking = require('./computeFeedRanking').computeFeedRanking;
@@ -102,6 +103,14 @@ exports.runStaffElections = require('./runStaffElections').runStaffElections;
 // admin dashboard's list query (orderByChild('bannedAt')) cannot see a
 // record missing that key. See functions/stampBanTimestamp.js.
 exports.stampBanTimestamp = require('./stampBanTimestamp').stampBanTimestamp;
+
+// Copies staff-made bans (banned_users_by_email) and the /links_allowed switch
+// into Supabase chat_bans / chat_settings, where supabase/045's triggers
+// enforce them for the website and raw API calls too. Non-staff edits to the
+// ban node are deliberately NOT mirrored. See functions/mirrorBansToSupabase.js.
+const banMirror = require('./mirrorBansToSupabase');
+exports.mirrorBansToSupabase = banMirror.mirrorBansToSupabase;
+exports.mirrorLinksAllowedToSupabase = banMirror.mirrorLinksAllowedToSupabase;
 
 // ── World Cup 2026 ────────────────────────────────────────────────────
 const worldCup = require('./fetchWorldCupData');
