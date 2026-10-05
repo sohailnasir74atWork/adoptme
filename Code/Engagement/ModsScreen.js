@@ -21,7 +21,10 @@ import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 
-const MODS_CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours
+// 30 min, like the profile cache: a MOD who renames or changes their
+// picture shows the new one within half an hour (was 6 h). The roster
+// is one small RTDB read.
+const MODS_CACHE_MS = 30 * 60 * 1000;
 
 const ROLE_META = {
   mod:  { labelKey: 'mods.role_mod',  color: '#3B82F6', icon: 'shield-halved' },
@@ -125,7 +128,7 @@ const ModsScreen = () => {
     }
   }, [appdatabase, updateLocalState]);
 
-  // Fetch only when cache is missing or stale (6h TTL).
+  // Fetch only when cache is missing or stale (MODS_CACHE_MS).
   useEffect(() => {
     if (initialFromCache) return; // fresh cache already in state
     fetchMods();

@@ -48,7 +48,8 @@ const TTL = 30 * 60 * 1000; // 30 minutes
 // ────────────────────────────────────────────────────────
 //  READ from cache (synchronous — safe in render)
 // ────────────────────────────────────────────────────────
-export const getCachedProfile = (uid) => {
+// { d: profile, t: when it was cached } or null — resolveProfile needs `t`.
+const getCachedEntry = (uid) => {
   if (!uid) return null;
   try {
     const raw = cache.getString(`p_${uid}`);
@@ -58,11 +59,13 @@ export const getCachedProfile = (uid) => {
       cache.remove(`p_${uid}`);
       return null;
     }
-    return parsed.d;
+    return parsed;
   } catch {
     return null;
   }
 };
+
+export const getCachedProfile = (uid) => getCachedEntry(uid)?.d ?? null;
 
 // ────────────────────────────────────────────────────────
 //  WRITE to cache
@@ -265,6 +268,9 @@ export const seedFromMessage = (msg) => {
   if (!msg.avatar && !msg.sender) return;
 
   setCachedProfile(msg.senderId, {
+    // Copied from a message, not fetched — resolveProfile must not treat
+    // it as newer than other messages.
+    seeded: true,
     displayName: msg.sender || 'Anonymous',
     avatar: msg.avatar || null,
     isPro: !!msg.isPro,
@@ -286,15 +292,26 @@ export const seedFromMessage = (msg) => {
 // ────────────────────────────────────────────────────────
 //  RESOLVE — get value from message first, then cache, then default
 //  This is the key "backwards compatible" resolver
+//
+//  Name and avatar are the exception: a message stores the ones its
+//  sender had when it was sent, so after a rename every older message
+//  kept the old name. When the cached profile was fetched AFTER the
+//  message was sent it is the newer of the two and wins; a message sent
+//  after the cache was filled still wins over the cache.
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
   if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isArtCMSR: false, isHelper: false, squadCount: 0 };
 
-  const cached = getCachedProfile(msg.senderId);
+  const entry = getCachedEntry(msg.senderId);
+  const cached = entry?.d ?? null;
+  const sentAt = Number(msg.timestamp) || 0;
+  const cacheIsNewer = !!cached && !cached.seeded && sentAt > 0 && entry.t > sentAt;
+  // 'Anonymous' is the assembler's placeholder for a missing identity row.
+  const freshName = cacheIsNewer && cached.displayName !== 'Anonymous' ? cached.displayName : null;
 
   return {
-    displayName: msg.sender || cached?.displayName || 'Anonymous',
-    avatar: msg.avatar || cached?.avatar || null,
+    displayName: freshName || msg.sender || cached?.displayName || 'Anonymous',
+    avatar: (cacheIsNewer && cached.avatar) || msg.avatar || cached?.avatar || null,
     isPro: msg.isPro ?? cached?.isPro ?? false,
     robloxUsernameVerified: msg.robloxUsernameVerified ?? cached?.robloxUsernameVerified ?? false,
     isAdmin: msg.isAdmin ?? cached?.isAdmin ?? false,

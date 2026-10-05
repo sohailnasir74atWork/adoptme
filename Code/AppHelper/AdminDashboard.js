@@ -497,6 +497,23 @@ const AdminDashboard = () => {
     // Most-recent first
     list.sort((a, b) => (b.bannedAt || 0) - (a.bannedAt || 0));
 
+    // The record keeps the target's name + avatar from ban time. Show the
+    // current ones — but only for records written since June 2026. Builds
+    // from March–May stored the MODERATOR's uid in `userId` (802 records,
+    // measured 2026-10-05), so resolving those would put the mod's name on
+    // the banned row. Those keep their stored copy.
+    const LIVE_TARGET_SINCE = Date.UTC(2026, 5, 1);
+    const liveTargets = list.filter((item) =>
+      item.id && item.id !== item.bannedBy && (item.bannedAt || 0) >= LIVE_TARGET_SINCE);
+    if (liveTargets.length > 0) {
+      const identities = await getIdentityBatch(liveTargets.map((item) => item.id)).catch(() => new Map());
+      liveTargets.forEach((item) => {
+        const ident = identities.get(item.id);
+        if (ident?.displayName) item.displayName = ident.displayName;
+        if (ident?.avatar) item.avatar = ident.avatar;
+      });
+    }
+
     // Batch-resolve mod IDs → display names via profileCache
     if (idsToResolve.size > 0) {
       const ids = [...idsToResolve];
@@ -1174,7 +1191,7 @@ const AdminDashboard = () => {
         avatar: userItem.avatar || DEFAULT_AVATAR,
         grantedAt: Date.now(),
         grantedBy: currentUser?.id || null,
-        grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+        grantedByName: currentUser?.displayName || currentUser?.userName || 'Owner',
       });
       setJmdGranters((prev) => [
         {
@@ -1182,7 +1199,7 @@ const AdminDashboard = () => {
           displayName: userItem.displayName || 'Unknown',
           avatar: userItem.avatar || DEFAULT_AVATAR,
           grantedAt: Date.now(),
-          grantedByName: currentUser?.userName || currentUser?.displayName || 'Owner',
+          grantedByName: currentUser?.displayName || currentUser?.userName || 'Owner',
         },
         ...prev,
       ]);
@@ -1601,7 +1618,9 @@ const AdminDashboard = () => {
   // event, and the history should not have to guess later.
   const actorInfo = useMemo(() => ({
     id: currentUser?.id,
-    displayName: currentUser?.userName || currentUser?.displayName || 'Admin',
+    // displayName first: it is what the profile editor changes. userName is a
+    // legacy RTDB field nothing updates on rename.
+    displayName: currentUser?.displayName || currentUser?.userName || 'Admin',
     avatar: currentUser?.avatar,
     role: isAdmin ? 'admin' : (isModerator ? 'moderator' : (isBabyMod ? 'baby_mod' : null)),
   }), [currentUser?.id, currentUser?.userName, currentUser?.displayName, currentUser?.avatar, isAdmin, isModerator, isBabyMod]);
@@ -2484,6 +2503,12 @@ const AdminDashboard = () => {
     }
 
     const merged = { ...item, ...(banInfo || {}), isBanned };
+    // A search result carries the user's current name + avatar; the ban
+    // record spread over it holds the ones from ban time. Keep the current.
+    if (activeTab === 'search' && banInfo) {
+      if (item.displayName) merged.displayName = item.displayName;
+      if (item.avatar) merged.avatar = item.avatar;
+    }
     const avatarUri = getAvatarSafe(merged);
     // A mute is a live restriction with no strike behind it. Showing it as
     // "BANNED" overstated it; showing it as "ACTIVE" (what the banned-list

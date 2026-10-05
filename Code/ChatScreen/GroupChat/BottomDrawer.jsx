@@ -48,7 +48,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { ref, get, set, update, remove } from '@react-native-firebase/database';
 import { getOrFetchFullProfile, invalidateFullProfile, setRoleOverride, getRoleOverride } from '../../Helper/profileCache';
-import { getIdentity, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
+import { getIdentity, getIdentityBatch, getRoles, getCosmetics, getRoblox, getBadges } from '../../Supabase/userBackend';
 import { getUserEmail, getPrivateProfile } from '../../Helper/privateProfile';
 
 // Kill-switch: set to false to revert to the original 16-get fetch path.
@@ -274,7 +274,6 @@ const ProfileBottomDrawer = ({
 
   // ✅ FIXED: Real-time online status listener instead of stale one-shot prop
   const isOnline = useOnlineStatus(isVisible ? selectedUserId : null);
-  const userName = selectedUser?.sender || null;
   const avatar = selectedUser?.avatar || null;
 
   // 🔒 ban state - ✅ Safety check for array
@@ -326,6 +325,11 @@ const ProfileBottomDrawer = ({
 
   // ✅ State for fetched user data (roblox username, verified status, etc.)
   const [userData, setUserData] = useState(null);
+  // selectedUser is whatever record opened the drawer (a chat message, trade
+  // card, inbox row…) and carries the name stored when that record was
+  // written. The fetched profile has the current one, so a renamed player
+  // shows their new name here once it loads.
+  const userName = userData?.displayName || selectedUser?.sender || null;
   const [isBanned, setIsBanned] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -409,6 +413,7 @@ const ProfileBottomDrawer = ({
       const has = (k) => Object.prototype.hasOwnProperty.call(r, k);
       const valOrNull = (k) => has(k) ? r[k] : null;
       return {
+        displayName: valOrNull('displayName'),
         avatar: valOrNull('avatar'),
         robloxUsername: valOrNull('robloxUsername'),
         robloxUserId: valOrNull('robloxUserId'),
@@ -483,6 +488,7 @@ const ProfileBottomDrawer = ({
             }
 
             newUserData = {
+              displayName:             identityRow?.displayName          ?? null,
               avatar:                  identityRow?.avatar               ?? null,
               // The user_identity view returns these only to staff (031).
               email:                   isStaffViewer ? (identityRow?.email ?? null) : null,
@@ -544,6 +550,7 @@ const ProfileBottomDrawer = ({
             isHelperSnap,
             supaBadgesMap,
             supaRobloxRow,
+            displayNameSnap,
           ] = await Promise.all([
             get(ref(appdatabase, `users/${selectedUserId}/isPro`)).catch(() => null),
             get(ref(appdatabase, `users/${selectedUserId}/isModerator`)).catch(() => null),
@@ -558,12 +565,14 @@ const ProfileBottomDrawer = ({
             get(ref(appdatabase, `users/${selectedUserId}/isHelper`)).catch(() => null),
             getBadges(selectedUserId).catch(() => null),
             getRoblox(selectedUserId).catch(() => null),
+            get(ref(appdatabase, `users/${selectedUserId}/displayName`)).catch(() => null),
           ]);
           if (!isMounted) return;
           // If Supabase roblox row missing, keep null — the kill-switch path
           // is rarely active (BOTTOM_DRAWER_CACHE_ENABLED=true in prod) and
           // getOrFetchFullProfile already contains roblox fields from RTDB.
           newUserData = {
+            displayName: displayNameSnap?.exists() ? displayNameSnap.val() : null,
             avatar: avatarSnap?.exists() ? avatarSnap.val() : null,
             robloxUsername: supaRobloxRow?.robloxUsername ?? null,
             robloxUserId: supaRobloxRow?.robloxUserId ?? null,
@@ -679,7 +688,7 @@ const ProfileBottomDrawer = ({
     return {
       ...selectedUser,
       avatar: userData.avatar || selectedUser?.avatar,
-      displayName: selectedUser?.displayName || selectedUser?.sender || selectedUser?.userName || 'Unknown User',
+      displayName: userData.displayName || selectedUser?.displayName || selectedUser?.sender || selectedUser?.userName || 'Unknown User',
       robloxUsername: selectedUser?.robloxUsername || userData.robloxUsername,
       robloxUserId: selectedUser?.robloxUserId || userData.robloxUserId,
       robloxUsernameVerified: userData.robloxUsernameVerified ?? selectedUser?.robloxUsernameVerified ?? false,
@@ -1227,10 +1236,13 @@ const ProfileBottomDrawer = ({
     setShowReasonModal(false);
 
     const currentUser = auth().currentUser;
+    // Name + picture from the in-app profile. The Firebase Auth ones are the
+    // Google account's and never change when a MOD renames in the app, so the
+    // ban record and the mod log carried that name forever.
     const bannerInfo = {
       id: currentUser?.uid,
-      displayName: currentUser?.displayName || 'Admin',
-      avatar: currentUser?.photoURL,
+      displayName: user?.displayName || currentUser?.displayName || 'Admin',
+      avatar: user?.avatar || currentUser?.photoURL,
       // Recorded on the audit-log row so the history shows what authority
       // the action was taken under, not just who took it.
       role: isAdmin ? 'admin' : (user?.isModerator ? 'moderator' : (user?.isBabyMod ? 'baby_mod' : null)),
@@ -1349,7 +1361,7 @@ const ProfileBottomDrawer = ({
     const me = auth().currentUser;
     const success = await unbanUserWithEmail(mergedUser.email, true, {
       id: me?.uid,
-      displayName: me?.displayName || 'Admin',
+      displayName: user?.displayName || me?.displayName || 'Admin',
       role: isAdmin ? 'admin' : (user?.isModerator ? 'moderator' : (user?.isBabyMod ? 'baby_mod' : null)),
     }, null, 'group_chat');
     if (success) {
@@ -1990,11 +2002,19 @@ const ProfileBottomDrawer = ({
       // ✅ Only take pageSize documents (discard the extra one)
       const docsToUse = snap.docs.slice(0, pageSize);
 
+      // A review stores the reviewer's name from when it was written; show
+      // their current one (stored name stays the fallback).
+      const reviewerIds = docsToUse.map((d) => d.data()?.fromUserId).filter(Boolean);
+      const reviewers = reviewerIds.length
+        ? await getIdentityBatch(reviewerIds).catch(() => new Map())
+        : new Map();
+
       const batch = docsToUse.map((d) => {
         const data = d.data();
         return {
           id: d.id,
           ...data,
+          userName: reviewers.get(data.fromUserId)?.displayName || data.userName,
         };
       });
 

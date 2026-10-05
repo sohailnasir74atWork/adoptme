@@ -31,7 +31,7 @@ import {
 // RTDB still needed for /banned_users_by_email, /presence, and the
 // legacy group_meta_data path. Message bodies + reactions are on Supabase.
 import { get, ref } from '@react-native-firebase/database';
-import { getIdentity } from '../../Supabase/userBackend';
+import { getIdentity, getIdentityBatch } from '../../Supabase/userBackend';
 import { useTranslation } from 'react-i18next';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import { sendGroupMessage, removeMemberFromGroup, hasGroupPermission, getPendingInviteForGroup, acceptGroupInvite, declineGroupInvite, leaveGroup, makeMemberCreator } from '../utils/groupUtils';
@@ -294,6 +294,21 @@ const GroupChatScreen = () => {
       return;
     }
   }, [showMembersModal]);
+
+  // groups/{id}.members stores each member's name + avatar as they were on
+  // joining and nothing rewrites them, so a member who renamed or changed
+  // their picture stayed stale in this list. One batched identity read per
+  // opening gives the current ones; the stored copy stays the fallback.
+  const [liveMembers, setLiveMembers] = useState(() => new Map());
+  const memberIdsKey = [...new Set(groupData?.memberIds || [])].join(',');
+  useEffect(() => {
+    if (!showMembersModal || !memberIdsKey) return;
+    let cancelled = false;
+    getIdentityBatch(memberIdsKey.split(','))
+      .then((map) => { if (!cancelled && map) setLiveMembers(map); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showMembersModal, memberIdsKey]);
 
   // ✅ Load first batch of member statuses when modal opens
   useEffect(() => {
@@ -1481,7 +1496,13 @@ const GroupChatScreen = () => {
 
                 // Render actual member
                 const memberId = item.id;
-                const member = groupData?.members?.[memberId] || {};
+                const stored = groupData?.members?.[memberId] || {};
+                const live = liveMembers.get(memberId);
+                const member = {
+                  ...stored,
+                  displayName: live?.displayName || stored.displayName,
+                  avatar: live?.avatar || stored.avatar,
+                };
                 const isOnline = onlineMembers.includes(memberId);
                 const isCurrentUser = memberId === user?.id;
                 const isMemberCreator = groupData?.createdBy === memberId;
