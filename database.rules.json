@@ -132,10 +132,21 @@
       ".write": false
     },
     "mod_votes_by_user": {
-      ".read": true,
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (auth.token.email_verified === true && (auth.token.email === 'thesolanalabs@gmail.com' || auth.token.email === 'sohailnasir74business@gmail.com' || auth.token.email === 'sohailnasir74@gmail.com')))",
+        ".write": "auth != null && auth.uid === $uid",
+        "$modUid": {
+          ".validate": "(newData.val() === 1 || newData.val() === -1) && $modUid !== $uid"
+        }
       }
+    },
+    "mod_votes_tally": {
+      ".read": true,
+      ".write": false
+    },
+    "mod_votes_counted": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (auth.token.email_verified === true && (auth.token.email === 'thesolanalabs@gmail.com' || auth.token.email === 'sohailnasir74business@gmail.com' || auth.token.email === 'sohailnasir74@gmail.com')))",
+      ".write": false
     },
     "mod_votes_summary": {
       ".read": true,

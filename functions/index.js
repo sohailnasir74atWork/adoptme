@@ -97,6 +97,12 @@ exports.seedAllRosters = rosters.seedAllRosters;
 // See functions/runStaffElections.js.
 exports.runStaffElections = require('./runStaffElections').runStaffElections;
 
+// Mod ratings: server-counted tally (skips banned/muted and new accounts).
+// See functions/modVoteTally.js.
+const modVotes = require('./modVoteTally');
+exports.countModVote = modVotes.countModVote;
+exports.rebuildModVoteTally = modVotes.rebuildModVoteTally;
+
 // ── Moderation ────────────────────────────────────────────────────────
 // Stamps `bannedAt` onto any ban record that arrives without one. Needed
 // because old app builds still in the field write `appliedAt` only, and the

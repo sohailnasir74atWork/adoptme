@@ -2216,7 +2216,16 @@
         "role_jmod": "Junior Mod",
         "sign_in_to_view": "Sign in to view moderator profiles.",
         "stat_mods": "Mods",
-        "stat_jmods": "Junior Mods"
+        "stat_jmods": "Junior Mods",
+        "positive": "{{pct}}% positive",
+        "vote_sign_in": "Sign in to rate moderators.",
+        "vote_self_title": "Oops",
+        "vote_self": "You can't rate yourself!",
+        "vote_blocked_title": "Not right now",
+        "vote_blocked": "You can't rate moderators while you are banned or muted.",
+        "vote_new_title": "Almost there",
+        "vote_new_account_one": "New accounts can rate moderators after 7 days. Try again in {{count}} day.",
+        "vote_new_account_other": "New accounts can rate moderators after 7 days. Try again in {{count}} days."
     },
     "guides": {
         "link_text": "How It Works — Learn about all features",
