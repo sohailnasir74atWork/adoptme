@@ -449,21 +449,10 @@
       "stickers": "스티커"
     },
     "insights": {
-      "giving_wanted": "다들 엄청 갖고 싶어 하는 펫을 주고 있어요!",
+      "giving_wanted": "내 펫이 인기 최고예요! 금방 거래될 거예요",
       "getting_wanted": "완전 인기 많은 펫을 받아요!",
-      "both_wanted": "양쪽 다 인기 펫이 있어요!",
       "getting_rising": "요즘 뜨는 펫을 받아요!",
-      "giving_rising": "잠깐! 내 펫 가치가 오르는 중이에요!",
-      "both_rising": "양쪽 다 가치가 오르고 있어요!",
-      "amazing_deal": "나한테 완전 좋은 거래예요!",
-      "good_value_want_yours": "가치는 괜찮은데, 상대가 내 펫을 정말 갖고 싶어 해요!",
-      "paying_extra": "꿈의 펫을 받으려고 조금 더 주고 있어요!",
-      "giving_a_lot": "와, 너무 많이 주는 것 같아요!",
-      "paying_more_similar": "비슷한 펫인데 조금 더 주고 있어요",
-      "fair_trade": "완전 공평한 거래예요!",
-      "yours_more_wanted": "내 펫이 더 인기 있어요!",
-      "theirs_more_wanted": "상대 펫이 더 인기 있어요!",
-      "equally_wanted": "양쪽 인기가 비슷해요!",
+      "giving_rising": "내 펫 가치가 오르고 있어요!",
       "show_tips": "💡 팁 보기"
     },
     "labels": {
@@ -2711,7 +2700,8 @@
       "day": "{{day}}일차",
       "tap": "터치!",
       "cycle_summary_one": "{{cycle}}회차 · 별 {{count}}개 받음",
-      "cycle_summary_other": "{{cycle}}회차 · 별 {{count}}개 받음"
+      "cycle_summary_other": "{{cycle}}회차 · 별 {{count}}개 받음",
+      "balance": "쓸 수 있는 별: ⭐{{balance}}"
     },
     "daily_rewards": {
       "day_1": "다시 와 줘서 반가워요!",
@@ -2992,35 +2982,19 @@
     "ask_code_body": "홈 탭에서 스쿼드를 열고 코드를 입력해 주세요. 둘 다 Pro를 무료로 받아요."
   },
   "trade_advice": {
-    "verdict_take": "받아요",
-    "verdict_think": "다시 생각해 봐요",
-    "verdict_skip": "패스해요",
-    "if_you_accept": "수락하면",
-    "value_win": "가치를 {{pct}}% 더 받아요",
-    "value_lose": "가치를 {{pct}}% 더 줘요",
-    "value_fair": "가치가 거의 비슷해요",
-    "get_fast": "{{name}} 펫은 다시 거래하기 쉬워요",
-    "get_slow": "{{name}} 펫은 다시 거래하기 어려워요",
-    "give_fast": "{{name}} 펫을 주게 되는데, 찾는 사람이 많은 펫이에요",
-    "get_dropping": "{{name}} 펫이 방금 {{pct}}% 떨어졌어요",
-    "get_rising": "{{name}} 펫이 방금 {{pct}}% 올랐어요",
-    "give_rising": "{{name}} 펫이 방금 {{pct}}% 올랐어요. 갖고 있는 게 나을 수도 있어요",
     "tag_fast": "잘 팔려요",
     "tag_slow": "잘 안 팔려요",
     "feed": {
       "tone_good": "나한테 좋은 거래예요",
+      "tone_popular": "인기 있는 선택",
       "tone_close": "괜찮을 수도 있어요",
-      "tone_counter": "역제안해 볼 만해요",
-      "ask_more": "{{amount}} 정도 더 달라고 하면 공평해져요",
-      "ask_more_big": "덜 주거나, {{amount}} 정도 더 달라고 해 보세요",
       "value_win": "가치를 {{pct}}% 정도 더 받아요",
       "value_fair": "가치가 거의 비슷해요",
-      "get_fast": "{{name}} 펫은 나중에 다시 거래하기 쉬워요",
-      "get_slow": "{{name}} 펫은 다시 거래하기까지 시간이 좀 걸릴 수 있어요",
-      "give_fast": "{{name}} 펫은 찾는 사람이 많아서 조금 더 달라고 해도 돼요",
-      "get_dropping": "{{name}} 펫이 요즘 {{pct}}% 떨어졌어요. 조금만 더 얹어 달라고 하면 돼요",
       "get_rising": "{{name}} 펫이 요즘 {{pct}}% 올랐어요. 잘 골랐어요!",
-      "give_rising": "내 {{name}} 펫이 {{pct}}% 올라서 지금은 가치가 더 높아요"
+      "demand_chip": "🔥 수요 {{score}}/10",
+      "asked_for_other": "이번 주 거래 {{count}}건에서 찾은 {{name}} 펫이에요",
+      "wishlisted_other": "{{count}}명이 {{name}} 펫을 위시리스트에 담았어요",
+      "steady_demand": "{{name}} 펫은 꾸준히 찾는 사람이 있어요"
     }
   },
   "pet_cards": {
@@ -3162,8 +3136,8 @@
     "wallpaper_note_desktop": "3840 × 2160(4K) 크기로 저장돼요. 컴퓨터로 옮겨서 바탕화면으로 설정해 보세요.",
     "home_ready_one": "🎴 열 수 있는 카드팩이 {{count}}개 있어요!",
     "home_ready_other": "🎴 열 수 있는 카드팩이 {{count}}개 있어요!",
-    "home_wait": "모든 펫을 반짝이는 카드로 모아 보세요. 매일 무료 카드팩이 하나씩 생겨요.",
-    "home_signed_out": "로그인하면 반짝이는 펫 카드팩을 매일 무료로 받아요!",
+    "home_wait": "모든 펫을 반짝이는 카드로 모아 보세요. 매일 무료 카드팩이 2개씩 생겨요.",
+    "home_signed_out": "로그인하면 반짝이는 펫 카드팩을 매일 2개씩 무료로 받아요!",
     "sets": {
       "haunted26": "으스스 카니발",
       "all": "모든 펫",
@@ -3252,7 +3226,9 @@
       "cocoa": "핫초코"
     },
     "wp_light": "라이트",
-    "wp_dark": "다크"
+    "wp_dark": "다크",
+    "open_free_left": "무료 카드팩 열기 (오늘 {{left}}번 남음)",
+    "get_stars": "별 모으러 가기 (지금 ⭐{{balance}}, 카드팩은 ⭐{{cost}})"
   },
   "elections": {
     "title": "운영진 선거",

@@ -7,7 +7,7 @@ import {
   Platform,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { navigationRef } from './Code/Helper/navigationService';
+import { navigationRef, trackCurrentScreen } from './Code/Helper/navigationService';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
 // Imported at the top on purpose: its launch clock is the cold-start ad budget.
@@ -327,7 +327,12 @@ function App() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef} theme={selectedTheme}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={selectedTheme}
+        onReady={trackCurrentScreen}
+        onStateChange={trackCurrentScreen}
+      >
         {/* Edge-to-edge: backgroundColor/translucent are ignored by the OS
             here, and forcing them conflicted with the window on some older
             devices (whole-screen shift). Only barStyle (icon color) is set;

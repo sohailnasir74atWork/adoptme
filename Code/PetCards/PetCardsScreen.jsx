@@ -23,6 +23,9 @@ import {
   themeOf, RARITIES, FINISHES, RARITY_STYLE, STAR_PACK_COST, STREAK_BONUS_EVERY,
 } from './cardConfig';
 import { isMockActive } from './cardsApi';
+import { useGlobalState } from '../GlobelStats';
+import useStarBalance from '../Engagement/useStarBalance';
+import DailyStarRewards from '../Engagement/DailyStarRewards';
 
 const BG = '#0B0816';
 const CARD = 'rgba(255,255,255,0.06)';
@@ -91,6 +94,10 @@ export default function PetCardsScreen() {
   const [setId, setSetId] = useState(route.params?.setId || null);
   const [oddsOpen, setOddsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [starsOpen, setStarsOpen] = useState(false);
+  const { appdatabase } = useGlobalState();
+  // Live: claiming or spending stars anywhere updates this at once.
+  const starBalance = useStarBalance(appdatabase, uid);
 
   useEffect(() => { trackGrowthEvent('cards_hub_open', {}); }, []);
 
@@ -139,15 +146,17 @@ export default function PetCardsScreen() {
   }
 
   const free = wallet?.freeReady;
+  const freeLeft = wallet?.freeLeft;   // supabase/048; undefined on an older server
   const bonus = wallet?.bonusPacks || 0;
   const starsLeft = wallet?.starPacksLeft ?? 0;
+  const shortOfStars = starBalance != null && starBalance < STAR_PACK_COST;
   const left = countdown(nextUtcMidnight(now), now);
   const streak = wallet?.streak || 0;
   const streakPos = streak % STREAK_BONUS_EVERY;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.stage[0] }]}>
-      <Header t={t} navigation={navigation} wallet={wallet} onOdds={() => setOddsOpen(true)} />
+      <Header t={t} navigation={navigation} wallet={wallet} stars={starBalance} onStars={() => setStarsOpen(true)} onOdds={() => setOddsOpen(true)} />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -189,7 +198,9 @@ export default function PetCardsScreen() {
 
             {free ? (
               <TouchableOpacity style={[styles.primary, { backgroundColor: theme.accent }]} onPress={() => open('free')}>
-                <Text style={styles.primaryText}>{t('pet_cards.open_free')}</Text>
+                <Text style={styles.primaryText}>
+                  {freeLeft > 0 ? t('pet_cards.open_free_left', { left: freeLeft }) : t('pet_cards.open_free')}
+                </Text>
               </TouchableOpacity>
             ) : bonus > 0 ? (
               <TouchableOpacity style={[styles.primary, { backgroundColor: theme.accent }]} onPress={() => open('bonus')}>
@@ -205,13 +216,17 @@ export default function PetCardsScreen() {
 
             <TouchableOpacity
               disabled={starsLeft <= 0}
-              onPress={() => open('stars')}
+              // Short of stars: open the daily star claim instead of a pack
+              // that would only fail with "not enough stars".
+              onPress={() => (shortOfStars ? setStarsOpen(true) : open('stars'))}
               style={[styles.secondary, starsLeft <= 0 && { opacity: 0.45 }]}
             >
               <Text style={styles.secondaryText}>
-                {starsLeft > 0
-                  ? t('pet_cards.open_stars', { cost: STAR_PACK_COST, left: starsLeft })
-                  : t('pet_cards.stars_done')}
+                {starsLeft <= 0
+                  ? t('pet_cards.stars_done')
+                  : shortOfStars
+                    ? t('pet_cards.get_stars', { balance: starBalance, cost: STAR_PACK_COST })
+                    : t('pet_cards.open_stars', { cost: STAR_PACK_COST, left: starsLeft })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -287,11 +302,12 @@ export default function PetCardsScreen() {
         {__DEV__ && isMockActive() ? <Text style={[styles.disclaimer, { color: '#FBBF24' }]}>DEV: local mock (037 not deployed)</Text> : null}
       </ScrollView>
       <OddsSheet visible={oddsOpen} onClose={() => setOddsOpen(false)} set={current} t={t} />
+      <DailyStarRewards visible={starsOpen} onClose={() => setStarsOpen(false)} db={appdatabase} uid={uid} isDarkMode />
     </View>
   );
 }
 
-function Header({ t, navigation, wallet, onOdds }) {
+function Header({ t, navigation, wallet, stars, onStars, onOdds }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12} style={styles.headerBtn}>
@@ -299,6 +315,11 @@ function Header({ t, navigation, wallet, onOdds }) {
       </TouchableOpacity>
       <Text style={styles.headerTitle}>{t('pet_cards.title')}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {stars != null ? (
+          <TouchableOpacity onPress={onStars} hitSlop={8} style={styles.stars}>
+            <Text style={styles.starsText}>⭐ {stars.toLocaleString()}</Text>
+          </TouchableOpacity>
+        ) : null}
         {wallet ? (
           <View style={styles.shards}>
             <Text style={styles.shardsText}>💠 {wallet.shards}</Text>
@@ -321,6 +342,8 @@ const styles = StyleSheet.create({
   headerTitle: { color: INK, fontSize: 18, fontWeight: '900', letterSpacing: 0.3 },
   shards: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14, backgroundColor: 'rgba(125,211,252,0.15)', borderWidth: 1, borderColor: 'rgba(125,211,252,0.35)' },
   shardsText: { color: '#BAE6FD', fontWeight: '800', fontSize: 13 },
+  stars: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14, backgroundColor: 'rgba(250,204,21,0.15)', borderWidth: 1, borderColor: 'rgba(250,204,21,0.4)' },
+  starsText: { color: '#FDE68A', fontWeight: '800', fontSize: 13 },
   hero: { marginHorizontal: 16, marginTop: 4, borderRadius: 24, paddingVertical: 18, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: LINE, overflow: 'hidden' },
   chips: { gap: 8, paddingBottom: 6 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)' },

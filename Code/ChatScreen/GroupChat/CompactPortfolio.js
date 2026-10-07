@@ -8,7 +8,6 @@ import {
     TouchableOpacity,
     ScrollView,
     ActivityIndicator,
-    LayoutAnimation,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
@@ -85,7 +84,6 @@ const CompactPortfolio = ({
     }, [tradeableOwned, tradeableWishlist, lookupPetValue]);
 
     const toggleExpand = () => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpanded((prev) => !prev);
     };
 

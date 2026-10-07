@@ -40,7 +40,8 @@ export const FIRST_EDITION_MAX = 100;   // serial #1–#100 carries the 1st Edit
 export const RARITY_POINTS = { common: 1, uncommon: 2, rare: 4, ultra: 8, legendary: 16 };
 export const DUPE_SHARDS = { common: 5, uncommon: 10, rare: 25, ultra: 50, legendary: 100 };
 export const CRAFT_COST = { common: 40, uncommon: 80, rare: 200, ultra: 400, legendary: 1000 };
-export const STAR_PACK_COST = 5;
+export const STAR_PACK_COST = 3;          // 2026-10-05: was 5 (client-only; stars live in RTDB)
+export const FREE_PACKS_PER_DAY = 2;      // supabase/048 (was 1)
 export const STAR_PACKS_PER_DAY = 2;
 export const STREAK_BONUS_EVERY = 7;
 // Neon fusion (supabase/044): 4 copies of one finish -> 1 of the next, as in Adopt Me.

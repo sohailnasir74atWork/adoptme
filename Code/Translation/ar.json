@@ -499,21 +499,10 @@
             "stickers": "الملصقات"
         },
         "insights": {
-            "giving_wanted": "أنت تعطي حيوانات مطلوبة جدًا!",
+            "giving_wanted": "حيواناتك مطلوبة بكثرة، وستتبادلها بسرعة!",
             "getting_wanted": "ستحصل على حيوانات مطلوبة جدًا!",
-            "both_wanted": "الطرفان عندهما حيوانات مطلوبة!",
             "getting_rising": "ستحصل على حيوانات قيمتها في صعود!",
-            "giving_rising": "انتبه — حيواناتك قيمتها في صعود!",
-            "both_rising": "قيمة الطرفين في ارتفاع!",
-            "amazing_deal": "صفقة رائعة لك!",
-            "good_value_want_yours": "القيمة جيدة، لكنهم يريدون حيواناتك بشدة!",
-            "paying_extra": "تدفع أكثر مقابل حيوانات أحلامك!",
-            "giving_a_lot": "واو، أنت تعطي كثيرًا!",
-            "paying_more_similar": "تدفع أكثر قليلًا مقابل حيوانات مشابهة",
-            "fair_trade": "تبادل عادل جدًا!",
-            "yours_more_wanted": "حيواناتك مطلوبة أكثر!",
-            "theirs_more_wanted": "حيواناتهم مطلوبة أكثر!",
-            "equally_wanted": "الطرفان مطلوبان بنفس القدر!",
+            "giving_rising": "قيمة حيواناتك في صعود!",
             "show_tips": "💡 عرض النصائح"
         },
         "labels": {
@@ -2944,7 +2933,8 @@
             "cycle_summary_two": "الدورة #{{cycle}} · ربحت نجمتين",
             "cycle_summary_few": "الدورة #{{cycle}} · ربحت {{count}} نجوم",
             "cycle_summary_many": "الدورة #{{cycle}} · ربحت {{count}} نجمة",
-            "cycle_summary_other": "الدورة #{{cycle}} · ربحت {{count}} نجمة"
+            "cycle_summary_other": "الدورة #{{cycle}} · ربحت {{count}} نجمة",
+            "balance": "رصيدك للإنفاق: ⭐{{balance}}"
         },
         "daily_rewards": {
             "day_1": "أهلًا بعودتك!",
@@ -3293,35 +3283,29 @@
         "ask_code_body": "افتح «الفريق» من الصفحة الرئيسية وأدخله. ستحصلان معًا على Pro مجانًا."
     },
     "trade_advice": {
-        "verdict_take": "خذها",
-        "verdict_think": "فكّر مرتين",
-        "verdict_skip": "اتركها",
-        "if_you_accept": "إذا قبلت",
-        "value_win": "تحصل على قيمة أكثر بـ {{pct}}%",
-        "value_lose": "تعطي قيمة أكثر بـ {{pct}}%",
-        "value_fair": "القيم متقاربة تقريبًا",
-        "get_fast": "{{name}} سهل التبادل بعدين",
-        "get_slow": "{{name}} صعب تبادله بعدين",
-        "give_fast": "ستعطي {{name}} وكثير من اللاعبين يريدونه",
-        "get_dropping": "{{name}} نزل للتو {{pct}}%",
-        "get_rising": "{{name}} ارتفع للتو {{pct}}%",
-        "give_rising": "{{name}} ارتفع للتو {{pct}}%، ربما تحتفظ به",
         "tag_fast": "يُباع بسرعة",
         "tag_slow": "صعب التبادل",
         "feed": {
             "tone_good": "صفقة جيدة لك",
+            "tone_popular": "مطلوب بكثرة",
             "tone_close": "ممكن تناسبك",
-            "tone_counter": "تستحق عرضًا مقابلًا",
-            "ask_more": "اطلب حوالي {{amount}} زيادة وتصير متعادلة",
-            "ask_more_big": "اعرض أقل، أو اطلب حوالي {{amount}} زيادة",
             "value_win": "تحصل على قيمة أكثر بحوالي {{pct}}%",
             "value_fair": "القيم متقاربة تقريبًا",
-            "get_fast": "{{name}} سهل التبادل بعدين",
-            "get_slow": "{{name}} قد يأخذ وقتًا لتبادله",
-            "give_fast": "{{name}} مطلوب كثيرًا، فتقدر تطلب أكثر قليلًا",
-            "get_dropping": "{{name}} نزل {{pct}}% مؤخرًا، إضافة صغيرة تعوّض ذلك",
             "get_rising": "{{name}} ارتفع {{pct}}% مؤخرًا، اختيار جيد",
-            "give_rising": "{{name}} عندك ارتفع {{pct}}%، فقيمته أعلى الآن"
+            "demand_chip": "🔥 الطلب {{score}}/10",
+            "asked_for_zero": "{{name}} مطلوب في التبادلات هذا الأسبوع",
+            "asked_for_one": "{{name}} طُلب في تبادل واحد هذا الأسبوع",
+            "asked_for_two": "{{name}} طُلب في تبادلين هذا الأسبوع",
+            "asked_for_few": "{{name}} طُلب في {{count}} تبادلات هذا الأسبوع",
+            "asked_for_many": "{{name}} طُلب في {{count}} تبادلًا هذا الأسبوع",
+            "asked_for_other": "{{name}} طُلب في {{count}} تبادل هذا الأسبوع",
+            "wishlisted_zero": "{{name}} في قوائم أمنيات اللاعبين",
+            "wishlisted_one": "{{name}} في قائمة أمنيات لاعب واحد",
+            "wishlisted_two": "{{name}} في قائمة أمنيات لاعبَين",
+            "wishlisted_few": "{{name}} في قائمة أمنيات {{count}} لاعبين",
+            "wishlisted_many": "{{name}} في قائمة أمنيات {{count}} لاعبًا",
+            "wishlisted_other": "{{name}} في قائمة أمنيات {{count}} لاعب",
+            "steady_demand": "{{name}} عليه طلب ثابت في التبادلات"
         }
     },
     "pet_cards": {
@@ -3475,8 +3459,8 @@
         "home_ready_few": "🎴 {{count}} حزم جاهزة للفتح!",
         "home_ready_many": "🎴 {{count}} حزمة جاهزة للفتح!",
         "home_ready_other": "🎴 {{count}} حزمة جاهزة للفتح!",
-        "home_wait": "اجمع كل الحيوانات في بطاقات لامعة. حزمة مجانية كل يوم.",
-        "home_signed_out": "سجّل الدخول واحصل على حزمة مجانية من البطاقات اللامعة كل يوم!",
+        "home_wait": "اجمع كل الحيوانات في بطاقات لامعة. حزمتان مجانيتان كل يوم.",
+        "home_signed_out": "سجّل الدخول واحصل على حزمتين مجانيتين من البطاقات اللامعة كل يوم!",
         "sets": {
             "haunted26": "الكرنفال المسكون",
             "all": "كل الحيوانات",
@@ -3569,7 +3553,9 @@
             "cocoa": "كاكاو ساخن"
         },
         "wp_light": "فاتحة",
-        "wp_dark": "داكنة"
+        "wp_dark": "داكنة",
+        "open_free_left": "افتح الحزمة المجانية (المتبقي اليوم: {{left}})",
+        "get_stars": "احصل على نجوم (لديك ⭐{{balance}}، والحزمة بـ ⭐{{cost}})"
     },
     "elections": {
         "title": "انتخابات الإشراف",

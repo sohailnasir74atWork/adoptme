@@ -10,7 +10,7 @@ import UserBadgeRail from '../Helper/UserBadgeRail';
 import { VALUE_SOURCE, sourceOfTrade } from '../Helper/valueSources';
 import { getFollowingIds } from '../Helper/followingCache';
 import { fetchAnalyticsData } from '../Helper/analyticsDataHelper';
-import { adviseTrade, feedNudge, FEED_TONE_STYLE } from '../Helper/tradeAdvice';
+import { tradeHighlight, TONE_STYLE } from '../Helper/tradeAdvice';
 import { tradeStatus as wflStatus, BUYER_FILTER_LETTER } from '../Helper/tradeStatus';
 import { useNavigation } from '@react-navigation/native';
 import ReportTradePopup from './ReportTradePopUp';
@@ -1908,36 +1908,40 @@ const TradeList = ({ route }) => {
           )}
         </View>
 
-        {/* If you accept: the viewer gives the poster's wants and gets the poster's has */}
+        {/* If you accept: the viewer gives the poster's wants and gets the
+            poster's has. Says what is good about what they'd get (demand,
+            wishlists, rising value); the pill above already shows the gap. */}
         {item.userId !== user?.id && (() => {
           const gg = sourceOfTrade(item) === VALUE_SOURCE.GG;
-          const advice = adviseTrade({
+          const maps = analyticsMaps || {};
+          const highlight = tradeHighlight({
             give: item.wantsItems || [],
             receive: item.hasItems || [],
             giveTotal: item.wantsTotal,
             getTotal: item.hasTotal,
             // Value moves are Elvebredd's; a GG-priced trade only gets the
-            // value + how-easily-it-trades parts.
-            maps: gg ? { marketMap: analyticsMaps?.marketMap } : (analyticsMaps || {}),
+            // demand parts, which come from trade posts and wishlists.
+            maps: gg ? { ...maps, hotMap: null } : maps,
           });
-          const nudge = feedNudge(advice, { giveTotal: item.wantsTotal, getTotal: item.hasTotal });
-          if (!nudge) return null;
-          const ts = FEED_TONE_STYLE[nudge.tone];
-          const { reason } = nudge;
-          const params = reason?.params?.amount != null
-            ? { ...reason.params, amount: formatValue(reason.params.amount) }
-            : reason?.params;
+          if (!highlight) return null;
+          const ts = TONE_STYLE[highlight.tone];
+          const { reason, demand } = highlight;
           return (
             <View style={[styles.adviceRow, { backgroundColor: ts.color + '14' }]}>
               <View style={styles.adviceHead}>
                 <Icon name={ts.icon} size={12} color={ts.color} />
                 <Text style={[styles.adviceVerdict, { color: ts.color }]} numberOfLines={1}>
-                  {t(`trade_advice.feed.tone_${nudge.tone}`)}
+                  {t(`trade_advice.feed.tone_${highlight.tone}`)}
                 </Text>
+                {demand != null && (
+                  <Text style={[styles.adviceDemand, { color: ts.color, borderColor: ts.color + '55' }]}>
+                    {t('trade_advice.feed.demand_chip', { score: demand })}
+                  </Text>
+                )}
               </View>
               {reason && (
-                <Text style={styles.adviceReason} numberOfLines={1}>
-                  {t(`trade_advice.feed.${reason.key}`, params)}
+                <Text style={styles.adviceReason} numberOfLines={2}>
+                  {t(`trade_advice.feed.${reason.key}`, reason.params)}
                 </Text>
               )}
             </View>
@@ -2639,6 +2643,15 @@ const getStyles = (isDarkMode, c) => {
       fontSize: 11,
       fontWeight: '800',
       flexShrink: 1,
+    },
+    adviceDemand: {
+      marginLeft: 'auto',
+      fontSize: 10,
+      fontWeight: '800',
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
     },
     adviceReason: {
       fontSize: 10,

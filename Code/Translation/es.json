@@ -460,21 +460,10 @@
             "stickers": "STICKERS"
         },
         "insights": {
-            "giving_wanted": "¡Estás dando mascotas que todos quieren!",
+            "giving_wanted": "¡Tus mascotas están muy buscadas, se tradean rápido!",
             "getting_wanted": "¡Te llevas mascotas súper populares!",
-            "both_wanted": "¡Los dos lados tienen mascotas populares!",
             "getting_rising": "¡Te llevas mascotas que van en subida!",
-            "giving_rising": "Ojo: ¡tus mascotas están subiendo!",
-            "both_rising": "¡Los dos lados van en subida!",
-            "amazing_deal": "¡Tremendo tradeo para ti!",
-            "good_value_want_yours": "Buen valor, ¡pero de verdad quieren tus mascotas!",
-            "paying_extra": "¡Das de más por tus mascotas soñadas!",
-            "giving_a_lot": "¡Uy, estás dando un montón!",
-            "paying_more_similar": "Das un poco más por mascotas parecidas",
-            "fair_trade": "¡Tradeo súper justo!",
-            "yours_more_wanted": "¡Tus mascotas son más buscadas!",
-            "theirs_more_wanted": "¡Las mascotas del otro lado son más buscadas!",
-            "equally_wanted": "¡Los dos lados son igual de buscados!",
+            "giving_rising": "¡Tus mascotas están subiendo de valor!",
             "show_tips": "💡 Ver consejos"
         },
         "labels": {
@@ -2762,7 +2751,8 @@
             "tap": "¡TOCA!",
             "cycle_summary_one": "Ciclo #{{cycle}} · {{count}} estrella ganada",
             "cycle_summary_many": "Ciclo #{{cycle}} · {{count}} de estrellas ganadas",
-            "cycle_summary_other": "Ciclo #{{cycle}} · {{count}} estrellas ganadas"
+            "cycle_summary_other": "Ciclo #{{cycle}} · {{count}} estrellas ganadas",
+            "balance": "Tienes ⭐{{balance}} para gastar"
         },
         "daily_rewards": {
             "day_1": "¡Qué bueno que volviste!",
@@ -3060,35 +3050,23 @@
         "ask_code_body": "Abre Squad en Inicio y escríbelo. Los dos consiguen Pro gratis."
     },
     "trade_advice": {
-        "verdict_take": "Acéptalo",
-        "verdict_think": "Piénsalo bien",
-        "verdict_skip": "Mejor no",
-        "if_you_accept": "Si aceptas",
-        "value_win": "Recibes un {{pct}}% más de valor",
-        "value_lose": "Das un {{pct}}% más de valor",
-        "value_fair": "Los valores están casi iguales",
-        "get_fast": "{{name}} se tradea fácil",
-        "get_slow": "{{name}} cuesta mucho tradearlo después",
-        "give_fast": "Darías {{name}}, y muchos lo quieren",
-        "get_dropping": "{{name}} acaba de bajar un {{pct}}%",
-        "get_rising": "{{name}} acaba de subir un {{pct}}%",
-        "give_rising": "{{name}} acaba de subir un {{pct}}%, quizá mejor quedártelo",
         "tag_fast": "Se tradea rápido",
         "tag_slow": "Difícil de tradear",
         "feed": {
             "tone_good": "Buen trato para ti",
+            "tone_popular": "Muy buscado",
             "tone_close": "Te podría servir",
-            "tone_counter": "Vale la pena contraofertar",
-            "ask_more": "Pide unos {{amount}} más y queda parejo",
-            "ask_more_big": "Ofrece menos o pide unos {{amount}} más",
             "value_win": "Recibes cerca de un {{pct}}% más de valor",
             "value_fair": "Los valores están casi iguales",
-            "get_fast": "{{name}} se tradea fácil después",
-            "get_slow": "{{name}} puede tardar en tradearse",
-            "give_fast": "{{name}} está muy buscado, puedes pedir un poco más",
-            "get_dropping": "{{name}} bajó un {{pct}}% hace poco, un pequeño add lo compensa",
             "get_rising": "{{name}} subió un {{pct}}% hace poco, buena compra",
-            "give_rising": "Tu {{name}} subió un {{pct}}%, ahora vale más"
+            "demand_chip": "🔥 Demanda {{score}}/10",
+            "asked_for_one": "Pidieron {{name}} en {{count}} tradeo esta semana",
+            "asked_for_many": "Pidieron {{name}} en {{count}} tradeos esta semana",
+            "asked_for_other": "Pidieron {{name}} en {{count}} tradeos esta semana",
+            "wishlisted_one": "{{count}} jugador tiene {{name}} en su lista de deseos",
+            "wishlisted_many": "{{count}} jugadores tienen {{name}} en su lista de deseos",
+            "wishlisted_other": "{{count}} jugadores tienen {{name}} en su lista de deseos",
+            "steady_demand": "{{name}} siempre tiene quien lo pida en tradeos"
         }
     },
     "pet_cards": {
@@ -3233,8 +3211,8 @@
         "home_ready_one": "🎴 ¡{{count}} sobre listo para abrir!",
         "home_ready_many": "🎴 ¡{{count}} sobres listos para abrir!",
         "home_ready_other": "🎴 ¡{{count}} sobres listos para abrir!",
-        "home_wait": "Colecciona todas las mascotas en cartas brillantes. Sobre gratis cada día.",
-        "home_signed_out": "¡Inicia sesión y recibe gratis un sobre de cartas brillantes cada día!",
+        "home_wait": "Colecciona todas las mascotas en cartas brillantes. 2 sobres gratis cada día.",
+        "home_signed_out": "¡Inicia sesión y recibe 2 sobres gratis de cartas brillantes cada día!",
         "sets": {
             "haunted26": "Carnaval embrujado",
             "all": "Todas las mascotas",
@@ -3324,7 +3302,9 @@
             "cocoa": "Chocolate caliente"
         },
         "wp_light": "Claros",
-        "wp_dark": "Oscuros"
+        "wp_dark": "Oscuros",
+        "open_free_left": "Abrir sobre gratis (te quedan {{left}} hoy)",
+        "get_stars": "Consigue estrellas (tienes ⭐{{balance}}, un sobre cuesta ⭐{{cost}})"
     },
     "elections": {
         "title": "Elecciones del staff",

@@ -1,7 +1,29 @@
 // navigationService.js — Global navigation ref for use outside NavigationContainer
 import { createNavigationContainerRef } from '@react-navigation/native';
+import { getCrashlytics, setAttribute, log as crashlyticsLog } from '@react-native-firebase/crashlytics';
+import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
 
 export const navigationRef = createNavigationContainerRef();
+
+// Screen names for crash reports (2026-10-05). Before this every Android crash
+// breadcrumb said only "MainActivity", so the RN 0.87 Fabric addViewAt crash
+// (~0.9% of users on 175) could not be tied to a screen. The screen_view event
+// becomes a Crashlytics breadcrumb, the log line lands in the crash's logs, and
+// the `screen` key shows where the app was at the moment it crashed.
+let _lastScreen = null;
+export function trackCurrentScreen() {
+  const name = navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : null;
+  if (!name || name === _lastScreen) return;
+  _lastScreen = name;
+  try {
+    const c = getCrashlytics();
+    crashlyticsLog(c, `screen ${name}`);
+    setAttribute(c, 'screen', name).catch(() => {});
+  } catch (_) {}
+  try {
+    logEvent(getAnalytics(), 'screen_view', { screen_name: name, screen_class: name }).catch(() => {});
+  } catch (_) {}
+}
 
 /** Navigate from outside a screen (the global game-invite banner). No-op until the navigator is ready. */
 export function navigate(name, params) {

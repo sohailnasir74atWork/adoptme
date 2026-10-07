@@ -448,21 +448,10 @@
             "stickers": "STICKERS"
         },
         "insights": {
-            "giving_wanted": "You're giving away super wanted pets!",
+            "giving_wanted": "Your pets are in high demand, they'll trade fast!",
             "getting_wanted": "You're getting super popular pets!",
-            "both_wanted": "Both sides have popular pets!",
             "getting_rising": "You're getting rising stars!",
-            "giving_rising": "Heads up — your pets are rising!",
-            "both_rising": "Both sides are going up!",
-            "amazing_deal": "Amazing deal for you!",
-            "good_value_want_yours": "Good value, but they really want yours!",
-            "paying_extra": "Paying extra for dream pets!",
-            "giving_a_lot": "Whoa, you're giving a lot!",
-            "paying_more_similar": "Paying a bit more for similar pets",
-            "fair_trade": "Super fair trade!",
-            "yours_more_wanted": "Your pets are more wanted!",
-            "theirs_more_wanted": "Their pets are more wanted!",
-            "equally_wanted": "Both sides equally wanted!",
+            "giving_rising": "Your pets are going up in value!",
             "show_tips": "💡 Show tips"
         },
         "labels": {
@@ -2719,7 +2708,8 @@
             "day": "Day {{day}}",
             "tap": "TAP!",
             "cycle_summary_one": "Cycle #{{cycle}} · {{count}} star earned",
-            "cycle_summary_other": "Cycle #{{cycle}} · {{count}} stars earned"
+            "cycle_summary_other": "Cycle #{{cycle}} · {{count}} stars earned",
+            "balance": "You have ⭐{{balance}} to spend"
         },
         "daily_rewards": {
             "day_1": "Welcome back!",
@@ -3000,35 +2990,21 @@
         "ask_code_body": "Open Squad on the Home tab and enter it. You both get free Pro."
     },
     "trade_advice": {
-        "verdict_take": "Take it",
-        "verdict_think": "Think twice",
-        "verdict_skip": "Skip it",
-        "if_you_accept": "If you accept",
-        "value_win": "You get {{pct}}% more value",
-        "value_lose": "You give {{pct}}% more value",
-        "value_fair": "Values are about even",
-        "get_fast": "{{name}} is easy to trade on",
-        "get_slow": "{{name}} is hard to trade on",
-        "give_fast": "You'd give up {{name}}, and lots of players want it",
-        "get_dropping": "{{name}} just dropped {{pct}}%",
-        "get_rising": "{{name}} just went up {{pct}}%",
-        "give_rising": "{{name}} just went up {{pct}}%, maybe keep it",
         "tag_fast": "Sells fast",
         "tag_slow": "Hard to trade",
         "feed": {
             "tone_good": "Good deal for you",
+            "tone_popular": "Popular pick",
             "tone_close": "Could work for you",
-            "tone_counter": "Worth a counter-offer",
-            "ask_more": "Ask for about {{amount}} more and it's even",
-            "ask_more_big": "Offer less, or ask for about {{amount}} more",
             "value_win": "You'd get about {{pct}}% more value",
             "value_fair": "Values are about even",
-            "get_fast": "{{name}} is easy to trade on later",
-            "get_slow": "{{name}} can take a while to trade on",
-            "give_fast": "{{name}} is in demand, so you can ask for a little more",
-            "get_dropping": "{{name}} dipped {{pct}}% lately, a small add makes up for it",
             "get_rising": "{{name}} is up {{pct}}% lately, nice pickup",
-            "give_rising": "Your {{name}} is up {{pct}}%, so it's worth more now"
+            "demand_chip": "🔥 Demand {{score}}/10",
+            "asked_for_one": "Players asked for {{name}} in {{count}} trade this week",
+            "asked_for_other": "Players asked for {{name}} in {{count}} trades this week",
+            "wishlisted_one": "{{count}} player has {{name}} on their wishlist",
+            "wishlisted_other": "{{count}} players have {{name}} on their wishlist",
+            "steady_demand": "Traders keep asking for {{name}}"
         }
     },
     "pet_cards": {
@@ -3170,8 +3146,8 @@
         "wallpaper_note_desktop": "Saved at 3840 × 2160 (4K). Send it to your computer and set it as your background.",
         "home_ready_one": "🎴 {{count}} pack ready to open!",
         "home_ready_other": "🎴 {{count}} packs ready to open!",
-        "home_wait": "Collect every pet as a shiny card. A new free pack every day.",
-        "home_signed_out": "Sign in for a free pack of shiny pet cards every day!",
+        "home_wait": "Collect every pet as a shiny card. 2 free packs every day.",
+        "home_signed_out": "Sign in for 2 free packs of shiny pet cards every day!",
         "sets": {
             "haunted26": "Haunted Carnival",
             "all": "All Pets",
@@ -3260,7 +3236,9 @@
             "cocoa": "Hot Cocoa"
         },
         "wp_light": "Light",
-        "wp_dark": "Dark"
+        "wp_dark": "Dark",
+        "open_free_left": "Open free pack ({{left}} left today)",
+        "get_stars": "Get more stars (you have ⭐{{balance}}, a pack is ⭐{{cost}})"
     },
     "elections": {
         "title": "Staff Elections",

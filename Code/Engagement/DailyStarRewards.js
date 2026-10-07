@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { DAILY_REWARDS, getStarStatus, claimDailyStar } from './starUtils';
+import useStarBalance from './useStarBalance';
 import { getThemeColors } from '../Helper/themeColors';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 
@@ -28,6 +29,9 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
   const [status, setStatus] = useState(null);
   const [claiming, setClaiming] = useState(false);
   const [claimedReward, setClaimedReward] = useState(null);
+  // Spendable stars, live (only while open). The cycle line below counts stars
+  // EARNED, which never drops when stars are spent on packs or eggs.
+  const balance = useStarBalance(visible ? db : null, uid);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef(new Animated.Value(1)).current;
 
@@ -46,7 +50,13 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
     const reward = await claimDailyStar(db, uid);
     if (reward) {
       setClaimedReward(reward);
-      setStatus(prev => ({ ...prev, canClaim: false, currentDay: reward.currentDay }));
+      setStatus(prev => ({
+        ...prev,
+        canClaim: false,
+        currentDay: reward.currentDay,
+        cycleNumber: reward.cycleNumber,
+        totalStarsEarned: (prev?.totalStarsEarned || 0) + (reward.stars || 1),
+      }));
 
       // Bounce animation
       Animated.sequence([
@@ -207,6 +217,12 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
             </Animated.View>
           )}
 
+          {balance != null ? (
+            <Text style={[styles.balanceText, { color: textColor }]}>
+              {t('stars.daily.balance', { balance })}
+            </Text>
+          ) : null}
+
           {/* Cycle info */}
           <Text style={[styles.cycleText, { color: subtextColor }]}>
             {t('stars.daily.cycle_summary', { cycle: status?.cycleNumber || 1, count: status?.totalStarsEarned || 0 })}
@@ -218,6 +234,7 @@ const DailyStarRewards = ({ visible, onClose, db, uid, isDarkMode = false }) => 
 };
 
 const styles = StyleSheet.create({
+  balanceText: { textAlign: 'center', fontSize: 15, fontWeight: '800', marginTop: 14 },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

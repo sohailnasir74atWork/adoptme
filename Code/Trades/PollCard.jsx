@@ -10,7 +10,6 @@ import {
     StyleSheet,
     Keyboard,
     Alert,
-    LayoutAnimation,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -90,7 +89,6 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
     }, [barAnims]);
 
     const toggleExpand = useCallback(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         const willExpand = !expanded;
         setExpanded(willExpand);
         // Animate bars when expanding if already voted
@@ -154,7 +152,6 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
             setSelectedOption(index);
             setVoted(true);
 
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             animateBars(newOptions, newTotal);
         } catch (err) {
             console.error('Vote error:', err);
@@ -202,7 +199,6 @@ const PollCard = ({ poll, user, firestoreDB, isDarkMode, onRequireSignIn }) => {
     }, [poll, firestoreDB]);
 
     const toggleComments = useCallback(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         if (!showComments && comments.length === 0) {
             fetchComments();
         }

@@ -105,7 +105,9 @@ export const nextUtcMidnight = (nowMs = Date.now()) => (Math.floor(nowMs / 86400
 /** Packs the player can open right now. */
 export const packsAvailable = (wallet) => {
   if (!wallet) return 0;
-  return (wallet.freeReady ? 1 : 0) + (wallet.bonusPacks || 0);
+  // freeLeft comes with supabase/048 (two free packs a day); older servers only send freeReady.
+  const free = wallet.freeLeft ?? (wallet.freeReady ? 1 : 0);
+  return free + (wallet.bonusPacks || 0);
 };
 
 // ── Neon fusion (fuse_card, supabase/044) ──

@@ -17,7 +17,7 @@ import SignInDrawer from '../Firebase/SigninDrawer';
 import { useTranslation } from 'react-i18next';
 import { isMatch } from '../Helper/searchHelper';
 import { fetchAnalyticsData, getDemandScore, getHotStatus } from '../Helper/analyticsDataHelper';
-import { adviseTrade, VERDICT_STYLE } from '../Helper/tradeAdvice';
+import { tradeHighlight, TONE_STYLE } from '../Helper/tradeAdvice';
 import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
@@ -1483,59 +1483,26 @@ const HomeScreen = ({ selectedTheme }) => {
     const highGiving = myItems.filter(i => { const d = demandMap[(i.name || '').toLowerCase().trim()]; return d && d.score >= 8; });
     const highGetting = theirItems.filter(i => { const d = demandMap[(i.name || '').toLowerCase().trim()]; return d && d.score >= 8; });
 
-    if (highGiving.length > 0 && highGetting.length === 0) {
-      tips.push({ emoji: '😱', text: t('home.insights.giving_wanted'), color: '#EF4444' });
-    } else if (highGetting.length > 0 && highGiving.length === 0) {
+    // Shown only while one side is still empty (both sides get the guide
+    // line below), so each tip is about the one side that is filled. A
+    // popular pet on your side is good news for selling it, not a warning.
+    if (highGiving.length > 0) {
+      tips.push({ emoji: '⭐', text: t('home.insights.giving_wanted'), color: '#F59E0B' });
+    } else if (highGetting.length > 0) {
       tips.push({ emoji: '🤩', text: t('home.insights.getting_wanted'), color: '#10B981' });
-    } else if (highGiving.length > 0 && highGetting.length > 0) {
-      tips.push({ emoji: '🔄', text: t('home.insights.both_wanted'), color: '#3B82F6' });
     }
 
-    // Rising value analysis
-    if (theirHotCount > 0 && myHotCount === 0) {
+    if (theirHotCount > 0) {
       tips.push({ emoji: '🚀', text: t('home.insights.getting_rising'), color: '#10B981' });
-    } else if (myHotCount > 0 && theirHotCount === 0) {
-      tips.push({ emoji: '📊', text: t('home.insights.giving_rising'), color: '#F59E0B' });
-    } else if (myHotCount > 0 && theirHotCount > 0) {
-      tips.push({ emoji: '📈', text: t('home.insights.both_rising'), color: '#3B82F6' });
+    } else if (myHotCount > 0) {
+      tips.push({ emoji: '📈', text: t('home.insights.giving_rising'), color: '#10B981' });
     }
 
-    // Combined value + demand verdict
-    if (tradeStatus === 'win' && myDemand >= theirDemand && myDemand > 0) {
-      tips.push({ emoji: '🏆', text: t('home.insights.amazing_deal'), color: '#10B981' });
-    } else if (tradeStatus === 'win' && theirDemand > myDemand) {
-      tips.push({ emoji: '💡', text: t('home.insights.good_value_want_yours'), color: '#F59E0B' });
-    } else if (tradeStatus === 'lose' && theirDemand > myDemand && theirDemand > 0) {
-      tips.push({ emoji: '🤔', text: t('home.insights.paying_extra'), color: '#3B82F6' });
-    } else if (tradeStatus === 'lose' && myDemand > theirDemand && myDemand > 0) {
-      tips.push({ emoji: '😱', text: t('home.insights.giving_a_lot'), color: '#EF4444' });
-    } else if (tradeStatus === 'lose' && myDemand > 0 && theirDemand > 0 && Math.abs(myDemand - theirDemand) < 0.5) {
-      tips.push({ emoji: '📉', text: t('home.insights.paying_more_similar'), color: '#F59E0B' });
-    } else if (tradeStatus === 'fair') {
-      if (myDemand > 0 && theirDemand > 0) {
-        tips.push({ emoji: '🤝', text: t('home.insights.fair_trade'), color: '#10B981' });
-      }
-    }
+    return { myDemand, theirDemand, myHotCount, theirHotCount, tips };
+  }, [hasItems, wantsItems, analyticsMaps, t]);
 
-    // Fallback: always show at least one tip when both sides have items
-    if (tips.length === 0 && myItems.length > 0 && theirItems.length > 0) {
-      if (myDemand > 0 || theirDemand > 0) {
-        const diff = myDemand - theirDemand;
-        if (diff > 0.5) {
-          tips.push({ emoji: '⭐', text: t('home.insights.yours_more_wanted'), color: '#F59E0B' });
-        } else if (diff < -0.5) {
-          tips.push({ emoji: '🌟', text: t('home.insights.theirs_more_wanted'), color: '#10B981' });
-        } else {
-          tips.push({ emoji: '⚖️', text: t('home.insights.equally_wanted'), color: '#3B82F6' });
-        }
-      }
-    }
-
-    return { myDemand, theirDemand, myHotCount, theirHotCount, tips: tips.slice(0, 3) };
-  }, [hasItems, wantsItems, analyticsMaps, tradeStatus, t]);
-
-  // "Should I take it?" — Me gives hasItems, gets wantsItems.
-  const advice = useMemo(() => adviseTrade({
+  // Guide line: what is good about what Me gets (Me gives hasItems, gets wantsItems).
+  const highlight = useMemo(() => tradeHighlight({
     give: hasItems,
     receive: wantsItems,
     giveTotal: hasTotal,
@@ -1633,10 +1600,10 @@ const HomeScreen = ({ selectedTheme }) => {
                       </View>
                     </View>
 
-                    {/* ── Verdict: value + how easily the pets trade + recent moves ── */}
-                    {advice && (() => {
-                      const vs = VERDICT_STYLE[advice.verdict];
-                      const [main, extra] = advice.reasons;
+                    {/* ── Guide: demand, wishlists, rising value of what you get ── */}
+                    {highlight && (() => {
+                      const ts = TONE_STYLE[highlight.tone];
+                      const { reason, extra, demand } = highlight;
                       if (!showTips) return (
                         <TouchableOpacity onPress={() => setShowTips(true)} style={{ alignItems: 'center', marginTop: 4 }}>
                           <Text style={{ fontSize: 9, fontWeight: '600', color: isDarkMode ? '#475569' : '#94a3b8' }}>{t('home.insights.show_tips')}</Text>
@@ -1649,21 +1616,26 @@ const HomeScreen = ({ selectedTheme }) => {
                             activeOpacity={0.7}
                             style={{
                               flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1,
-                              backgroundColor: vs.color + '18',
+                              backgroundColor: ts.color + '18',
                               paddingLeft: 12, paddingRight: 8, paddingVertical: 6,
                               borderRadius: 20,
                             }}
                           >
-                            <Text style={{ fontSize: 14 }}>{vs.emoji}</Text>
-                            <Text style={{ fontSize: 11, fontWeight: '800', color: vs.color, flexShrink: 1 }}>
-                              {t(`trade_advice.verdict_${advice.verdict}`)}
-                              {main ? ` · ${t(`trade_advice.${main.key}`, main.params)}` : ''}
+                            <Icon name={ts.icon} size={14} color={ts.color} />
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: ts.color, flexShrink: 1 }}>
+                              {t(`trade_advice.feed.tone_${highlight.tone}`)}
+                              {demand != null ? ` · ${t('trade_advice.feed.demand_chip', { score: demand })}` : ''}
                             </Text>
-                            <Icon name="close-circle" size={14} color={vs.color + '60'} />
+                            <Icon name="close-circle" size={14} color={ts.color + '60'} />
                           </TouchableOpacity>
-                          {extra && (
+                          {reason && (
                             <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#94a3b8' : '#64748b', marginTop: 4, textAlign: 'center' }}>
-                              {t(`trade_advice.${extra.key}`, extra.params)}
+                              {t(`trade_advice.feed.${reason.key}`, reason.params)}
+                            </Text>
+                          )}
+                          {extra && (
+                            <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#94a3b8' : '#64748b', marginTop: 2, textAlign: 'center' }}>
+                              {t(`trade_advice.feed.${extra.key}`, extra.params)}
                             </Text>
                           )}
                         </View>
@@ -1671,7 +1643,7 @@ const HomeScreen = ({ selectedTheme }) => {
                     })()}
 
                     {/* ── Smart Tip (only while one side is still empty) ── */}
-                    {!advice && tradeInsights.tips.length > 0 && (() => {
+                    {!(hasItems.some(Boolean) && wantsItems.some(Boolean)) && tradeInsights.tips.length > 0 && (() => {
                       const mainTip = tradeInsights.tips[0];
                       const extraTips = tradeInsights.tips.slice(1);
                       if (!showTips) return (

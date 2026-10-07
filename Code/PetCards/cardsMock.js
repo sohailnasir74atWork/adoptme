@@ -104,7 +104,8 @@ const state = () => load('state', {
 });
 
 const walletJson = (w) => ({
-  shards: w.shards, bonusPacks: w.bonus_packs, streak: w.streak, freeReady: w.free_day < today(),
+  shards: w.shards, bonusPacks: w.bonus_packs, streak: w.streak, freeReady: w.free_day < today() || (w.free_count || 0) < 2,
+  freeLeft: w.free_day === today() ? Math.max(0, 2 - (w.free_count || 0)) : 2,
   starPacksLeft: Math.max(0, 2 - (w.star_day === today() ? w.star_count : 0)), packsOpened: w.packs_opened,
   uniqueCards: w.unique_cards, score: w.score, completed: w.completed, pityLegend: w.pity_legend, pityHolo: w.pity_holo,
 });
@@ -181,10 +182,15 @@ export default {
     if (!set) fail('pack not available');
     let streakBonus = false;
     if (p_source === 'free') {
-      if (w.free_day >= today()) fail('free pack already opened today');
-      w.streak = w.free_day === today() - 1 ? w.streak + 1 : 1;
-      w.free_day = today();
-      if (w.streak % 7 === 0) { w.bonus_packs += 1; streakBonus = true; }
+      if (w.free_day >= today() && (w.free_count || 0) >= 2) fail('free pack already opened today');
+      if (w.free_day < today()) {
+        w.streak = w.free_day === today() - 1 ? w.streak + 1 : 1;
+        w.free_day = today();
+        w.free_count = 1;
+        if (w.streak % 7 === 0) { w.bonus_packs += 1; streakBonus = true; }
+      } else {
+        w.free_count = (w.free_count || 0) + 1;
+      }
     } else if (p_source === 'stars') {
       if (w.star_day !== today()) { w.star_day = today(); w.star_count = 0; }
       if (w.star_count >= 2) fail('star pack limit reached');

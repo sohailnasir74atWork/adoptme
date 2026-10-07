@@ -158,8 +158,9 @@ export const liquidityFor = (wanted, offered) => {
 //   demandMap: 1-10 rank score from topWanted
 //   hotMap / dropMap: value risers / fallers from the latest diff
 //   marketMap: { wanted, offered, liquidity } per pet (7-day trade posts)
+//   wishMap: { count } players with the pet on their wishlist (topWishlisted)
 const buildMaps = (analyticsRaw, changesRaw) => {
-    const result = { demandMap: {}, hotMap: {}, dropMap: {}, marketMap: {} };
+    const result = { demandMap: {}, hotMap: {}, dropMap: {}, marketMap: {}, wishMap: {} };
 
     try {
         if (analyticsRaw) {
@@ -176,6 +177,12 @@ const buildMaps = (analyticsRaw, changesRaw) => {
                     result.demandMap[name] = { score, label: `${score}/10`, count: (item.count || 0) };
                 });
             }
+
+            (Array.isArray(analytics?.topWishlisted) ? analytics.topWishlisted : []).forEach((item) => {
+                const name = normalizeName(item?.name);
+                const count = Number(item?.count) || 0;
+                if (name && count > 0) result.wishMap[name] = { count };
+            });
 
             // Before 2026-09-29 the counts were mostly wishlists and owned
             // pets, not trades, so they say nothing about how fast a pet sells.
