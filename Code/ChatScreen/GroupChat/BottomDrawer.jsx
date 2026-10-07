@@ -76,6 +76,7 @@ import { getThemeColors } from '../../Helper/themeColors';
 import { getPublicProfile } from '../../Helper/publicProfile';
 import { canSeeCountryFlags } from '../../Helper/countryFlag';
 import { tradeStatus as wflStatus } from '../../Helper/tradeStatus';
+import { BirthdayProfileLine } from '../../Birthdays/BirthdayBits';
 
 dayjs.extend(relativeTime);
 
@@ -3213,6 +3214,11 @@ const ProfileBottomDrawer = ({
                       </Text>
                     </View>
                   </View>
+                )}
+
+                {/* ═══ BIRTHDAY: "🎂 12 Oct", only if they show it (Code/Birthdays) ═══ */}
+                {loadDetails && !loadingRating && selectedUserId && (
+                  <BirthdayProfileLine uid={selectedUserId} color={c.textMuted} />
                 )}
 
                 {/* ═══ PET CARDS: showcased cards + collector score (Code/PetCards/ProfileShowcase.jsx) ═══ */}

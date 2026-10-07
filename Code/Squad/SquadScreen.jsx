@@ -28,6 +28,7 @@ import {
   getMySquad, getSquadLeaderboard, joinSquad, squadPing, activatePass, isSquadProActive,
 } from '../Helper/squad';
 import { ROLE_RULES, BADGE_MIN_SQUAD } from '../Helper/staffElections';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 const ACCENT = '#7C3AED';
 // A friend counts on any later UTC day (034 squad_ping), so "counts tomorrow"
@@ -215,7 +216,7 @@ export default function SquadScreen() {
           <Text style={[styles.emptyTitle, { color: c.text }]}>{t('squad.sign_in')}</Text>
         </View>
       ) : loading && !squad ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+        <View style={{ flex: 1 }}><ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} /></View>
       ) : !squad ? (
         <View style={styles.center}>
           <Text style={{ fontSize: 40 }}>⚠️</Text>
@@ -223,7 +224,7 @@ export default function SquadScreen() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
           keyboardShouldPersistTaps="handled"
         >
@@ -468,6 +469,7 @@ export default function SquadScreen() {
           </Card>
         </ScrollView>
       )}
+      <ScreenBottomBanner background={c.bg} />
     </View>
   );
 }
@@ -479,7 +481,7 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, marginTop: 1 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
-  center: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, gap: 8 },
+  center: { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
   hero: { backgroundColor: ACCENT, borderRadius: 18, padding: 18, alignItems: 'center' },
   heroRank: { color: '#FDE68A', fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },

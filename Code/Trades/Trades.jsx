@@ -2285,7 +2285,7 @@ const TradeList = ({ route }) => {
 
       />
 
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
 
       {/* {!isProStatus && <View style={{ alignSelf: 'center' }}>
         {isAdVisible && (

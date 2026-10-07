@@ -34,6 +34,7 @@ import CardIcon from './cardIcons';
 import { openPack, errorKey, peekCardsState } from './cardsApi';
 import { bestPull, revealTier } from './cardMath';
 import { RARITY_STYLE, STAR_PACK_COST, themeOf, FINISH_STYLE } from './cardConfig';
+import useDarkSystemBars from '../Helper/useDarkSystemBars';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.65)';
@@ -111,6 +112,7 @@ export default function PackOpeningScreen() {
   const setId = params?.setId || 'all';
   const source = params?.source || 'free';
   const theme = themeOf(params?.theme);
+  useDarkSystemBars(theme.stage[0]);
   const st = peekCardsState();
   const set = st?.sets?.find((s) => s.id === setId);
   // Collector numbers count across every card (the "All Pets" set).
@@ -299,7 +301,7 @@ export default function PackOpeningScreen() {
   );
 
   return (
-    <View style={[styles.root, { backgroundImage: `radial-gradient(ellipse 80% 55% at 50% 42%, ${theme.stage[2]} 0%, ${theme.stage[1]} 45%, ${theme.stage[0]} 100%)` }]}>
+    <View style={[styles.root, { paddingBottom: insets.bottom, backgroundImage: `radial-gradient(ellipse 80% 55% at 50% 42%, ${theme.stage[2]} 0%, ${theme.stage[1]} 45%, ${theme.stage[0]} 100%)` }]}>
       <View style={[styles.top, { paddingTop: insets.top + 6 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
           <Icon name="close" size={26} color={INK} />
@@ -321,7 +323,7 @@ export default function PackOpeningScreen() {
               width={packW}
               theme={params?.theme || 'island'}
               title={t(`pet_cards.sets.${setId}`, { defaultValue: set?.names?.en || '' })}
-              subtitle={t('pet_cards.three_cards')}
+              subtitle={source === 'birthday' ? t('birthdays.pack_subtitle') : t('pet_cards.three_cards')}
               topOffset={sealY}
               topRotate={sealR.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-28deg'] })}
               glow={theme.accent}

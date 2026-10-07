@@ -31,38 +31,29 @@ import i18n from '../../../i18n';
 
 const MAX_GROUP_MEMBERS = 50; // Maximum members per group
 
-/**
- * Get user's group where they are admin/creator
- * @param {Object} firestoreDB - Firestore database instance
- * @param {String} userId - User ID
- * @returns {Promise<{success: boolean, groupId?: string, groupData?: object}>}
- */
-export const getUserAdminGroup = async (firestoreDB, userId) => {
-  if (!firestoreDB || !userId) {
-    return { success: false };
-  }
+// How many active groups one player may own at a time (owner decision,
+// 2026-10-07: was 1). Client-side only, like the rest of group creation.
+export const MAX_GROUPS_PER_USER = 2;
 
+/**
+ * Every active group the user created (newest first), at most
+ * MAX_GROUPS_PER_USER + 1 so an over-limit account still reads as full.
+ * @returns {Promise<Array<{groupId: string, groupData: object}>>}
+ */
+export const getUserAdminGroups = async (firestoreDB, userId) => {
+  if (!firestoreDB || !userId) return [];
   try {
-    const groupsQuery = query(
+    const snapshot = await getDocs(query(
       collection(firestoreDB, 'groups'),
       where('createdBy', '==', userId),
-      where('isActive', '==', true)
-    );
-    const snapshot = await getDocs(groupsQuery);
-
-    if (!snapshot.empty) {
-      const groupDoc = snapshot.docs[0];
-      return {
-        success: true,
-        groupId: groupDoc.id,
-        groupData: groupDoc.data(),
-      };
-    }
-
-    return { success: false };
+      where('isActive', '==', true),
+    ));
+    return snapshot.docs
+      .map((d) => ({ groupId: d.id, groupData: d.data() }))
+      .sort((a, b) => (b.groupData?.createdAt?.toMillis?.() || 0) - (a.groupData?.createdAt?.toMillis?.() || 0));
   } catch (error) {
-    console.error('Error getting user admin group:', error);
-    return { success: false };
+    console.error('Error getting user admin groups:', error);
+    return [];
   }
 };
 
@@ -102,13 +93,12 @@ export const createGroup = async (firestoreDB, appdatabase, creatorData, memberI
     return { success: false, error: i18n.t('chat.group_desc_required') };
   }
 
-  // Check if user already has a group as admin/creator
-  const existingGroup = await getUserAdminGroup(firestoreDB, creatorData.id);
-  if (existingGroup.success) {
+  // Up to MAX_GROUPS_PER_USER groups as admin/creator at a time.
+  const ownGroups = await getUserAdminGroups(firestoreDB, creatorData.id);
+  if (ownGroups.length >= MAX_GROUPS_PER_USER) {
     return {
       success: false,
-      error: i18n.t('groups.errors.one_group_limit'),
-      existingGroupId: existingGroup.groupId,
+      error: i18n.t('groups.errors.group_limit', { max: MAX_GROUPS_PER_USER }),
     };
   }
 

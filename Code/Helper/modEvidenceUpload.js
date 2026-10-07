@@ -107,13 +107,13 @@ export const pickEvidenceImages = async (alreadyPicked = 0) => {
  * '[object Object]'. Every attach failed with ENOENT. Unwrap `.uri`, the way
  * all eight other call sites in the app do.
  */
-const uploadOne = async (uri) => {
+const uploadOne = async (uri, folder) => {
   // returnableOutputType matches the other call sites: safeCompressImage only
   // checks that the compressor returned *a string*, so base64 would sail
   // through its guard and be used as a path.
   const compressed = await safeCompressImage(uri, { returnableOutputType: 'uri' }).catch(() => null);
   const local = compressed?.uri || uri;
-  const remotePath = `mod-evidence/${uuidv4()}.jpg`;
+  const remotePath = `${folder}/${uuidv4()}.jpg`;
 
   const base64 = await RNFS.readFile(String(local).replace('file://', ''), 'base64');
   // global.atob, not bare atob: it exists at runtime (UploadModal relies on
@@ -148,14 +148,16 @@ const uploadOne = async (uri) => {
  * to ban without it.
  *
  * `onProgress(done, total)` fires after each upload so the button can count.
+ * `folder` is the bare-UUID prefix: player reports use 'report-images' (the
+ * /user_reports rule only accepts URLs under it).
  */
-export const uploadEvidence = async (uris = [], onProgress) => {
+export const uploadEvidence = async (uris = [], onProgress, folder = 'mod-evidence') => {
   const list = (Array.isArray(uris) ? uris : []).filter(Boolean).slice(0, MAX_EVIDENCE_IMAGES);
   if (list.length === 0) return [];
 
   const urls = [];
   for (const uri of list) {
-    urls.push(await uploadOne(uri));
+    urls.push(await uploadOne(uri, folder));
     if (typeof onProgress === 'function') onProgress(urls.length, list.length);
   }
   return urls;

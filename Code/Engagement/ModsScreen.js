@@ -28,6 +28,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import { useTranslation } from 'react-i18next';
 import config from '../Helper/Environment';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 // 30 min, like the profile cache: a MOD who renames or changes their
 // picture shows the new one within half an hour (was 6 h). The roster
@@ -368,14 +369,14 @@ const ModsScreen = () => {
       )}
 
       {loading ? (
-        <ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} />
+        <View style={{ flex: 1 }}><ActivityIndicator size="large" color={config.colors.primary} style={{ marginTop: 40 }} /></View>
       ) : (
         <FlatList
           removeClippedSubviews={false}
           data={mods}
           keyExtractor={item => item.uid}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 30 }}
+          contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -392,6 +393,7 @@ const ModsScreen = () => {
           }
         />
       )}
+      <ScreenBottomBanner background={bgColor} />
 
       {/* Profile BottomDrawer */}
       <ProfileBottomDrawer

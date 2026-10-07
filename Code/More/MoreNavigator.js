@@ -15,13 +15,26 @@ import HDWallpaperScreen from '../ValuesScreen/HDwallpaper';
 import ServerScreen from '../ValuesScreen/ServerScreen';
 import ScammerDatabaseScreen from '../ValuesScreen/ScammerDatabaseScreen';
 import NewsScreen from '../ValuesScreen/News';
-import NewsFeedbackReport from '../ValuesScreen/AdminReport';
+import AdminReportsInbox from '../ValuesScreen/AdminReport';
+import ReportScreen from '../Reports/ReportScreen';
+import BannerAdComponent from '../Ads/bannerAds';
+import { useLocalState } from '../LocalGlobelStats';
 
 const Stack = createNativeStackNavigator();
 
+// Bottom banner for the More screens, like every other tab's main screens.
+// The tab bar sits under it, so no nav-bar spacer is needed here.
+const MoreBanner = () => {
+  const { localState } = useLocalState();
+  return localState.isPro ? null : <BannerAdComponent collapsible />;
+};
+
 // The tool screens were built for the old top-tab body, which had an 8 pt side margin.
-const Body = ({ background, children }) => (
-  <View style={[styles.body, { backgroundColor: background }]}>{children}</View>
+const Body = ({ background, children, ad = true }) => (
+  <View style={[styles.flex1, { backgroundColor: background }]}>
+    <View style={styles.body}>{children}</View>
+    {ad && <MoreBanner />}
+  </View>
 );
 
 export const MoreStack = ({ selectedTheme }) => {
@@ -47,7 +60,12 @@ export const MoreStack = ({ selectedTheme }) => {
   return (
     <Stack.Navigator screenOptions={headerOptions}>
       <Stack.Screen name="MoreHome" options={{ headerShown: false }}>
-        {(props) => <MoreHubScreen {...props} background={background} />}
+        {(props) => (
+          <View style={[styles.flex1, { backgroundColor: background }]}>
+            <MoreHubScreen {...props} background={background} />
+            <MoreBanner />
+          </View>
+        )}
       </Stack.Screen>
       <Stack.Screen name="MoreWallpapers" options={{ title: t('tabs.hd_wallpaper') }}>
         {() => <Body background={background}><HDWallpaperScreen /></Body>}
@@ -61,9 +79,13 @@ export const MoreStack = ({ selectedTheme }) => {
       <Stack.Screen name="MoreNews" options={{ title: t('tabs.news') }}>
         {() => <Body background={background}><NewsScreen /></Body>}
       </Stack.Screen>
+      {/* A form with a send button: no banner next to it. */}
+      <Stack.Screen name="MoreReport" options={{ title: t('reports.title') }}>
+        {() => <Body background={background} ad={false}><ReportScreen /></Body>}
+      </Stack.Screen>
       {isAdmin && (
-        <Stack.Screen name="MoreAdmin" options={{ title: 'Admin' }}>
-          {() => <Body background={background}><NewsFeedbackReport /></Body>}
+        <Stack.Screen name="MoreAdmin" options={{ title: 'Reports inbox' }}>
+          {() => <Body background={background} ad={false}><AdminReportsInbox /></Body>}
         </Stack.Screen>
       )}
     </Stack.Navigator>
@@ -71,6 +93,7 @@ export const MoreStack = ({ selectedTheme }) => {
 };
 
 const styles = StyleSheet.create({
+  flex1: { flex: 1 },
   body: { flex: 1, paddingHorizontal: 8 },
 });
 

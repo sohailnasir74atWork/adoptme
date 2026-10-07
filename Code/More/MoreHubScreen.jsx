@@ -24,6 +24,8 @@ export const MORE_ICONS = {
   scammer: require('../../assets/more-hub/scammer.png'),
   news: require('../../assets/more-hub/news.png'),
   admin: require('../../assets/more-hub/admin.png'),
+  birthdays: require('../../assets/more-hub/birthdays.png'),
+  reports: require('../../assets/more-hub/reports.png'),
 };
 
 const chunkPairs = (items) => {
@@ -45,9 +47,11 @@ const MoreHubScreen = ({ navigation, background }) => {
       { key: 'servers', screen: 'MoreServers', title: t('more_hub.servers_title'), desc: t('more_hub.servers_desc'), color: '#2563EB' },
       { key: 'scammer', screen: 'MoreScammers', title: t('tabs.scammer_db'), desc: t('more_hub.scammer_desc'), color: '#DC2626' },
       { key: 'news', screen: 'MoreNews', title: t('tabs.news'), desc: t('more_hub.news_desc'), color: '#EA580C' },
+      { key: 'birthdays', screen: 'Birthdays', title: t('birthdays.title'), desc: t('more_hub.birthdays_desc'), color: '#EC4899' },
+      { key: 'reports', screen: 'MoreReport', title: t('reports.title'), desc: t('more_hub.reports_desc'), color: '#7C3AED' },
     ];
     // Staff-only card, left in English like the rest of the staff tools.
-    if (isAdmin) list.push({ key: 'admin', screen: 'MoreAdmin', title: 'Admin', desc: 'Feedback and poll results', color: '#0D9488' });
+    if (isAdmin) list.push({ key: 'admin', screen: 'MoreAdmin', title: 'Admin', desc: 'Complaints, ideas and old feedback', color: '#0D9488' });
     return list;
   }, [t, isAdmin]);
 

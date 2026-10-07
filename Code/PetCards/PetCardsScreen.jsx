@@ -26,6 +26,8 @@ import { isMockActive } from './cardsApi';
 import { useGlobalState } from '../GlobelStats';
 import useStarBalance from '../Engagement/useStarBalance';
 import DailyStarRewards from '../Engagement/DailyStarRewards';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
+import useDarkSystemBars from '../Helper/useDarkSystemBars';
 
 const BG = '#0B0816';
 const CARD = 'rgba(255,255,255,0.06)';
@@ -46,6 +48,7 @@ function useClock() {
 }
 
 function OddsSheet({ visible, onClose, set, t }) {
+  const insets = useSafeAreaInsets();
   const odds = set?.odds || {};
   const row = (label, value, color) => (
     <View key={label} style={styles.oddsRow}>
@@ -61,7 +64,7 @@ function OddsSheet({ visible, onClose, set, t }) {
       <View style={styles.sheetBackdrop}>
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 24 }}>
             <Text style={styles.sheetTitle}>{t('pet_cards.odds_title', { set: set ? setName(t, set) : '' })}</Text>
             <Text style={styles.sheetSub}>{t('pet_cards.odds_intro')}</Text>
             <Text style={styles.oddsHead}>{t('pet_cards.odds_slots')}</Text>
@@ -104,6 +107,7 @@ export default function PetCardsScreen() {
   const packSets = useMemo(() => sets.filter((s) => s.kind === 'pack' && s.open && s.total > 0), [sets]);
   const current = packSets.find((s) => s.id === setId) || packSets[0] || null;
   const theme = themeOf(current?.theme);
+  useDarkSystemBars(theme.stage[0]);
   const progress = current ? setProgress(catalog, owned, current.id) : null;
 
   const albums = useMemo(() => sets
@@ -158,7 +162,7 @@ export default function PetCardsScreen() {
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: theme.stage[0] }]}>
       <Header t={t} navigation={navigation} wallet={wallet} stars={starBalance} onStars={() => setStarsOpen(true)} onOdds={() => setOddsOpen(true)} />
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
         {loading && !current ? <ActivityIndicator color="#fff" style={{ marginTop: 80 }} /> : null}
@@ -301,6 +305,7 @@ export default function PetCardsScreen() {
         <Text style={styles.disclaimer}>{t('pet_cards.disclaimer')}</Text>
         {__DEV__ && isMockActive() ? <Text style={[styles.disclaimer, { color: '#FBBF24' }]}>DEV: local mock (037 not deployed)</Text> : null}
       </ScrollView>
+      <ScreenBottomBanner background={theme.stage[0]} />
       <OddsSheet visible={oddsOpen} onClose={() => setOddsOpen(false)} set={current} t={t} />
       <DailyStarRewards visible={starsOpen} onClose={() => setStarsOpen(false)} db={appdatabase} uid={uid} isDarkMode />
     </View>

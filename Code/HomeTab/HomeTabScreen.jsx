@@ -29,6 +29,7 @@ import { getPassCount, onSquadPassesChange, canStillJoin } from '../Helper/squad
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
+import BirthdayHomeCard from '../Birthdays/BirthdayHomeCard';
 import { GAMES, GAME_ICONS, openMiniGame } from '../Engagement/miniGames';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
@@ -625,6 +626,9 @@ const HomeTabScreen = ({ selectedTheme }) => {
             ))}
           </View>
 
+          {/* ═══ BIRTHDAYS: your celebration, the "show it?" ask, or today's birthdays ═══ */}
+          <BirthdayHomeCard userId={user?.id} userName={user?.displayName} />
+
           {/* ═══ PET CARDS ═══ */}
           <PetCardsHomeCard userId={user?.id} requireSignIn={requireSignIn} />
 
@@ -848,7 +852,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
       </ScrollView>
 
       {/* ═══ Sticky Banner Ad (outside ScrollView) ═══ */}
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
 
 
 

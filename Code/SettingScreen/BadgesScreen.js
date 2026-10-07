@@ -27,6 +27,7 @@ import { getStarStatus } from '../Engagement/starUtils';
 import DailyStarRewards from '../Engagement/DailyStarRewards';
 import SafeLottieView from '../Helper/SafeLottieView';
 import { getIdentity, getBadges } from '../Supabase/userBackend';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 // Lottie files for XP levels
 const LEVEL_LOTTIE = {
@@ -428,6 +429,7 @@ const BadgesScreen = ({ navigation }) => {
 
           <View style={{ height: 40 }} />
         </ScrollView>
+        <ScreenBottomBanner background={isDark ? '#0f172a' : '#f1f5f9'} />
 
         {/* Hidden shareable card — captured by ViewShot */}
         <View style={{ position: 'absolute', left: -9999 }}>

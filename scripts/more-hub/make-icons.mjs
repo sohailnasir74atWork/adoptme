@@ -10,6 +10,8 @@
  *   scammer    Scammer DB      (a red warning shield under a magnifier)
  *   news       News            (a megaphone)
  *   admin      Admin reports   (a clipboard with a bar chart)
+ *   birthdays  Birthdays       (a pink cake with three lit candles)
+ *   reports    Complaints & ideas (a purple speech bubble with a "!" and a lit bulb)
  *
  * Glossy toy style to sit next to the assets/home-actions art: soft gradients,
  * a white gloss, a soft dark outline so they read on light and dark cards.
@@ -146,6 +148,49 @@ const ICONS = {
      <rect x="38" y="21" width="6" height="28" rx="1.8" fill="#FBBF24"/>
      <path d="M19 49.5 H45" stroke="#CBD5E1" stroke-width="1.4" stroke-linecap="round"/>
      ${sparkle(56, 12, 5, '#FDE68A')}`),
+
+  // A pink layer cake with white icing and three lit candles: Birthdays.
+  birthdays: svg(
+    grad('cake', [[0, '#FBCFE8'], [0.45, '#EC4899'], [1, '#BE185D']])
+      + grad('flame', [[0, '#FEF9C3'], [0.5, '#FDE047'], [1, '#F97316']])
+      + grad('plate', [[0, '#F8FAFC'], [1, '#CBD5E1']]),
+    `<ellipse cx="32" cy="56" rx="26" ry="5.5" fill="url(#plate)" stroke="${OUTLINE}" stroke-width="1.4"/>
+     <rect x="11" y="31" width="42" height="24" rx="7" fill="url(#cake)" stroke="${OUTLINE}" stroke-width="1.6"/>
+     <path d="M11 37 C11 33 14 31 18 31 H46 C50 31 53 33 53 37 V39 C51 41.5 49 41.5 47.5 39 C46 42.5 43 42.5 41.5 39 C40 43.5 36.5 43.5 35 39
+              C33.5 42.5 30.5 42.5 29 39 C27.5 43.5 24 43.5 22.5 39 C21 42 18 42 16.5 39 C15 41.5 12.5 41.5 11 39 Z"
+           fill="#FFFFFF" stroke="${OUTLINE}" stroke-width="1.2" stroke-linejoin="round"/>
+     <rect x="18" y="45" width="5" height="2.2" rx="1.1" fill="#FDE047" transform="rotate(-20 20 46)"/>
+     <rect x="29" y="48" width="5" height="2.2" rx="1.1" fill="#67E8F9" transform="rotate(15 31 49)"/>
+     <rect x="40" y="45" width="5" height="2.2" rx="1.1" fill="#A7F3D0" transform="rotate(-10 42 46)"/>
+     <rect x="24" y="51" width="4" height="2" rx="1" fill="#FFFFFF" opacity="0.8"/>
+     ${[19.5, 30, 40.5].map((x, i) => `
+       <rect x="${x}" y="17" width="4.5" height="15" rx="1.6" fill="${['#60A5FA', '#FBBF24', '#A78BFA'][i]}" stroke="${OUTLINE}" stroke-width="1"/>
+       <path d="M${x} 21 L${x + 4.5} 19 M${x} 25 L${x + 4.5} 23 M${x} 29 L${x + 4.5} 27" stroke="rgba(255,255,255,0.7)" stroke-width="1.2"/>
+       <path d="M${x + 2.25} 6 C${x + 6} 10.5 ${x + 5.5} 15.5 ${x + 2.25} 15.5 C${x - 1} 15.5 ${x - 1.5} 10.5 ${x + 2.25} 6 Z" fill="url(#flame)" stroke="rgba(194,65,12,0.55)" stroke-width="0.8"/>`).join('')}
+     <path d="M16 33.5 C20 32.6 26 32.4 30 32.6" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+     ${sparkle(55, 13, 5, '#FDE68A')}
+     ${sparkle(8, 22, 3.5, '#FBCFE8')}`),
+
+  // A purple speech bubble with a white "!" (complaints) and a lit bulb (ideas).
+  reports: svg(
+    grad('bubble', [[0, '#DDD6FE'], [0.45, '#8B5CF6'], [1, '#6D28D9']])
+      + grad('bulb', [[0, '#FEF9C3'], [0.55, '#FDE047'], [1, '#F59E0B']])
+      + grad('cap', [[0, '#E2E8F0'], [1, '#64748B']]),
+    `<path d="M7 12 C7 8.5 9.5 6 13 6 H43 C46.5 6 49 8.5 49 12 V33 C49 36.5 46.5 39 43 39 H24 L14 48 V39 H13 C9.5 39 7 36.5 7 33 Z"
+           fill="#4C1D95" transform="translate(0 2)"/>
+     <path d="M7 12 C7 8.5 9.5 6 13 6 H43 C46.5 6 49 8.5 49 12 V33 C49 36.5 46.5 39 43 39 H24 L14 48 V39 H13 C9.5 39 7 36.5 7 33 Z"
+           fill="url(#bubble)" stroke="${OUTLINE}" stroke-width="1.6" stroke-linejoin="round"/>
+     <path d="M13 9 H43 C45.5 9 46 11.5 44.5 12 C34 10.6 22 10.6 11.5 12 C10.3 11.5 10.8 9 13 9 Z" fill="rgba(255,255,255,0.5)"/>
+     <rect x="25.5" y="14" width="5" height="14" rx="2.5" fill="#FFFFFF"/>
+     <circle cx="28" cy="33" r="2.9" fill="#FFFFFF"/>
+     <g fill="none" stroke="#FDE047" stroke-width="2.2" stroke-linecap="round">
+       <path d="M47 34 L45 31"/><path d="M58 34 L60 31"/><path d="M62.5 42 H59.5"/>
+     </g>
+     <circle cx="52.5" cy="44" r="9" fill="url(#bulb)" stroke="${OUTLINE}" stroke-width="1.4"/>
+     <path d="M48.5 41 C49.5 38.6 51.5 37.8 53.5 38" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+     <rect x="48.5" y="52" width="8" height="7" rx="2" fill="url(#cap)" stroke="${OUTLINE}" stroke-width="1.1"/>
+     <path d="M48.5 55.5 H56.5" stroke="rgba(15,23,42,0.35)" stroke-width="1"/>
+     ${sparkle(9, 54, 4.5, '#DDD6FE')}`),
 };
 
 fs.mkdirSync(OUT, { recursive: true });

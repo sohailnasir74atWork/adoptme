@@ -55,6 +55,7 @@ export const errorKey = (e) => {
   if (/free pack already opened/.test(m)) return 'free_used';
   if (/star pack limit/.test(m)) return 'star_limit';
   if (/no bonus packs/.test(m)) return 'no_bonus';
+  if (/birthday pack not available/.test(m)) return 'birthday_used';
   if (/pack not available/.test(m)) return 'pack_closed';
   if (/no cards in this pack/.test(m)) return 'pack_empty';
   if (/not enough shards/.test(m)) return 'shards';
@@ -73,6 +74,11 @@ export const setCardsUser = (uid) => {
 };
 
 export const isMockActive = () => !!mock;
+
+/** __DEV__ only: the Birthdays preview opens its pack against the local mock. */
+export const enableCardsMockForPreview = () => {
+  if (__DEV__ && !mock) mock = require('./cardsMock').default;
+};
 
 export async function getCardsState({ force = false } = {}) {
   if (!force && stateCache && stateCache.uid === currentUid && Date.now() - stateCache.at < STATE_TTL_MS) {
@@ -120,7 +126,7 @@ const afterChange = (wallet) => {
   if (stateCache && wallet) stateCache = { ...stateCache, at: Date.now(), data: { ...stateCache.data, wallet } };
 };
 
-/** source: 'free' | 'stars' | 'bonus' */
+/** source: 'free' | 'stars' | 'bonus' | 'birthday' (once a year, supabase/049) */
 export async function openPack(setId, source) {
   const data = await call('open_card_pack', { p_set: setId, p_source: source });
   afterChange(data?.wallet);

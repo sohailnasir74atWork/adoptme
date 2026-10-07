@@ -97,6 +97,15 @@ exports.seedAllRosters = rosters.seedAllRosters;
 // See functions/runStaffElections.js.
 exports.runStaffElections = require('./runStaffElections').runStaffElections;
 
+// Birthday push: once a day, today's birthdays (supabase/049). See functions/notifyBirthdays.js.
+exports.notifyBirthdays = require('./notifyBirthdays').notifyBirthdays;
+
+// A player corrects their birthday's month/day once (supabase/050). See functions/updateBirthday.js.
+exports.updateBirthday = require('./updateBirthday').updateBirthday;
+
+// Birthday-wish pushes: first wish + one summary 8 h later (supabase/051). See functions/notifyBirthdayWishes.js.
+exports.notifyBirthdayWishes = require('./notifyBirthdayWishes').notifyBirthdayWishes;
+
 // Mod ratings: server-counted tally (skips banned/muted and new accounts).
 // See functions/modVoteTally.js.
 const modVotes = require('./modVoteTally');

@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState, useCallback, useEffect } from 'react';
+import React, { memo, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { getSafeTextColor, RainbowText, isMultiColorText, getMultiColorPalette } from '../../Helper/contrastHelper';
 import {
   FlatList,
@@ -28,6 +28,7 @@ import MessageActionDrawer from './MessageActionDrawer';
 import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 import FramedAvatar from './FramedAvatar';
 import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
+import { BirthdayCake } from '../../Birthdays/BirthdayBits';
 
 // Above this many pets a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
@@ -52,7 +53,9 @@ const GroupMessageList = ({
   onReaction, // Callback to react to a message
   onTranslate, // Callback to translate a message
   onReport, // Callback to report a message
-  onPinMessage, // Callback to pin a message
+  onPinMessage, // Callback to pin / unpin a message
+  canPin = false, // The group's creator may pin too (staff always can)
+  pinnedIds = null, // Set of pinned message ids (the drawer then offers Unpin)
 }) => {
   const { theme, isAdmin, appdatabase } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -65,6 +68,22 @@ const GroupMessageList = ({
 
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [actionDrawerVisible, setActionDrawerVisible] = useState(false);
+
+  const scrollRetryRef = useRef(0);
+  const handleScrollToIndexFailed = useCallback((info) => {
+    const list = flatListRef?.current;
+    if (!list) return;
+    list.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    // At most three retries per jump; the window reopens after 2 s.
+    if (scrollRetryRef.current >= 3) return;
+    scrollRetryRef.current += 1;
+    if (scrollRetryRef.current === 1) setTimeout(() => { scrollRetryRef.current = 0; }, 2000);
+    setTimeout(() => {
+      try {
+        flatListRef?.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+      } catch (e) { /* the next failure callback retries */ }
+    }, 250);
+  }, [flatListRef]);
 
   // Frame border color cycling removed — was causing full-list re-renders every 1.5s.
   // Frames now render with a static primary color (borderColors[0]).
@@ -301,6 +320,7 @@ const GroupMessageList = ({
                     >
                       {senderName}
                     </Text>
+                    <BirthdayCake uid={item.senderId} />
 
                     {/* Group chats never flag app-wide Admin/Mod; the rest as everywhere. */}
                     <UserBadgeRail
@@ -659,6 +679,9 @@ const GroupMessageList = ({
         }
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        // Jumping to a reply or a pin far up the list: the row isn't laid
+        // out yet, so get close by the average row height, then retry.
+        onScrollToIndexFailed={handleScrollToIndexFailed}
       />
       <MessageActionDrawer
         visible={actionDrawerVisible}
@@ -675,6 +698,8 @@ const GroupMessageList = ({
         onDelete={onDeleteMessage || null}
         onDeleteAll={onDeleteAllMessages || null}
         onPinMessage={onPinMessage || null}
+        canPin={canPin}
+        isPinned={!!(selectedMessage && pinnedIds?.has(selectedMessage.id))}
         isAdminOrMod={isAdminOrMod}
         userId={userId}
         isDarkMode={isDarkMode}

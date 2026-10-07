@@ -19,9 +19,33 @@
 // awaits it before calling load(), so no ad is ever requested before consent is
 // resolved and the config lands. Safe to call any number of times from anywhere
 // — the work runs exactly once, so the consent form shows at most once.
+// Exception: when consent from an earlier session already allows ads, the
+// refresh runs alongside setRequestConfiguration/initialize instead of in
+// front of them (canRequestAdsFromLastSession below).
+import { Platform } from 'react-native';
 import { MobileAds, MaxAdContentRating, AdsConsent } from 'react-native-google-mobile-ads';
+import { getTrackingStatus } from 'react-native-tracking-transparency';
 
 let initPromise = null;
+
+// Consent the user gave in an earlier session is kept on the device by UMP and
+// is enough to request ads right away: Google's UMP sample initialises the SDK
+// in parallel with the new session's consent refresh whenever canRequestAds()
+// is already true. Waiting for that refresh (a network round trip) is what
+// made the launch ad miss its splash window. First launches, anyone whose
+// consent is still incomplete, and iOS users with the ATT prompt still to come
+// keep waiting for the full flow. getConsentInfo() reads the stored state; it
+// makes no network call.
+export async function canRequestAdsFromLastSession() {
+  try {
+    const info = await AdsConsent.getConsentInfo();
+    if (!info?.canRequestAds) return false;
+    if (Platform.OS === 'ios' && (await getTrackingStatus()) === 'not-determined') return false;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 // Gather UMP consent (requestInfoUpdate + loadAndShowConsentFormIfRequired) so
 // the IAB TCF string exists before the first ad request. Best-effort: a consent
@@ -42,7 +66,16 @@ async function gatherConsent() {
 
 export function ensureAdsInitialized() {
   if (!initPromise) {
-    initPromise = gatherConsent()
+    initPromise = canRequestAdsFromLastSession()
+      .then((alreadyConsented) => {
+        // Earlier consent stands: refresh it alongside init (the form still
+        // shows if this session needs one) instead of in front of it.
+        if (alreadyConsented) {
+          gatherConsent();
+          return undefined;
+        }
+        return gatherConsent();
+      })
       .then(() =>
         MobileAds().setRequestConfiguration({
           // 'T' (Teen) opens up Teen-rated inventory that AdMob's default 'G'

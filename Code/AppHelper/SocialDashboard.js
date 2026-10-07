@@ -20,6 +20,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import config from '../Helper/Environment';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import { useTranslation } from 'react-i18next';
 
 // ✅ Constants for optimization
@@ -633,6 +634,7 @@ const SocialDashboard = () => {
                     )}
                 </View>
             )}
+            <ScreenBottomBanner background={isDark ? '#000' : '#F2F2F7'} />
 
             {/* Profile Drawer */}
             <ProfileBottomDrawer

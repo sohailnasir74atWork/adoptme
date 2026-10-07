@@ -35,6 +35,7 @@ import { ref, update } from '@react-native-firebase/database';
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from 'react-native-popup-menu';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import { handleBloxFruit, handleadoptme } from '../SettingScreen/settinghelper';
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
 import { isMatch } from '../Helper/searchHelper';
@@ -1290,7 +1291,11 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
           }}
         />
       </GestureHandlerRootView>
-      {!localState.isPro && !fromChat && <BannerAdComponent />}
+      {/* Browse mode is the full-screen Pet Values page (no tab bar); the
+          picker modes live inside a drawer that pads itself. */}
+      {isBrowseMode
+        ? <ScreenBottomBanner background={getThemeColors(isDarkMode).bg} />
+        : !localState.isPro && !fromChat && <BannerAdComponent collapsible />}
     </>
   );
 });

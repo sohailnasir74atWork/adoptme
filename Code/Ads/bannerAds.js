@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { useLocalState } from '../LocalGlobelStats';
@@ -20,6 +20,10 @@ const npaRequiredFor = (status) =>
 const BannerAdComponent = ({
   adType = 'banner',
   visible = true,
+  // Collapsible banner, Android only: pass it on main screens, never on chat
+  // screens (their input bar sits right above the banner, and the expanded
+  // first impression would cover it). See requestOptions below.
+  collapsible = false,
 }) => {
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
@@ -67,14 +71,20 @@ const BannerAdComponent = ({
   // BannerAd component below doesn't see a new object reference on every
   // render (which would otherwise force a fresh ad request).
   //
-  // Collapsible banners removed on every screen (owner decision, 2026-10-04):
-  // no `networkExtras.collapsible`, so the first impression never expands
-  // over the content above the banner.
+  // Collapsible banners are back on Android main screens (owner decision,
+  // 2026-10-07). Removing them on 2026-10-04 halved what an Android banner
+  // impression earned (AdMob, same days, old vs new build: US $0.39 → $0.16
+  // eCPM, inside personalised traffic, so not a consent effect). The first
+  // request of a session expands over the content above the banner until the
+  // user collapses it; refreshes are ordinary banners. iOS banners earned the
+  // same without it, so iOS stays a plain strip.
+  const isCollapsible = collapsible && Platform.OS === 'android';
   const requestOptions = useMemo(
     () => ({
       requestNonPersonalizedAdsOnly: npaRequiredFor(localState?.consentStatus),
+      ...(isCollapsible ? { networkExtras: { collapsible: 'bottom' } } : {}),
     }),
-    [localState?.consentStatus],
+    [localState?.consentStatus, isCollapsible],
   );
 
   if (!visible) return null;

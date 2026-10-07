@@ -29,6 +29,10 @@ const MessageActionDrawer = ({
     onDeleteAll,
     onPinMessage,
     isAdminOrMod,
+    // Pin for someone who isn't staff (a group's creator), and whether this
+    // message is already pinned (the row then reads Unpin).
+    canPin = false,
+    isPinned = false,
     userId,
     isDarkMode,
     // Public chat switches this off: regular users must not be able to delete
@@ -202,19 +206,20 @@ const MessageActionDrawer = ({
                                         <Text style={[styles.actionText, { color: '#EF4444' }]}>{t('chat.delete_all')}</Text>
                                     </TouchableOpacity>
                                 )}
-
-                                {/* Pin */}
-                                {onPinMessage && (
-                                    <TouchableOpacity
-                                        style={styles.actionRow}
-                                        activeOpacity={0.6}
-                                        onPress={() => handleAction(onPinMessage)}
-                                    >
-                                        <Icon name="pin-outline" size={20} color={isDarkMode ? '#e2e8f0' : '#334155'} />
-                                        <Text style={styles.actionText}>{t('chat.pin_message')}</Text>
-                                    </TouchableOpacity>
-                                )}
                             </>
+                        )}
+
+                        {/* Pin / Unpin — staff everywhere; a screen can also let
+                            someone else pin (group chats: the group's creator). */}
+                        {onPinMessage && (isAdminOrMod || canPin) && (
+                            <TouchableOpacity
+                                style={styles.actionRow}
+                                activeOpacity={0.6}
+                                onPress={() => handleAction(onPinMessage)}
+                            >
+                                <Icon name={isPinned ? 'pin' : 'pin-outline'} size={20} color={isDarkMode ? '#e2e8f0' : '#334155'} />
+                                <Text style={styles.actionText}>{t(isPinned ? 'chat.unpin_message' : 'chat.pin_message')}</Text>
+                            </TouchableOpacity>
                         )}
 
                         {/* Delete own message (non-admin) — hidden where the host

@@ -1,818 +1,121 @@
-// NewsScreen.jsx
-import React, {
-    useState,
-    useCallback,
-    useMemo,
-    useEffect,
-} from "react";
-import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
-    ScrollView,
-    ActivityIndicator,
-    Alert,
-    TextInput,
-} from "react-native";
-import { useGlobalState } from "../GlobelStats";
-import { ref, push, onValue } from "@react-native-firebase/database";
-import config from "../Helper/Environment";
-import ConditionalKeyboardWrapper from "../Helper/keyboardAvoidingContainer";
-import { useTranslation } from "react-i18next";
+/**
+ * News.js — More ▸ News: the posts admins write in the Admin Dashboard's News
+ * tab, newest first. Each is a heading, a body and the date it was last
+ * updated. Read once per visit (plus pull to refresh) rather than kept on a
+ * live listener: posts change a few times a month at most.
+ *
+ * The polls, quick suggestions and feedback box that used to live here are
+ * gone (owner decision, 2026-10-07). Old builds still show them, and still
+ * write /news_feedback, so that rule stays.
+ */
+
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
+import { useGlobalState } from '../GlobelStats';
+import { getThemeColors } from '../Helper/themeColors';
+import config from '../Helper/Environment';
+import { fetchNews } from './newsApi';
+
+// "Updated" only when the post was edited after it went up (a minute's slack
+// covers the server stamping both fields a moment apart).
+export const newsDateLabel = (item, t, lang) => {
+  const ms = item.updatedAt || item.createdAt;
+  if (!ms) return null;
+  const date = new Date(ms).toLocaleDateString(lang, { day: 'numeric', month: 'long', year: 'numeric' });
+  const edited = item.createdAt && item.updatedAt && item.updatedAt - item.createdAt > 60000;
+  return edited ? t('news.updated_on', { date }) : date;
+};
 
 const NewsScreen = () => {
-    const { appdatabase, theme, user } = useGlobalState(); // assumes 'light' | 'dark'
-    const { t } = useTranslation();
-    const isDark = theme === "dark";
+  const { appdatabase, theme } = useGlobalState();
+  const { t, i18n } = useTranslation();
+  const c = getThemeColors(theme === 'dark');
+  const [items, setItems] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-    // simple theme palette
-    const palette = useMemo(
-        () =>
-            isDark
-                ? {
-                    // 🔳 Very dark background
-                    background: "#000000",          // true black
-
-                    // 🧱 Surfaces clearly separated from bg
-                    card: "#10151A",                // much lighter than bg
-                    subtleCard: "#0B1014",
-
-                    // 🧵 Stronger borders for separation
-                    border: "rgba(255,255,255,0.22)",
-
-                    // ✍️ Text with real contrast
-                    textPrimary: "#FFFFFF",         // pure white
-                    textSecondary: "#D5E2DC",       // very light, still with a soft tint
-
-                    // 🌱 Chips / inputs slightly lifted from bg
-                    chipBg: "#141C20",
-                    inputBg: "#0B1014",
-                    inputBorder: "rgba(255,255,255,0.35)", // clear, visible outline
-                }
-                : {
-                    background: "#f3f7f5",
-                    card: "#ffffff",
-                    subtleCard: "#edf5f1",
-                    border: "rgba(0,0,0,0.06)",
-                    textPrimary: "#0b1510",
-                    textSecondary: "#4c6357",
-                    chipBg: "#edf5f1",
-                    inputBg: "#ffffff",
-                    inputBorder: "rgba(0,0,0,0.08)",
-                },
-        [isDark],
-    );
-
-
-
-    // data from backend
-    const [newsItems, setNewsItems] = useState([]);
-    const [polls, setPolls] = useState([]);
-    const [quickSuggestions, setQuickSuggestions] = useState([]);
-
-    const [newsExists, setNewsExists] = useState(false);
-    const [loadingNews, setLoadingNews] = useState(true);
-
-    // local UI state
-    const [pollAnswers, setPollAnswers] = useState({});
-    const [quickSending, setQuickSending] = useState(false);
-    const [sendingPollId, setSendingPollId] = useState(null);
-    const [customFeedback, setCustomFeedback] = useState("");
-    const [sendingCustom, setSendingCustom] = useState(false);
-
-    // 🔁 Load /news from Firebase
-    useEffect(() => {
-        if (!appdatabase) return;
-
-        setLoadingNews(true);
-
-        const newsRef = ref(appdatabase, "news");
-        const unsubscribe = onValue(newsRef, (snapshot) => {
-            const data = snapshot.val();
-
-            if (!data) {
-                setNewsExists(false);
-                setNewsItems([]);
-                setPolls([]);
-                setQuickSuggestions([]);
-                setLoadingNews(false);
-                return;
-            }
-
-            setNewsExists(true);
-
-            // updates
-            const updatesRaw = data.updates || {};
-            const updatesArr = Object.entries(updatesRaw).map(([id, value]) => ({
-                id,
-                title: value.title ?? "",
-                body: value.body ?? "",
-                tag: value.tag ?? "",
-                order: value.order ?? 0,
-            }));
-            updatesArr.sort((a, b) => a.order - b.order);
-
-            // polls
-            const pollsRaw = data.polls || {};
-            const pollsArr = Object.entries(pollsRaw).map(([id, value]) => {
-                const optionsRaw = value.options || {};
-                const optionsArr = Object.entries(optionsRaw)
-                    .map(([optId, optVal]) => ({
-                        id: optId,
-                        label: optVal.label ?? "",
-                        order: optVal.order ?? 0,
-                    }))
-                    .sort((a, b) => a.order - b.order);
-
-                return {
-                    id,
-                    question: value.question ?? "",
-                    options: optionsArr,
-                    order: value.order ?? 0,
-                };
-            });
-            pollsArr.sort((a, b) => a.order - b.order);
-
-            // quick suggestions
-            const qsRaw = data.quickSuggestions || {};
-            const qsArr = Object.entries(qsRaw)
-                .map(([id, value]) => ({
-                    id,
-                    text: value.text ?? "",
-                    order: value.order ?? 0,
-                }))
-                .sort((a, b) => a.order - b.order);
-
-            setNewsItems(updatesArr);
-            setPolls(pollsArr);
-            setQuickSuggestions(qsArr);
-            setLoadingNews(false);
-        });
-
-        return () => unsubscribe();
-    }, [appdatabase]);
-
-    // send feedback to /news_feedback
-    const sendToFirebase = useCallback(
-        async (payload) => {
-            if (!appdatabase) return;
-            try {
-                const nodeRef = ref(appdatabase, "news_feedback");
-                await push(nodeRef, {
-                    ...payload,
-                    // 👇 who sent it
-                    //
-                    // 2026-09-02 FIX: this read `user?.uid`, but the global user
-                    // object has no `uid` key — it uses `id` (this was the only
-                    // `user?.uid` in the codebase). Every one of the 2,594
-                    // entries written so far therefore stored the literal
-                    // "anonymous", so the admin report had no way to identify a
-                    // reporter. Same for `user?.username`, which doesn't exist
-                    // either — `userName` is the real key, and displayName
-                    // already covered it as the first fallback.
-                    userId: user?.id || "anonymous",
-                    userName: user?.displayName || user?.userName || null,
-                    userEmail: user?.email || null,
-                    createdAt: Date.now(),
-                });
-            } catch (e) {
-                console.log("Error sending news feedback:", e);
-            }
-        },
-        [appdatabase, user] // 👈 include user in deps
-    );
-
-
-    const handlePollVote = useCallback(
-        async (pollId, optionLabel) => {
-            setPollAnswers((prev) => ({
-                ...prev,
-                [pollId]: optionLabel,
-            }));
-
-            if (!appdatabase) return;
-
-            try {
-                setSendingPollId(pollId);
-                await sendToFirebase({
-                    type: "poll_vote",
-                    pollId,
-                    option: optionLabel,
-                });
-                Alert.alert(t("news.thanks_title"), t("news.vote_recorded"));
-            } catch (e) {
-                Alert.alert(t("alert.error"), t("news.vote_failed"));
-            } finally {
-                setSendingPollId(null);
-            }
-        },
-        [appdatabase, sendToFirebase, t]
-    );
-
-    const handleQuickSuggestion = useCallback(
-        async (text) => {
-            if (!appdatabase) {
-                Alert.alert(t("news.thanks_title"), t("news.suggestion_noted"));
-                return;
-            }
-
-            try {
-                setQuickSending(true);
-                await sendToFirebase({
-                    type: "quick_suggestion",
-                    text,
-                });
-                Alert.alert(t("news.thanks_title"), t("news.suggestion_sent"));
-            } catch (e) {
-                Alert.alert(
-                    t("alert.error"),
-                    t("news.suggestion_failed")
-                );
-            } finally {
-                setQuickSending(false);
-            }
-        },
-        [appdatabase, sendToFirebase, t]
-    );
-
-    const handleCustomFeedbackSubmit = useCallback(async () => {
-        const trimmed = customFeedback.trim();
-        if (!trimmed) {
-            Alert.alert(t("news.empty_title"), t("news.empty_message"));
-            return;
-        }
-
-        if (!appdatabase) {
-            setCustomFeedback("");
-            Alert.alert(t("news.thanks_title"), t("news.feedback_noted"));
-            return;
-        }
-
-        try {
-            setSendingCustom(true);
-            await sendToFirebase({
-                type: "custom_feedback",
-                text: trimmed,
-            });
-            setCustomFeedback("");
-            Alert.alert(t("news.thanks_title"), t("news.feedback_sent"));
-        } catch (e) {
-            Alert.alert(
-                t("alert.error"),
-                t("news.feedback_failed")
-            );
-        } finally {
-            setSendingCustom(false);
-        }
-    }, [appdatabase, customFeedback, sendToFirebase, t]);
-
-    // ⏳ loading state
-    if (loadingNews) {
-        return (
-            <View
-                style={[
-                    styles.loadingContainer,
-                    { backgroundColor: palette.background },
-                ]}
-            >
-                <ActivityIndicator
-                    size="small"
-                    color={config.colors.hasBlockGreen}
-                />
-                <Text
-                    style={[
-                        styles.loadingText,
-                        { color: palette.textSecondary },
-                    ]}
-                >
-                    {t("news.checking")}
-                </Text>
-            </View>
-        );
+  const load = useCallback(async () => {
+    if (!appdatabase) return;
+    try {
+      setItems(await fetchNews(appdatabase));
+      setFailed(false);
+    } catch (e) {
+      setFailed(true);
+      setItems((prev) => prev || []);
     }
+  }, [appdatabase]);
 
-    // 🚫 no /news node or completely empty
-    if (!newsExists) {
-        return (
-            <View
-                style={[
-                    styles.loadingContainer,
-                    { backgroundColor: palette.background },
-                ]}
-            >
-                <Text
-                    style={[
-                        styles.sectionTitle,
-                        { color: palette.textPrimary, marginBottom: 4 },
-                    ]}
-                >
-                    {t("news.nothing_new_title")}
-                </Text>
-                <Text
-                    style={[
-                        styles.sectionSubtitle,
-                        { color: palette.textSecondary, textAlign: "center" },
-                    ]}
-                >
-                    {t("news.nothing_new_body")}
-                </Text>
-            </View>
-        );
-    }
+  useEffect(() => { load(); }, [load]);
 
-    // ✅ normal content
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  if (items === null) {
     return (
-        <ConditionalKeyboardWrapper style={{ flex: 1 }} >
-
-            <ScrollView
-                style={[styles.container, { backgroundColor: palette.background }]}
-                contentContainerStyle={styles.contentContainer}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Updates section */}
-                {newsItems.length > 0 && (
-                    <>
-                        <View style={styles.sectionHeaderRow}>
-                            <View>
-                                <Text
-                                    style={[
-                                        styles.sectionTitle,
-                                        { color: palette.textPrimary },
-                                    ]}
-                                >
-                                    {t("news.updates_title")}
-                                </Text>
-                                <Text
-                                    style={[
-                                        styles.sectionSubtitle,
-                                        { color: palette.textSecondary },
-                                    ]}
-                                >
-                                    {t("news.updates_subtitle")}
-                                </Text>
-                            </View>
-                        </View>
-
-                        {newsItems.map((item) => (
-                            <View
-                                key={item.id}
-                                style={[
-                                    styles.newsCard,
-                                    {
-                                        backgroundColor: palette.card,
-                                        borderColor: palette.border,
-                                    },
-                                ]}
-                            >
-                                <View style={styles.newsHeaderRow}>
-                                    <Text
-                                        style={[
-                                            styles.newsTitle,
-                                            { color: palette.textPrimary },
-                                        ]}
-                                    >
-                                        {item.title}
-                                    </Text>
-                                    {!!item.tag && (
-                                        <View
-                                            style={[
-                                                styles.tagChip,
-                                                { backgroundColor: config.colors.hasBlockGreen },
-                                            ]}
-                                        >
-                                            <Text style={styles.tagText}>{item.tag}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                                <Text
-                                    style={[
-                                        styles.newsBody,
-                                        { color: palette.textSecondary },
-                                    ]}
-                                >
-                                    {item.body}
-                                </Text>
-                            </View>
-                        ))}
-
-                        <View style={styles.sectionSpacing} />
-                    </>
-                )}
-
-                {/* Polls section */}
-                {polls.length > 0 && (
-                    <>
-                        <Text
-                            style={[
-                                styles.sectionTitle,
-                                { color: palette.textPrimary },
-                            ]}
-                        >
-                            {t("news.polls_title")}
-                        </Text>
-                        <Text
-                            style={[
-                                styles.sectionSubtitle,
-                                { color: palette.textSecondary },
-                            ]}
-                        >
-                            {t("news.polls_subtitle")}
-                        </Text>
-
-                        {polls.map((poll) => {
-                            const selected = pollAnswers[poll.id];
-                            const loading = sendingPollId === poll.id;
-
-                            return (
-                                <View
-                                    key={poll.id}
-                                    style={[
-                                        styles.pollCard,
-                                        {
-                                            backgroundColor: palette.subtleCard,
-                                            borderColor: palette.border,
-                                        },
-                                    ]}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.pollQuestion,
-                                            { color: palette.textPrimary },
-                                        ]}
-                                    >
-                                        {poll.question}
-                                    </Text>
-                                    {poll.options.map((opt) => {
-                                        const isSelected = selected === opt.label;
-                                        return (
-                                            <TouchableOpacity
-                                                key={opt.id}
-                                                style={[
-                                                    styles.pollOption,
-                                                    {
-                                                        backgroundColor: isSelected
-                                                            ? config.colors.hasBlockGreen
-                                                            : palette.card,
-                                                        borderColor: isSelected
-                                                            ? config.colors.hasBlockGreen
-                                                            : palette.border,
-                                                    },
-                                                ]}
-                                                activeOpacity={0.7}
-                                                onPress={() => handlePollVote(poll.id, opt.label)}
-                                                disabled={loading}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.pollOptionText,
-                                                        {
-                                                            color: isSelected
-                                                                ? "#02120b"
-                                                                : palette.textSecondary,
-                                                            fontWeight: isSelected
-                                                                ? "bold"
-                                                                : "narmal",
-                                                        },
-                                                    ]}
-                                                >
-                                                    {opt.label}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                    {loading && (
-                                        <View style={styles.pollLoadingRow}>
-                                            <ActivityIndicator
-                                                size="small"
-                                                color={config.colors.hasBlockGreen}
-                                            />
-                                            <Text
-                                                style={[
-                                                    styles.pollLoadingText,
-                                                    { color: palette.textSecondary },
-                                                ]}
-                                            >
-                                                {t("news.sending_vote")}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                            );
-                        })}
-
-                        <View style={styles.sectionSpacing} />
-                    </>
-                )}
-
-                {/* Quick suggestions section */}
-                {quickSuggestions.length > 0 && (
-                    <>
-                        <Text
-                            style={[
-                                styles.sectionTitle,
-                                { color: palette.textPrimary },
-                            ]}
-                        >
-                            {t("news.quick_title")}
-                        </Text>
-                        <Text
-                            style={[
-                                styles.helperText,
-                                { color: palette.textSecondary },
-                            ]}
-                        >
-                            {t("news.quick_subtitle")}
-                        </Text>
-
-                        <View className="chipsRow" style={styles.chipsRow}>
-                            {quickSuggestions.map((s) => (
-                                <TouchableOpacity
-                                    key={s.id}
-                                    style={[
-                                        styles.chip,
-                                        {
-                                            backgroundColor: palette.chipBg,
-                                            borderColor: palette.border,
-                                        },
-                                    ]}
-                                    activeOpacity={0.7}
-                                    onPress={() => handleQuickSuggestion(s.text)}
-                                    disabled={quickSending}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.chipText,
-                                            { color: palette.textSecondary },
-                                        ]}
-                                    >
-                                        {s.text}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        {quickSending && (
-                            <View style={styles.pollLoadingRow}>
-                                <ActivityIndicator
-                                    size="small"
-                                    color={config.colors.hasBlockGreen}
-                                />
-                                <Text
-                                    style={[
-                                        styles.pollLoadingText,
-                                        { color: palette.textSecondary },
-                                    ]}
-                                >
-                                    {t("news.sending_suggestion")}
-                                </Text>
-                            </View>
-                        )}
-
-                        <View style={styles.sectionSpacing} />
-                    </>
-                )}
-
-                {/* Question template / free text feedback */}
-                <Text
-                    style={[
-                        styles.sectionTitle,
-                        { color: palette.textPrimary },
-                    ]}
-                >
-                    {t("news.own_words_title")}
-                </Text>
-                <Text
-                    style={[
-                        styles.sectionSubtitle,
-                        { color: palette.textSecondary },
-                    ]}
-                >
-                    {t("news.own_words_subtitle")}
-                </Text>
-
-                <View />
-
-                <View
-                    style={[
-                        styles.feedbackCard,
-                        {
-                            backgroundColor: palette.card,
-                            borderColor: palette.border,
-                        },
-                    ]}
-                >
-                    <Text
-                        style={[
-                            styles.feedbackLabel,
-                            { color: palette.textSecondary },
-                        ]}
-                    >
-                        {t("news.idea_label")}
-                    </Text>
-                    <TextInput
-                        style={[
-                            styles.textInput,
-                            {
-                                backgroundColor: palette.inputBg,
-                                borderColor: palette.inputBorder,
-                                color: palette.textPrimary,
-                            },
-                        ]}
-                        placeholder={t("news.idea_placeholder")}
-                        placeholderTextColor={palette.textSecondary + "99"}
-                        value={customFeedback}
-                        onChangeText={setCustomFeedback}
-                        multiline
-                    />
-                    <TouchableOpacity
-                        style={[
-                            styles.submitButton,
-                            {
-                                backgroundColor: config.colors.hasBlockGreen,
-                                opacity: sendingCustom ? 0.7 : 1,
-                            },
-                        ]}
-                        activeOpacity={0.8}
-                        onPress={handleCustomFeedbackSubmit}
-                        disabled={sendingCustom}
-                    >
-                        {sendingCustom ? (
-                            <ActivityIndicator size="small" color="#02120b" />
-                        ) : (
-                            <Text style={styles.submitButtonText}>{t("news.send_feedback")}</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-            </ScrollView>
-        </ConditionalKeyboardWrapper>
-
+      <View style={styles.center}>
+        <ActivityIndicator color={config.colors.primary} />
+      </View>
     );
+  }
+
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.id}
+      removeClippedSubviews={false}
+      contentContainerStyle={[styles.list, items.length === 0 && { flexGrow: 1 }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={config.colors.primary} />}
+      renderItem={({ item }) => {
+        const date = newsDateLabel(item, t, i18n.language);
+        return (
+          <View style={[styles.card, { backgroundColor: c.bgAlt, borderColor: c.border }]}>
+            {date ? (
+              <View style={styles.dateRow}>
+                <Icon name="calendar-outline" size={13} color={c.textSecondary} />
+                <Text style={[styles.date, { color: c.textSecondary }]}>{date}</Text>
+              </View>
+            ) : null}
+            <Text style={[styles.title, { color: c.text }]} selectable>{item.title}</Text>
+            {item.body ? <Text style={[styles.body, { color: c.text }]} selectable>{item.body}</Text> : null}
+          </View>
+        );
+      }}
+      ListEmptyComponent={
+        <View style={styles.center}>
+          <Text style={styles.emptyIcon}>📰</Text>
+          <Text style={[styles.emptyTitle, { color: c.text }]}>
+            {failed ? t('news.load_failed') : t('news.nothing_new_title')}
+          </Text>
+          {!failed ? (
+            <Text style={[styles.emptyBody, { color: c.textSecondary }]}>{t('news.nothing_new_body')}</Text>
+          ) : null}
+        </View>
+      }
+    />
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    contentContainer: {
-        paddingHorizontal: 12,
-        paddingTop: 12,
-        paddingBottom: 224,
-    },
-
-    loadingContainer: {
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 24,
-    },
-    loadingText: {
-        marginTop: 8,
-        fontSize: 14,
-
-    },
-
-    sectionHeaderRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 6,
-        justifyContent: "space-between",
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 2,
-    },
-    sectionSubtitle: {
-        fontSize: 13,
-
-    },
-    sectionSpacing: {
-        height: 20,
-    },
-
-    newsCard: {
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 10,
-    },
-    newsHeaderRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: 4,
-    },
-    newsTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        flex: 1,
-        paddingRight: 8,
-    },
-    newsBody: {
-        fontSize: 14,
-
-        marginTop: 4,
-        lineHeight: 20,
-    },
-    tagChip: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 999,
-        alignSelf: "flex-start",
-    },
-    tagText: {
-        color: "#02120b",
-        fontSize: 11,
-        fontWeight: 'bold',
-    },
-
-    pollCard: {
-        borderRadius: 16,
-        padding: 12,
-        marginTop: 10,
-        borderWidth: 1,
-    },
-    pollQuestion: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    pollOption: {
-        borderRadius: 999,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        marginVertical: 4,
-        borderWidth: 1,
-    },
-    pollOptionText: {
-        fontSize: 14,
-    },
-    pollLoadingRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 6,
-    },
-    pollLoadingText: {
-        fontSize: 13,
-
-        marginLeft: 6,
-    },
-
-    helperText: {
-        fontSize: 13,
-
-        marginBottom: 6,
-    },
-    chipsRow: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        marginBottom: 8,
-    },
-    chip: {
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        marginRight: 6,
-        marginBottom: 6,
-        borderWidth: 1,
-    },
-    chipText: {
-        fontSize: 13,
-
-    },
-
-    feedbackCard: {
-        borderRadius: 16,
-        padding: 12,
-        borderWidth: 1,
-    },
-    feedbackLabel: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        marginBottom: 6,
-    },
-    textInput: {
-        borderRadius: 10,
-        borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        fontSize: 14,
-
-        minHeight: 80,
-        textAlignVertical: "top",
-        marginBottom: 10,
-    },
-    submitButton: {
-        borderRadius: 999,
-        paddingVertical: 9,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    submitButtonText: {
-        color: "white",
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
+  list: { paddingTop: 10, paddingBottom: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  card: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    marginBottom: 12,
+  },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  date: { fontSize: 12, fontWeight: '600' },
+  title: { fontSize: 17, fontWeight: '800', lineHeight: 23 },
+  body: { fontSize: 14.5, lineHeight: 21, marginTop: 6 },
+  emptyIcon: { fontSize: 40, marginBottom: 10 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyBody: { fontSize: 13.5, marginTop: 6, textAlign: 'center', lineHeight: 19 },
 });
 
 export default NewsScreen;

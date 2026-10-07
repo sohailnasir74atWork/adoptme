@@ -36,6 +36,7 @@ import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } f
 
 import FramedAvatar from './FramedAvatar';
 import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
+import { BirthdayCake } from '../../Birthdays/BirthdayBits';
 
 // Above this many items a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
@@ -417,6 +418,7 @@ const MessagesList = ({
                     <TouchableOpacity onPress={() => handleProfileClick(item)} activeOpacity={0.7} style={messageLayoutStyles.name}>
                       <Text style={styles.userNameText}>{profile.displayName}</Text>
                     </TouchableOpacity>
+                    <BirthdayCake uid={item.senderId} />
 
                     <UserBadgeRail
                       user={{

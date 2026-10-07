@@ -12,6 +12,7 @@ import {
   View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PetCard from './PetCard';
 import CardShine from './CardShine';
@@ -30,6 +31,7 @@ export default function CardViewerModal({
   card, entries, values, total, shards = 0, showcase = null, onClose, onCraft, onShowcase, onFuse, crafting = false,
 }) {
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { width: W } = useWindowDimensions();
   const visible = !!card;
   const owned = Array.isArray(entries) && entries.length > 0;
@@ -93,8 +95,8 @@ export default function CardViewerModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <TouchableOpacity style={styles.close} onPress={onClose} hitSlop={14}>
+      <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <TouchableOpacity style={[styles.close, { top: insets.top + 12 }]} onPress={onClose} hitSlop={14}>
           <Icon name="close" size={28} color={INK} />
         </TouchableOpacity>
 

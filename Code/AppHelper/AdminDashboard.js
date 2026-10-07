@@ -81,6 +81,7 @@ import {
 import { useGlobalState } from '../GlobelStats';
 import { adminApplications, adminReview } from '../Helper/staffElections';
 import ElectionResultsPanel from '../Elections/ElectionResultsPanel';
+import AdminNewsTab from './AdminNewsTab';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2577,6 +2578,11 @@ const AdminDashboard = () => {
           // MODs on this list may badge players under the 3-squad bar (/badge_granters).
           { key: 'badgeAccess', label: 'Badge Access', adminOnly: true },
           { key: 'elections',  label: 'Elections', adminOnly: true },
+          // More ▸ News posts (AdminNewsTab).
+          { key: 'news',       label: 'News', adminOnly: true },
+          // The app-wide on/off switches. They used to sit above every tab,
+          // eating the space the chat and user lists needed.
+          { key: 'switches',   label: 'Switches', adminOnly: true },
         ]
           .filter((t) => !t.adminOnly || isAdmin)
           .map((t) => {
@@ -2597,94 +2603,6 @@ const AdminDashboard = () => {
             );
           })}
       </ScrollView>
-
-      {/* Admin-only: moderator ban/mute kill switch. Hidden from moderators. */}
-      {isAdmin && (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            marginHorizontal: SPACE.lg,
-            // Had marginTop but NO marginBottom, so the next control in
-            // every tab was drawn flush against its bottom edge.
-            marginBottom: SPACE.md,
-            borderRadius: RADIUS.md,
-            borderWidth: 1,
-            borderColor: modControlsEnabled ? C.border : tint(HUE.warn, '55'),
-            backgroundColor: modControlsEnabled ? C.surface : tint(HUE.warn, '12'),
-          }}
-        >
-          {/* An OFF state is a live restriction on the whole mod team, so
-              it is tinted rather than left looking like an idle row. */}
-          <Ionicons
-            name={modControlsEnabled ? 'shield-checkmark' : 'shield-outline'}
-            size={18}
-            color={modControlsEnabled ? HUE.success : HUE.warn}
-            style={{ marginRight: 10 }}
-          />
-          <View style={{ flex: 1, paddingRight: SPACE.md }}>
-            <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>
-              Moderator ban &amp; mute
-            </Text>
-            <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
-              {modControlsEnabled
-                ? 'Moderators can ban & mute'
-                : 'Disabled for moderators — admins unaffected'}
-            </Text>
-          </View>
-          <Switch
-            value={modControlsEnabled}
-            onValueChange={handleToggleModControls}
-            trackColor={{ false: '#767577', true: HUE.success }}
-            thumbColor="#FFF"
-          />
-        </View>
-      )}
-
-      {/* Admin-only: let every player share links and emails in chat
-          (RTDB /links_allowed). ON is the unusual state — the link filter is
-          off for everyone — so that is the one tinted. */}
-      {isAdmin && (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            marginHorizontal: SPACE.lg,
-            marginBottom: SPACE.md,
-            borderRadius: RADIUS.md,
-            borderWidth: 1,
-            borderColor: linksAllowed ? tint(HUE.warn, '55') : C.border,
-            backgroundColor: linksAllowed ? tint(HUE.warn, '12') : C.surface,
-          }}
-        >
-          <Ionicons
-            name={linksAllowed ? 'link' : 'link-outline'}
-            size={18}
-            color={linksAllowed ? HUE.warn : C.textMuted}
-            style={{ marginRight: 10 }}
-          />
-          <View style={{ flex: 1, paddingRight: SPACE.md }}>
-            <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>
-              Links &amp; emails in chat
-            </Text>
-            <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
-              {linksAllowed
-                ? 'Everyone can share links and email addresses'
-                : 'Blocked for players (YouTube & TikTok only) — staff unaffected'}
-            </Text>
-          </View>
-          <Switch
-            value={!!linksAllowed}
-            onValueChange={handleToggleLinks}
-            trackColor={{ false: '#767577', true: HUE.warn }}
-            thumbColor="#FFF"
-          />
-        </View>
-      )}
 
       {activeTab === 'search' && (
         <View style={styles.searchContainer}>
@@ -3129,141 +3047,151 @@ const AdminDashboard = () => {
           {/* Person Selectors */}
           <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
 
-            {/* Person 1 */}
-            <View style={{ marginBottom: 12 }}>
-              <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
-              {chatPerson1 ? (
-                <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                  <Image source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
-                    <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => { setChatPerson1(null); setChatSearch1(''); setChatResults1([]); setChatMessages([]); }} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={22} color={C.textFaint} />
+            {/* Both people picked: one compact row instead of two cards and
+                two full-width buttons, so the conversation gets the screen.
+                Tap a name to swap that person out. */}
+            {chatPerson1 && chatPerson2 ? (
+              <View style={[styles.pairBar, { backgroundColor: C.surface, borderColor: C.border }]}>
+                {[[chatPerson1, 1], [chatPerson2, 2]].map(([p, n]) => (
+                  <React.Fragment key={n}>
+                    {n === 2 ? <Ionicons name="swap-horizontal" size={16} color={C.textFaint} style={{ marginHorizontal: 4 }} /> : null}
+                    <TouchableOpacity
+                      style={styles.pairPerson}
+                      onPress={() => {
+                        if (n === 1) { setChatPerson1(null); setChatSearch1(''); setChatResults1([]); } else { setChatPerson2(null); setChatSearch2(''); setChatResults2([]); }
+                        setChatMessages([]);
+                      }}
+                    >
+                      <Image source={{ uri: p.avatar }} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#DDD' }} />
+                      <Text style={{ color: C.text, fontSize: 13.5, fontWeight: '600', marginLeft: 6, flexShrink: 1 }} numberOfLines={1}>{p.displayName}</Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                ))}
+                <TouchableOpacity onPress={() => loadChat(true)} disabled={loadingChat} style={styles.pairIcon} hitSlop={6}>
+                  <Ionicons name="refresh" size={19} color={HUE.accent} />
+                </TouchableOpacity>
+                {isAdmin && (
+                  <TouchableOpacity onPress={deletePrivateChat} disabled={loadingChat} style={styles.pairIcon} hitSlop={6}>
+                    <Ionicons name="trash-outline" size={18} color={HUE.danger} />
                   </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  <View style={styles.searchContainer}>
-                    <TextInput
-                      value={chatSearch1}
-                      onChangeText={setChatSearch1}
-                      placeholder="Search user..."
-                      placeholderTextColor={C.textFaint}
-                      style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="search"
-                      onSubmitEditing={() => searchChatUser(chatSearch1, 1)}
-                    />
-                    {chatSearching1 ? (
-                      <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
-                    ) : (
-                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: HUE.mute }]} onPress={() => searchChatUser(chatSearch1, 1)}>
-                        <Ionicons name="person-outline" size={18} color="#FFF" />
-                      </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <>
+              {/* Person 1 */}
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
+                {chatPerson1 ? (
+                  <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                    <Image source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
+                      <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => { setChatPerson1(null); setChatSearch1(''); setChatResults1([]); setChatMessages([]); }} style={{ padding: 4 }}>
+                      <Ionicons name="close-circle" size={22} color={C.textFaint} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View>
+                    <View style={styles.searchContainer}>
+                      <TextInput
+                        value={chatSearch1}
+                        onChangeText={setChatSearch1}
+                        placeholder="Search user..."
+                        placeholderTextColor={C.textFaint}
+                        style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        onSubmitEditing={() => searchChatUser(chatSearch1, 1)}
+                      />
+                      {chatSearching1 ? (
+                        <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
+                      ) : (
+                        <TouchableOpacity style={[styles.searchBtn, { backgroundColor: HUE.mute }]} onPress={() => searchChatUser(chatSearch1, 1)}>
+                          <Ionicons name="person-outline" size={18} color="#FFF" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {chatResults1.length > 0 && (
+                      <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
+                        {chatResults1.map((u) => (
+                          <TouchableOpacity
+                            key={u.id}
+                            onPress={() => { setChatPerson1(u); setChatSearch1(''); setChatResults1([]); }}
+                            style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
+                          >
+                            <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                            <View style={{ flex: 1, marginLeft: 8 }}>
+                              <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                              <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     )}
                   </View>
-                  {chatResults1.length > 0 && (
-                    <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
-                      {chatResults1.map((u) => (
-                        <TouchableOpacity
-                          key={u.id}
-                          onPress={() => { setChatPerson1(u); setChatSearch1(''); setChatResults1([]); }}
-                          style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
-                        >
-                          <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
-                            <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
+                )}
+              </View>
 
-            {/* Person 2 */}
-            <View style={{ marginBottom: 12 }}>
-              <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
-              {chatPerson2 ? (
-                <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                  <Image source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
-                    <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
+              {/* Person 2 */}
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
+                {chatPerson2 ? (
+                  <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                    <Image source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
+                      <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => { setChatPerson2(null); setChatSearch2(''); setChatResults2([]); setChatMessages([]); }} style={{ padding: 4 }}>
+                      <Ionicons name="close-circle" size={22} color={C.textFaint} />
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => { setChatPerson2(null); setChatSearch2(''); setChatResults2([]); setChatMessages([]); }} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={22} color={C.textFaint} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  <View style={styles.searchContainer}>
-                    <TextInput
-                      value={chatSearch2}
-                      onChangeText={setChatSearch2}
-                      placeholder="Search user..."
-                      placeholderTextColor={C.textFaint}
-                      style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="search"
-                      onSubmitEditing={() => searchChatUser(chatSearch2, 2)}
-                    />
-                    {chatSearching2 ? (
-                      <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
-                    ) : (
-                      <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#AF52DE' }]} onPress={() => searchChatUser(chatSearch2, 2)}>
-                        <Ionicons name="person-outline" size={18} color="#FFF" />
-                      </TouchableOpacity>
+                ) : (
+                  <View>
+                    <View style={styles.searchContainer}>
+                      <TextInput
+                        value={chatSearch2}
+                        onChangeText={setChatSearch2}
+                        placeholder="Search user..."
+                        placeholderTextColor={C.textFaint}
+                        style={[styles.searchInput, { backgroundColor: C.fieldBg, color: C.text, borderColor: C.border }]}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        onSubmitEditing={() => searchChatUser(chatSearch2, 2)}
+                      />
+                      {chatSearching2 ? (
+                        <ActivityIndicator size="small" color="#007AFF" style={{ marginLeft: 8 }} />
+                      ) : (
+                        <TouchableOpacity style={[styles.searchBtn, { backgroundColor: '#AF52DE' }]} onPress={() => searchChatUser(chatSearch2, 2)}>
+                          <Ionicons name="person-outline" size={18} color="#FFF" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {chatResults2.length > 0 && (
+                      <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
+                        {chatResults2.map((u) => (
+                          <TouchableOpacity
+                            key={u.id}
+                            onPress={() => { setChatPerson2(u); setChatSearch2(''); setChatResults2([]); }}
+                            style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
+                          >
+                            <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                            <View style={{ flex: 1, marginLeft: 8 }}>
+                              <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
+                              <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     )}
                   </View>
-                  {chatResults2.length > 0 && (
-                    <View style={[styles.chatDropdown, { backgroundColor: C.surface, borderColor: C.border }]}>
-                      {chatResults2.map((u) => (
-                        <TouchableOpacity
-                          key={u.id}
-                          onPress={() => { setChatPerson2(u); setChatSearch2(''); setChatResults2([]); }}
-                          style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
-                        >
-                          <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
-                          <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
-                            <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* Load Chat Button */}
-            {chatPerson1 && chatPerson2 && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: HUE.accent, height: 46, borderRadius: 14, marginBottom: 0 }]}
-                onPress={() => loadChat(true)}
-              >
-                <Ionicons name="chatbubbles" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                <Text style={[styles.buttonText, { fontSize: 15 }]}>View Conversation</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Delete Conversation — admin + owner UID only */}
-            {chatPerson1 && chatPerson2 && isAdmin && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#dc262618', borderWidth: 1, borderColor: '#dc262640', height: 42, borderRadius: 12, marginTop: 8, marginBottom: 0 }]}
-                onPress={deletePrivateChat}
-                disabled={loadingChat}
-              >
-                <Ionicons name="trash-outline" size={16} color="#dc2626" style={{ marginRight: 8 }} />
-                <Text style={[styles.buttonText, { fontSize: 14, color: '#dc2626', fontWeight: '700' }]}>Delete Conversation</Text>
-              </TouchableOpacity>
+                )}
+              </View>
+              </>
             )}
           </View>
 
@@ -3902,38 +3830,72 @@ const AdminDashboard = () => {
             />
           )}
         </View>
+      ) : activeTab === 'news' && isAdmin ? (
+        <AdminNewsTab db={db} uid={currentUser?.id} C={C} accent={HUE.accent} danger={HUE.danger} bottomInset={insets.bottom} />
+      ) : activeTab === 'switches' && isAdmin ? (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: SPACE.lg, paddingBottom: insets.bottom + SPACE.xl }}>
+          {[
+            // `offIsUnusual`: which state gets the warning tint. Turning mod
+            // powers or elections OFF is the unusual state; for links it is ON
+            // (the link filter off for everyone).
+            {
+              key: 'mods', on: modControlsEnabled !== false, onChange: handleToggleModControls, offIsUnusual: true,
+              icon: ['shield-checkmark', 'shield-outline'], title: 'Moderator ban & mute',
+              sub: ['Moderators can ban & mute', 'Disabled for moderators — admins unaffected'],
+            },
+            {
+              key: 'links', on: !!linksAllowed, onChange: handleToggleLinks, offIsUnusual: false,
+              icon: ['link', 'link-outline'], title: 'Links & emails in chat',
+              sub: ['Everyone can share links and email addresses', 'Blocked for players (YouTube & TikTok only) — staff unaffected'],
+            },
+            {
+              key: 'elections', on: !!electionsEnabled, onChange: handleToggleElections, offIsUnusual: true,
+              icon: ['eye-outline', 'eye-off-outline'], title: 'Show Staff Elections to players',
+              sub: ['Live: players can open, apply and vote', 'Off: players see "Coming soon"'],
+            },
+          ].map((sw) => {
+            const unusual = sw.offIsUnusual ? !sw.on : sw.on;
+            const iconColor = unusual ? HUE.warn : sw.offIsUnusual ? HUE.success : C.textMuted;
+            return (
+              <View
+                key={sw.key}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12,
+                  marginBottom: SPACE.md, borderRadius: RADIUS.md, borderWidth: 1,
+                  borderColor: unusual ? tint(HUE.warn, '55') : C.border,
+                  backgroundColor: unusual ? tint(HUE.warn, '12') : C.surface,
+                }}
+              >
+                <Ionicons name={sw.on ? sw.icon[0] : sw.icon[1]} size={18} color={iconColor} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1, paddingRight: SPACE.md }}>
+                  <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>{sw.title}</Text>
+                  <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>{sw.on ? sw.sub[0] : sw.sub[1]}</Text>
+                </View>
+                <Switch
+                  value={sw.on}
+                  onValueChange={sw.onChange}
+                  trackColor={{ false: '#767577', true: sw.offIsUnusual ? HUE.success : HUE.warn }}
+                  thumbColor="#FFF"
+                />
+              </View>
+            );
+          })}
+          <Text style={{ fontSize: 12, color: C.textFaint, lineHeight: 17 }}>
+            Each switch reaches every open app at once.
+          </Text>
+        </ScrollView>
       ) : activeTab === 'elections' && isAdmin ? (
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
           refreshControl={<RefreshControl refreshing={appsLoading} onRefresh={loadApplications} tintColor={HUE.accent} />}
         >
-          <View
-            style={{
-              flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10,
-              marginBottom: SPACE.md, borderRadius: RADIUS.md, borderWidth: 1,
-              borderColor: electionsEnabled ? C.border : tint(HUE.warn, '55'),
-              backgroundColor: electionsEnabled ? C.surface : tint(HUE.warn, '12'),
-            }}
-          >
-            <Ionicons
-              name={electionsEnabled ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
-              color={electionsEnabled ? HUE.success : HUE.warn}
-              style={{ marginRight: 10 }}
-            />
-            <View style={{ flex: 1, paddingRight: SPACE.md }}>
-              <Text style={{ fontSize: 13.5, fontWeight: '600', color: C.text }}>Show Staff Elections to players</Text>
-              <Text style={{ fontSize: 11.5, marginTop: 1, color: C.textMuted }}>
-                {electionsEnabled ? 'Live: players can open, apply and vote' : 'Off: players see "Coming soon"'}
-              </Text>
-            </View>
-            <Switch
-              value={!!electionsEnabled}
-              onValueChange={handleToggleElections}
-              trackColor={{ false: '#767577', true: HUE.success }}
-              thumbColor="#FFF"
-            />
-          </View>
+          <TouchableOpacity onPress={() => setActiveTab('switches')} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.md }}>
+            <Ionicons name={electionsEnabled ? 'eye-outline' : 'eye-off-outline'} size={16} color={electionsEnabled ? HUE.success : HUE.warn} style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: 13, color: C.textMuted, flex: 1 }}>
+              {electionsEnabled ? 'Players can see Staff Elections.' : 'Players see "Coming soon".'}{' '}
+              <Text style={{ color: HUE.accent, fontWeight: '700' }}>Change in Switches</Text>
+            </Text>
+          </TouchableOpacity>
           <Text style={{ fontSize: 13, color: C.textMuted, lineHeight: 19 }}>
             MODs and Junior Mods are elected by players, and you have the final say. You can also appoint
             or remove one by hand from any profile's Mod Tools (no requirements apply), or let someone
@@ -4909,6 +4871,9 @@ const styles = StyleSheet.create({
 
   chatBubble: { maxWidth: '82%', padding: SPACE.md, borderRadius: RADIUS.lg, marginBottom: SPACE.sm, borderWidth: 1 },
   selectedPersonCard: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: RADIUS.md, borderWidth: 1 },
+  pairBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingLeft: 8, paddingRight: 4, borderRadius: RADIUS.md, borderWidth: 1 },
+  pairPerson: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  pairIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   chatDropdown: { borderRadius: RADIUS.md, borderWidth: 1, marginTop: SPACE.xs, overflow: 'hidden' },
   chatDropdownItem: { flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1 },
 

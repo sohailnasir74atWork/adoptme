@@ -18,6 +18,7 @@ import { RARITY_CONFIG, ALL_ITEMS, COSMETIC_TYPE, FRAMES, TEXT_COLORS, TRADE_BG_
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import config from '../Helper/Environment';
 import { serverNowMs } from '../Helper/serverTime';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 // Translated twin of shopUtils.formatTimeRemaining (same thresholds, same
 // cached server-time estimate) — that helper returns hardcoded English.
@@ -330,6 +331,7 @@ const MyCosmeticsScreen = ({ navigation }) => {
           </>
         )}
       </ScrollView>
+      <ScreenBottomBanner background={bgColor} ad={false} />
 
       {/* ═══ FRAME PREVIEW MODAL ═══ */}
       {previewItem && (() => {

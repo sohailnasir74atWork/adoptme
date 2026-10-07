@@ -326,7 +326,7 @@ function App() {
   const handleCloseOfferwall = useCallback(() => setShowofferwall(false), []);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onTouchStartCapture={AppOpenAdManager.noteUserTouch}>
       <NavigationContainer
         ref={navigationRef}
         theme={selectedTheme}
@@ -399,6 +399,7 @@ function App() {
               Elections screen and profile drawers reach it (params: initialTab). */}
           <Stack.Screen name="AdminPanel" options={{ title: 'Admin Dashboard' }} getComponent={() => require('./Code/AppHelper/AdminDashboard').default} />
           <Stack.Screen name="PetCards" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/PetCardsScreen').default} />
+          <Stack.Screen name="Birthdays" options={{ headerShown: false }} getComponent={() => require('./Code/Birthdays/BirthdaysScreen').default} />
           <Stack.Screen name="PackOpening" options={{ headerShown: false, animation: 'fade', gestureEnabled: false }} getComponent={() => require('./Code/PetCards/PackOpeningScreen').default} />
           <Stack.Screen name="CardAlbum" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/CardAlbumScreen').default} />
           <Stack.Screen name="CardWallpaper" options={{ headerShown: false }} getComponent={() => require('./Code/PetCards/CardWallpaper').default} />
@@ -463,9 +464,9 @@ export default function AppWrapper() {
   const { localState, updateLocalState } = useLocalState();
   const { theme } = useGlobalState();
 
-  // Cold-start App Open ad: decided once per launch, shown FROM the splash or
-  // not at all (budget, first-launch and 4 h rules live in Code/Ads/openApp.js).
-  const [splashAdGateOpen, setSplashAdGateOpen] = useState(false);
+  // Launch App Open ad: decided once per launch. The splash no longer waits
+  // for it; it shows when it loads, over the splash or Home, under the window
+  // and no-touch rules in Code/Ads/openApp.js / adPolicy.js.
   const [splashCapReached, setSplashCapReached] = useState(false);
   const coldStartPrepared = useRef(false);
   useEffect(() => {
@@ -476,10 +477,6 @@ export default function AppWrapper() {
       } else {
         AppOpenAdManager.prepareColdStart();
       }
-      AppOpenAdManager.splashGate.then(() => setSplashAdGateOpen(true));
-      // Belt and braces: whatever the ad SDK does, the splash never stays
-      // more than 6 s.
-      setTimeout(() => setSplashAdGateOpen(true), 6000);
     }
     if (localState.showOnBoardingScreen || localState.isPro) return undefined;
     // Registers the AppState listener so the App Open ad shows on every
@@ -494,19 +491,21 @@ export default function AppWrapper() {
     return () => clearTimeout(id);
   }, []);
 
-  // Hide the splash once login is done (or the cap passed) AND the cold-start
-  // ad has either opened over it or been skipped. rAF, not
+  // Hide the splash once login is done (or the cap passed). rAF, not
   // requestIdleCallback: an idle callback can be starved and leave the splash
-  // stuck on screen.
+  // stuck on screen. Once it has faded, Home is on screen, which starts the
+  // launch ad's no-touch rule.
   useEffect(() => {
-    if ((localState.isAppReady || splashCapReached) && splashAdGateOpen) {
+    if (localState.isAppReady || splashCapReached) {
       const raf = requestAnimationFrame(() => {
-        RNBootSplash.hide({ fade: true });
+        Promise.resolve(RNBootSplash.hide({ fade: true }))
+          .catch(() => {})
+          .then(() => AppOpenAdManager.noteHomeVisible());
       });
       return () => cancelAnimationFrame(raf);
     }
     return undefined;
-  }, [localState.isAppReady, splashCapReached, splashAdGateOpen]);
+  }, [localState.isAppReady, splashCapReached]);
 
   const selectedTheme = useMemo(() => {
     if (!theme) {

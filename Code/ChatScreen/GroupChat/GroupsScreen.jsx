@@ -20,7 +20,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
-import { leaveGroup, acceptGroupInvite, declineGroupInvite, updateGroupAvatar, approveJoinRequest, rejectJoinRequest, getAllGroups, sendJoinRequest, deleteGroup } from '../utils/groupUtils';
+import { leaveGroup, acceptGroupInvite, declineGroupInvite, updateGroupAvatar, approveJoinRequest, rejectJoinRequest, getAllGroups, sendJoinRequest, deleteGroup, MAX_GROUPS_PER_USER } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
@@ -1827,7 +1827,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
 
       {/* Create Group / Add Members Button (Only show in Joined Groups tab) */}
       {activeTab === 'joined' && (() => {
-        const myGroup = groups.find(g => g.createdBy === user?.id);
+        // Up to MAX_GROUPS_PER_USER own groups: below that the button still
+        // creates (the picker then offers "Add to <group>" too); at the limit
+        // it only adds players.
+        const atLimit = groups.filter(g => g.createdBy === user?.id).length >= MAX_GROUPS_PER_USER;
         return (
           <TouchableOpacity
             onPress={() => setOnlineUsersListVisible(true)}
@@ -1850,14 +1853,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
             }}
           >
             <Icon
-              name={myGroup ? "person-add" : "add"}
+              name={atLimit ? "person-add" : "add"}
               size={20}
               color="#fff"
             />
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 }} numberOfLines={1}>
-              {myGroup
-                ? t('chat.add_members_in', { groupName: truncateGroupName(myGroup.groupName || t('groups.default_name'), 15) })
-                : t('chat.create_group')}
+              {atLimit ? t('chat.add_players') : t('chat.create_group')}
             </Text>
           </TouchableOpacity>
         );

@@ -26,6 +26,8 @@ try {
 const RARITY = { common: 'common', uncommon: 'uncommon', rare: 'rare', 'ultra rare': 'ultra', legendary: 'legendary' };
 const ORDER = ['common', 'uncommon', 'rare', 'ultra', 'legendary'];
 const FANCY = ['holo', 'gilded', 'mega', 'fullart'];
+// The birthday pack's hit card is always Ultra or Legendary (049).
+const BIRTHDAY_HIT = { ultra: 70, legendary: 30 };
 const today = () => Math.floor(Date.now() / 86400000);
 const key = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -198,10 +200,13 @@ export default {
     } else if (p_source === 'bonus') {
       if (w.bonus_packs <= 0) fail('no bonus packs');
       w.bonus_packs -= 1;
+    } else if (p_source === 'birthday') {
+      // Once per birthday (Code/Birthdays/birthdayMock.js mirrors 049).
+      require('../Birthdays/birthdayMock').default.consumeGift();
     } else fail('bad source');
     w.packs_opened += 1;
 
-    const odds = oddsOf(p_set);
+    const odds = p_source === 'birthday' ? { ...oddsOf(p_set), hit: BIRTHDAY_HIT } : oddsOf(p_set);
     const cards = [];
     let legend = false;
     let holo = false;

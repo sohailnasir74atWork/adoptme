@@ -29,6 +29,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import { getThemeColors } from '../Helper/themeColors';
 import { showErrorMessage } from '../Helper/MessageHelper';
 import config from '../Helper/Environment';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import {
   petKey, getDreamKey, setDreamKeyLocal, alertsEnabled, setAlertsEnabled,
   syncTradeInventory, fetchTradeMatches, fetchTradeMatchStats, reportDreamFound,
@@ -435,7 +436,7 @@ export default function TradeMatchScreen() {
       </View>
 
       {!uid ? (
-        <View style={styles.empty}>
+        <View style={[styles.empty, { flex: 1 }]}>
           <Text style={{ fontSize: 40 }}>🔒</Text>
           <Text style={[styles.emptyTitle, { color: c.text }]}>{t('trade_match.sign_in')}</Text>
         </View>
@@ -449,12 +450,13 @@ export default function TradeMatchScreen() {
           )}
           ListHeaderComponent={renderHeader()}
           ListEmptyComponent={renderEmpty()}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
           initialNumToRender={6}
           windowSize={7}
         />
       )}
+      <ScreenBottomBanner background={c.bg} />
 
       {/* Dream pet picker */}
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>

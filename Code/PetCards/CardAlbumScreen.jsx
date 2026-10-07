@@ -23,6 +23,8 @@ import {
 import { themeOf } from './cardConfig';
 import { craftCard, fuseCard, setShowcase, errorKey } from './cardsApi';
 import { setName } from './PetCardsScreen';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
+import useDarkSystemBars from '../Helper/useDarkSystemBars';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.62)';
@@ -51,6 +53,7 @@ export default function CardAlbumScreen() {
   const albumSets = useMemo(() => sets.filter((s) => s.total > 0).sort((a, b) => a.sort - b.sort), [sets]);
   const set = albumSets.find((s) => s.id === setId) || albumSets[0];
   const theme = themeOf(set?.theme);
+  useDarkSystemBars(theme.stage[0]);
   const p = set ? setProgress(catalog, owned, set.id) : { have: 0, total: 0 };
   const cw = (W - PAD * 2 - GAP * 2) / 3;
   const ch = cw * 1.4;
@@ -166,13 +169,13 @@ export default function CardAlbumScreen() {
         </View>
       </View>
 
-      {loading && !catalog.length ? <ActivityIndicator color="#fff" style={{ marginTop: 40 }} /> : (
+      {loading && !catalog.length ? <View style={{ flex: 1 }}><ActivityIndicator color="#fff" style={{ marginTop: 40 }} /></View> : (
         <FlatList
           data={data}
           keyExtractor={(c) => c.key}
           numColumns={3}
           columnWrapperStyle={{ gap: GAP }}
-          contentContainerStyle={{ paddingHorizontal: PAD, paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ paddingHorizontal: PAD, paddingBottom: 24 }}
           renderItem={renderItem}
           initialNumToRender={12}
           maxToRenderPerBatch={9}
@@ -182,6 +185,7 @@ export default function CardAlbumScreen() {
           ListEmptyComponent={<Text style={styles.empty}>{t(filter === 'owned' ? 'pet_cards.empty_owned' : 'pet_cards.empty_missing')}</Text>}
         />
       )}
+      <ScreenBottomBanner background={theme.stage[0]} />
 
       <CardViewerModal
         card={open}

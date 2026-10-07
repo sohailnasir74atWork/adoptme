@@ -1,4 +1,3 @@
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
@@ -24,7 +23,9 @@ import { getThemeColors } from '../Helper/themeColors';
 import { getStyles } from './settingstyle';
 import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRateApp, handleadoptme, handleShareApp, imageOptions, handleBloxFruit, handleRefresh, handleReport, handleOpenPrivacy, handleOpenChild } from './settinghelper';
 import { usePrivacyOptionsRequired, showPrivacyOptionsForm } from '../Ads/consentOptions';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import EmailUpdatesRow from './EmailUpdatesRow';
+import BirthdayVisibilityRow from '../Birthdays/BirthdayVisibilityRow';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
 import { ensureGoogleSignInConfigured } from '../Firebase/googleSignInConfig';
@@ -499,7 +500,6 @@ const EditProfileDrawerContent = ({
 };
 
 export default function SettingsScreen({ selectedTheme }) {
-  const insets = useSafeAreaInsets();
   const settingsNav = useNavigation();
   const [isDrawerVisible, setDrawerVisible] = useState(false);
   // Public-profile preview. The drawer starts loading the moment it has a
@@ -2875,7 +2875,7 @@ export default function SettingsScreen({ selectedTheme }) {
       <SettingsTabs />
 
       {/* User Profile Section */}
-      {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}>
+      {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={styles.cardContainer}>
           <View style={[styles.optionuserName, styles.option]}>
             {/* flex:1 + minWidth:0 bounds the avatar+name block to the row's
@@ -3177,6 +3177,15 @@ export default function SettingsScreen({ selectedTheme }) {
             />
           )}
 
+          {user?.id && (
+            <BirthdayVisibilityRow
+              uid={user.id}
+              knownDob={user?.dateOfBirth || null}
+              styles={styles}
+              onHaptic={() => triggerHapticFeedback('impactLight')}
+            />
+          )}
+
           {/* Chat availability — two independent doors. Trade chat is what
               opens from the Trades screen; general chat is everywhere else
               (public chat, feed, leaderboard, inbox, profiles). Each switch
@@ -3423,7 +3432,7 @@ export default function SettingsScreen({ selectedTheme }) {
         </View>
       </ScrollView>
 
-        : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}>
+        : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
           {/* <Text style={styles.subtitle}>{t('settings.app_settings')}</Text> */}
           <View style={styles.cardContainer}>
             <View style={styles.option} onPress={() => {
@@ -3655,6 +3664,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
         </ScrollView>}
+      <ScreenBottomBanner ad={false} />
 
       {/* Public profile preview: the shared profile drawer pointed at yourself */}
       {publicProfileTarget && (

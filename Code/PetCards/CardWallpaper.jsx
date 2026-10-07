@@ -34,6 +34,8 @@ import {
   WallpaperArt, WP_STYLES, WP_MAX_PETS, WP_STYLE_ICON, WP_GRADIENTS, WP_LIGHT, WP_DARK, WP_SCENES, WP_MOTIFS, WP_MOTIF_ICON,
 } from './wallpaperStyles';
 import PET_COLORS from './petColors.json';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
+import useDarkSystemBars from '../Helper/useDarkSystemBars';
 
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.62)';
@@ -97,6 +99,7 @@ export default function CardWallpaper() {
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
+  useDarkSystemBars('#0B0816');
   const { width: W } = useWindowDimensions();
   const { catalog, owned, values } = usePetCards();
   const trends = useValueTrends();
@@ -214,7 +217,7 @@ export default function CardWallpaper() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
         {/* Preview: the real-size wallpaper, shown scaled */}
         <View style={{ alignItems: 'center', marginTop: 6 }}>
           <View style={{ width: F.w * scale, height: F.h * scale, borderRadius: format === 'phone' ? 26 : 10, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)', backgroundColor: '#000' }}>
@@ -351,6 +354,7 @@ export default function CardWallpaper() {
         </TouchableOpacity>
         <Text style={styles.note}>{t(`pet_cards.wallpaper_note_${format}`)}</Text>
       </ScrollView>
+      <ScreenBottomBanner background="#0B0816" />
     </View>
   );
 }

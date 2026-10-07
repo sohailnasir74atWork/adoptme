@@ -10,7 +10,6 @@ import {
   RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -22,7 +21,7 @@ import { useLocalState } from '../../LocalGlobelStats';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import ProfileBottomDrawer from './BottomDrawer';
-import BannerAdComponent from '../../Ads/bannerAds';
+import ScreenBottomBanner from '../../Ads/ScreenBottomBanner';
 
 const CACHE_DURATION_MS = 2 * 24 * 60 * 60 * 1000; // 2 days — Top Picks
 const ROSTER_CACHE_MS = 4 * 60 * 60 * 1000;        // 4 hours — Trusted / CMSR
@@ -45,7 +44,6 @@ const LeaderboardScreen = () => {
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
-  const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState('topRated');
   const [topRatedData, setTopRatedData] = useState([]);
@@ -446,7 +444,7 @@ const LeaderboardScreen = () => {
             data={activeData}
             renderItem={activeRenderer}
             keyExtractor={(item) => item.userId}
-            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 16 }]}
             showsVerticalScrollIndicator={false}
             onEndReachedThreshold={0.5}
             onEndReached={() => {
@@ -479,7 +477,7 @@ const LeaderboardScreen = () => {
           </Text>
         )}
 
-        {!localState.isPro && <BannerAdComponent />}
+        <ScreenBottomBanner background={isDarkMode ? '#0f172a' : '#f2f2f7'} />
       </View>
 
       <ProfileBottomDrawer

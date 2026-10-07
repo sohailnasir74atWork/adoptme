@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   TextInput,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -26,7 +27,7 @@ import { getCachedProfile } from '../../Helper/profileCache';
 import { getIdentityBatch, getRolesBatch, getCosmeticsBatch, getRobloxBatch, getIdentity, searchIdentityByName, searchIdentityByEmail } from '../../Supabase/userBackend';
 import CreateGroupModal from './CreateGroupModal';
 import { useHaptic } from '../../Helper/HepticFeedBack';
-import { getUserAdminGroup, addMembersToGroup } from '../utils/groupUtils';
+import { getUserAdminGroups, addMembersToGroup, MAX_GROUPS_PER_USER } from '../utils/groupUtils';
 import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
 import { sendGameInvite } from '../../ValuesScreen/PetGuessingGame/utils/gameInviteSystem';
@@ -73,7 +74,8 @@ const OnlineUsersList = ({
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
 
   // ✅ User's existing group state (only used in 'select' mode)
-  const [userGroup, setUserGroup] = useState(null);
+  // Groups this player owns (up to MAX_GROUPS_PER_USER).
+  const [userGroups, setUserGroups] = useState([]);
   const [checkingGroup, setCheckingGroup] = useState(false);
 
   // ✅ Game invitation state (only used in 'gameInvite' mode)
@@ -95,23 +97,17 @@ const OnlineUsersList = ({
   // ✅ Check if user has existing group (only in 'select' mode)
   useEffect(() => {
     if (mode !== 'select' || !visible || !firestoreDB || !user?.id) {
-      setUserGroup(null);
+      setUserGroups([]);
       return;
     }
 
     setCheckingGroup(true);
     const checkUserGroup = async () => {
       try {
-        // ✅ Pass firestoreDB to query user's existing group
-        const result = await getUserAdminGroup(firestoreDB, user.id);
-        if (result.success) {
-          setUserGroup({ groupId: result.groupId, groupData: result.groupData });
-        } else {
-          setUserGroup(null);
-        }
+        setUserGroups(await getUserAdminGroups(firestoreDB, user.id));
       } catch (error) {
         console.error('Error checking user group:', error);
-        setUserGroup(null);
+        setUserGroups([]);
       } finally {
         setCheckingGroup(false);
       }
@@ -395,8 +391,15 @@ const OnlineUsersList = ({
 
     triggerHapticFeedback('impactMedium');
 
-    // If user has existing group, add members to it
-    if (userGroup?.groupId) {
+    // No group yet: create one with the picked players.
+    if (userGroups.length === 0) {
+      setShowCreateGroupModal(true);
+      return;
+    }
+
+    // Owns one or two: pick which group gets them, or start the second one.
+    // (At most three buttons, which is all an Android alert shows.)
+    const addToGroup = async (groupId) => {
       const selectedIds = Array.from(selectedUserIds);
       setLoading(true);
 
@@ -416,7 +419,7 @@ const OnlineUsersList = ({
         const result = await addMembersToGroup(
           firestoreDB,
           appdatabase,
-          userGroup.groupId,
+          groupId,
           selectedIds,
           {
             id: user.id,
@@ -439,11 +442,18 @@ const OnlineUsersList = ({
       } finally {
         setLoading(false);
       }
-    } else {
-      // Create new group
-      setShowCreateGroupModal(true);
+    };
+
+    const options = userGroups.slice(0, MAX_GROUPS_PER_USER).map((g) => ({
+      text: t('chat.add_to_named_group', { name: g.groupData?.name || g.groupData?.groupName || '—' }),
+      onPress: () => addToGroup(g.groupId),
+    }));
+    if (userGroups.length < MAX_GROUPS_PER_USER) {
+      options.push({ text: t('chat.create_new_group'), onPress: () => setShowCreateGroupModal(true) });
     }
-  }, [selectedUserIds, userGroup, user, appdatabase, allOnlineUsers, searchResults, triggerHapticFeedback]);
+    options.push({ text: t('chat.cancel'), style: 'cancel' });
+    Alert.alert(t('chat.choose_group_title'), null, options);
+  }, [selectedUserIds, userGroups, user, appdatabase, allOnlineUsers, searchResults, triggerHapticFeedback, firestoreDB, t]);
 
   // ✅ Handle group created (navigate to group chat)
   const handleGroupCreated = useCallback((groupId) => {
@@ -694,7 +704,7 @@ const OnlineUsersList = ({
                         disabled={loading}
                       >
                         <Text style={styles.createGroupText}>
-                          {userGroup
+                          {userGroups.length
                             ? t('chat.add_with_count', { number: selectedUserIds.size })
                             : t('chat.create_group_with_count', { number: selectedUserIds.size })}
                         </Text>

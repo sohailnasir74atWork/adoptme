@@ -29,6 +29,7 @@ import { getThemeColors } from '../Helper/themeColors';
 import { showErrorMessage, showSuccessMessage } from '../Helper/MessageHelper';
 import SquadBadge from '../Squad/SquadBadge';
 import RoleCharter, { ROLE_COLOR } from './RoleCharter';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import {
   ROLES, ROLE_RULES, PITCH_MAX, phaseOf, phaseEndsAt, splitDuration, eligibility, blockReasonKey,
   getElections, runForRole, withdraw, castVote, adminOpen, adminCancel, adminDisqualify,
@@ -432,7 +433,7 @@ export default function ElectionsScreen() {
           <Text style={[styles.emptyTitle, { color: c.text }]}>{t('elections.sign_in')}</Text>
         </View>
       ) : loading && !data ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+        <View style={{ flex: 1 }}><ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} /></View>
       ) : !data ? (
         <View style={styles.center}>
           <Text style={{ fontSize: 40 }}>⚠️</Text>
@@ -443,7 +444,7 @@ export default function ElectionsScreen() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
         >
           {!electionsEnabled && (
@@ -551,6 +552,7 @@ export default function ElectionsScreen() {
           <RoleCharter c={c} rules={data?.rules} limits={data?.limits} />
         </ScrollView>
       )}
+      <ScreenBottomBanner background={c.bg} />
 
       {/* Pitch sheet */}
       <Modal visible={!!runFor} transparent animationType="slide" onRequestClose={() => setRunFor(null)}>
@@ -594,7 +596,7 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, marginTop: 1 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
-  center: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, gap: 8 },
+  center: { flex: 1, alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '800', textAlign: 'center' },
   hero: { backgroundColor: ACCENT, borderRadius: 18, padding: 16 },
   hiddenNote: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 12 },

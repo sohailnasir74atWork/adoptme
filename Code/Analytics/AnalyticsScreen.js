@@ -11,7 +11,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
 
-import BannerAdComponent from '../Ads/bannerAds';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import { useTranslation } from 'react-i18next';
 
@@ -1333,11 +1333,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {!isPro && (
-        <View style={{ paddingBottom: Platform.OS === 'android' ? 24 : 0 }}>
-          <BannerAdComponent />
-        </View>
-      )}
+      <ScreenBottomBanner background={c.bg} />
       <SubscriptionScreen
         visible={showOfferwall}
         onClose={() => setShowOfferwall(false)}

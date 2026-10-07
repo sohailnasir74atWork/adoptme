@@ -2163,7 +2163,7 @@ const HomeScreen = ({ selectedTheme }) => {
         </View>
         <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />
       </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent />}
+      {!localState.isPro && <BannerAdComponent collapsible />}
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}

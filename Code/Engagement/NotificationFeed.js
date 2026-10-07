@@ -17,6 +17,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { ref, get, set } from '@react-native-firebase/database';
 import { getNotifications } from '../Supabase/userBackend';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 dayjs.extend(relativeTime);
 
@@ -357,6 +358,7 @@ const NotificationFeed = () => {
           ) : null
         }
       />
+      <ScreenBottomBanner background={bgColor} />
     </View>
   );
 };

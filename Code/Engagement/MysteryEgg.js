@@ -25,6 +25,7 @@ import { getMyCosmetics, syncMyCosmetics, getCachedEggData, setCachedEggXP, setC
 import { EGG_LIST, RARITY_CONFIG, COSMETIC_TYPE, ALL_ITEMS, getCosmeticName } from './shopItems';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import RewardedAdManager from '../Ads/RewardedAdManager';
+import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 
 const { width } = Dimensions.get('window');
 
@@ -893,6 +894,7 @@ const MysteryEggScreen = ({ navigation }) => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      <ScreenBottomBanner background={bgColor} ad={false} />
     </View>
   );
 };
