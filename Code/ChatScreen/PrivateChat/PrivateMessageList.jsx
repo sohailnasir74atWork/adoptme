@@ -59,6 +59,7 @@ const PrivateMessageList = ({
   isPaginating,
   chatKey, // 👈 Add chatKey to construct messagePath for private messages
   otherLastRead, // 👈 Other user's lastRead timestamp for read receipts
+  onTradeInvite, // "Trade in game" line in the safety strip (null when the chat is closed)
 }) => {
   const { theme, isAdmin, api, freeTranslation } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -603,7 +604,7 @@ const PrivateMessageList = ({
       ) : (
         <View style={{ flex: 1 }}>
           <>
-            <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} />
+            <ScamSafetyBox setShowRatingModal={setShowRatingModal} canRate={canRate} hasRated={hasRated} onTradeInvite={onTradeInvite} />
 
             <FlatList
               ref={flatListRef}

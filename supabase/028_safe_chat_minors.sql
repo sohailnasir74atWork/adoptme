@@ -167,6 +167,7 @@ insert into public.safe_chat_templates (id, text_en, category) values
   ('when', 'When can you trade?', 'trade'),
   ('online', 'Are you online?', 'trade'),
   ('thanks', 'Thanks for the trade!', 'trade'),
+  ('trade_server', 'Let''s trade in game! Join me in the Trading Zone server.', 'trade'),
   ('hi', 'Hi!', 'friendly'),
   ('how_are_you', 'How are you?', 'friendly'),
   ('im_good', 'I''m good, thanks!', 'friendly'),
@@ -196,7 +197,7 @@ on conflict (id) do update
 -- Anything no longer in the catalogue stops being sendable. Existing
 -- messages that used it are untouched — this table only gates new inserts.
 delete from public.safe_chat_templates
- where id not in ('interest', 'available', 'what_pets', 'have_item', 'negotiate', 'best_offer', 'add_more', 'add_pets', 'change_item', 'fair_trade', 'make_deal', 'can_do', 'discuss', 'check_inv', 'ready', 'deal_accepted', 'meet_hub', 'when', 'online', 'thanks', 'hi', 'how_are_you', 'im_good', 'yes', 'no', 'ok', 'thank_you', 'youre_welcome', 'please_wait', 'brb', 'im_back', 'good_luck', 'congrats', 'nice_pets', 'have_fun', 'not_interested', 'maybe_later', 'gtg', 'see_you', 'keep_trading', 'no_personal_info', 'stop_asking');
+ where id not in ('interest', 'available', 'what_pets', 'have_item', 'negotiate', 'best_offer', 'add_more', 'add_pets', 'change_item', 'fair_trade', 'make_deal', 'can_do', 'discuss', 'check_inv', 'ready', 'deal_accepted', 'meet_hub', 'when', 'online', 'thanks', 'trade_server', 'hi', 'how_are_you', 'im_good', 'yes', 'no', 'ok', 'thank_you', 'youre_welcome', 'please_wait', 'brb', 'im_back', 'good_luck', 'congrats', 'nice_pets', 'have_fun', 'not_interested', 'maybe_later', 'gtg', 'see_you', 'keep_trading', 'no_personal_info', 'stop_asking');
 -- >>> SEED END <<<
 
 

@@ -46,6 +46,12 @@ export const SAFE_TEMPLATES = [
   T('when',          'When can you trade?',            'trade'),
   T('online',        'Are you online?',                'trade'),
   T('thanks',        'Thanks for the trade!',          'trade'),
+  // "Trade in game" (player request, 2026-10-08): sent from the Invite chip
+  // in the chat's safety strip (PrivateChat/Scamwarning.js) or the drawer's
+  // top row. Its Join chip opens the admin's Trading Zone server
+  // (Helper/tradingServer.js); the link is never in the message, so nobody
+  // can send a different one.
+  T('trade_server',  "Let's trade in game! Join me in the Trading Zone server.", 'trade'),
 
   // ── Friendly / status ───────────────────────────────────────────────
   T('hi',            'Hi!',                            'friendly'),
@@ -102,6 +108,10 @@ export const TEMPLATE_ID_BY_TEXT = SAFE_TEMPLATES.reduce((acc, tpl) => {
 // name. The server re-checks it against the mirrored user_roblox row, which is
 // what stops a modified client from smuggling a sentence through this hole.
 export const GAME_ID_TEMPLATE_ID = 'game_id';
+
+// The "trade in game" invite: a normal template (seeded like the rest) that
+// the drawer and the safety strip send.
+export const TRADE_SERVER_TEMPLATE_ID = 'trade_server';
 
 // Roblox usernames: 3-20 chars, letters/digits/underscore, alphanumeric at
 // both ends, at most one underscore. Written without lookbehind on purpose —

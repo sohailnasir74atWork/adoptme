@@ -41,7 +41,7 @@ import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 import PetModal from './PetsModel';
 import { chatTypeForRoute, fetchChatAvailability, resolveChatBlock } from '../chatAvailability';
 import { resolveSafeChat } from '../../Helper/ageGate';
-import { isAllowedSafeMessage, GAME_ID_TEMPLATE_ID } from '../safeTemplates';
+import { isAllowedSafeMessage, GAME_ID_TEMPLATE_ID, TEMPLATE_BY_ID, TRADE_SERVER_TEMPLATE_ID } from '../safeTemplates';
 import { incrementAndCheckBadge, checkFiveStarBadge, REVIEW_BADGE_THRESHOLDS } from '../GroupChat/badgeUtils';
 import {
   doc,
@@ -996,6 +996,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     }
   }, [myUserId, selectedUserId, selectedUser, user, t, strikeInfo, isMeBanned, myBanDetails, isRTDBConnected, firestoreDB, isAdmin, chatBlockedBy, chatType, appdatabase, isSafeChat]);
 
+  // "Trade in game" line in the safety strip: the same invite as the
+  // quick-messages drawer row. The strip's Join chip opens the server.
+  const sendTradeInvite = useCallback(() => {
+    const tpl = TEMPLATE_BY_ID[TRADE_SERVER_TEMPLATE_ID];
+    return sendMessage(tpl.en, null, [], null, tpl.id);
+  }, [sendMessage]);
+
 
 
   useFocusEffect(
@@ -1301,6 +1308,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 setShowRatingModal={setShowRatingModal}
                 chatKey={chatKey}
                 otherLastRead={otherLastRead}
+                onTradeInvite={isChatUnavailable ? null : sendTradeInvite}
               />
             )}
 

@@ -23,6 +23,8 @@ import {
   SAFE_TEMPLATES,
   TEMPLATE_CATEGORIES,
   GAME_ID_TEMPLATE_ID,
+  TRADE_SERVER_TEMPLATE_ID,
+  TEMPLATE_BY_ID,
   isValidGameId,
 } from '../safeTemplates';
 
@@ -393,6 +395,7 @@ const PrivateMessageInput = ({
   const templateSections = useMemo(() => {
     const byCategory = new Map(TEMPLATE_CATEGORIES.map((c) => [c, []]));
     SAFE_TEMPLATES.forEach((tpl) => {
+      if (tpl.id === TRADE_SERVER_TEMPLATE_ID) return; // its own row at the top
       byCategory.get(tpl.category)?.push({
         ...tpl,
         label: t(tpl.key, { defaultValue: tpl.en }),
@@ -422,6 +425,11 @@ const PrivateMessageInput = ({
       if (onCancelReply && typeof onCancelReply === 'function') onCancelReply();
     }
   }, [onSend, replyTo, onCancelReply]);
+
+  // "Trade in game": the invite template (Join is in the safety strip).
+  const handleSendTradeInvite = useCallback(() => {
+    handleTemplateSelect(TEMPLATE_BY_ID[TRADE_SERVER_TEMPLATE_ID]);
+  }, [handleTemplateSelect]);
 
   // Share the Roblox username saved on this user's own profile — the only way
   // to exchange an in-game name inside a safe chat, and never free-typed.
@@ -756,6 +764,35 @@ const PrivateMessageInput = ({
               style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}
               showsVerticalScrollIndicator={false}
             >
+              {/* Trade in game — sends the invite (the same as the Invite chip
+                  in the chat's safety strip, where Join lives). */}
+              <TouchableOpacity
+                onPress={handleSendTradeInvite}
+                disabled={isSending || isBanned}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  marginBottom: 10,
+                  backgroundColor: isDark ? '#064E3B' : '#D1FAE5',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#10B981' : '#6EE7B7',
+                }}
+              >
+                <Icon name="enter-outline" size={20} color={isDark ? '#A7F3D0' : '#047857'} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: isDark ? '#ECFDF5' : '#064E3B' }} numberOfLines={1}>
+                    {t('chat.trade_server_invite', { defaultValue: 'Trade in game' })}
+                  </Text>
+                  <Text style={{ fontSize: 11.5, marginTop: 1, color: isDark ? '#A7F3D0' : '#047857' }} numberOfLines={2}>
+                    {t('chat.trade_server_invite_sub', { defaultValue: 'Invite them to the Trading Zone server' })}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
               {/* Share game ID — the only in-game name exchange a safe chat
                   allows. Always offered, because it saves everyone typing. */}
               <TouchableOpacity
