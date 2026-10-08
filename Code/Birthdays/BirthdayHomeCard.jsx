@@ -17,6 +17,7 @@ import SafeLottieView from '../Helper/SafeLottieView';
 import { setBirthdayUser, getBirthdayHome, todayBirthdayCount } from './birthdayApi';
 import { daysUntilBirthday } from './birthdayDate';
 import { BIRTHDAY_GRADIENT } from './BirthdayBits';
+import HomeCardArt from '../HomeTab/HomeCardArt';
 
 const COUNTDOWN_DAYS = 7;
 
@@ -57,7 +58,7 @@ export default function BirthdayHomeCard({ userId, userName }) {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <Text style={styles.bigEmoji}>🎂</Text>
+        <HomeCardArt name="cake" />
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{t('birthdays.home_happy', { name: userName || t('birthdays.you') })}</Text>
           <Text style={styles.sub} numberOfLines={2}>
@@ -73,7 +74,7 @@ export default function BirthdayHomeCard({ userId, userName }) {
   if (days != null && days <= COUNTDOWN_DAYS) {
     return (
       <TouchableOpacity key="soon" activeOpacity={0.9} onPress={open} style={[styles.card, { backgroundImage: BIRTHDAY_GRADIENT }]}>
-        <Text style={styles.bigEmoji}>🎈</Text>
+        <HomeCardArt name="balloons" />
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>
             {days === 1 ? t('birthdays.home_soon_tomorrow') : t('birthdays.home_soon', { count: days })}
@@ -91,7 +92,7 @@ export default function BirthdayHomeCard({ userId, userName }) {
   if (todayCount > 0) {
     return (
       <TouchableOpacity key="others" activeOpacity={0.9} onPress={open} style={[styles.card, { backgroundImage: BIRTHDAY_GRADIENT }]}>
-        <Text style={styles.bigEmoji}>🎉</Text>
+        <HomeCardArt name="gift" />
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{t('birthdays.home_others', { count: todayCount })}</Text>
           <Text style={styles.sub} numberOfLines={1}>{t('birthdays.home_send_wish')}</Text>
@@ -110,7 +111,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 8, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
   party: { paddingVertical: 16 },
-  bigEmoji: { fontSize: 30 },
   title: { color: '#fff', fontSize: 16, fontWeight: '900' },
   sub: { color: 'rgba(255,255,255,0.92)', fontSize: 12, marginTop: 2, lineHeight: 16, fontWeight: '600' },
 });
