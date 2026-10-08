@@ -75,6 +75,14 @@ export const setCardsUser = (uid) => {
 
 export const isMockActive = () => !!mock;
 
+/** The pack this player last picked on the Pet Cards screen, or null (then the first open one). */
+export const getLastPackSet = (uid) => {
+  try { return uid ? storage.getString(`pack:${uid}`) || null : null; } catch (e) { return null; }
+};
+export const rememberPackSet = (uid, setId) => {
+  try { if (uid && setId) storage.set(`pack:${uid}`, setId); } catch (e) { /* convenience only */ }
+};
+
 /** __DEV__ only: the Birthdays preview opens its pack against the local mock. */
 export const enableCardsMockForPreview = () => {
   if (__DEV__ && !mock) mock = require('./cardsMock').default;

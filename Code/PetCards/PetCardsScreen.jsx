@@ -22,7 +22,7 @@ import { setProgress, countdown, nextUtcMidnight, bestOwned } from './cardMath';
 import {
   themeOf, RARITIES, FINISHES, RARITY_STYLE, STAR_PACK_COST, STREAK_BONUS_EVERY,
 } from './cardConfig';
-import { isMockActive } from './cardsApi';
+import { isMockActive, getLastPackSet, rememberPackSet } from './cardsApi';
 import { useGlobalState } from '../GlobelStats';
 import useStarBalance from '../Engagement/useStarBalance';
 import DailyStarRewards from '../Engagement/DailyStarRewards';
@@ -34,6 +34,7 @@ const CARD = 'rgba(255,255,255,0.06)';
 const LINE = 'rgba(255,255,255,0.10)';
 const INK = '#F4ECFF';
 const MUTED = 'rgba(244,236,255,0.62)';
+const PACK_EMOJI = { haunted: '🎃', island: '🏝️' };
 
 export const setName = (t, set) =>
   t(`pet_cards.sets.${set.id}`, { defaultValue: set.names?.en || set.id });
@@ -94,7 +95,8 @@ export default function PetCardsScreen() {
   const insets = useSafeAreaInsets();
   const now = useClock();
   const { wallet, sets, catalog, owned, collection, loading, error, reload, uid } = usePetCards();
-  const [setId, setSetId] = useState(route.params?.setId || null);
+  // The last pack the player picked stays picked (it used to reset to the first one every visit).
+  const [setId, setSetId] = useState(route.params?.setId || getLastPackSet(uid));
   const [oddsOpen, setOddsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [starsOpen, setStarsOpen] = useState(false);
@@ -106,6 +108,15 @@ export default function PetCardsScreen() {
 
   const packSets = useMemo(() => sets.filter((s) => s.kind === 'pack' && s.open && s.total > 0), [sets]);
   const current = packSets.find((s) => s.id === setId) || packSets[0] || null;
+  const choosePack = (id) => {
+    setSetId(id);
+    rememberPackSet(uid, id);
+  };
+  const stepPack = (dir) => {
+    const i = packSets.findIndex((s) => s.id === current?.id);
+    const next = packSets[(i + dir + packSets.length) % packSets.length];
+    if (next) choosePack(next.id);
+  };
   const theme = themeOf(current?.theme);
   useDarkSystemBars(theme.stage[0]);
   const progress = current ? setProgress(catalog, owned, current.id) : null;
@@ -174,18 +185,35 @@ export default function PetCardsScreen() {
         {current ? (
           <View style={[styles.hero, { backgroundImage: `radial-gradient(ellipse 90% 70% at 50% 35%, ${theme.stage[2]} 0%, ${theme.stage[1]} 45%, ${theme.stage[0]} 100%)` }]}>
             {packSets.length > 1 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                {packSets.map((s) => (
-                  <TouchableOpacity key={s.id} onPress={() => setSetId(s.id)} style={[styles.chip, s.id === current.id && { backgroundColor: themeOf(s.theme).accent }]}>
-                    <Text style={[styles.chipText, s.id === current.id && { color: '#1A0E00' }]}>{setName(t, s)}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <>
+                <Text style={styles.chooseLabel}>{t('pet_cards.choose_pack')}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                  {packSets.map((s) => (
+                    <TouchableOpacity key={s.id} onPress={() => choosePack(s.id)} style={[styles.chip, s.id === current.id && { backgroundColor: themeOf(s.theme).accent }]}>
+                      <Text style={[styles.chipText, s.id === current.id && { color: '#1A0E00' }]}>
+                        {PACK_EMOJI[s.theme] || '🃏'} {setName(t, s)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
             ) : null}
 
-            <TouchableOpacity activeOpacity={0.9} onPress={() => (free ? open('free') : bonus ? open('bonus') : null)} style={{ alignItems: 'center', marginTop: 8 }}>
-              <PackArt width={170} theme={current.theme} title={setName(t, current)} subtitle={t('pet_cards.three_cards')} glow={free || bonus ? theme.accent : null} />
-            </TouchableOpacity>
+            <View style={styles.packRow}>
+              {packSets.length > 1 ? (
+                <TouchableOpacity onPress={() => stepPack(-1)} style={styles.arrow} hitSlop={8}>
+                  <Icon name="chevron-back" size={22} color={INK} />
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity activeOpacity={0.9} onPress={() => (free ? open('free') : bonus ? open('bonus') : null)}>
+                <PackArt width={170} theme={current.theme} title={setName(t, current)} subtitle={t('pet_cards.three_cards')} glow={free || bonus ? theme.accent : null} />
+              </TouchableOpacity>
+              {packSets.length > 1 ? (
+                <TouchableOpacity onPress={() => stepPack(1)} style={styles.arrow} hitSlop={8}>
+                  <Icon name="chevron-forward" size={22} color={INK} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
 
             {current.endsAt ? (
               <Text style={styles.ends}>{t('pet_cards.ends_on', { date: new Date(current.endsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) })}</Text>
@@ -350,9 +378,12 @@ const styles = StyleSheet.create({
   stars: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14, backgroundColor: 'rgba(250,204,21,0.15)', borderWidth: 1, borderColor: 'rgba(250,204,21,0.4)' },
   starsText: { color: '#FDE68A', fontWeight: '800', fontSize: 13 },
   hero: { marginHorizontal: 16, marginTop: 4, borderRadius: 24, paddingVertical: 18, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: LINE, overflow: 'hidden' },
-  chips: { gap: 8, paddingBottom: 6 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)' },
-  chipText: { color: INK, fontWeight: '800', fontSize: 13 },
+  chooseLabel: { color: MUTED, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center', marginBottom: 8 },
+  chips: { gap: 8, paddingBottom: 6, flexGrow: 1, justifyContent: 'center' },
+  chip: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)' },
+  chipText: { color: INK, fontWeight: '800', fontSize: 14 },
+  packRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 },
+  arrow: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   ends: { color: MUTED, fontSize: 12, fontWeight: '700', marginTop: 12 },
   progressWrap: { alignSelf: 'stretch', marginTop: 12 },
   progressBar: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' },
