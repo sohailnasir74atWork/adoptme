@@ -1294,7 +1294,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       {/* Browse mode is the full-screen Pet Values page (no tab bar); the
           picker modes live inside a drawer that pads itself. */}
       {isBrowseMode
-        ? <ScreenBottomBanner background={getThemeColors(isDarkMode).bg} />
+        ? <ScreenBottomBanner background={getThemeColors(isDarkMode).bg} collapsible />
         : !localState.isPro && !fromChat && <BannerAdComponent collapsible />}
     </>
   );

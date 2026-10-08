@@ -106,6 +106,9 @@ exports.updateBirthday = require('./updateBirthday').updateBirthday;
 // Birthday-wish pushes: first wish + one summary 8 h later (supabase/051). See functions/notifyBirthdayWishes.js.
 exports.notifyBirthdayWishes = require('./notifyBirthdayWishes').notifyBirthdayWishes;
 
+// Keeps two owner-moderated reviews (one dispute) from being edited (2026-10-07).
+exports.guardLockedReviews = require('./guardLockedReviews').guardLockedReviews;
+
 // Mod ratings: server-counted tally (skips banned/muted and new accounts).
 // See functions/modVoteTally.js.
 const modVotes = require('./modVoteTally');

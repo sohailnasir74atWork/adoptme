@@ -10,6 +10,10 @@
  * flex:1 list, and drop insets.bottom from the list's own padding.
  *
  * Tab screens don't need it: the tab bar already sits above the nav bar.
+ *
+ * Plain banner by default. `collapsible` only where the owner chose it (main
+ * screens: Pet Values, Analytics): a collapsible banner's first load expands
+ * over half the page, which on every secondary page is too much.
  */
 
 import React from 'react';
@@ -18,12 +22,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BannerAdComponent from './bannerAds';
 import { useLocalState } from '../LocalGlobelStats';
 
-const ScreenBottomBanner = ({ background, ad = true }) => {
+const ScreenBottomBanner = ({ background, ad = true, collapsible = false }) => {
   const insets = useSafeAreaInsets();
   const { localState } = useLocalState();
   return (
     <>
-      {ad && !localState.isPro && <BannerAdComponent collapsible />}
+      {ad && !localState.isPro && <BannerAdComponent collapsible={collapsible} />}
       <View style={{ height: insets.bottom, backgroundColor: background }} />
     </>
   );

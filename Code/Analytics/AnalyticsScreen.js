@@ -1333,7 +1333,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <ScreenBottomBanner background={c.bg} />
+      <ScreenBottomBanner background={c.bg} collapsible />
       <SubscriptionScreen
         visible={showOfferwall}
         onClose={() => setShowOfferwall(false)}
