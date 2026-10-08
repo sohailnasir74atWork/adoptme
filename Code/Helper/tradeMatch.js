@@ -1,7 +1,8 @@
 /**
  * tradeMatch.js — Trade Match ("get your dream pet") client helpers.
  *
- * Server side: supabase/032_trade_match.sql. The phone keeps a compact copy
+ * Server side: supabase/032_trade_match.sql (and 053: who wants my pets).
+ * The phone keeps a compact copy
  * of the player's PUBLIC trade lists in Supabase:
  *   have = owned pets marked "For Trade"        (availableForTrade === true)
  *   want = wishlist pets marked "Trading"        (availableForTrade === true)
@@ -13,7 +14,8 @@
  *   - sync only when the lists changed (hash per uid), or once a week so an
  *     active player never ages out of matching (rows expire after 120 days);
  *   - coalesce bursts (My Stuff auto-saves every edit) with a short debounce;
- *   - matches are cached on the phone for 10 minutes, stats for 1 hour.
+ *   - matches and wanters are cached on the phone for 10 minutes, stats
+ *     for 1 hour; wanters load only when their tab opens.
  *
  * Everything is keyed by uid, never by the device: the MMKV `ownedPets`
  * cache is per device and survives account switches, so callers pass the
@@ -164,7 +166,9 @@ async function doSync(uid, ownedPets, wishlistPets, dreamKey, lang) {
   if (error) throw error;
   storage.set(`hash_${uid}`, hash);
   storage.set(`syncAt_${uid}`, Date.now());
-  storage.remove(`matches_${uid}`); // lists changed -> matches are stale
+  // Lists changed -> both directions are stale.
+  storage.remove(`matches_${uid}`);
+  storage.remove(`wanters_${uid}`);
   return data;
 }
 
@@ -222,6 +226,23 @@ export const fetchTradeMatches = async (uid, { force = false } = {}) => {
   if (error) throw error;
   const list = Array.isArray(data) ? data : [];
   writeCache(`matches_${uid}`, list);
+  return list;
+};
+
+/**
+ * Players who want pets the player lists For Trade (053), their dream pet
+ * first: [{ uid, name, avatar, dream, dreamKey, full, wants, gives, givesCount, ... }].
+ */
+export const fetchPetWanters = async (uid, { force = false } = {}) => {
+  if (!uid) return [];
+  if (!force) {
+    const cached = readCache(`wanters_${uid}`, MATCHES_TTL_MS);
+    if (cached) return cached;
+  }
+  const { data, error } = await supabase.rpc('find_pet_wanters', { p_limit: 30 });
+  if (error) throw error;
+  const list = Array.isArray(data) ? data : [];
+  writeCache(`wanters_${uid}`, list);
   return list;
 };
 

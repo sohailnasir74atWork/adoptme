@@ -7,9 +7,13 @@
  *    something the player offers.
  * 3. One tap opens a private chat with them.
  * 4. "I got it! 🎉" moves the dream pet to My Pets and makes a share card.
+ * 5. The "Want my pets" tab is the other way round (supabase/053): players
+ *    whose wishlist has a pet the player lists For Trade, their dream first,
+ *    and what they could give.
  *
  * Reads: 1 Firestore doc (the player's own pets) + 1 Supabase RPC per open,
- * both cached (matches 10 min, stats 1 h).
+ * both cached (matches 10 min, stats 1 h); the wanters RPC only when its tab
+ * opens (cached 10 min).
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +21,7 @@ import {
   View, Text, FlatList, StyleSheet, Image, TouchableOpacity, ActivityIndicator,
   RefreshControl, Alert, Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, getDoc, setDoc, serverTimestamp as fsServerTimestamp } from '@react-native-firebase/firestore';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -32,7 +36,7 @@ import config from '../Helper/Environment';
 import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import {
   petKey, getDreamKey, setDreamKeyLocal, alertsEnabled, setAlertsEnabled,
-  syncTradeInventory, fetchTradeMatches, fetchTradeMatchStats, reportDreamFound,
+  syncTradeInventory, fetchTradeMatches, fetchPetWanters, fetchTradeMatchStats, reportDreamFound,
 } from '../Helper/tradeMatch';
 
 const ACCENT = '#8B5CF6';
@@ -79,37 +83,45 @@ const PetChip = React.memo(({ entry, imgBase, highlight, c }) => {
   );
 });
 
+// Avatar, name, the gold "dream" pill, the green "perfect match" pill, Message.
+const CardHead = ({ m, c, dreamText, onMessage }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.cardHead}>
+      {m.avatar
+        ? <Image source={{ uri: m.avatar }} style={styles.avatar} />
+        : <View style={[styles.avatar, styles.avatarFallback]}><Icon name="person" size={18} color="#fff" /></View>}
+      <View style={{ flex: 1 }}>
+        <View style={styles.row}>
+          <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{m.name || t('chat.anonymous')}</Text>
+          {m.verified && <Icon name="checkmark-circle" size={14} color="#3B82F6" style={{ marginLeft: 4 }} />}
+        </View>
+        <View style={[styles.row, { marginTop: 4, flexWrap: 'wrap', gap: 6 }]}>
+          {m.dream && (
+            <View style={[styles.pill, { backgroundColor: GOLD + '22' }]}>
+              <Text style={[styles.pillText, { color: GOLD }]}>⭐ {dreamText}</Text>
+            </View>
+          )}
+          {m.full && (
+            <View style={[styles.pill, { backgroundColor: GREEN + '22' }]}>
+              <Text style={[styles.pillText, { color: GREEN }]}>🤝 {t('trade_match.perfect_match')}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+      <TouchableOpacity style={styles.msgBtn} onPress={() => onMessage(m)} activeOpacity={0.85}>
+        <Icon name="chatbubble-ellipses" size={16} color="#fff" />
+        <Text style={styles.msgText}>{t('trade_match.message')}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 const MatchCard = React.memo(({ m, dreamKey, imgBase, c, onMessage }) => {
   const { t } = useTranslation();
   return (
     <View style={[styles.card, { backgroundColor: c.bgAlt, borderColor: m.dream ? GOLD : c.border }]}>
-      <View style={styles.cardHead}>
-        {m.avatar
-          ? <Image source={{ uri: m.avatar }} style={styles.avatar} />
-          : <View style={[styles.avatar, styles.avatarFallback]}><Icon name="person" size={18} color="#fff" /></View>}
-        <View style={{ flex: 1 }}>
-          <View style={styles.row}>
-            <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{m.name || t('chat.anonymous')}</Text>
-            {m.verified && <Icon name="checkmark-circle" size={14} color="#3B82F6" style={{ marginLeft: 4 }} />}
-          </View>
-          <View style={[styles.row, { marginTop: 4, flexWrap: 'wrap', gap: 6 }]}>
-            {m.dream && (
-              <View style={[styles.pill, { backgroundColor: GOLD + '22' }]}>
-                <Text style={[styles.pillText, { color: GOLD }]}>⭐ {t('trade_match.has_dream')}</Text>
-              </View>
-            )}
-            {m.full && (
-              <View style={[styles.pill, { backgroundColor: GREEN + '22' }]}>
-                <Text style={[styles.pillText, { color: GREEN }]}>🤝 {t('trade_match.perfect_match')}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        <TouchableOpacity style={styles.msgBtn} onPress={() => onMessage(m)} activeOpacity={0.85}>
-          <Icon name="chatbubble-ellipses" size={16} color="#fff" />
-          <Text style={styles.msgText}>{t('trade_match.message')}</Text>
-        </TouchableOpacity>
-      </View>
+      <CardHead m={m} c={c} dreamText={t('trade_match.has_dream')} onMessage={onMessage} />
 
       <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>{t('trade_match.has_label')}</Text>
       <View style={styles.chips}>
@@ -132,9 +144,46 @@ const MatchCard = React.memo(({ m, dreamKey, imgBase, c, onMessage }) => {
   );
 });
 
+// "Want my pets": what of mine they want (their dream first) and what they could give.
+const WanterCard = React.memo(({ m, imgBase, c, onMessage }) => {
+  const { t } = useTranslation();
+  const dreamPet = m.dream ? (m.wants || []).find((e) => e.k === m.dreamKey) : null;
+  const gives = (m.gives || []).slice(0, 6);
+  const more = Math.max(0, (m.givesCount || 0) - gives.length);
+  return (
+    <View style={[styles.card, { backgroundColor: c.bgAlt, borderColor: m.dream ? GOLD : c.border }]}>
+      <CardHead m={m} c={c} dreamText={t('trade_match.their_dream', { pet: dreamPet?.n || '' })} onMessage={onMessage} />
+
+      <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>{t('trade_match.wants_label')}</Text>
+      <View style={styles.chips}>
+        {(m.wants || []).slice(0, 6).map((e, i) => (
+          <PetChip key={`w${i}`} entry={e} imgBase={imgBase} highlight={e.k === m.dreamKey} c={c} />
+        ))}
+      </View>
+
+      <Text style={[styles.sectionLabel, { color: c.textSecondary }]}>{t('trade_match.could_give')}</Text>
+      {gives.length ? (
+        <View style={styles.chips}>
+          {gives.map((e, i) => (
+            <PetChip key={`g${i}`} entry={e} imgBase={imgBase} highlight={e.w} c={c} />
+          ))}
+          {more > 0 && (
+            <View style={[styles.chip, { backgroundColor: c.bgAlt, borderColor: c.border }]}>
+              <Text style={[styles.chipText, { color: c.textSecondary }]}>{t('trade_match.more_count', { count: more })}</Text>
+            </View>
+          )}
+        </View>
+      ) : (
+        <Text style={[styles.muted, { color: c.textMuted }]}>{t('trade_match.wants_other')}</Text>
+      )}
+    </View>
+  );
+});
+
 export default function TradeMatchScreen() {
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const { user, theme, firestoreDB } = useGlobalState();
   const { localState, updateLocalState } = useLocalState();
@@ -154,6 +203,9 @@ export default function TradeMatchScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [alertsOn, setAlertsOn] = useState(alertsEnabled());
   const [proofPet, setProofPet] = useState(null);
+  const [tab, setTab] = useState(route.params?.tab === 'wanters' ? 'wanters' : 'matches');
+  const [wanters, setWanters] = useState(null);   // null = not loaded yet
+  const [wantersError, setWantersError] = useState(false);
   const shotRef = useRef(null);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -195,13 +247,35 @@ export default function TradeMatchScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // After load() has synced the player's lists, so "who wants mine" is current.
+  const loadWanters = useCallback(async ({ force = false } = {}) => {
+    if (!uid) return;
+    setWantersError(false);
+    try {
+      const list = await fetchPetWanters(uid, { force });
+      if (mounted.current) setWanters(list);
+    } catch (e) {
+      console.warn('[TradeMatch] wanters failed:', e?.message);
+      if (mounted.current) { setWantersError(true); setWanters((w) => w || []); }
+    }
+  }, [uid]);
+
   // First visit with a wishlist but nothing to search for: open the dream
   // picker once, so "add to wishlist, then see matches" just works.
   const autoPickedRef = useRef(false);
 
-  const onRefresh = useCallback(() => { setRefreshing(true); load({ force: true }); }, [load]);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load({ force: true });
+    if (tab === 'wanters') loadWanters({ force: true });
+  }, [load, loadWanters, tab]);
 
   const forTradeCount = useMemo(() => owned.filter((p) => p?.availableForTrade === true).length, [owned]);
+
+  // Nothing For Trade: nobody can want anything yet, so don't ask the server.
+  useEffect(() => {
+    if (tab === 'wanters' && wanters === null && !loading && forTradeCount > 0) loadWanters();
+  }, [tab, wanters, loading, forTradeCount, loadWanters]);
   const choices = useMemo(() => wishlistChoices(wishlist), [wishlist]);
   const dreamPet = useMemo(() => choices.find((x) => x.key === dreamKey)?.pet || null, [choices, dreamKey]);
   const wantCount = useMemo(
@@ -318,7 +392,22 @@ export default function TradeMatchScreen() {
 
   const renderHeader = () => (
     <View>
+      {/* Have what I want / Want my pets */}
+      <View style={[styles.tabs, { backgroundColor: c.bgAlt, borderColor: c.border }]}>
+        {[['matches', t('trade_match.tab_have')], ['wanters', t('trade_match.tab_wanters')]].map(([k, label]) => (
+          <TouchableOpacity
+            key={k}
+            style={[styles.tab, tab === k && { backgroundColor: ACCENT }]}
+            onPress={() => setTab(k)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.tabText, { color: tab === k ? '#fff' : c.textSecondary }]} numberOfLines={1}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Dream pet */}
+      {tab === 'matches' ? (
       <View style={[styles.dreamCard, { backgroundColor: isDark ? '#2e1065' : '#F5F3FF', borderColor: ACCENT + '55' }]}>
         {dreamPet ? (
           <>
@@ -355,6 +444,9 @@ export default function TradeMatchScreen() {
           </>
         )}
       </View>
+      ) : (
+        <Text style={[styles.muted, { color: c.textSecondary }]}>{t('trade_match.wanters_hint')}</Text>
+      )}
 
       {/* Social proof */}
       {!!stats && (stats.traders > 0 || stats.found7d > 0) && (
@@ -381,11 +473,40 @@ export default function TradeMatchScreen() {
         </TouchableOpacity>
       )}
 
-      {matches.length > 0 && (
+      {tab === 'matches' && matches.length > 0 && (
         <Text style={[styles.listTitle, { color: c.text }]}>{t('trade_match.matches_title')}</Text>
+      )}
+      {tab === 'wanters' && wanters?.length > 0 && (
+        <Text style={[styles.listTitle, { color: c.text }]}>{t('trade_match.wanters_title')}</Text>
       )}
     </View>
   );
+
+  const renderWantersEmpty = () => (loading ? (
+    <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+  ) : forTradeCount === 0 ? (
+    <View style={styles.empty}>
+      <Text style={{ fontSize: 40 }}>🏷️</Text>
+      <Text style={[styles.emptyTitle, { color: c.text }]}>{t('trade_match.wanters_need_title')}</Text>
+      <Text style={[styles.muted, { color: c.textSecondary, textAlign: 'center' }]}>{t('trade_match.need_for_trade')}</Text>
+      <TouchableOpacity style={[styles.primaryBtn, { marginTop: 8 }]} onPress={() => navigation.navigate('MyStuffScreen', { initialTab: 'pets' })} activeOpacity={0.85}>
+        <Text style={styles.primaryText}>{t('trade_match.open_my_pets')}</Text>
+      </TouchableOpacity>
+    </View>
+  ) : wanters === null && !wantersError ? (
+    <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+  ) : wantersError ? (
+    <View style={styles.empty}>
+      <Text style={{ fontSize: 40 }}>⚠️</Text>
+      <Text style={[styles.emptyTitle, { color: c.text }]}>{t('trade_match.error_load')}</Text>
+    </View>
+  ) : (
+    <View style={styles.empty}>
+      <Text style={{ fontSize: 40 }}>🔍</Text>
+      <Text style={[styles.emptyTitle, { color: c.text }]}>{t('trade_match.wanters_empty_title')}</Text>
+      <Text style={[styles.muted, { color: c.textSecondary, textAlign: 'center' }]}>{t('trade_match.wanters_empty_body')}</Text>
+    </View>
+  ));
 
   const renderEmpty = () => (loading ? (
     <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
@@ -443,13 +564,14 @@ export default function TradeMatchScreen() {
       ) : (
         <FlatList
           removeClippedSubviews={false}
-          data={matches}
+          data={tab === 'matches' ? matches : (wanters || [])}
           keyExtractor={(m) => m.uid}
-          renderItem={({ item }) => (
-            <MatchCard m={item} dreamKey={dreamKey} imgBase={imgBase} c={c} onMessage={openChat} />
+          renderItem={({ item }) => (tab === 'matches'
+            ? <MatchCard m={item} dreamKey={dreamKey} imgBase={imgBase} c={c} onMessage={openChat} />
+            : <WanterCard m={item} imgBase={imgBase} c={c} onMessage={openChat} />
           )}
           ListHeaderComponent={renderHeader()}
-          ListEmptyComponent={renderEmpty()}
+          ListEmptyComponent={tab === 'matches' ? renderEmpty() : renderWantersEmpty()}
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
           initialNumToRender={6}
@@ -538,6 +660,9 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 12, marginTop: 1 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
+  tabs: { flexDirection: 'row', borderWidth: 1, borderRadius: 14, padding: 4, marginBottom: 12 },
+  tab: { flex: 1, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 6, alignItems: 'center' },
+  tabText: { fontSize: 13, fontWeight: '800' },
   dreamCard: { borderRadius: 16, borderWidth: 1, padding: 14 },
   dreamLabel: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
   dreamImg: { width: 64, height: 64, resizeMode: 'contain' },
