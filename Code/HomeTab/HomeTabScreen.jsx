@@ -24,7 +24,7 @@ import GuidesScreen from '../SettingScreen/GuidesScreen';
 import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
 import SafeLottieView from '../Helper/SafeLottieView';
-import SquadBadge from '../Squad/SquadBadge';
+import HomeCardArt from './HomeCardArt';
 import { getPassCount, onSquadPassesChange, canStillJoin } from '../Helper/squad';
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
@@ -664,7 +664,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
             onPress={() => requireSignIn(() => navigation.navigate('TradeMatch'), t('trade_match.sign_in'))}
             activeOpacity={0.85}
           >
-            <Text style={styles.tradeMatchEmoji}>🎯</Text>
+            <HomeCardArt name="match" />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.tradeMatchTitle}>{t('trade_match.title')}</Text>
@@ -687,7 +687,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
             onPress={() => requireSignIn(() => navigation.navigate('Squad'), t('squad.sign_in'))}
             activeOpacity={0.85}
           >
-            <SquadBadge rankKey="squad" size={34} />
+            <HomeCardArt name="squad" />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.tradeMatchTitle}>{t('squad.title')}</Text>
@@ -1207,7 +1207,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
   },
-  tradeMatchEmoji: { fontSize: 30 },
   tradeMatchTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
   electionBtn: {
     flexDirection: 'row',
