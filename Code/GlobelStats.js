@@ -1595,7 +1595,7 @@ export const GlobalStateProvider = ({ children }) => {
       canGrantBadgeAnySquad, // Badge Access: MOD may badge under the squad bar (RTDB /badge_granters/{uid})
       linksAllowed, // links & emails allowed in chat for everyone (RTDB /links_allowed)
     }),
-    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, electionsEnabled, canGrantJmd, canGrantBadgeAnySquad, linksAllowed]
+    [user, theme, loading, catalogStatus, robloxUsernameRef, api, freeTranslation, currentUserEmail, tradingServerLink, isAdmin, single_offer_wall, isInActiveGame, acceptedInviteRoom, isRTDBConnected, strikeInfo, deviceBanInfo, isUserBlocked, worldCupEnabled, modControlsEnabled, electionsEnabled, canGrantJmd, canGrantBadgeAnySquad, linksAllowed]
   );
 
   return (

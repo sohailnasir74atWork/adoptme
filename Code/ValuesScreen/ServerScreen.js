@@ -9,6 +9,7 @@ import {
   Alert,
   Linking,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { useGlobalState } from '../GlobelStats';
 import { useHaptic } from '../Helper/HepticFeedBack';
@@ -24,43 +25,49 @@ const ServerScreen = ({ selectedTheme }) => {
 
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // ✅ Fetch server data from Firebase RTDB
-  useEffect(() => {
-    const fetchServers = async () => {
-      try {
-        setLoading(true);
-        const serverRef = ref(getDatabase(), 'server');
-        const snapshot = await get(serverRef);
+  // ✅ Fetch server data from Firebase RTDB (on mount, pull-to-refresh, Try again)
+  const fetchServers = useCallback(async (fromPull = false) => {
+    try {
+      if (fromPull) setRefreshing(true);
+      else setLoading(true);
+      const serverRef = ref(getDatabase(), 'server');
+      const snapshot = await get(serverRef);
 
-        if (!snapshot.exists()) {
-          setServers([]);
-          setError(null);
-          return;
-        }
-
-        const serverData = snapshot.val();
-
-        // ✅ Convert Firebase object format to array
-        // Format: { "-ON15YX7Hp402i2zC2Aw": { link: "...", name: "..." }, ... }
-        const serverList = Object.entries(serverData).map(([id, value]) => ({
-          id,
-          ...value,
-        }));
-
-        setServers(serverList);
+      if (!snapshot.exists()) {
+        setServers([]);
         setError(null);
-      } catch (err) {
-        console.error('Error fetching servers:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
 
-    fetchServers();
+      const serverData = snapshot.val();
+
+      // ✅ Convert Firebase object format to array
+      // Format: { "-ON15YX7Hp402i2zC2Aw": { link: "...", name: "..." }, ... }
+      const serverList = Object.entries(serverData).map(([id, value]) => ({
+        id,
+        ...value,
+      }));
+
+      setServers(serverList);
+      setError(null);
+    } catch (err) {
+      // Logged only: the raw Firebase text means nothing to a player.
+      console.error('Error fetching servers:', err);
+      setError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchServers();
+  }, [fetchServers]);
+
+  const onRefresh = useCallback(() => fetchServers(true), [fetchServers]);
 
   // ✅ Handle server click
   const handleServerPress = useCallback((server) => {
@@ -112,22 +119,33 @@ const ServerScreen = ({ selectedTheme }) => {
     );
   }
 
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={isDarkMode ? '#fff' : '#000'}
+    />
+  );
+
   if (error) {
     return (
-      <View style={styles.errorContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.errorContainer} refreshControl={refreshControl}>
         <Icon name="alert-circle-outline" size={48} color={isDarkMode ? '#fff' : '#000'} />
         <Text style={styles.errorText}>{t('server.load_failed')}</Text>
-        <Text style={styles.errorSubtext}>{error}</Text>
-      </View>
+        <Text style={styles.errorSubtext}>{t('value.history.error_body')}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={() => fetchServers()} activeOpacity={0.8}>
+          <Text style={styles.retryText}>{t('value.history.retry')}</Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
   if (servers.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.emptyContainer} refreshControl={refreshControl}>
         <Icon name="server-outline" size={48} color={isDarkMode ? '#666' : '#999'} />
         <Text style={styles.emptyText}>{t('server.empty')}</Text>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -136,6 +154,7 @@ const ServerScreen = ({ selectedTheme }) => {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
     >
       <Text style={styles.headerTitle}>{t('server.title')}</Text>
 
@@ -190,7 +209,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
 
   },
   errorContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',
@@ -209,8 +228,22 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     color: isDarkMode ? '#999' : '#666',
     textAlign: 'center',
   },
+  retryBtn: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: isDarkMode ? '#333' : '#ddd',
+    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: isDarkMode ? '#fff' : '#000',
+  },
   emptyContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: isDarkMode ? '#0f172a' : '#f5f5f5',

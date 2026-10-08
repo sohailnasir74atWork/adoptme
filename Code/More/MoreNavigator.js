@@ -4,7 +4,7 @@
  * opens. Nested inside the tab so the tab bar stays visible on every screen.
  */
 
-import React, { useMemo } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,20 +22,50 @@ import { useLocalState } from '../LocalGlobelStats';
 
 const Stack = createNativeStackNavigator();
 
-// Bottom banner for the More screens, like every other tab's main screens.
-// The tab bar sits under it, so no nav-bar spacer is needed here.
+// Bottom banner for the More screens. Plain, not collapsible: the expanding
+// first load is kept to the main tabs. The tab bar sits under it, so no
+// nav-bar spacer is needed here.
 const MoreBanner = () => {
   const { localState } = useLocalState();
-  return localState.isPro ? null : <BannerAdComponent collapsible />;
+  return localState.isPro ? null : <BannerAdComponent />;
 };
 
+// Theme for the screens below. They are module-level `component`s reading it
+// from context, not `{() => …}` render callbacks: a callback skips React
+// Navigation's StaticContainer, so every MoreStack render (isAdmin, insets,
+// language) re-rendered every mounted More screen and its banner.
+const MoreThemeContext = createContext({ background: undefined, selectedTheme: undefined });
+
 // The tool screens were built for the old top-tab body, which had an 8 pt side margin.
-const Body = ({ background, children, ad = true }) => (
-  <View style={[styles.flex1, { backgroundColor: background }]}>
-    <View style={styles.body}>{children}</View>
-    {ad && <MoreBanner />}
-  </View>
-);
+const Body = ({ children, ad = true }) => {
+  const { background } = useContext(MoreThemeContext);
+  return (
+    <View style={[styles.flex1, { backgroundColor: background }]}>
+      <View style={styles.body}>{children}</View>
+      {ad && <MoreBanner />}
+    </View>
+  );
+};
+
+const HomeScreen = (props) => {
+  const { background } = useContext(MoreThemeContext);
+  return (
+    <View style={[styles.flex1, { backgroundColor: background }]}>
+      <MoreHubScreen {...props} background={background} />
+      <MoreBanner />
+    </View>
+  );
+};
+const WallpapersScreen = () => <Body><HDWallpaperScreen /></Body>;
+const ServersScreen = () => {
+  const { selectedTheme } = useContext(MoreThemeContext);
+  return <Body><ServerScreen selectedTheme={selectedTheme} /></Body>;
+};
+const ScammersScreen = () => <Body><ScammerDatabaseScreen /></Body>;
+const NewsTabScreen = () => <Body><NewsScreen /></Body>;
+// A form with a send button: no banner next to it.
+const ReportFormScreen = () => <Body ad={false}><ReportScreen /></Body>;
+const AdminScreen = () => <Body ad={false}><AdminReportsInbox /></Body>;
 
 export const MoreStack = ({ selectedTheme }) => {
   const { t } = useTranslation();
@@ -57,38 +87,22 @@ export const MoreStack = ({ selectedTheme }) => {
     [background, selectedTheme.colors.text, insets.top]
   );
 
+  const themeValue = useMemo(() => ({ background, selectedTheme }), [background, selectedTheme]);
+
   return (
-    <Stack.Navigator screenOptions={headerOptions}>
-      <Stack.Screen name="MoreHome" options={{ headerShown: false }}>
-        {(props) => (
-          <View style={[styles.flex1, { backgroundColor: background }]}>
-            <MoreHubScreen {...props} background={background} />
-            <MoreBanner />
-          </View>
+    <MoreThemeContext.Provider value={themeValue}>
+      <Stack.Navigator screenOptions={headerOptions}>
+        <Stack.Screen name="MoreHome" options={{ headerShown: false }} component={HomeScreen} />
+        <Stack.Screen name="MoreWallpapers" options={{ title: t('tabs.hd_wallpaper') }} component={WallpapersScreen} />
+        <Stack.Screen name="MoreServers" options={{ title: t('more_hub.servers_title') }} component={ServersScreen} />
+        <Stack.Screen name="MoreScammers" options={{ title: t('tabs.scammer_db') }} component={ScammersScreen} />
+        <Stack.Screen name="MoreNews" options={{ title: t('tabs.news') }} component={NewsTabScreen} />
+        <Stack.Screen name="MoreReport" options={{ title: t('reports.title') }} component={ReportFormScreen} />
+        {isAdmin && (
+          <Stack.Screen name="MoreAdmin" options={{ title: 'Reports inbox' }} component={AdminScreen} />
         )}
-      </Stack.Screen>
-      <Stack.Screen name="MoreWallpapers" options={{ title: t('tabs.hd_wallpaper') }}>
-        {() => <Body background={background}><HDWallpaperScreen /></Body>}
-      </Stack.Screen>
-      <Stack.Screen name="MoreServers" options={{ title: t('more_hub.servers_title') }}>
-        {() => <Body background={background}><ServerScreen selectedTheme={selectedTheme} /></Body>}
-      </Stack.Screen>
-      <Stack.Screen name="MoreScammers" options={{ title: t('tabs.scammer_db') }}>
-        {() => <Body background={background}><ScammerDatabaseScreen /></Body>}
-      </Stack.Screen>
-      <Stack.Screen name="MoreNews" options={{ title: t('tabs.news') }}>
-        {() => <Body background={background}><NewsScreen /></Body>}
-      </Stack.Screen>
-      {/* A form with a send button: no banner next to it. */}
-      <Stack.Screen name="MoreReport" options={{ title: t('reports.title') }}>
-        {() => <Body background={background} ad={false}><ReportScreen /></Body>}
-      </Stack.Screen>
-      {isAdmin && (
-        <Stack.Screen name="MoreAdmin" options={{ title: 'Reports inbox' }}>
-          {() => <Body background={background} ad={false}><AdminReportsInbox /></Body>}
-        </Stack.Screen>
-      )}
-    </Stack.Navigator>
+      </Stack.Navigator>
+    </MoreThemeContext.Provider>
   );
 };
 
