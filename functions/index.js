@@ -106,6 +106,12 @@ exports.updateBirthday = require('./updateBirthday').updateBirthday;
 // Birthday-wish pushes: first wish + one summary 8 h later (supabase/051). See functions/notifyBirthdayWishes.js.
 exports.notifyBirthdayWishes = require('./notifyBirthdayWishes').notifyBirthdayWishes;
 
+// Birthday email through Brevo, once a year on the day, 13+ only (supabase/055). See functions/notifyBirthdayEmails.js.
+exports.notifyBirthdayEmails = require('./notifyBirthdayEmails').notifyBirthdayEmails;
+
+// The unsubscribe link in those emails: turns RTDB email_prefs/{uid}.optIn off. See functions/emailUnsubscribe.js.
+exports.emailUnsubscribe = require('./emailUnsubscribe').emailUnsubscribe;
+
 // Keeps two owner-moderated reviews (one dispute) from being edited (2026-10-07).
 exports.guardLockedReviews = require('./guardLockedReviews').guardLockedReviews;
 
