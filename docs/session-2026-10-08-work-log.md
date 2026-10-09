@@ -91,3 +91,27 @@ Strings: 58 keys verified in all 11 Blox locales (birthdays + `trade_journal.my_
 - **Adopt Me 1.15.53 (179)** — AAB 70.4 MB, with R8 mapping. Next versionCode 180.
 - **Blox Fruits 4.0.18 (167)** — AAB 56.6 MB. Next versionCode 168.
 - Built from the uncommitted working trees; owner tests on internal. Birthday push/email schedulers stay paused (owner switches them on).
+
+## 10. Pet Cards — performance + flashes (after the builds; uncommitted)
+
+The owner said the card screens felt heavy and flashed when entering, switching and going back. Measured on the emulator (debug build) with screen-recording frames and `dumpsys gfxinfo`. Nothing in the looks or behaviour changed; the old and new album were pixel-diffed (0 differing pixels, classic and holo/foil cards).
+
+| Scenario (debug build) | Before | After |
+|---|---|---|
+| Open "All Pets" album: frames in 3.4 s / p90 / worst | ~30 / 400–450 ms / 750–1,100 ms | ~115 / ~100 ms / 150 ms |
+| Switch album set: frames / p50 | 12–13 / 250–300 ms | 90–110 / ~30 ms |
+| Pack switch on the hub | white nav-bar frame each switch | none |
+
+- **Album cost = tiled textures.** Android draws `resizeMode="repeat"` by painting a new, uncached bitmap per image view; each card had 1–3. The thumbnails now use pre-tiled sheets: `assets/pet-cards/*_sheet.webp` (lossless, 15–50 KB each), made by `scripts/pet-cards/make-texture-sheets.py`. `PetCard.jsx` `Texture` uses a sheet when the area fits (Android only) and otherwise keeps repeat (full-size cards, iOS).
+- **Album list:** builds one row per 100 ms until the first drag, then the old 9 cards per 50 ms, so a fast fling never outruns it (`CardAlbumScreen.jsx`).
+- **Flashes:**
+  - `Helper/useDarkSystemBars.js`: a colour change no longer runs the blur clean-up; hand-back waits 150 ms so dark → dark screens never show the light bar.
+  - `CardViewerModal.jsx`: no longer a `<Modal>` (a separate window that got a light nav bar); now an in-screen overlay with the same fade, Back closes it.
+- **First paint complete:**
+  - `usePetCards.js` starts from cached state, catalogue and collection. `cardsApi.js` adds `peekCatalog`/`peekCollection`; the own collection is also kept in MMKV `col:<uid>`, and a pack marks it stale instead of dropping it. No more "0 of 0" → "0 of 579" → "3 of 579".
+  - `Engagement/useStarBalance.js` remembers the last balance per uid.
+  - The value index is built once per values list (it was per screen).
+- **Less work per focus:**
+  - `cardMath.setProgressAll` (one pass for all sets; same results as `setProgress`, checked on 356 cards × 24 sets) and a `byKey` lookup for the showcase.
+  - `cardArt.loadArtManifest` re-downloaded 3 lists on every focus (`v1/index.json` 404s), so it is now throttled to 10 min (6 h when all three load).
+- All changed files compile under Hermes.
