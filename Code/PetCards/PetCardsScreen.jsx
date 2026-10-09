@@ -18,7 +18,7 @@ import { trackGrowthEvent } from '../Helper/growthAnalytics';
 import usePetCards from './usePetCards';
 import PackArt from './PackArt';
 import PetCard from './PetCard';
-import { setProgress, countdown, nextUtcMidnight, bestOwned } from './cardMath';
+import { setProgressAll, countdown, nextUtcMidnight, bestOwned } from './cardMath';
 import {
   themeOf, RARITIES, FINISHES, RARITY_STYLE, STAR_PACK_COST, STREAK_BONUS_EVERY,
 } from './cardConfig';
@@ -94,7 +94,7 @@ export default function PetCardsScreen() {
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const now = useClock();
-  const { wallet, sets, catalog, owned, collection, loading, error, reload, uid } = usePetCards();
+  const { wallet, sets, catalog, byKey, owned, collection, loading, error, reload, uid } = usePetCards();
   // The last pack the player picked stays picked (it used to reset to the first one every visit).
   const [setId, setSetId] = useState(route.params?.setId || getLastPackSet(uid));
   const [oddsOpen, setOddsOpen] = useState(false);
@@ -119,18 +119,22 @@ export default function PetCardsScreen() {
   };
   const theme = themeOf(current?.theme);
   useDarkSystemBars(theme.stage[0]);
-  const progress = current ? setProgress(catalog, owned, current.id) : null;
+
+  // Every set's progress in one walk of the catalogue (was one walk per set,
+  // plus another for the featured pack, on every render — the clock ticks too).
+  const progressBySet = useMemo(() => setProgressAll(catalog, owned), [catalog, owned]);
+  const progress = current ? progressBySet(current.id) : null;
 
   const albums = useMemo(() => sets
     .filter((s) => s.total > 0)
-    .map((s) => ({ set: s, p: setProgress(catalog, owned, s.id) }))
-    .sort((a, b) => a.set.sort - b.set.sort), [sets, catalog, owned]);
+    .map((s) => ({ set: s, p: progressBySet(s.id) }))
+    .sort((a, b) => a.set.sort - b.set.sort), [sets, progressBySet]);
 
   const showcase = useMemo(() => {
     // Rarest three cards the player owns, for the hero strip.
     const list = [];
     Object.entries(owned).forEach(([k, entries]) => {
-      const c = catalog.find((x) => x.key === k);
+      const c = byKey.get(k);
       const b = bestOwned(entries);
       if (c && b) list.push({ c, b });
     });
@@ -138,7 +142,7 @@ export default function PetCardsScreen() {
       .sort((a, b) => FINISHES.indexOf(b.b.finish) - FINISHES.indexOf(a.b.finish)
         || RARITIES.indexOf(b.c.rarity) - RARITIES.indexOf(a.c.rarity))
       .slice(0, 3);
-  }, [owned, catalog]);
+  }, [owned, byKey]);
 
   const open = (source) => {
     if (!current) return;

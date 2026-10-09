@@ -53,6 +53,29 @@ export const setProgress = (catalog, owned, setId) => {
   return { have, total: cards.length, done: cards.length > 0 && have >= cards.length };
 };
 
+/**
+ * setProgress for every set at once: one walk of the catalogue. Returns
+ * (setId) => { have, total, done }, the same answer setProgress gives.
+ */
+export const setProgressAll = (catalog, owned) => {
+  const tally = new Map();
+  const bump = (id, has) => {
+    const t = tally.get(id) || { have: 0, total: 0 };
+    t.total += 1;
+    if (has) t.have += 1;
+    tally.set(id, t);
+  };
+  for (const c of catalog) {
+    const has = !!(owned && owned[c.key] && owned[c.key].length);
+    bump('all', has);
+    for (const id of new Set(c.sets || [])) if (id !== 'all') bump(id, has);
+  }
+  return (setId) => {
+    const t = tally.get(setId) || { have: 0, total: 0 };
+    return { have: t.have, total: t.total, done: t.total > 0 && t.have >= t.total };
+  };
+};
+
 /** The fanciest finish a player owns of one card: { finish, count, serial } or null. */
 export const bestOwned = (entries) => {
   if (!Array.isArray(entries) || !entries.length) return null;

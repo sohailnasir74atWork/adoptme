@@ -3,7 +3,8 @@
  *
  * Reads: cards_state when the hub opens (cached 2 min), the catalogue once
  * per catalogVersion (MMKV), get_card_collection when the album opens
- * (cached 5 min; dropped after every pack). No realtime.
+ * (cached 5 min; refetched after every pack; the last copy is kept in MMKV
+ * only to paint the first frame). No realtime.
  *
  * Development: when the 037 functions are not deployed yet, __DEV__ builds
  * fall back to cardsMock.js (same rules, kept on the device) so every screen
@@ -100,7 +101,8 @@ export async function getCardsState({ force = false } = {}) {
 /** Last state without a network call (for an instant first paint). */
 export const peekCardsState = () => (stateCache && stateCache.uid === currentUid ? stateCache.data : null);
 
-export async function getCatalog(version) {
+// The catalogue for `version` from memory, else from the device copy; null if neither has it.
+function cachedCatalog(version) {
   if (catalogCache && catalogCache.version === version) return catalogCache.list;
   try {
     const raw = storage.getString('catalog');
@@ -112,6 +114,12 @@ export async function getCatalog(version) {
       }
     }
   } catch (e) { /* refetch */ }
+  return null;
+}
+
+export async function getCatalog(version) {
+  const hit = cachedCatalog(version);
+  if (hit) return hit;
   const rows = await call('card_catalog_list');
   catalogCache = { version, list: parseCatalog(rows) };
   if (!mock) {
@@ -120,17 +128,42 @@ export async function getCatalog(version) {
   return catalogCache.list;
 }
 
+/** Catalogue already on the phone (or null), for a first paint without an empty frame. */
+export const peekCatalog = (version) => (version == null ? null : cachedCatalog(version));
+
 export async function getCollection(uid = null, { force = false } = {}) {
   const who = uid || currentUid || 'me';
   const hit = collectionCache.get(who);
   if (!force && hit && Date.now() - hit.at < COLLECTION_TTL_MS) return hit.data;
   const data = await call('get_card_collection', { p_uid: uid });
   collectionCache.set(who, { at: Date.now(), data });
+  // The player's own copy is kept on the phone for the next first paint.
+  if (!uid && currentUid && !mock) {
+    try { storage.set(`col:${currentUid}`, JSON.stringify(data)); } catch (e) { /* paint cache only */ }
+  }
   return data;
 }
 
+/**
+ * The player's last known collection, even if stale (screens refetch behind
+ * it): this session's copy, else the one saved on the phone. Paints "3 of 579"
+ * on the first frame instead of "0 of 579" and then the jump.
+ */
+export const peekCollection = () => {
+  const hit = collectionCache.get(currentUid || 'me');
+  if (hit) return hit.data;
+  if (!currentUid) return null;
+  try {
+    const raw = storage.getString(`col:${currentUid}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+};
+
 const afterChange = (wallet) => {
-  collectionCache.delete(currentUid || 'me');
+  // Stale, not gone: the next getCollection refetches, while a screen that
+  // opens meanwhile still paints the last known cards (peekCollection).
+  const hit = collectionCache.get(currentUid || 'me');
+  if (hit) hit.at = 0;
   if (stateCache && wallet) stateCache = { ...stateCache, at: Date.now(), data: { ...stateCache.data, wallet } };
 };
 

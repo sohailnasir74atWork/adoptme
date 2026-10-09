@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing, ScrollView, useWindowDimensions,
+  View, Text, TouchableOpacity, StyleSheet, Animated, Easing, ScrollView, useWindowDimensions, BackHandler,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +56,24 @@ export default function CardViewerModal({
     if (best && !(entries || []).some((e) => e[0] === finish)) setFinish(best.finish);
   }, [entries, best, finish]);
 
+  // Drawn inside the album's own window, not a <Modal>: a Modal is a
+  // separate Android window that takes the app's light nav bar (or, drawn
+  // edge-to-edge, the system theme's), so every card opened put a pale strip
+  // under this dark page (2026-10-08). Here the album's dark bars stay put.
+  // Same fade-in as the Modal had; Back closes it, as onRequestClose did.
+  const fade = useRef(new Animated.Value(0)).current;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!visible) { fade.setValue(0); return undefined; }
+    Animated.timing(fade, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onCloseRef.current?.();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, fade]);
+
   if (!card) return null;
   const cw = Math.min(W - 64, 340);
   const entry = (entries || []).find((e) => e[0] === finish);
@@ -94,7 +112,7 @@ export default function CardViewerModal({
   const pinned = isShowcased(showcase, card.key, finish);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Animated.View style={[StyleSheet.absoluteFill, styles.layer, { opacity: fade }]} accessibilityViewIsModal>
       <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <TouchableOpacity style={[styles.close, { top: insets.top + 12 }]} onPress={onClose} hitSlop={14}>
           <Icon name="close" size={28} color={INK} />
@@ -204,11 +222,12 @@ export default function CardViewerModal({
         {owned && onShowcase ? <Text style={styles.tip}>{t('pet_cards.showcase_hint')}</Text> : null}
       </View>
       <CardShareSheet card={share} total={total} onClose={() => setShare(null)} />
-    </Modal>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  layer: { zIndex: 50, elevation: 50 },
   backdrop: { flex: 1, backgroundColor: 'rgba(5,3,12,0.94)', alignItems: 'center', justifyContent: 'center' },
   close: { position: 'absolute', top: 54, right: 20, zIndex: 3 },
   detail: { borderRadius: 16, borderWidth: 2, backgroundColor: '#140F24', overflow: 'hidden' },

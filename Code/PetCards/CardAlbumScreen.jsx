@@ -42,6 +42,12 @@ export default function CardAlbumScreen() {
   const [filter, setFilter] = useState('all');
   const [open, setOpen] = useState(null);
   const [crafting, setCrafting] = useState(false);
+  // Until the first touch, build the rows below the screen one row per 100 ms
+  // instead of nine cards every 50 ms, so the slide-in and the first look
+  // stay smooth (2026-10-08: the full-speed fill stalled the UI thread for
+  // ~0.5 s per frame on the emulator). The first drag switches to full speed,
+  // so a fast fling never outruns the list.
+  const [warm, setWarm] = useState(false);
   // The profile showcase as the server holds it (get_card_collection.showcase).
   const showcase = useMemo(() => collection?.showcase || [], [collection?.showcase]);
 
@@ -178,7 +184,9 @@ export default function CardAlbumScreen() {
           contentContainerStyle={{ paddingHorizontal: PAD, paddingBottom: 24 }}
           renderItem={renderItem}
           initialNumToRender={12}
-          maxToRenderPerBatch={9}
+          maxToRenderPerBatch={warm ? 9 : 3}
+          updateCellsBatchingPeriod={warm ? 50 : 100}
+          onScrollBeginDrag={warm ? undefined : () => setWarm(true)}
           windowSize={7}
           removeClippedSubviews={false}
           getItemLayout={(_, i) => ({ length: ch + GAP, offset: (ch + GAP) * Math.floor(i / 3), index: i })}

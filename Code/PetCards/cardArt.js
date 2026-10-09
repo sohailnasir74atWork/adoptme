@@ -23,6 +23,12 @@ let petKeys = null;     // Set of card keys with HD art
 let assetIds = null;    // Set of art ids (BG-…, P-…, CB-…)
 let pet2k = null;       // Set of card keys with 2048 px wallpaper art
 let loading = null;
+let cacheRead = false;  // the saved lists are parsed once per session
+let lastTry = 0;        // last network refresh attempt
+// The background-art list (index.json) 404s while no backgrounds are uploaded,
+// so the lists were never all "fresh" and every card screen focus re-parsed
+// the saved lists and re-downloaded all three. Now: retry at most this often.
+const RETRY_MS = 10 * 60 * 1000;
 
 // A manifest is a list of ids. Anything else (an error page, another file
 // served on a catch-all path) is rejected rather than trusted.
@@ -57,28 +63,45 @@ const fetchList = async (url) => {
 /** Load the CDN manifests (cached 6 h). Safe to call often. */
 export const loadArtManifest = async () => {
   if (loading) return loading;
-  const cachedPets = readCache('pets');
-  const cachedAssets = readCache('assets');
-  const cached2k = readCache('pets2k');
-  if (cachedPets) petKeys = new Set(cachedPets.list);
-  if (cachedAssets) assetIds = new Set(cachedAssets.list);
-  if (cached2k) pet2k = new Set(cached2k.list);
-  const fresh = (c) => c && Date.now() - c.at < MANIFEST_TTL_MS;
-  if (fresh(cachedPets) && fresh(cachedAssets) && fresh(cached2k)) return null;
+  if (Date.now() - lastTry < RETRY_MS) return null;
+  if (!cacheRead) {
+    cacheRead = true;
+    const cachedPets = readCache('pets');
+    const cachedAssets = readCache('assets');
+    const cached2k = readCache('pets2k');
+    if (cachedPets) petKeys = new Set(cachedPets.list);
+    if (cachedAssets) assetIds = new Set(cachedAssets.list);
+    if (cached2k) pet2k = new Set(cached2k.list);
+    const fresh = (c) => c && Date.now() - c.at < MANIFEST_TTL_MS;
+    if (fresh(cachedPets) && fresh(cachedAssets) && fresh(cached2k)) {
+      // All fresh: check again once they can have gone stale.
+      lastTry = Math.min(cachedPets.at, cachedAssets.at, cached2k.at) + MANIFEST_TTL_MS - RETRY_MS;
+      return null;
+    }
+  }
+  lastTry = Date.now();
+  let ok = 0;
   loading = Promise.all([
     fetchList(`${cdnBase()}/pets/index.json`).then((list) => {
       petKeys = new Set(list);
       storage.set('pets', JSON.stringify({ at: Date.now(), list }));
+      ok += 1;
     }).catch(() => {}),
     fetchList(`${cdnBase()}/index.json`).then((list) => {
       assetIds = new Set(list);
       storage.set('assets', JSON.stringify({ at: Date.now(), list }));
+      ok += 1;
     }).catch(() => {}),
     fetchList(`${cdnBase()}/pets/2k/index.json`).then((list) => {
       pet2k = new Set(list);
       storage.set('pets2k', JSON.stringify({ at: Date.now(), list }));
+      ok += 1;
     }).catch(() => {}),
-  ]).finally(() => { loading = null; });
+  ]).finally(() => {
+    loading = null;
+    // All three fresh: the next look is when they go stale, as before.
+    if (ok === 3) lastTry = Date.now() + MANIFEST_TTL_MS - RETRY_MS;
+  });
   return loading;
 };
 

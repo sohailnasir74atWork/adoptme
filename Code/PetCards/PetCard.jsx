@@ -17,7 +17,7 @@
  */
 
 import React, { memo, useState } from 'react';
-import { View, Text, Image, Animated, StyleSheet, I18nManager } from 'react-native';
+import { View, Text, Image, Animated, StyleSheet, I18nManager, PixelRatio, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   RARITY_STYLE, FIRST_EDITION_MAX, THEMES, themeOf, themeIdFor, bgIdFor, petArtUrl,
@@ -35,6 +35,40 @@ const TEX = {
   paper: require('../../assets/pet-cards/t_paper.webp'),
   brushed: require('../../assets/pet-cards/t_brushed.webp'),
 };
+
+// The same tiles repeated from the top-left into one 512x768 px sheet
+// (scripts/pet-cards/make-texture-sheets.py, lossless). Android draws
+// resizeMode="repeat" by painting a new bitmap per image view, uncached, so an
+// album page of small cards built dozens of them while opening; a sheet is one
+// decoded bitmap every card shares, drawn at the tile's own pixel size from
+// the top-left — exactly what "repeat" shows. Areas bigger than the sheet
+// (full-size cards) keep "repeat", and so does iOS (it tiles natively, at
+// the image's point size, so it has neither the cost nor the same scale).
+const SHEET = {
+  paper: require('../../assets/pet-cards/t_paper_sheet.webp'),
+  brushed: require('../../assets/pet-cards/t_brushed_sheet.webp'),
+  cosmos: require('../../assets/pet-cards/h_cosmos_sheet.webp'),
+  starlight: require('../../assets/pet-cards/h_starlight_sheet.webp'),
+  web: require('../../assets/pet-cards/h_web_sheet.webp'),
+};
+const SHEET_PX = { w: 512, h: 768 }; // keep in step with make-texture-sheets.py
+
+/** A tiled texture filling a w x h (dp) box whose parent clips (overflow hidden). */
+function Texture({ name, w, h, style }) {
+  const px = PixelRatio.get();
+  const sheet = SHEET[name];
+  if (Platform.OS === 'android' && sheet && w * px <= SHEET_PX.w && h * px <= SHEET_PX.h) {
+    return (
+      <Image
+        source={sheet}
+        resizeMode="stretch"
+        fadeDuration={0}
+        style={[{ position: 'absolute', left: 0, top: 0, width: SHEET_PX.w / px, height: SHEET_PX.h / px }, style]}
+      />
+    );
+  }
+  return <Image source={TEX[name]} resizeMode="repeat" style={[StyleSheet.absoluteFill, style]} />;
+}
 
 const RAINBOW = 'linear-gradient(115deg, #FF5FA2 0%, #FFD45E 18%, #5EFFB4 36%, #5EC8FF 54%, #B45EFF 72%, #FF5FA2 90%)';
 const SHINE = 'linear-gradient(115deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0) 62%)';
@@ -99,7 +133,7 @@ function PetCard({
   const bgUri = assetUri(bgAssetId(bgId));
   const petUri = !petFailed && hasPetArt(card.key) ? petArtUrl(card.key, thumb || width < 180 ? 512 : 1024) : null;
   const holo = owned && (f === 'holo' || f === 'mega' || fullArt);
-  const pattern = themeId === 'haunted' ? TEX.web : card.rarity === 'legendary' ? TEX.starlight : TEX.cosmos;
+  const pattern = themeId === 'haunted' ? 'web' : card.rarity === 'legendary' ? 'starlight' : 'cosmos';
 
   // Shine moves opposite to the finger (or on its own idle loop).
   // A still card keeps a gloss highlight in the upper left.
@@ -154,7 +188,7 @@ function PetCard({
       {f === 'neon' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,4,30,0.45)' }]} /> : null}
       {holo ? (
         <>
-          <Image source={pattern} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.32, mixBlendMode: 'screen' }]} />
+          <Texture name={pattern} w={w} h={h} style={{ opacity: 0.32, mixBlendMode: 'screen' }} />
           <Animated.View
             style={{
               position: 'absolute', top: 0, bottom: 0, left: -w, width: w * 3,
@@ -205,7 +239,7 @@ function PetCard({
         />
       ) : null}
       {f === 'foil' || f === 'holo' ? (
-        <Image source={TEX.brushed} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.55 }]} />
+        <Texture name="brushed" w={width} h={H} style={{ opacity: 0.55 }} />
       ) : null}
       {f === 'holo' ? (
         <Animated.View style={{ position: 'absolute', top: 0, bottom: 0, left: -width, width: width * 3, backgroundImage: RAINBOW, opacity: 0.45, mixBlendMode: 'overlay', transform: [{ translateX: holoTx }] }} />
@@ -227,7 +261,7 @@ function PetCard({
             overflow: 'hidden',
           }}
         >
-          {f === 'classic' && !dark ? <Image source={TEX.paper} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.9 }]} /> : null}
+          {f === 'classic' && !dark ? <Texture name="paper" w={width - border * 2} h={H - border * 2} style={{ opacity: 0.9 }} /> : null}
         </View>
       ) : null}
 
