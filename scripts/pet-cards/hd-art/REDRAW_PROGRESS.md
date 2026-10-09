@@ -64,6 +64,18 @@ The browser pane must stay open and visible, and the Mac awake (`caffeinate -dis
   tab step (paste runner, `__petLoad`, `__petRun2`) was left for the owner: the
   session's permission mode refused to script the signed-in Gemini page.
 
+- **2026-10-08 22:20 PKT.** Resumed. One run list holds all 294 pets: 201 from kit 2 (pets with no HD art), then 93 from **kit 3**.
+  - Kit 3 is the live upscales whose originals are only 256–383 px, so they're the weakest art. The owner wants them made stronger.
+  - Kit 3 references are in `out/kit3/` with their own `queue.json`; they're uploaded to the bucket's `kit2/` folder, which is where the runner reads from.
+  - The run list is built by the new `gemini/make_run_all.py`, which retries sessions. `make_run.sh` once staged an EMPTY list because one session failed.
+  - Started from the in-page runner. The browser pane must stay **visible**: hidden, the page's timers stall and pets time out.
+  - **Hole fix.** Navy-backdrop redraws had see-through eyes (`process.clear_plain_background` measured "near navy" by luminance, so black pupils matched).
+    - It now compares every colour channel.
+    - `redraw.KEEP_GAPS` skips gap-clearing for pets whose own colour is navy (balistarling).
+    - 15 pets were re-processed and re-pushed with `verify_cdn.py --fix`; the CDN serves the fixed files (checked by SHA).
+    - Hole scan: the snippet in the 2026-10-08 session, which finds transparent areas not touching the border. The rest it flags are real gaps (ribs, legs, wings).
+  - **Kit 3 pets are already on the CDN,** so `upload.py --new-only` will SKIP their redraws. Run `verify_cdn.py --fix` after kit 3 finishes.
+
 ## Resume from here
 
 ```

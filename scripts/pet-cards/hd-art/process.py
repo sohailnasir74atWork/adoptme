@@ -117,10 +117,12 @@ def best_source(key):
     return best[1:] if best else None
 
 
-def clear_plain_background(img):
+def clear_plain_background(img, clear_gaps=True):
     """AI tools often return a plain white/grey backdrop instead of transparency.
     If the picture has no transparent background but its border is one flat
-    colour, flood that colour away from the edges (soft edge, so no halo)."""
+    colour, flood that colour away from the edges (soft edge, so no halo).
+    clear_gaps=False keeps enclosed backdrop-coloured areas (a pet whose eye is
+    the backdrop colour, e.g. Bali Starling's navy eye inside its mask)."""
     if has_transparent_background(img):
         return img
     from PIL import ImageDraw, ImageFilter
@@ -145,12 +147,16 @@ def clear_plain_background(img):
     # original, so pet pixels that happen to match the marker colour stay).
     from PIL import ImageChops
     changed = ImageChops.difference(flood, rgb).convert("L").point(lambda v: 255 if v else 0)
-    if sum(ref) < 600:
+    if sum(ref) < 600 and clear_gaps:
         # A coloured backdrop (never white: white pets would lose their white
         # parts) also shows through enclosed gaps, e.g. between ribs. Clear
         # every pixel that is almost exactly the backdrop colour.
+        # "Almost exactly" per channel: a luminance distance called near-black
+        # pupils (15,15,20) "navy" (10,26,58) and punched holes in eyes
+        # (2026-10-08: dolphin, corgi, dodo, …). The largest channel gap must be small.
         solid = Image.new("RGB", rgb.size, ref)
-        near = ImageChops.difference(rgb, solid).convert("L").point(lambda v: 255 if v < 14 else 0)
+        dr, dg, db = ImageChops.difference(rgb, solid).split()
+        near = ImageChops.lighter(ImageChops.lighter(dr, dg), db).point(lambda v: 255 if v < 14 else 0)
         changed = ImageChops.lighter(changed, near)
     alpha = ImageChops.invert(changed).filter(ImageFilter.GaussianBlur(1.2))
     out = img.copy()

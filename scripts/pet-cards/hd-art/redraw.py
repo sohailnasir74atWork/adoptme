@@ -21,6 +21,11 @@ import process as P  # noqa: E402
 from common import OUT, read_json, write_json  # noqa: E402
 
 
+# Pets whose own colours match the navy backdrop inside the body (eyes):
+# only the outside is cleared for these. Found by the hole scan 2026-10-08.
+KEEP_GAPS = {"balistarling"}
+
+
 def todo_keys(argv):
     if argv:
         return argv
@@ -62,7 +67,7 @@ def main():
             print(f"  {key}: no file in out/remaster")
             continue
         raw = Image.open(path).convert("RGBA")
-        img = P.clear_plain_background(raw)
+        img = P.clear_plain_background(raw, clear_gaps=key not in KEEP_GAPS)
         t = P.trimmed(img)
         if t is None or not P.has_transparent_background(img):
             print(f"  {key}: background could not be removed; ask for a transparent or bright green background")
