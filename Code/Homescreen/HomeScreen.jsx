@@ -5,7 +5,6 @@ import ViewShot from 'react-native-view-shot';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalState } from '../GlobelStats';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import config from '../Helper/Environment';
 import { getThemeColors } from '../Helper/themeColors';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
@@ -1523,8 +1522,11 @@ const HomeScreen = ({ selectedTheme }) => {
 
   return (
     <>
-      <GestureHandlerRootView>
-        <View style={styles.container} key={language}>
+      {/* Plain non-collapsable roots: Fabric's addViewAt IOOBE (Crashlytics
+          c907906e, 62% on this screen) comes from children shifting under
+          views that get flattened/unflattened between renders. */}
+      <View style={styles.flexOne} collapsable={false}>
+        <View style={styles.container} key={language} collapsable={false}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <ViewShot ref={viewRef} style={styles.screenshotView}>
               {config.isNoman && (
@@ -2162,8 +2164,12 @@ const HomeScreen = ({ selectedTheme }) => {
           />
         </View>
         <SubscriptionScreen visible={showofferwall} onClose={() => setShowofferwall(false)} track='Home' oneWallOnly={single_offer_wall} showoffer={!single_offer_wall} />
-      </GestureHandlerRootView>
-      {!localState.isPro && <BannerAdComponent collapsible />}
+      </View>
+      {/* Always-mounted slot so the banner appearing/vanishing never changes
+          this level's child count. */}
+      <View collapsable={false}>
+        {!localState.isPro && <BannerAdComponent collapsible />}
+      </View>
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}
@@ -2190,6 +2196,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
 const getStyles = (isDarkMode, c) => {
   return StyleSheet.create({
+    flexOne: { flex: 1 },
     container: {
       flex: 1,
       backgroundColor: c.bg,
