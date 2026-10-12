@@ -2525,7 +2525,7 @@ const AdminDashboard = () => {
           { backgroundColor: C.surface, borderColor: C.border }
         ]}
       >
-        <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        <Image resizeMethod="resize" source={{ uri: avatarUri }} style={styles.avatar} />
         <View style={styles.cardContent}>
           <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
             {merged.displayName}
@@ -3062,7 +3062,7 @@ const AdminDashboard = () => {
                         setChatMessages([]);
                       }}
                     >
-                      <Image source={{ uri: p.avatar }} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#DDD' }} />
+                      <Image resizeMethod="resize" source={{ uri: p.avatar }} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#DDD' }} />
                       <Text style={{ color: C.text, fontSize: 13.5, fontWeight: '600', marginLeft: 6, flexShrink: 1 }} numberOfLines={1}>{p.displayName}</Text>
                     </TouchableOpacity>
                   </React.Fragment>
@@ -3083,7 +3083,7 @@ const AdminDashboard = () => {
                 <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 1</Text>
                 {chatPerson1 ? (
                   <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                    <Image source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                    <Image resizeMethod="resize" source={{ uri: chatPerson1.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson1.displayName}</Text>
                       <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson1.email || chatPerson1.id}</Text>
@@ -3122,7 +3122,7 @@ const AdminDashboard = () => {
                             onPress={() => { setChatPerson1(u); setChatSearch1(''); setChatResults1([]); }}
                             style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
                           >
-                            <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                            <Image resizeMethod="resize" source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
                             <View style={{ flex: 1, marginLeft: 8 }}>
                               <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
                               <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
@@ -3140,7 +3140,7 @@ const AdminDashboard = () => {
                 <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Person 2</Text>
                 {chatPerson2 ? (
                   <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                    <Image source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                    <Image resizeMethod="resize" source={{ uri: chatPerson2.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{chatPerson2.displayName}</Text>
                       <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{chatPerson2.email || chatPerson2.id}</Text>
@@ -3179,7 +3179,7 @@ const AdminDashboard = () => {
                             onPress={() => { setChatPerson2(u); setChatSearch2(''); setChatResults2([]); }}
                             style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
                           >
-                            <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                            <Image resizeMethod="resize" source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
                             <View style={{ flex: 1, marginLeft: 8 }}>
                               <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
                               <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
@@ -3299,7 +3299,7 @@ const AdminDashboard = () => {
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
                           {urls.map((url) => (
                             <TouchableOpacity key={url} activeOpacity={0.85} onPress={() => setPreviewImage(url)}>
-                              <Image
+                              <Image resizeMethod="resize"
                                 source={{ uri: url }}
                                 style={{
                                   width: urls.length > 1 ? 96 : 200,
@@ -3335,7 +3335,7 @@ const AdminDashboard = () => {
             <Text style={{ color: C.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Target User</Text>
             {userChatsTarget ? (
               <View style={[styles.selectedPersonCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <Image source={{ uri: userChatsTarget.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
+                <Image resizeMethod="resize" source={{ uri: userChatsTarget.avatar }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DDD' }} />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={{ color: C.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{userChatsTarget.displayName}</Text>
                   <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{userChatsTarget.email || userChatsTarget.id}</Text>
@@ -3373,7 +3373,7 @@ const AdminDashboard = () => {
                     onPress={() => selectUserChatsTarget(u)}
                     style={[styles.chatDropdownItem, { borderBottomColor: C.border }]}
                   >
-                    <Image source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
+                    <Image resizeMethod="resize" source={{ uri: u.avatar }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#DDD' }} />
                     <View style={{ flex: 1, marginLeft: 8 }}>
                       <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{u.displayName}</Text>
                       <Text style={{ color: C.textFaint, fontSize: 11 }} numberOfLines={1}>{u.email || u.id}</Text>
@@ -3416,7 +3416,7 @@ const AdminDashboard = () => {
                   onPress={() => openChatFromUserChats(item)}
                   style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
                 >
-                  <Image source={{ uri: item.partnerAvatar }} style={styles.avatar} />
+                  <Image resizeMethod="resize" source={{ uri: item.partnerAvatar }} style={styles.avatar} />
                   <View style={styles.cardContent}>
                     <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                       {item.partnerName}
@@ -3515,7 +3515,7 @@ const AdminDashboard = () => {
               )}
             </TouchableOpacity>
             {pollImageUrl ? (
-              <Image source={{ uri: pollImageUrl }} style={{ width: '100%', height: 120, borderRadius: 10, marginBottom: 6, backgroundColor: '#DDD' }} resizeMode="cover" />
+              <Image resizeMethod="resize" source={{ uri: pollImageUrl }} style={{ width: '100%', height: 120, borderRadius: 10, marginBottom: 6, backgroundColor: '#DDD' }} resizeMode="cover" />
             ) : null}
 
             <TouchableOpacity
@@ -3635,7 +3635,7 @@ const AdminDashboard = () => {
                       })}
                       style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
                     >
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: item.userAvatar || DEFAULT_AVATAR }}
                         style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
                       />
@@ -3659,7 +3659,7 @@ const AdminDashboard = () => {
 
                     {/* Image */}
                     {!!item.imageUrl && (
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: item.imageUrl }}
                         style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8, backgroundColor: C.surfaceAlt }}
                         resizeMode="cover"
@@ -3748,7 +3748,7 @@ const AdminDashboard = () => {
                     key={u.id}
                     style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}
                   >
-                    <Image source={{ uri: getAvatarSafe(u) }} style={styles.avatar} />
+                    <Image resizeMethod="resize" source={{ uri: getAvatarSafe(u) }} style={styles.avatar} />
                     <View style={styles.cardContent}>
                       <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                         {u.displayName}
@@ -3804,7 +3804,7 @@ const AdminDashboard = () => {
               }
               renderItem={({ item }) => (
                 <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border }]}>
-                  <Image source={{ uri: getAvatarSafe(item) }} style={styles.avatar} />
+                  <Image resizeMethod="resize" source={{ uri: getAvatarSafe(item) }} style={styles.avatar} />
                   <View style={styles.cardContent}>
                     <Text style={[styles.name, { color: C.text }]} numberOfLines={1}>
                       {item.displayName}
@@ -3947,7 +3947,7 @@ const AdminDashboard = () => {
               return (
                 <View key={key} style={{ borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: RADIUS.md, padding: 12, marginTop: SPACE.sm }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Image source={{ uri: getAvatarSafe(a) }} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.fieldBg }} />
+                    <Image resizeMethod="resize" source={{ uri: getAvatarSafe(a) }} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.fieldBg }} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: C.text, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{a.name || 'Unknown'}</Text>
                       <Text style={{ color: C.textMuted, fontSize: 11.5, marginTop: 1 }}>
@@ -4086,7 +4086,7 @@ const AdminDashboard = () => {
                   status in the same glance and leaves room for the record
                   underneath. */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACE.lg }}>
-                <Image source={{ uri: getAvatarSafe(selectedUser) }} style={styles.avatarLarge} />
+                <Image resizeMethod="resize" source={{ uri: getAvatarSafe(selectedUser) }} style={styles.avatarLarge} />
                 <View style={{ flex: 1, marginLeft: SPACE.md }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                     <Text style={[styles.modalName, { color: C.text, textAlign: 'left' }]} numberOfLines={1}>
@@ -4423,7 +4423,7 @@ const AdminDashboard = () => {
                                     onPress={() => setEvidenceViewer({ urls: a.evidenceUrls, index: idx })}
                                     activeOpacity={0.8}
                                   >
-                                    <Image
+                                    <Image resizeMethod="resize"
                                       source={{ uri: url }}
                                       style={{
                                         width: 52, height: 52, borderRadius: 6,
@@ -4724,7 +4724,7 @@ const AdminDashboard = () => {
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}
         >
           {previewImage ? (
-            <Image
+            <Image resizeMethod="resize"
               source={{ uri: previewImage }}
               style={{ width: '100%', height: '100%' }}
               resizeMode="contain"

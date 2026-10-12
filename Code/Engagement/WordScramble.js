@@ -595,7 +595,7 @@ const WordScramble = ({ visible, onClose }) => {
                       style={s.confettiOverlay}
                     />
                   )}
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: getImageUrl(targetPet.image) }}
                     style={s.petImage}
                     resizeMode="contain"
@@ -608,7 +608,7 @@ const WordScramble = ({ visible, onClose }) => {
               {/* ── WRONG feedback ── */}
               {roundResult === 'wrong' && targetPet && (
                 <View style={s.failReveal}>
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: getImageUrl(targetPet.image) }}
                     style={[s.petImage, { opacity: 0.5 }]}
                     resizeMode="contain"

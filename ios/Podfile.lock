@@ -3352,7 +3352,7 @@ PODS:
     - Yoga
   - RNDeviceInfo (14.1.1):
     - React-Core
-  - RNFBAnalytics (23.8.8):
+  - RNFBAnalytics (25.1.0):
     - FirebaseAnalytics/Core (= 12.19.0)
     - hermes-engine
     - RCTRequired
@@ -3376,7 +3376,7 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
-  - RNFBApp (23.8.8):
+  - RNFBApp (25.1.0):
     - Firebase/CoreOnly (= 12.19.0)
     - hermes-engine
     - RCTRequired
@@ -3399,7 +3399,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNFBAuth (23.8.8):
+  - RNFBAuth (25.1.0):
     - Firebase/Auth (= 12.19.0)
     - hermes-engine
     - RCTRequired
@@ -3423,7 +3423,7 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
-  - RNFBCrashlytics (23.8.8):
+  - RNFBCrashlytics (25.1.0):
     - Firebase/Crashlytics (= 12.19.0)
     - FirebaseCoreExtension
     - hermes-engine
@@ -3448,7 +3448,7 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
-  - RNFBDatabase (23.8.8):
+  - RNFBDatabase (25.1.0):
     - Firebase/Database (= 12.19.0)
     - hermes-engine
     - RCTRequired
@@ -3472,7 +3472,7 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
-  - RNFBFirestore (23.8.8):
+  - RNFBFirestore (25.1.0):
     - Firebase/Firestore (= 12.19.0)
     - hermes-engine
     - RCTRequired
@@ -3496,7 +3496,7 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
-  - RNFBMessaging (23.8.8):
+  - RNFBMessaging (25.1.0):
     - Firebase/Messaging (= 12.19.0)
     - FirebaseCoreExtension
     - hermes-engine
@@ -4363,13 +4363,13 @@ SPEC CHECKSUMS:
   RNBootSplash: 61f66e2f39fbb51315a0af3e032300de9b29fc22
   RNCClipboard: e706ef7ccbbfd69f829c1b683f893bc7668c9fdb
   RNDeviceInfo: bcce8752b5043a623fe3c26789679b473f705d3c
-  RNFBAnalytics: 48ff2109e6e7ed679aeb7d118895e479b62a3a9f
-  RNFBApp: 41425c22106aa4c0fa8da1d386e4027b922ef0f8
-  RNFBAuth: 059c7c0bd8b0970d1fcd6c10878cdd1db00944a1
-  RNFBCrashlytics: d9dd1d43ff55ba6ce0f60f5bfde516a3db40246d
-  RNFBDatabase: e405d62bfc8c73b5ec4009bad49bbe17d7472521
-  RNFBFirestore: 3c9ddaa4e61152637c2cb94e6fbd6880e83e8530
-  RNFBMessaging: 1f5e5459795ceb7f274834c21d459c2d93a2f90f
+  RNFBAnalytics: fcf5a5f27e9bc8af1050009132a393cda8201dda
+  RNFBApp: 4f238569683a6b4a8ad248a083be1ab7c8638316
+  RNFBAuth: c31404c00588563ab5708040fa61690b9530cab9
+  RNFBCrashlytics: 7716883dc2fae808a286705d7230e60aa9d2c01e
+  RNFBDatabase: abb3fdc101d5dc0cbabe4486aedd5c85d850604c
+  RNFBFirestore: c34beb4c82f4d05b4a1957470ba34e0afaf934df
+  RNFBMessaging: 694ca4d6eac3234f30ab486c625eebde75817ea9
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNGestureHandler: b4c1c351c1d33151b813dcc02f249d425a1ee739
   RNGoogleMobileAds: 77e87564ad5ad859f32b1010040667e04cfe5a5d

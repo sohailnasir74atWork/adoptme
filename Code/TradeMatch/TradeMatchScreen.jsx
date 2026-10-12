@@ -76,7 +76,7 @@ const PetChip = React.memo(({ entry, imgBase, highlight, c }) => {
   const label = variantLabel(entry);
   return (
     <View style={[styles.chip, { backgroundColor: c.bgAlt, borderColor: highlight ? GOLD : c.border }]}>
-      {uri ? <Image source={{ uri }} style={styles.chipImg} /> : <Text style={styles.chipImgFallback}>🐾</Text>}
+      {uri ? <Image resizeMethod="resize" source={{ uri }} style={styles.chipImg} /> : <Text style={styles.chipImgFallback}>🐾</Text>}
       <Text style={[styles.chipText, { color: c.text }]} numberOfLines={1}>{entry.n}</Text>
       {!!label && <Text style={styles.chipVariant}>{label}</Text>}
     </View>
@@ -89,7 +89,7 @@ const CardHead = ({ m, c, dreamText, onMessage }) => {
   return (
     <View style={styles.cardHead}>
       {m.avatar
-        ? <Image source={{ uri: m.avatar }} style={styles.avatar} />
+        ? <Image resizeMethod="resize" source={{ uri: m.avatar }} style={styles.avatar} />
         : <View style={[styles.avatar, styles.avatarFallback]}><Icon name="person" size={18} color="#fff" /></View>}
       <View style={{ flex: 1 }}>
         <View style={styles.row}>
@@ -414,7 +414,7 @@ export default function TradeMatchScreen() {
             <Text style={[styles.dreamLabel, { color: ACCENT }]}>⭐ {t('trade_match.dream_label')}</Text>
             <View style={[styles.row, { marginTop: 8 }]}>
               {imageOf(dreamPet.imageUrl || dreamPet.image, imgBase)
-                ? <Image source={{ uri: imageOf(dreamPet.imageUrl || dreamPet.image, imgBase) }} style={styles.dreamImg} />
+                ? <Image resizeMethod="resize" source={{ uri: imageOf(dreamPet.imageUrl || dreamPet.image, imgBase) }} style={styles.dreamImg} />
                 : <Text style={{ fontSize: 40 }}>🐾</Text>}
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.dreamName, { color: c.text }]} numberOfLines={2}>
@@ -603,7 +603,7 @@ export default function TradeMatchScreen() {
                     onPress={() => pickDream(item)}
                     activeOpacity={0.8}
                   >
-                    {uri ? <Image source={{ uri }} style={styles.pickImg} /> : <Text style={{ fontSize: 30 }}>🐾</Text>}
+                    {uri ? <Image resizeMethod="resize" source={{ uri }} style={styles.pickImg} /> : <Text style={{ fontSize: 30 }}>🐾</Text>}
                     <Text style={[styles.pickName, { color: c.text }]} numberOfLines={2}>{item.pet.name || item.pet.Name}</Text>
                   </TouchableOpacity>
                 );
@@ -623,7 +623,7 @@ export default function TradeMatchScreen() {
                 <Text style={styles.proofTitle}>{t('trade_match.proof_title')}</Text>
                 <View style={styles.proofImgWrap}>
                   {proofPet?.image
-                    ? <Image source={{ uri: proofPet.image }} style={styles.proofImg} />
+                    ? <Image resizeMethod="resize" source={{ uri: proofPet.image }} style={styles.proofImg} />
                     : <Text style={{ fontSize: 80 }}>🐾</Text>}
                 </View>
                 <Text style={styles.proofPet} numberOfLines={2}>

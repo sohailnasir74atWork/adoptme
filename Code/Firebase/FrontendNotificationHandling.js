@@ -8,6 +8,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import i18n from '../../i18n';
 import { openPushRoute } from '../Helper/navigationService';
 import { onSquadPush } from '../Helper/squad';
+import { syncValueUpdatesTopic, scheduleValueUpdatesPermissionAsk } from '../Helper/valueUpdatesTopic';
 
 // ✅ Messaging instance for default app
 const messaging = getMessaging();
@@ -100,6 +101,9 @@ const NotificationHandler = () => {
               color: '#36454F',
               pressAction: { id: 'default' },
             },
+            // A newer value update replaces the older one instead of stacking,
+            // as the tag / apns-collapse-id do for the system-shown copies.
+            ...(data?.type === 'values_update' ? { id: 'values_update' } : {}),
             ...(data?.route ? { data: { route: String(data.route) } } : {}),
           });
         }, { timeout: 1000 });
@@ -149,6 +153,18 @@ const NotificationHandler = () => {
       unsubscribeOpened();
     };
   }, [localState?.bannedUsers]);
+
+  // Value-update pushes go to the FCM topic 'value-updates', for guests and
+  // signed-in players alike. Once per launch, clear of the startup work, bring
+  // this device's membership in line with the Settings switch (default on).
+  // Mostly a no-op: valueUpdatesTopic.js remembers the last successful sync.
+  // Also queue the once-per-install permission ask; it waits for onboarding
+  // and the ATT → UMP consent prompts (Ads/adsGate.js) on its own.
+  useEffect(() => {
+    const id = setTimeout(() => { syncValueUpdatesTopic(); }, 5000);
+    scheduleValueUpdatesPermissionAsk();
+    return () => clearTimeout(id);
+  }, []);
 
   return null;
 };

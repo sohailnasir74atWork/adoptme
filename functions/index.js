@@ -112,6 +112,12 @@ exports.notifyBirthdayEmails = require('./notifyBirthdayEmails').notifyBirthdayE
 // The unsubscribe link in those emails: turns RTDB email_prefs/{uid}.optIn off. See functions/emailUnsubscribe.js.
 exports.emailUnsubscribe = require('./emailUnsubscribe').emailUnsubscribe;
 
+// One-time Auth email list (email_import/{uid}): a player leaves it on unsubscribe,
+// any in-app email choice, or account deletion. See functions/emailImportCleanup.js.
+const emailImportCleanup = require('./emailImportCleanup');
+exports.pruneEmailImportOnPrefs = emailImportCleanup.pruneEmailImportOnPrefs;
+exports.pruneEmailImportOnAccountDelete = emailImportCleanup.pruneEmailImportOnAccountDelete;
+
 // Keeps two owner-moderated reviews (one dispute) from being edited (2026-10-07).
 exports.guardLockedReviews = require('./guardLockedReviews').guardLockedReviews;
 

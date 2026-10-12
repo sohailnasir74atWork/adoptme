@@ -608,7 +608,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
               >
                 <View style={{ position: 'relative' }}>
                   <View style={[styles.quickActionIcon, { backgroundColor: action.color + '14' }]}>
-                    <Image source={action.image} style={styles.quickActionImage} resizeMode="contain" />
+                    <Image resizeMethod="resize" source={action.image} style={styles.quickActionImage} resizeMode="contain" />
                   </View>
                   {action.hasBadge && (
                     <Animated.View style={[styles.starBadge, { transform: [{ scale: starPulse }] }]} />
@@ -721,7 +721,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
           {/* ═══ SECTION 3: Cosmetics ═══ */}
           <View style={styles.section}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Image source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticsSectionIcon} resizeMode="contain" />
+              <Image resizeMethod="resize" source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticsSectionIcon} resizeMode="contain" />
               <Text style={[styles.sectionTitle, { color: selectedTheme.colors.text, marginBottom: 0 }]}>{t('home_tab.cosmetics_title')}</Text>
             </View>
             <View style={styles.cosmeticsCards}>
@@ -738,7 +738,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 activeOpacity={0.85}
               >
                 <View style={[styles.cosmeticIcon, { backgroundColor: '#EC4899' }]}>
-                  <Image source={require('../../assets/home-actions/mystery-egg.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
+                  <Image resizeMethod="resize" source={require('../../assets/home-actions/mystery-egg.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
                 </View>
                 <View style={styles.cosmeticCardContent}>
                   <View style={styles.cosmeticTitleRow}>
@@ -766,7 +766,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                 activeOpacity={0.85}
               >
                 <View style={[styles.cosmeticIcon, { backgroundColor: '#8B5CF6' }]}>
-                  <Image source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
+                  <Image resizeMethod="resize" source={require('../../assets/home-actions/cosmetics.png')} style={styles.cosmeticCardImage} resizeMode="contain" />
                 </View>
                 <View style={styles.cosmeticCardContent}>
                   <Text style={[styles.cosmeticCardTitle, { color: selectedTheme.colors.text }]}>{t('home_tab.action_cosmetics')}</Text>
@@ -784,7 +784,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
               onPress={() => requireSignIn(() => navigation.navigate('GameHub'), t('mini_games.sign_in'))}
               activeOpacity={0.85}
             >
-              <Image source={GAME_ICONS.controller} style={styles.miniGamesIcon} resizeMode="contain" />
+              <Image resizeMethod="resize" source={GAME_ICONS.controller} style={styles.miniGamesIcon} resizeMode="contain" />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={styles.tradeMatchTitle}>{t('home_tab.mini_games_title')}</Text>
@@ -804,7 +804,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
                   onPress={() => requireSignIn(() => openMiniGame(navigation, g.id), t('mini_games.sign_in'))}
                   activeOpacity={0.8}
                 >
-                  <Image source={GAME_ICONS[g.id]} style={styles.miniGamesTileIcon} resizeMode="contain" />
+                  <Image resizeMethod="resize" source={GAME_ICONS[g.id]} style={styles.miniGamesTileIcon} resizeMode="contain" />
                   <Text style={styles.miniGamesTileText} numberOfLines={1}>{t(`mini_games.${g.id}_short`)}</Text>
                 </TouchableOpacity>
               ))}
@@ -838,7 +838,7 @@ const HomeTabScreen = ({ selectedTheme }) => {
 
           {/* ═══ SECTION 5: Footer ═══ */}
           <View style={styles.footer}>
-            <Image
+            <Image resizeMethod="resize"
               source={require('../../assets/splashscreen.webp')}
               style={styles.footerLogo}
               resizeMode="contain"

@@ -5,6 +5,7 @@
         "app_settings": "PARAMÈTRES DE L'APP",
         "haptic_feedback": "Vibrations",
         "chat_notifications": "Notifications du chat",
+        "value_update_notifications": "Notifications de mise à jour des valeurs",
         "theme": "Thème",
         "theme_system": "SYSTÈME",
         "theme_light": "CLAIR",
@@ -2238,7 +2239,9 @@
         "trial_weeks_other": "{{count}} semaines",
         "trial_months_one": "{{count}} mois",
         "trial_months_many": "{{count}} de mois",
-        "trial_months_other": "{{count}} mois"
+        "trial_months_other": "{{count}} mois",
+        "restore_none_title": "Aucun achat trouvé",
+        "restore_none": "Aucun achat Pro actif sur ce compte."
     },
     "catalog": {
         "updated": "Valeurs téléchargées : {{date}}",

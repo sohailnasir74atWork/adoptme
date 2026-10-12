@@ -33,6 +33,8 @@ import { markSignOutIntent } from '../Firebase/signOutIntent';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { resetUserState, registerForNotifications } from '../Globelhelper';
+import { syncValueUpdatesTopic } from '../Helper/valueUpdatesTopic';
+import { requestPermission as askNotificationPermission } from '../Helper/PermissionCheck';
 import ConditionalKeyboardWrapper from '../Helper/keyboardAvoidingContainer';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import { useLocalState } from '../LocalGlobelStats';
@@ -387,7 +389,7 @@ const EditProfileDrawerContent = ({
                 padding: selectedImage === item.url ? 2 : 0,
               }}
             >
-              <Image
+              <Image resizeMethod="resize"
                 source={{ uri: item.url }}
                 style={{ width: 40, height: 40, borderRadius: 20, opacity: selectedImage === item.url ? 1 : 0.6 }}
               />
@@ -1282,6 +1284,19 @@ export default function SettingsScreen({ selectedTheme }) {
       }
     }
   };
+
+  // Value update pushes: the FCM topic 'value-updates'. Membership is per
+  // device, so this works for guests too and is separate from the chat switch
+  // above (which clears users/{uid}/fcmToken). Not awaited: a failed call is
+  // retried at the next launch (Helper/valueUpdatesTopic.js).
+  const handleToggleValueUpdates = (value) => {
+    updateLocalState('valueUpdateNotifications', value);
+    syncValueUpdatesTopic(value, { force: true });
+    // The pushes only show with OS permission, and nothing asks guests for it
+    // at startup. Uses the shared helper, not the local requestPermission
+    // above, because that one also flips the chat switch on.
+    if (value) askNotificationPermission().catch(() => {});
+  };
   const USERNAME_REGEX = /^[A-Za-z0-9_-]+$/;
 
   const handleSaveChanges = async () => {
@@ -1472,7 +1487,7 @@ export default function SettingsScreen({ selectedTheme }) {
           backgroundColor: c.bg,
         }}
       >
-        <Image
+        <Image resizeMethod="resize"
           source={{ uri: pet.imageUrl || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
           style={{ width: '100%', height: '100%' }}
         />
@@ -2170,7 +2185,7 @@ export default function SettingsScreen({ selectedTheme }) {
                   <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
                     {tradeItem ? (
                       <>
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                           style={{ width: 30, height: 30, borderRadius: 6 }}
                           resizeMode="contain"
@@ -2223,7 +2238,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
           {/* Transfer Icon */}
           <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <Image source={require('../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
+            <Image resizeMethod="resize" source={require('../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
           </View>
 
           {/* Wants Items Grid */}
@@ -2237,7 +2252,7 @@ export default function SettingsScreen({ selectedTheme }) {
                   <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
                     {tradeItem ? (
                       <>
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                           style={{ width: 30, height: 30, borderRadius: 6 }}
                           resizeMode="contain"
@@ -2906,7 +2921,7 @@ export default function SettingsScreen({ selectedTheme }) {
                     {!user?.id ? t("settings.login_register") : displayName}
                   </Text>
                   {user?.isPro &&
-                    <Image
+                    <Image resizeMethod="resize"
                       source={require('../../assets/pro.png')}
                       style={{ width: 14, height: 14, marginLeft: 4 }}
                     />
@@ -3163,6 +3178,23 @@ export default function SettingsScreen({ selectedTheme }) {
               <Switch
                 value={isPermissionGranted}
                 onValueChange={handleToggleNotification}
+              />
+            </View>
+          </View>
+
+          {/* Value update notifications: guests too (topic push, no account needed) */}
+          <View style={styles.option}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => handleToggleValueUpdates(!(localState.valueUpdateNotifications ?? true))}
+              >
+                <Icon name="trending-up" size={18} color={'white'} style={{ backgroundColor: '#2563EB', padding: 5, borderRadius: 5 }} />
+                <Text style={styles.optionText}>{t('settings.value_update_notifications')}</Text>
+              </TouchableOpacity>
+              <Switch
+                value={localState.valueUpdateNotifications ?? true}
+                onValueChange={handleToggleValueUpdates}
               />
             </View>
           </View>
@@ -3603,7 +3635,7 @@ export default function SettingsScreen({ selectedTheme }) {
             <TouchableOpacity style={styles.option} onPress={() => {
               handleBloxFruit(); triggerHapticFeedback('impactLight');
             }}>
-              <Image
+              <Image resizeMethod="resize"
                 source={require('../../assets/logo.webp')}
                 style={{ width: 40, height: 40, borderRadius: 5 }}
               />
@@ -3613,7 +3645,7 @@ export default function SettingsScreen({ selectedTheme }) {
             <TouchableOpacity style={styles.optionLast} onPress={() => {
               handleadoptme(); triggerHapticFeedback('impactLight');
             }}>
-              <Image
+              <Image resizeMethod="resize"
                 source={require('../../assets/MM2logo.webp')}
                 style={{ width: 40, height: 40, borderRadius: 5 }}
               />
@@ -4125,7 +4157,7 @@ export default function SettingsScreen({ selectedTheme }) {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: follower.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                         style={{ width: 44, height: 44, borderRadius: 22 }}
                       />

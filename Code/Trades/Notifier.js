@@ -316,7 +316,7 @@ const NotifierDrawer = () => {
       <TouchableOpacity
         style={[styles.itemContainer, isSelected && styles.itemSelected, isDarkMode && styles.itemContainerDark]}
         onPress={() => handleSelect(item)}>
-        <Image
+        <Image resizeMethod="resize"
           source={{ uri: getImageUrl(item) }}
           style={styles.itemImage}
         />
@@ -333,7 +333,7 @@ const NotifierDrawer = () => {
     const imageUrl = getImageUrl({}, itemName); // Pass empty object, name as override
     return (
       <View style={styles.savedItem} key={key}>
-        <Image source={{ uri: imageUrl }} style={styles.itemImageSelected} />
+        <Image resizeMethod="resize" source={{ uri: imageUrl }} style={styles.itemImageSelected} />
         <Text style={[styles.itemText, { color: isDarkMode ? '#fff' : '#000', marginLeft: 5 }]}>{itemName}</Text>
         <TouchableOpacity onPress={() => handleRemove(key)}>
           <Icon name="close-circle" size={20} color="red" style={styles.removeText} />

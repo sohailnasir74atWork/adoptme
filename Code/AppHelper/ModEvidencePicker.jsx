@@ -70,7 +70,7 @@ const ModEvidencePicker = ({
       <View style={styles.row}>
         {uris.map((uri, i) => (
           <View key={`${uri}-${i}`} style={styles.thumbWrap}>
-            <Image source={{ uri }} style={[styles.thumb, { borderColor: C.border }]} />
+            <Image resizeMethod="resize" source={{ uri }} style={[styles.thumb, { borderColor: C.border }]} />
             {!disabled && (
               <TouchableOpacity
                 onPress={() => removeAt(i)}

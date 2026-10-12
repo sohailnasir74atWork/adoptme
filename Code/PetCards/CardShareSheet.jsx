@@ -67,7 +67,7 @@ export default function CardShareSheet({ card, total, onClose }) {
         <View style={styles.previewBox}>
           <ViewShot ref={shot} options={{ format: 'png', quality: 1, width: 1080, height: 1920 }} style={styles.canvas}>
             <View style={[StyleSheet.absoluteFill, { backgroundImage: `radial-gradient(ellipse 70% 45% at 50% 48%, ${rs.glow} 0%, ${th.stage[1]} 45%, ${th.stage[0]} 100%)` }]} />
-            {bg ? <Image source={{ uri: bg }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : (
+            {bg ? <Image resizeMethod="resize" source={{ uri: bg }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : (
               <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
                 {Array.from({ length: 12 }).map((_, i) => (
                   <View key={i} style={{ position: 'absolute', width: 26, height: 900, opacity: 0.18, backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0) 0%, ${rs.glow} 50%, rgba(0,0,0,0) 100%)`, transform: [{ rotate: `${i * 15}deg` }] }} />

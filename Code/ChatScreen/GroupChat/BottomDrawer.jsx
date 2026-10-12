@@ -201,7 +201,7 @@ const PostImageCarousel = React.memo(({ images, isDarkMode, screenWidth }) => {
               paddingHorizontal: 16,
             }}
           >
-            <Image
+            <Image resizeMethod="resize"
               source={{ uri: imgUrl }}
               style={{
                 width: screenWidth - 32,
@@ -2245,7 +2245,7 @@ const ProfileBottomDrawer = ({
           backgroundColor: c.bg,
         }}
       >
-        <Image
+        <Image resizeMethod="resize"
           source={{ uri: resolvePetImageUrl(pet) }}
           style={{ width: '100%', height: '100%' }}
         />
@@ -2542,7 +2542,7 @@ const ProfileBottomDrawer = ({
                   <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
                     {tradeItem ? (
                       <>
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                           style={{ width: 30, height: 30, borderRadius: 6 }}
                           resizeMode="contain"
@@ -2595,7 +2595,7 @@ const ProfileBottomDrawer = ({
 
           {/* Transfer Icon */}
           <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <Image source={require('../../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
+            <Image resizeMethod="resize" source={require('../../../assets/left-right.png')} style={{ width: 20, height: 20, borderRadius: 5 }} />
           </View>
 
           {/* Wants Items Grid */}
@@ -2609,7 +2609,7 @@ const ProfileBottomDrawer = ({
                   <View key={idx} style={{ width: '22%', height: 40, margin: 1, alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: 10 }}>
                     {tradeItem ? (
                       <>
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getTradeItemImageUrl(tradeItem) || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                           style={{ width: 30, height: 30, borderRadius: 6 }}
                           resizeMode="contain"
@@ -2780,7 +2780,7 @@ const ProfileBottomDrawer = ({
       >
         {/* Post Image */}
         {images.length > 0 && (
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: images[0] }}
             style={{ width: '100%', height: 140, borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
             resizeMode="cover"
@@ -2901,7 +2901,7 @@ const ProfileBottomDrawer = ({
               borderBottomWidth: 1, borderBottomColor: c.border,
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                <Image
+                <Image resizeMethod="resize"
                   source={{ uri: post.avatar || avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                   style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
                 />
@@ -3033,7 +3033,7 @@ const ProfileBottomDrawer = ({
                     paddingHorizontal: 10, paddingVertical: 4,
                     borderRadius: 999,
                   }}>
-                    <Image source={require('../../../assets/pro.png')} style={{ width: 11, height: 11 }} />
+                    <Image resizeMethod="resize" source={require('../../../assets/pro.png')} style={{ width: 11, height: 11 }} />
                     <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 }}>Pro</Text>
                   </View>
                 )}

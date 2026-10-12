@@ -125,7 +125,7 @@ const BadgeCard = ({ badgeId, earned, isDark }) => {
         alignItems: 'center', justifyContent: 'center',
       }, earned && { backgroundColor: badge.color + '20' }]}>
         {earned && BADGE_IMAGES[badgeId] ? (
-          <Image source={BADGE_IMAGES[badgeId]} style={[{ width: 36, height: 36 }, isDark && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
+          <Image resizeMethod="resize" source={BADGE_IMAGES[badgeId]} style={[{ width: 36, height: 36 }, isDark && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
         ) : (
           <Text style={{ fontSize: 28, opacity: 0.3 }}>🔒</Text>
         )}
@@ -466,7 +466,7 @@ const BadgesScreen = ({ navigation }) => {
                         return (
                           <View key={id} style={[s.shareCardBadge, { backgroundColor: badge.bgLight, borderColor: badge.color + '40' }]}>
                             {BADGE_IMAGES[id] ? (
-                              <Image source={BADGE_IMAGES[id]} style={{ width: 28, height: 28 }} />
+                              <Image resizeMethod="resize" source={BADGE_IMAGES[id]} style={{ width: 28, height: 28 }} />
                             ) : (
                               <Text style={{ fontSize: 22 }}>{badge.emoji}</Text>
                             )}

@@ -299,7 +299,7 @@ const PrivateMessageList = ({
                         })
                       }
                     >
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: imageUri }}
                         style={{
                           width: imageSize,
@@ -345,7 +345,7 @@ const PrivateMessageList = ({
                       key={`${fruit.id || fruit.name}-${index}`}
                       style={[fruitStyles.fruitCard, isCompactFruits && fruitStyles.fruitCardCompact]}
                     >
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: fruit.imageUrl }}
                         style={[fruitStyles.fruitImage, isCompactFruits && fruitStyles.fruitImageCompact]}
                       />

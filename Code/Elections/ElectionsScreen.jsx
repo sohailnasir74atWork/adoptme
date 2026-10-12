@@ -49,7 +49,7 @@ const APP_ICON = { pending: 'hourglass-outline', approved: 'checkmark-circle', r
 const PHASE_COLOR = { upcoming: '#64748B', nominations: GOLD, voting: GREEN, counting: '#0EA5E9', review: '#0EA5E9', finalized: ACCENT };
 
 const Avatar = ({ uri, size = 36, color = ACCENT }) => (uri
-  ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+  ? <Image resizeMethod="resize" source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
   : (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name="person" size={size * 0.5} color="#fff" />

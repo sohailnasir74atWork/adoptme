@@ -1794,7 +1794,7 @@ const TradeList = ({ route }) => {
                           )}
                         </View>
                         {/* ✅ Image */}
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getImageUrl(tradeItem, localState.imgurl) }}
                           style={styles.gridItemImage}
                         />
@@ -1817,7 +1817,7 @@ const TradeList = ({ route }) => {
           )}
           {/* Transfer Icon */}
           <View style={styles.transfer}>
-            <Image source={require('../../assets/left-right.png')} style={styles.transferImage} />
+            <Image resizeMethod="resize" source={require('../../assets/left-right.png')} style={styles.transferImage} />
           </View>
           {/* Wants Items Grid or Give Offer */}
           {item.wantsItems && item.wantsItems.length > 0 ? (
@@ -1847,7 +1847,7 @@ const TradeList = ({ route }) => {
                           )}
                         </View>
                         {/* ✅ Image */}
-                        <Image
+                        <Image resizeMethod="resize"
                           source={{ uri: getImageUrl(tradeItem, localState.imgurl) }}
                           style={styles.gridItemImage}
                         />

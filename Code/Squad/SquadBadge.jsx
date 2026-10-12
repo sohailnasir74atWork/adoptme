@@ -25,7 +25,7 @@ export const squadBadgeKey = (count) => {
 const SquadBadge = React.memo(({ count, rankKey, size = 16, style }) => {
   const key = rankKey || squadBadgeKey(count);
   if (!key || !IMAGES[key]) return null;
-  return <Image source={IMAGES[key]} style={[{ width: size, height: size }, style]} resizeMode="contain" />;
+  return <Image resizeMethod="resize" source={IMAGES[key]} style={[{ width: size, height: size }, style]} resizeMode="contain" />;
 });
 
 export default SquadBadge;

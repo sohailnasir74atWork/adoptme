@@ -549,7 +549,7 @@ const IceBreaker = ({ visible, onClose }) => {
                   },
                 ]}>
                   {/* Pet image */}
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: getImageUrl(targetPet.image) }}
                     style={s.petImage}
                     blurRadius={phase === 'guessing' ? 0 : currentBlur}

@@ -585,7 +585,7 @@ const HDWallpaperScreen = () => {
           >
             {selectedUrl ? (
               <View style={styles.fullImageWrapper}>
-                <Image
+                <Image resizeMethod="resize"
                   source={{ uri: selectedUrl }}
                   style={styles.fullImage}
                   resizeMode="contain"

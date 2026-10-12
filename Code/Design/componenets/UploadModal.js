@@ -404,7 +404,7 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
                 <View style={themedStyles.imageGrid}>
                   {imageUris.map((uri, idx) => (
                     <View key={idx} style={themedStyles.imagePreviewContainer}>
-                      <Image source={{ uri }} style={themedStyles.previewImage} />
+                      <Image resizeMethod="resize" source={{ uri }} style={themedStyles.previewImage} />
                       <View style={themedStyles.imageCountBadge}>
                         <Text style={themedStyles.imageCountText}>{idx + 1}</Text>
                       </View>

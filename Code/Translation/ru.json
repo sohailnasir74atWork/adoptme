@@ -5,6 +5,7 @@
         "app_settings": "НАСТРОЙКИ ПРИЛОЖЕНИЯ",
         "haptic_feedback": "Виброотклик",
         "chat_notifications": "Уведомления чата",
+        "value_update_notifications": "Уведомления об обновлении цен",
         "theme": "Тема",
         "theme_system": "СИСТЕМНАЯ",
         "theme_light": "СВЕТЛАЯ",
@@ -2123,7 +2124,9 @@
         "trial_months_one": "{{count}} месяц",
         "trial_months_few": "{{count}} месяца",
         "trial_months_many": "{{count}} месяцев",
-        "trial_months_other": "{{count}} месяца"
+        "trial_months_other": "{{count}} месяца",
+        "restore_none_title": "Покупок не найдено",
+        "restore_none": "На этом аккаунте нет активной подписки Pro."
     },
     "catalog": {
         "updated": "Каталог загружен: {{date}}",

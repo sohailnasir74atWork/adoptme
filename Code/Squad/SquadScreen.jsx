@@ -41,7 +41,7 @@ const GREEN = '#10B981';
 const GOLD = '#F59E0B';
 
 const Avatar = ({ uri, size = 36 }) => (uri
-  ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+  ? <Image resizeMethod="resize" source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
   : (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name="person" size={size * 0.5} color="#fff" />

@@ -755,7 +755,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           style={styles.chatItem}
           onPress={() => handleOpenGroup(groupId, groupName)}
         >
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: groupAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
             style={styles.avatar}
           />
@@ -1139,7 +1139,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
           <View style={{ position: 'relative', marginRight: 12 }}>
-            <Image
+            <Image resizeMethod="resize"
               source={{ uri: item.requesterAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
               style={{
                 width: 44,
@@ -1596,7 +1596,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: groupAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                         style={{
                           width: 40,
@@ -1955,7 +1955,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                 <View style={{ padding: 20 }}>
                   {/* Group Avatar */}
                   <View style={{ alignItems: 'center', marginBottom: 24 }}>
-                    <Image
+                    <Image resizeMethod="resize"
                       source={{
                         uri: selectedGroupInfo.avatar ||
                           'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
@@ -2009,7 +2009,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
                       backgroundColor: isDarkMode ? '#111827' : '#F9FAFB',
                       borderRadius: 12,
                     }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{
                           uri: selectedGroupInfo.createdBy.avatar ||
                             'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',

@@ -725,7 +725,11 @@ export const GlobalStateProvider = ({ children }) => {
               const res = await GoogleSignin.signInSilently();
               const idToken = res?.idToken || res?.data?.idToken;
               if (idToken) {
-                await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+                // With the access token: see SigninDrawer (RNFB 25 + Android).
+                const accessToken = await GoogleSignin.getTokens()
+                  .then((tk) => tk?.accessToken || null)
+                  .catch(() => null);
+                await signInWithCredential(auth, GoogleAuthProvider.credential(idToken, accessToken));
                 logAuthEvent(`auth_silent_relogin_ok hadPrevUid=${prevUid ? 1 : 0} msSinceLaunch=${Date.now() - _launchedAt}`);
                 return; // this listener fires again with the restored user
               }

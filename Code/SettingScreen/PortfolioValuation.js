@@ -227,7 +227,7 @@ const PortfolioValuation = ({ ownedPets = [], wishlistPets = [], isDarkMode, t }
                             <View style={styles.topItemRank}>
                                 <Text style={styles.rankText}>#{index + 1}</Text>
                             </View>
-                            <Image
+                            <Image resizeMethod="resize"
                                 source={{
                                     uri: pet.imageUrl || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png',
                                 }}

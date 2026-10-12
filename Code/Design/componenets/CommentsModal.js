@@ -320,7 +320,7 @@ const CommentModal = ({ visible, onClose, postId, collectionName = 'designPosts'
         ]}
       >
         <TouchableOpacity onPress={() => handleChatNavigation(item)} activeOpacity={0.7}>
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: item.avatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
             style={[styles.avatar, isReply && styles.replyAvatar]}
           />

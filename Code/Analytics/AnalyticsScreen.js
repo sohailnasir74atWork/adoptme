@@ -152,7 +152,7 @@ const ItemRow = memo(({ item, index, showSignal, showChange, locked, getImageUrl
       <Text style={[styles.itemRank, index < 3 && { fontSize: 18 }]}>{rankDisplay}</Text>
       <View style={styles.itemImageWrap}>
         {item.image ? (
-          <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+          <Image resizeMethod="resize" source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
         ) : (
           <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
             <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
@@ -273,7 +273,7 @@ const ChangeRow = memo(({ item, index, isDarkMode, getImageUrl, getTimeAgo, form
         <View style={styles.changeLeft}>
           <View style={styles.itemImageWrap}>
             {item.image ? (
-              <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+              <Image resizeMethod="resize" source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
             ) : (
               <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
                 <Icon name="cube-outline" size={16} color={isDarkMode ? '#666' : '#999'} />
@@ -1217,7 +1217,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                           <View style={styles.predictionLeft}>
                             <View style={styles.itemImageWrap}>
                               {item.image ? (
-                                <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+                                <Image resizeMethod="resize" source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
                               ) : (
                                 <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
                                   <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />
@@ -1277,7 +1277,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                         <View style={styles.predictionLeft}>
                           <View style={styles.itemImageWrap}>
                             {item.image ? (
-                              <Image source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
+                              <Image resizeMethod="resize" source={{ uri: getImageUrl(item.image) }} style={styles.itemImage} />
                             ) : (
                               <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
                                 <Icon name="cube-outline" size={18} color={isDarkMode ? '#666' : '#bbb'} />

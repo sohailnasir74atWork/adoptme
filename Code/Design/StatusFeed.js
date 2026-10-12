@@ -167,7 +167,7 @@ const LoadingImage = ({ source, style, resizeMode = 'cover', borderRadius }) => 
           style={[StyleSheet.absoluteFill, { borderRadius: borderRadius || style?.borderRadius || 0 }]}
         />
       )}
-      <Image
+      <Image resizeMethod="resize"
         source={source}
         style={[style, { position: loaded ? 'relative' : 'absolute', opacity: loaded ? 1 : 0 }]}
         resizeMode={resizeMode}
@@ -1323,7 +1323,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
 
             {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, zIndex: 20 }}>
-              <Image
+              <Image resizeMethod="resize"
                 source={{ uri: viewingStatus.userAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
                 style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)' }}
               />
@@ -1658,7 +1658,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
             {/* Image preview */}
             {selectedImage?.uri && (
               <View style={styles.imagePreviewWrap}>
-                <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                <Image resizeMethod="resize" source={{ uri: selectedImage.uri }} style={styles.imagePreview} resizeMode="cover" />
                 <TouchableOpacity
                   style={styles.removeImageBtn}
                   onPress={() => setSelectedImage(null)}

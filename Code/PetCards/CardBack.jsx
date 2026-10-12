@@ -43,7 +43,7 @@ function CardBack({ width, theme = 'island', glow = null }) {
       }}
     >
       {uri ? (
-        <Image source={{ uri }} style={{ position: 'absolute', width, height: h }} resizeMode="cover" />
+        <Image resizeMethod="resize" source={{ uri }} style={{ position: 'absolute', width, height: h }} resizeMode="cover" />
       ) : (
         <>
           <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: `radial-gradient(circle at 20% 15%, ${b.dot} 0%, rgba(0,0,0,0) 30%), radial-gradient(circle at 80% 85%, ${b.dot} 0%, rgba(0,0,0,0) 30%)` }} />

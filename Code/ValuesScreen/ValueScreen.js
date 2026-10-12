@@ -126,7 +126,7 @@ const VariantToggle = React.memo(({ badge, color, label, isActive, onPress, styl
 
 const ItemImage = React.memo(({ uri, badges, styles }) => (
   <View style={styles.imageWrapper}>
-    <Image source={{ uri }} style={styles.icon} resizeMode="cover" />
+    <Image resizeMethod="resize" source={{ uri }} style={styles.icon} resizeMode="cover" />
     <View style={styles.itemBadgesContainer}>
       {badges}
     </View>
@@ -423,7 +423,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const CustomAd = () => (
     <View style={styles.adContainer}>
       <View style={styles.adContent}>
-        <Image
+        <Image resizeMethod="resize"
           source={require('../../assets/icon.webp')} // Replace with your ad icon
           style={styles.adIcon}
         />
@@ -443,7 +443,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
   const CustomAd2 = () => (
     <View style={styles.adContainer}>
       <View style={styles.adContent}>
-        <Image
+        <Image resizeMethod="resize"
           source={require('../../assets/MM2logo.webp')}
           style={styles.adIcon}
         />
@@ -1009,7 +1009,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
                 contentContainerStyle={styles.selectedPetsList}
                 renderItem={({ item, index }) => (
                   <TouchableOpacity style={styles.selectedPetCard} onPress={() => handleRemoveSelected(index)}>
-                    <Image
+                    <Image resizeMethod="resize"
                       source={{ uri: item.imageUrl }}
                       style={styles.selectedPetImage}
                     />

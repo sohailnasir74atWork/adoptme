@@ -12,6 +12,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useGlobalState } from './Code/GlobelStats';
 // Imported at the top on purpose: its launch clock is the cold-start ad budget.
 import AppOpenAdManager from './Code/Ads/openApp';
+import { markAdsReady } from './Code/Ads/adsGate';
 import { useLocalState } from './Code/LocalGlobelStats';
 import { AdsConsent } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
@@ -257,6 +258,16 @@ function App() {
       }
     } catch (error) {
       // Silently handle consent errors
+    } finally {
+      // Onboarding is over (App only mounts after it) and ATT → UMP have run,
+      // including a consent form refreshed alongside init: open the gate that
+      // the one-time notification permission ask waits on (Code/Ads/adsGate.js).
+      try {
+        const { whenConsentGathered } = require('./Code/Ads/init');
+        whenConsentGathered().then(markAdsReady, markAdsReady);
+      } catch (_) {
+        markAdsReady();
+      }
     }
   }, [saveConsentStatus, showAttPrimer]);
 

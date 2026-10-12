@@ -59,7 +59,7 @@ function Texture({ name, w, h, style }) {
   const sheet = SHEET[name];
   if (Platform.OS === 'android' && sheet && w * px <= SHEET_PX.w && h * px <= SHEET_PX.h) {
     return (
-      <Image
+      <Image resizeMethod="resize"
         source={sheet}
         resizeMode="stretch"
         fadeDuration={0}
@@ -67,7 +67,7 @@ function Texture({ name, w, h, style }) {
       />
     );
   }
-  return <Image source={TEX[name]} resizeMode="repeat" style={[StyleSheet.absoluteFill, style]} />;
+  return <Image resizeMethod="resize" source={TEX[name]} resizeMode="repeat" style={[StyleSheet.absoluteFill, style]} />;
 }
 
 const RAINBOW = 'linear-gradient(115deg, #FF5FA2 0%, #FFD45E 18%, #5EFFB4 36%, #5EC8FF 54%, #B45EFF 72%, #FF5FA2 90%)';
@@ -157,7 +157,7 @@ function PetCard({
   // Pop-out pets are drawn bigger than the window so they break out of its top.
   const popScale = fullArt ? 1.12 : 1.2;
   const pet = petUri ? (
-    <Image
+    <Image resizeMethod="resize"
       source={{ uri: petUri }}
       onError={() => setPetFailed(true)}
       resizeMode="contain"
@@ -178,7 +178,7 @@ function PetCard({
       <Animated.View style={[StyleSheet.absoluteFill, { transform: sceneryDepth }]}>
         <View style={[StyleSheet.absoluteFill, { backgroundImage: paintFor(bgId) }]} />
         {bgUri ? (
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: bgUri }}
             resizeMode="cover"
             style={{ position: 'absolute', width: w, height: w * 1.4, left: 0, top: h >= w * 1.4 ? 0 : -(w * 1.4 - h) * 0.55 }}
@@ -230,7 +230,7 @@ function PetCard({
     >
       {/* Mega: the rainbow wheel spins behind the frame (CardShine drives it). */}
       {f === 'mega' && owned ? (
-        <Animated.Image
+        <Animated.Image resizeMethod="resize"
           source={TEX.conic}
           style={{
             position: 'absolute', width: H * 1.5, height: H * 1.5, left: (width - H * 1.5) / 2, top: (H - H * 1.5) / 2,

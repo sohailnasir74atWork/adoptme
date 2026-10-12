@@ -23,7 +23,7 @@ const colorFor = (name) => INITIAL_COLORS[[...String(name || '?')].reduce((a, ch
 export const BirthdayAvatar = ({ uri, name, size = 40, ring = false }) => {
   const box = { width: size, height: size, borderRadius: size / 2 };
   const ringStyle = ring ? { borderWidth: 2, borderColor: BIRTHDAY_PINK } : null;
-  if (uri) return <Image source={{ uri }} style={[box, ringStyle]} />;
+  if (uri) return <Image resizeMethod="resize" source={{ uri }} style={[box, ringStyle]} />;
   return (
     <View style={[box, ringStyle, { backgroundColor: colorFor(name), alignItems: 'center', justifyContent: 'center' }]}>
       <Text style={{ color: '#fff', fontWeight: '900', fontSize: size * 0.42 }}>

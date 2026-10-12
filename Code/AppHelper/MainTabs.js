@@ -53,7 +53,7 @@ const TabIcon = React.memo(({ routeName, iconName, color, size, focused }) => {
     return <FontAwesome name={iconName} size={size} color={color} solid={focused} />;
   }
   return (
-    <Image
+    <Image resizeMethod="resize"
       source={focused ? images[0] : images[1]}
       style={{ width: 26, height: 26, transform: [{ scale: focused ? 1.08 : 1 }] }}
       resizeMode="contain"
@@ -126,7 +126,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
     <>
       {isAdmin && (
         <TouchableOpacity onPress={() => navigation.navigate('Admin')}>
-          <Image
+          <Image resizeMethod="resize"
             source={require('../../assets/trophy.webp')}
             style={{ width: 20, height: 20, marginRight: 16 }}
           />

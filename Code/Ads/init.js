@@ -27,6 +27,14 @@ import { MobileAds, MaxAdContentRating, AdsConsent } from 'react-native-google-m
 import { getTrackingStatus } from 'react-native-tracking-transparency';
 
 let initPromise = null;
+// This session's UMP step, form included. Kept apart from initPromise, which
+// can resolve before it when earlier consent stands (see ensureAdsInitialized).
+let consentPromise = null;
+
+// Resolves once this session's consent step, and any form it showed, is over.
+// Never rejects (gatherConsent swallows its errors). Read it after
+// ensureAdsInitialized() has settled, as App.js does.
+export const whenConsentGathered = () => consentPromise || Promise.resolve();
 
 // Consent the user gave in an earlier session is kept on the device by UMP and
 // is enough to request ads right away: Google's UMP sample initialises the SDK
@@ -70,11 +78,11 @@ export function ensureAdsInitialized() {
       .then((alreadyConsented) => {
         // Earlier consent stands: refresh it alongside init (the form still
         // shows if this session needs one) instead of in front of it.
+        consentPromise = gatherConsent();
         if (alreadyConsented) {
-          gatherConsent();
           return undefined;
         }
-        return gatherConsent();
+        return consentPromise;
       })
       .then(() =>
         MobileAds().setRequestConfiguration({

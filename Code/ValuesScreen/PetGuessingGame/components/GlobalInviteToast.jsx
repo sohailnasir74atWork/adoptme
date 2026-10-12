@@ -136,7 +136,7 @@ const GlobalInviteToast = () => {
 
         {/* Top row: avatar + invite text */}
         <View style={styles.topRow}>
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: invite.fromUserAvatar || 'https://bloxfruitscalc.com/wp-content/uploads/2025/display-pic.png' }}
             style={styles.avatar}
           />

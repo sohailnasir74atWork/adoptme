@@ -108,7 +108,7 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
           overflow: shouldGlow ? 'hidden' : undefined,
         }, style]}
       >
-        <Image source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
+        <Image resizeMethod="resize" source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
         <Text style={{ color: '#fff', fontSize: s.fs, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 }}>
           {label}
         </Text>
@@ -136,7 +136,7 @@ const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, s
         overflow: shouldGlow ? 'hidden' : undefined,
       }, style]}
     >
-      <Image source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
+      <Image resizeMethod="resize" source={def.image} style={{ width: s.ic, height: s.ic }} resizeMode="contain" />
       <Text style={{ color: def.color, fontSize: s.fs, fontWeight: '800', letterSpacing: 0.35 }}>
         {label}
       </Text>

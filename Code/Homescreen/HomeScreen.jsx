@@ -816,7 +816,7 @@ const HomeScreen = ({ selectedTheme }) => {
         >
           <View style={styles.favoriteImageContainer}>
             {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.favoriteItemImage} />
+              <Image resizeMethod="resize" source={{ uri: imageUrl }} style={styles.favoriteItemImage} />
             ) : (
               <View style={[styles.favoriteItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
                 <Icon name="image-outline" size={18} color={isDarkMode ? '#666' : '#999'} />
@@ -892,7 +892,7 @@ const HomeScreen = ({ selectedTheme }) => {
           }}
         >
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.detailedItemImage} />
+            <Image resizeMethod="resize" source={{ uri: imageUrl }} style={styles.detailedItemImage} />
           ) : (
             <View style={[styles.detailedItemImage, { backgroundColor: isDarkMode ? '#333' : '#ddd', justifyContent: 'center', alignItems: 'center' }]}>
               <Icon name="image-outline" size={24} color={isDarkMode ? '#666' : '#999'} />
@@ -939,7 +939,7 @@ const HomeScreen = ({ selectedTheme }) => {
         }}
       >
         {imageUrl ? (
-          <Image
+          <Image resizeMethod="resize"
             source={{ uri: imageUrl }}
             style={styles.gridItemImage}
           />
@@ -1594,7 +1594,7 @@ const HomeScreen = ({ selectedTheme }) => {
                         {Math.abs(profitLoss).toLocaleString()}
                       </Text>
                       <View style={[styles.divider, { position: 'absolute', right: 0, bottom: 0 }]}>
-                        <Image
+                        <Image resizeMethod="resize"
                           source={require('../../assets/reset.png')}
                           style={{ width: 18, height: 18, tintColor: 'white' }}
                           onTouchEnd={resetState}
@@ -1712,7 +1712,7 @@ const HomeScreen = ({ selectedTheme }) => {
                       >
                         {item ? (
                           <>
-                            <Image
+                            <Image resizeMethod="resize"
                               source={{ uri: getImageUrl(item, localState.imgurl) }}
                               style={[styles.itemImageOverlay]}
                             />
@@ -1789,7 +1789,7 @@ const HomeScreen = ({ selectedTheme }) => {
                       >
                         {item ? (
                           <>
-                            <Image
+                            <Image resizeMethod="resize"
                               source={{ uri: getImageUrl(item, localState.imgurl) }}
 
                               style={[styles.itemImageOverlay]}

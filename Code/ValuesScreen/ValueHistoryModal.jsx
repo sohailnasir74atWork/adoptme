@@ -183,7 +183,7 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
           <View style={styles.grabber} />
 
           <View style={styles.headerRow}>
-            {!!imageUrl && <Image source={{ uri: imageUrl }} style={styles.thumb} resizeMode="cover" />}
+            {!!imageUrl && <Image resizeMethod="resize" source={{ uri: imageUrl }} style={styles.thumb} resizeMode="cover" />}
             <View style={styles.headerText}>
               <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
               <Text style={styles.itemMeta} numberOfLines={1}>

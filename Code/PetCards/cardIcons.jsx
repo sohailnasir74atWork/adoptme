@@ -20,5 +20,5 @@ export const ICONS = {
 export default function CardIcon({ name, size = 18, style }) {
   const source = ICONS[name];
   if (!source) return null;
-  return <Image source={source} style={[{ width: size, height: size }, style]} resizeMode="contain" />;
+  return <Image resizeMethod="resize" source={source} style={[{ width: size, height: size }, style]} resizeMode="contain" />;
 }

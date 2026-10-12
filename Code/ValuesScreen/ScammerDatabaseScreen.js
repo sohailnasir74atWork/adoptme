@@ -900,7 +900,7 @@ const ScammerDatabaseScreen = () => {
                                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                                         {d.proofUrls.map((url, i) => (
                                                             <TouchableOpacity key={i} activeOpacity={0.8} onPress={() => setFullscreenImage(url)}>
-                                                                <Image source={{ uri: url }} style={s.proofImage} resizeMode="cover" />
+                                                                <Image resizeMethod="resize" source={{ uri: url }} style={s.proofImage} resizeMode="cover" />
                                                             </TouchableOpacity>
                                                         ))}
                                                     </ScrollView>
@@ -958,7 +958,7 @@ const ScammerDatabaseScreen = () => {
                                 <TouchableOpacity style={s.fullscreenClose} onPress={() => setFullscreenImage(null)}>
                                     <Icon name="close-circle" size={32} color="#FFF" />
                                 </TouchableOpacity>
-                                <Image
+                                <Image resizeMethod="resize"
                                     source={{ uri: fullscreenImage }}
                                     style={s.fullscreenImg}
                                     resizeMode="contain"
@@ -1055,7 +1055,7 @@ const ScammerDatabaseScreen = () => {
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                                 {reportImages.map((uri, i) => (
                                     <View key={i} style={{ position: 'relative' }}>
-                                        <Image source={{ uri }} style={s.proofThumb} resizeMode="cover" />
+                                        <Image resizeMethod="resize" source={{ uri }} style={s.proofThumb} resizeMode="cover" />
                                         <TouchableOpacity
                                             onPress={() => setReportImages((prev) => prev.filter((_, idx) => idx !== i))}
                                             style={s.proofRemove}

@@ -100,7 +100,7 @@ const PetTrackerScreen = () => {
         onLongPress={() => confirmDelete(item)}
       >
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.grindImage} resizeMode="contain" />
+          <Image resizeMethod="resize" source={{ uri: item.imageUrl }} style={styles.grindImage} resizeMode="contain" />
         ) : (
           <View style={[styles.grindImage, styles.grindImageFallback]}>
             <FontAwesome name="paw" size={18} color={c.textMuted} />
@@ -343,7 +343,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
                 const rKey = normalizeRarity(item.rarity);
                 return (
                   <TouchableOpacity style={styles.petRow} onPress={() => pickPet(item)} activeOpacity={0.7}>
-                    <Image source={{ uri: getPetImageUrl(item, imgurl) }} style={styles.petRowImage} resizeMode="contain" />
+                    <Image resizeMethod="resize" source={{ uri: getPetImageUrl(item, imgurl) }} style={styles.petRowImage} resizeMode="contain" />
                     <Text style={styles.petRowName} numberOfLines={1}>{item.name}</Text>
                     {rKey && (
                       <Text style={[styles.petRowRarity, { color: RARITY_COLORS[rKey] }]}>

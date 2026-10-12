@@ -172,7 +172,7 @@ const GrindDetailScreen = () => {
         <View style={styles.hero}>
           <ProgressRing size={86} stroke={9} pct={totals.pct} color={goalColor} trackColor={c.borderLight}>
             {grind.imageUrl ? (
-              <Image source={{ uri: grind.imageUrl }} style={{ width: 52, height: 52 }} resizeMode="contain" />
+              <Image resizeMethod="resize" source={{ uri: grind.imageUrl }} style={{ width: 52, height: 52 }} resizeMode="contain" />
             ) : (
               <Text style={[styles.heroPct, { color: goalColor }]}>{totals.pct}%</Text>
             )}

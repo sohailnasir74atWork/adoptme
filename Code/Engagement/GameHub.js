@@ -78,7 +78,7 @@ const GameHub = ({ navigation, route }) => {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
-        <Image source={GAME_ICONS.controller} style={styles.heroIcon} resizeMode="contain" />
+        <Image resizeMethod="resize" source={GAME_ICONS.controller} style={styles.heroIcon} resizeMode="contain" />
         <View style={styles.flex1}>
           <Text style={styles.heroTitle}>{t('mini_games.title')}</Text>
           <Text style={styles.heroSub}>{t('mini_games.hero_sub')}</Text>
@@ -95,7 +95,7 @@ const GameHub = ({ navigation, route }) => {
           activeOpacity={0.85}
         >
           <View style={[styles.tile, { backgroundColor: g.color + '1F' }]}>
-            <Image source={GAME_ICONS[g.id]} style={styles.tileIcon} resizeMode="contain" />
+            <Image resizeMethod="resize" source={GAME_ICONS[g.id]} style={styles.tileIcon} resizeMode="contain" />
           </View>
           <View style={styles.flex1}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{t(`mini_games.${g.id}_name`)}</Text>
@@ -120,7 +120,7 @@ const GameHub = ({ navigation, route }) => {
           activeOpacity={0.85}
         >
           <View style={[styles.tile, { backgroundColor: g.color + '1F' }]}>
-            <Image source={GAME_ICONS[g.icon]} style={styles.tileIcon} resizeMode="contain" />
+            <Image resizeMethod="resize" source={GAME_ICONS[g.icon]} style={styles.tileIcon} resizeMode="contain" />
           </View>
           <View style={styles.flex1}>
             <Text style={[styles.name, { color: c.text }]} numberOfLines={1}>{t(`mini_games.${g.id}_name`)}</Text>

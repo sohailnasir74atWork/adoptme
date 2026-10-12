@@ -167,7 +167,7 @@ const ShareTradeModal = ({ visible, onClose, hasItems, wantsItems, hasTotal, wan
 
         return (
             <View style={styles.gridItem}>
-                <Image
+                <Image resizeMethod="resize"
                     source={{ uri: getImageUrl(item, localState.imgurl) }}
 
                     style={styles.gridItemImage}

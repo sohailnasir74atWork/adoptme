@@ -545,7 +545,7 @@ const MemoryMatch = ({ visible, onClose }) => {
                         opacity: frontOpacity,
                       }]}>
                         {card.useRealImg ? (
-                          <Image
+                          <Image resizeMethod="resize"
                             source={{ uri: getImageUrl(card.img) }}
                             style={{ width: CARD_W * 0.6, height: CARD_W * 0.6, borderRadius: 8 }}
                             resizeMode="contain"

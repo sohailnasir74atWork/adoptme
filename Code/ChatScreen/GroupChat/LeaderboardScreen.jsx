@@ -334,7 +334,7 @@ const LeaderboardScreen = () => {
         <View style={[styles.rankBadge, { backgroundColor: rankColor }]}>
           <Text style={styles.rankText}>{rank}</Text>
         </View>
-        <Image source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
+        <Image resizeMethod="resize" source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
         <View style={styles.userInfo}>
           <Text style={styles.userName} numberOfLines={1}>
             {!item.displayName || item.displayName === 'Anonymous' ? t('chat.anonymous') : item.displayName}
@@ -355,7 +355,7 @@ const LeaderboardScreen = () => {
     const tabMeta = TABS.find(tab => tab.key === activeTab);
     return (
       <TouchableOpacity style={styles.userItem} onPress={() => handleUserClick(item)} activeOpacity={0.7}>
-        <Image source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
+        <Image resizeMethod="resize" source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
         <View style={styles.userInfo}>
           <Text style={styles.userName} numberOfLines={1}>{item.displayName || t('leaderboard.unknown_user')}</Text>
           <View style={[styles.rolePill, { backgroundColor: tabMeta.color + '18' }]}>

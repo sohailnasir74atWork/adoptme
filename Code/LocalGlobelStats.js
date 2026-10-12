@@ -5,6 +5,7 @@ import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
+import { trackProPurchase } from './Helper/growthAnalytics';
 import { serverNowMs } from './Helper/serverTime';
 import { isSquadProActive, onSquadProChange } from './Helper/squad';
 
@@ -105,6 +106,10 @@ export const LocalStateProvider = ({ children }) => {
     // Device-level opt-out for chat pushes. Turning it on clears users/{uid}/fcmToken,
     // which is the gate notifyNewMessage actually checks.
     chatNotificationsOff: storage.getBoolean('chatNotificationsOff') ?? false,
+    // Device-level switch for "values changed" pushes (FCM topic 'value-updates',
+    // guests included). Default on. Helper/valueUpdatesTopic.js keeps the
+    // device's topic membership in line with it.
+    valueUpdateNotifications: storage.getBoolean('valueUpdateNotifications') ?? true,
     // One-time hint on the Values list telling users a pet card opens its value
     // history. The corner chart icon alone doesn't read as "tap me" — the hint
     // says it once in words, then never again. Cleared on dismiss, and also as
@@ -397,8 +402,7 @@ export const LocalStateProvider = ({ children }) => {
           : []
       );
 
-      if (track) {
-      }
+      if (proStatus) trackProPurchase(packageToPurchase, track);
 
       showSuccessMessage(t('alert.success'), t('alert.purchase_success'));
     } catch (error) {

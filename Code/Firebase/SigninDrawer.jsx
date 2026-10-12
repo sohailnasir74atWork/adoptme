@@ -362,7 +362,13 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       const idToken = signInResult?.idToken || signInResult?.data?.idToken;
       if (!idToken) throw new Error(t('signin.error_signin_message'));
 
-      const googleCredential = GoogleAuthProvider.credential(idToken);
+      // Pass the access token too. @react-native-firebase 25 sends a missing
+      // one as '' and Firebase Android rejects that ("accessToken cannot be
+      // empty"), so an ID-token-only credential fails every Google sign-in.
+      const accessToken = await GoogleSignin.getTokens()
+        .then((tk) => tk?.accessToken || null)
+        .catch(() => null);
+      const googleCredential = GoogleAuthProvider.credential(idToken, accessToken);
       await signInWithCredential(auth, googleCredential);
 
       showSuccessMessage(t('signin.alert_welcome_back'), t('signin.success_signin'));

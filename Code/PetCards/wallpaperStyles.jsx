@@ -92,7 +92,7 @@ function Backdrop({ bg }) {
   return (
     <>
       <View style={[StyleSheet.absoluteFill, { backgroundImage: bg.css }]} />
-      {bg.image ? <Image source={{ uri: bg.image }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+      {bg.image ? <Image resizeMethod="resize" source={{ uri: bg.image }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
     </>
   );
 }
@@ -198,11 +198,11 @@ function Pet({ pet, size, x, y, glow, glowColor, shadow = true, outline = null }
   return (
     <View style={{ position: 'absolute', left: x - size / 2, top: y - size, width: size, height: size }}>
       {shadow ? <View style={{ position: 'absolute', left: size * 0.18, width: size * 0.64, bottom: -size * 0.04, height: size * 0.12, backgroundImage: 'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0) 100%)' }} /> : null}
-      {glow ? <Image source={{ uri }} blurRadius={Math.max(4, Math.round(size / 16))} tintColor={glowColor} style={{ position: 'absolute', left: -size * 0.04, top: -size * 0.04, width: size * 1.08, height: size * 1.08, opacity: 0.9 }} resizeMode="contain" /> : null}
+      {glow ? <Image resizeMethod="resize" source={{ uri }} blurRadius={Math.max(4, Math.round(size / 16))} tintColor={glowColor} style={{ position: 'absolute', left: -size * 0.04, top: -size * 0.04, width: size * 1.08, height: size * 1.08, opacity: 0.9 }} resizeMode="contain" /> : null}
       {outline ? [[-1, 0], [1, 0], [0, -1], [0, 1], [-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]].map(([dx, dy], i) => (
-        <Image key={i} source={{ uri }} tintColor={outline} style={{ position: 'absolute', left: dx * size * 0.012, top: dy * size * 0.012, width: size, height: size }} resizeMode="contain" />
+        <Image resizeMethod="resize" key={i} source={{ uri }} tintColor={outline} style={{ position: 'absolute', left: dx * size * 0.012, top: dy * size * 0.012, width: size, height: size }} resizeMode="contain" />
       )) : null}
-      <Image source={{ uri }} style={{ width: size, height: size }} resizeMode="contain" />
+      <Image resizeMethod="resize" source={{ uri }} style={{ width: size, height: size }} resizeMode="contain" />
     </View>
   );
 }
@@ -339,7 +339,7 @@ function Board({ F, pets, bg, o, L }) {
           <View key={p.key} style={{ position: 'absolute', left, top: startY + row * (rowH + 10), width: colW, height: rowH, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderRadius: rowH / 2.6, backgroundColor: i < 3 ? 'rgba(14,8,32,0.72)' : 'rgba(14,8,32,0.55)', borderWidth: i < 3 ? 2 : 1.5, borderColor: i < 3 ? medal[i] : 'rgba(255,255,255,0.16)', boxShadow: '0 8px 20px rgba(0,0,0,0.22)' }}>
             <Text style={{ width: rowH * 0.5, textAlign: 'center', fontSize: rowH * 0.36, fontWeight: '900', color: i < 3 ? medal[i] : '#FFFFFF' }}>{i + 1}</Text>
             <View style={{ width: rowH * 0.86, height: rowH * 0.86, borderRadius: rowH, marginHorizontal: 8, backgroundImage: `radial-gradient(circle at 50% 40%, ${rs.glow} 0%, ${rs.base} 55%, ${rs.dark} 100%)`, alignItems: 'center', justifyContent: 'center' }}>
-              <Image source={{ uri: petArtUrl(p.key, 512) }} style={{ width: rowH * 0.8, height: rowH * 0.8 }} resizeMode="contain" />
+              <Image resizeMethod="resize" source={{ uri: petArtUrl(p.key, 512) }} style={{ width: rowH * 0.8, height: rowH * 0.8 }} resizeMode="contain" />
             </View>
             <View style={{ flex: 1 }}>
               <Text numberOfLines={1} style={{ color: '#FFFFFF', fontWeight: '900', fontSize: rowH * 0.24 }}>{p.name}</Text>
@@ -458,7 +458,7 @@ function Scrapbook({ F, pets, bg, o, L }) {
   return (
     <>
       <Backdrop bg={bg} />
-      <Image source={require('../../assets/pet-cards/t_paper.webp')} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.8 }]} />
+      <Image resizeMethod="resize" source={require('../../assets/pet-cards/t_paper.webp')} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.8 }]} />
       <Motifs kind={o.motif} w={F.w} h={F.h} accent={bg.accent} dark={bg.dark} seed={37} density={0.6} />
       {pets.map((p, i) => {
         const [fx, fy, rot] = lay[i % lay.length];  // centre of the photo
@@ -466,7 +466,7 @@ function Scrapbook({ F, pets, bg, o, L }) {
         return (
           <View key={p.key} style={{ position: 'absolute', left: F.w * fx - w / 2, top: F.h * fy - w * 0.55, width: w, padding: w * 0.05, paddingBottom: w * 0.2, backgroundColor: '#FFFDF8', borderRadius: 4, boxShadow: '0 10px 24px rgba(0,0,0,0.28)', transform: [{ rotate: `${rot}deg` }] }}>
             <View style={{ width: w * 0.9, height: w * 0.9, overflow: 'hidden', backgroundImage: paintFor(p.bgId || 'island_meadow') }}>
-              <Image source={{ uri: artFor(p.key, w * 0.78) }} style={{ position: 'absolute', left: w * 0.06, top: w * 0.08, width: w * 0.78, height: w * 0.78 }} resizeMode="contain" />
+              <Image resizeMethod="resize" source={{ uri: artFor(p.key, w * 0.78) }} style={{ position: 'absolute', left: w * 0.06, top: w * 0.08, width: w * 0.78, height: w * 0.78 }} resizeMode="contain" />
             </View>
             <Text numberOfLines={1} style={{ position: 'absolute', left: 0, right: 0, bottom: w * 0.05, textAlign: 'center', fontSize: w * 0.072, fontWeight: '800', fontStyle: 'italic', color: '#3B2A4A' }}>
               {p.name}{o.values && p.values?.r != null ? `  ·  ${formatCompact(p.values.r)}` : ''}
@@ -494,7 +494,7 @@ function Pattern({ F, pets, bg, o }) {
     for (let c = 0; c < cols; c++) {
       const p = pets[(r * 3 + c) % pets.length];
       tiles.push(
-        <Image key={`${r}-${c}`} source={{ uri: petArtUrl(p.key, 512) }} resizeMode="contain"
+        <Image resizeMethod="resize" key={`${r}-${c}`} source={{ uri: petArtUrl(p.key, 512) }} resizeMode="contain"
           style={{ position: 'absolute', width: cell * 0.78, height: cell * 0.78, left: c * cell - (r % 2 ? cell / 2 : 0) - cell * 0.4, top: r * cell * 0.92 - cell * 0.4, transform: [{ rotate: `${(r + c) % 2 ? -14 : 12}deg` }] }} />,
       );
     }
@@ -508,7 +508,7 @@ function Pattern({ F, pets, bg, o }) {
       <View style={[StyleSheet.absoluteFill, { backgroundColor: bg.dark ? 'rgba(10,6,25,0.25)' : 'rgba(255,255,255,0.18)' }]} />
       {o.title ? (
         <View style={{ position: 'absolute', left: F.w / 2 - ring / 2, top: phone ? F.h * 0.55 - ring / 2 : F.h / 2 - ring / 2, width: ring, height: ring, borderRadius: ring, borderWidth: 6, borderColor: '#FFFFFF', backgroundImage: bg.css, alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 30px ${bg.accent}` }}>
-          <Image source={{ uri: artFor(hero.key, ring * 0.82) }} style={{ width: ring * 0.82, height: ring * 0.82 }} resizeMode="contain" />
+          <Image resizeMethod="resize" source={{ uri: artFor(hero.key, ring * 0.82) }} style={{ width: ring * 0.82, height: ring * 0.82 }} resizeMode="contain" />
         </View>
       ) : null}
       {o.sparkles ? <Sparkles w={F.w} h={F.h} count={18} seed={21} /> : null}

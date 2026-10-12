@@ -293,7 +293,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
                 activeOpacity={0.95}
                 onPress={() => navigation.navigate('ImageViewerScreen', { images: item.imageUrl, initialIndex: 0 })}
               >
-                <Image source={{ uri: item.imageUrl[0] }} style={s.singleImage} />
+                <Image resizeMethod="resize" source={{ uri: item.imageUrl[0] }} style={s.singleImage} />
               </TouchableOpacity>
             ) : (
               <View style={s.multiGrid}>
@@ -307,7 +307,7 @@ const PostCard = ({ item, userId, onReaction, localState, appdatabase, onDelete,
                     activeOpacity={0.9}
                     onPress={() => navigation.navigate('ImageViewerScreen', { images: item.imageUrl, initialIndex: idx })}
                   >
-                    <Image source={{ uri: url }} style={s.gridImage} />
+                    <Image resizeMethod="resize" source={{ uri: url }} style={s.gridImage} />
                     {idx === 3 && item.imageUrl.length > 4 && (
                       <View style={s.moreOverlay}>
                         <Text style={s.moreText}>+{item.imageUrl.length - 4}</Text>

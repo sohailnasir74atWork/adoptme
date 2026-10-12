@@ -453,7 +453,7 @@ const CreateGroupModal = ({ visible, onClose, selectedUsers = [], editGroupId = 
                 disabled={uploadingAvatar}
               >
                 {groupAvatarUri ? (
-                  <Image source={{ uri: groupAvatarUri }} style={styles.avatarPreview} />
+                  <Image resizeMethod="resize" source={{ uri: groupAvatarUri }} style={styles.avatarPreview} />
                 ) : (
                   <View style={[styles.avatarPlaceholder, { backgroundColor: isDarkMode ? '#2a2a2a' : '#f5f5f5' }]}>
                     <Icon name="camera" size={32} color={c.textMuted} />

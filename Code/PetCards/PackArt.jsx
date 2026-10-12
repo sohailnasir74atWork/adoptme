@@ -44,7 +44,7 @@ function PackArt({ width, theme = 'island', title, subtitle, topOffset, topRotat
   if (uri) {
     return (
       <View style={{ width, height: h, boxShadow: glow ? `0 0 ${u * 10}px ${glow}` : undefined }}>
-        <Image source={{ uri }} style={{ width, height: h }} resizeMode="contain" />
+        <Image resizeMethod="resize" source={{ uri }} style={{ width, height: h }} resizeMode="contain" />
         {titleBand}
       </View>
     );

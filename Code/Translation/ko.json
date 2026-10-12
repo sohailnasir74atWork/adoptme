@@ -5,6 +5,7 @@
     "app_settings": "앱 설정",
     "haptic_feedback": "진동 피드백",
     "chat_notifications": "채팅 알림",
+    "value_update_notifications": "가치 업데이트 알림",
     "theme": "테마",
     "theme_system": "기기 설정",
     "theme_light": "라이트",
@@ -2195,7 +2196,9 @@
     "trial_weeks_one": "{{count}}주",
     "trial_weeks_other": "{{count}}주",
     "trial_months_one": "{{count}}개월",
-    "trial_months_other": "{{count}}개월"
+    "trial_months_other": "{{count}}개월",
+    "restore_none_title": "복원할 구매 없음",
+    "restore_none": "이 계정에는 활성화된 Pro 구매가 없어요."
   },
   "catalog": {
     "updated": "가치 정보 받은 날: {{date}}",

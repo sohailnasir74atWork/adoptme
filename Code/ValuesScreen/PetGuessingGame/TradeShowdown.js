@@ -833,7 +833,7 @@ const TradeShowdown = () => {
                 {showResults && isCorrect && <View style={s.resultBadge}><Icon name="checkmark-circle" size={22} color="#10B981" /></View>}
                 {showResults && isSelected && !isCorrect && <View style={s.resultBadge}><Icon name="close-circle" size={22} color="#EF4444" /></View>}
                 <View style={s.petImageWrap}>
-                  <Image source={{ uri: pet.image }} style={s.petImage} resizeMode="contain" />
+                  <Image resizeMethod="resize" source={{ uri: pet.image }} style={s.petImage} resizeMode="contain" />
                 </View>
                 <Text style={[s.petName, { color: txt }]} numberOfLines={1}>{pet.name}</Text>
                 <View style={[s.valueBadge, { backgroundColor: showResults ? (isCorrect ? '#10B981' : '#64748b') : (isDarkMode ? '#334155' : '#e2e8f0') }]}>

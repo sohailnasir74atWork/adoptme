@@ -445,7 +445,7 @@ const MessagesList = ({
 
                   {item.gif && !/\.gif(\?|$)/i.test(item.gif) && (
                     <View>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: item.gif }}
                         style={{ height: 50, width: 50, resizeMode: 'contain' }}
                       />
@@ -506,7 +506,7 @@ const MessagesList = ({
                           key={`${fruit.id || fruit.name}-${index}`}
                           style={[fruitStyles.fruitCard, isCompactFruits && fruitStyles.fruitCardCompact]}
                         >
-                          <Image
+                          <Image resizeMethod="resize"
                             source={{ uri: fruit.imageUrl }}
                             style={[fruitStyles.fruitImage, isCompactFruits && fruitStyles.fruitImageCompact]}
                           />

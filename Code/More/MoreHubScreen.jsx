@@ -72,7 +72,7 @@ const MoreHubScreen = ({ navigation, background }) => {
             <Text style={[styles.headerTitle, { color: c.text }]}>{t('tabs.more')}</Text>
             <Text style={[styles.headerSub, { color: c.textSecondary }]}>{t('more_hub.subtitle')}</Text>
           </View>
-          <Image source={MORE_ICONS.more} style={styles.headerIcon} resizeMode="contain" />
+          <Image resizeMethod="resize" source={MORE_ICONS.more} style={styles.headerIcon} resizeMode="contain" />
         </View>
 
         <TouchableOpacity style={styles.hero} onPress={() => open('MoreWallpapers')} activeOpacity={0.88}>
@@ -85,7 +85,7 @@ const MoreHubScreen = ({ navigation, background }) => {
               <Icon name="arrow-forward" size={13} color="#7C3AED" />
             </View>
           </View>
-          <Image source={MORE_ICONS.wallpaper} style={styles.heroIcon} resizeMode="contain" />
+          <Image resizeMethod="resize" source={MORE_ICONS.wallpaper} style={styles.heroIcon} resizeMode="contain" />
         </TouchableOpacity>
 
         {chunkPairs(cards).map((row) => (
@@ -99,7 +99,7 @@ const MoreHubScreen = ({ navigation, background }) => {
               >
                 <View style={[styles.cardWash, { backgroundColor: card.color + (isDarkMode ? '24' : '14') }]} />
                 <View style={styles.cardTop}>
-                  <Image source={MORE_ICONS[card.key]} style={styles.cardIcon} resizeMode="contain" />
+                  <Image resizeMethod="resize" source={MORE_ICONS[card.key]} style={styles.cardIcon} resizeMode="contain" />
                   <View style={[styles.chevron, { backgroundColor: card.color }]}>
                     <Icon name="chevron-forward" size={14} color="#fff" />
                   </View>

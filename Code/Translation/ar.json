@@ -5,6 +5,7 @@
         "app_settings": "إعدادات التطبيق",
         "haptic_feedback": "الاهتزاز عند اللمس",
         "chat_notifications": "إشعارات الدردشة",
+        "value_update_notifications": "إشعارات تحديث القيم",
         "theme": "المظهر",
         "theme_system": "تلقائي",
         "theme_light": "فاتح",
@@ -2397,7 +2398,9 @@
         "trial_months_two": "شهران",
         "trial_months_few": "{{count}} أشهر",
         "trial_months_many": "{{count}} شهرًا",
-        "trial_months_other": "{{count}} شهر"
+        "trial_months_other": "{{count}} شهر",
+        "restore_none_title": "لا توجد مشتريات",
+        "restore_none": "لا يوجد اشتراك Pro فعّال على هذا الحساب."
     },
     "catalog": {
         "updated": "تم تحميل القيم: {{date}}",

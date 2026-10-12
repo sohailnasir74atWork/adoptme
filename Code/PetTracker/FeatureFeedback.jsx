@@ -152,7 +152,7 @@ const FeatureFeedback = ({ c }) => {
           {comments.map((cm) => (
             <View key={cm.id} style={styles.commentRow}>
               {cm.avatar ? (
-                <Image source={{ uri: cm.avatar }} style={styles.avatar} />
+                <Image resizeMethod="resize" source={{ uri: cm.avatar }} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarFallback]}>
                   <FontAwesome name="user" size={10} color={c.textMuted} solid />

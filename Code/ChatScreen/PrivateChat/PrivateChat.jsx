@@ -1157,7 +1157,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 <View style={{ flex: 1, flexWrap: 'wrap', flexDirection: 'row', gap: 3 }}>
                   {groupedHasItems?.map((hasItem) => (
                     <View key={`${hasItem.name}-${hasItem.type}`} style={{ width: 28, alignItems: 'center' }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${hasItem.image?.replace(/^\//, "")}` }}
                         style={{ width: 24, height: 24 }}
                       />
@@ -1191,11 +1191,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                     </View>
                   ))}
                 </View>
-                <Image source={require('../../../assets/transfer.png')} style={{ width: 8, height: 8, marginHorizontal: 4 }} />
+                <Image resizeMethod="resize" source={require('../../../assets/transfer.png')} style={{ width: 8, height: 8, marginHorizontal: 4 }} />
                 <View style={{ flex: 1, flexWrap: 'wrap', flexDirection: 'row', gap: 3 }}>
                   {groupedWantsItems?.map((wantitem) => (
                     <View key={`${wantitem.name}-${wantitem.type}`} style={{ width: 28, alignItems: 'center' }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: `${localState?.imgurl?.replace(/"/g, "").replace(/\/$/, "")}/${wantitem.image?.replace(/^\//, "")}` }}
                         style={{ width: 24, height: 24 }}
                       />
@@ -1245,7 +1245,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 gap: 6,
               }}>
                 {Array.isArray(post.imageUrl) && post.imageUrl.length > 0 && (
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: post.imageUrl[0] }}
                     style={{ width: 28, height: 28, borderRadius: 4 }}
                   />

@@ -60,7 +60,7 @@ const RoleCard = ({ role, rules, c, t }) => {
   return (
     <View style={[styles.card, { backgroundColor: c.bgAlt, borderColor: ROLE_COLOR[role] + '55' }]}>
       <View style={styles.row}>
-        <Image source={ART[role]} style={styles.roleArt} resizeMode="contain" />
+        <Image resizeMethod="resize" source={ART[role]} style={styles.roleArt} resizeMode="contain" />
         <View style={{ flex: 1 }}>
           <Text style={[styles.roleTitle, { color: c.text }]}>{t(`elections.role_${role}`)}</Text>
           <Text style={[styles.roleMeta, { color: ROLE_COLOR[role] }]}>
@@ -92,7 +92,7 @@ export default function RoleCharter({ c, rules, limits }) {
         </Text>
         {['trusted', 'cmsr_house', 'cmsr_art', 'helper'].map((b) => (
           <View key={b} style={[styles.row, { marginTop: 10, gap: 10 }]}>
-            <Image source={ART[b]} style={styles.badgeArt} resizeMode="contain" />
+            <Image resizeMethod="resize" source={ART[b]} style={styles.badgeArt} resizeMode="contain" />
             <View style={{ flex: 1 }}>
               <Text style={[styles.badgeName, { color: c.text }]}>{t(`badges.roles.${BADGE_NAME[b]}`)}</Text>
               <Text style={[styles.muted, { color: c.textSecondary }]}>{t(`elections.badge_${b}`)}</Text>

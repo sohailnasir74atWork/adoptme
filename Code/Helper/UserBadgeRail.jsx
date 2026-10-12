@@ -50,7 +50,7 @@ const Glyph = ({ k, user, size }) => {
   if (k === 'squad') return <SquadBadge count={user.squadCount} size={size} />;
   const src = k === 'verified' ? VERIFIED : ROLE[k];
   if (!src) return null;
-  return <Image source={src} style={{ width: size, height: size }} resizeMode="contain" />;
+  return <Image resizeMethod="resize" source={src} style={{ width: size, height: size }} resizeMode="contain" />;
 };
 
 const SquadPill = ({ count, isDarkMode, t }) => {
@@ -110,7 +110,7 @@ const UserBadgeRail = React.memo(({
 
   return (
     <View style={[styles.inline, style]}>
-      {showPro && <Image source={PRO} style={{ width: size, height: size }} resizeMode="contain" />}
+      {showPro && <Image resizeMethod="resize" source={PRO} style={{ width: size, height: size }} resizeMode="contain" />}
       {shown.map((k) => (AUTHORITY.includes(k)
         ? <UserBadgePill key={k} type={k} size="sm" isDarkMode={isDarkMode} glow={glow === k} />
         : <Glyph key={k} k={k} user={user} size={size} />))}

@@ -5,6 +5,7 @@
         "app_settings": "AJUSTES DE LA APP",
         "haptic_feedback": "Vibración",
         "chat_notifications": "Notificaciones del chat",
+        "value_update_notifications": "Notificaciones de cambios de valor",
         "theme": "Tema",
         "theme_system": "SISTEMA",
         "theme_light": "CLARO",
@@ -2238,7 +2239,9 @@
         "trial_weeks_other": "{{count}} semanas",
         "trial_months_one": "{{count}} mes",
         "trial_months_many": "{{count}} de meses",
-        "trial_months_other": "{{count}} meses"
+        "trial_months_other": "{{count}} meses",
+        "restore_none_title": "No encontramos compras",
+        "restore_none": "Esta cuenta no tiene una compra Pro activa."
     },
     "catalog": {
         "updated": "Catálogo descargado: {{date}}",

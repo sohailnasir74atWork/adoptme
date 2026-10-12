@@ -169,7 +169,7 @@ const ServerScreen = ({ selectedTheme }) => {
           >
             {/* Icon with background color */}
             <View style={[styles.iconContainer, { backgroundColor: getBackgroundColor(index) }]}>
-              <Image
+              <Image resizeMethod="resize"
                 source={require('../../assets/splashscreen.webp')}
                 style={styles.icon}
                 resizeMode="contain"

@@ -33,7 +33,9 @@ export function navigate(name, params) {
 }
 
 // Routes a push notification may open (data.route). Anything else is ignored.
-const PUSH_ROUTES = new Set(['TradeMatch', 'Squad', 'Elections', 'Birthdays']);
+// All are root-stack screens that open without params. ValueScreen is the
+// values list, opened by the 'value-updates' topic push (values_update).
+const PUSH_ROUTES = new Set(['TradeMatch', 'Squad', 'Elections', 'Birthdays', 'ValueScreen']);
 
 /**
  * Open the screen a tapped notification points to. On a cold start the

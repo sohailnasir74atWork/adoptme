@@ -73,7 +73,7 @@ const fmtDate = (iso) => {
 };
 
 const Avatar = ({ uri, size = 40, color = ACCENT }) => (uri
-  ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+  ? <Image resizeMethod="resize" source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
   : (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name="person" size={size * 0.5} color="#fff" />

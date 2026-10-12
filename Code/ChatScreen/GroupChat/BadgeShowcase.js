@@ -68,7 +68,7 @@ const BadgeShowcase = ({ isDarkMode, t, earnedBadges = {}, activeFrame, avatarUr
               }}
             >
               {BADGE_IMAGES[id] ? (
-                <Image source={BADGE_IMAGES[id]} resizeMode="contain" style={[{ width: 12, height: 12 }, isDarkMode && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
+                <Image resizeMethod="resize" source={BADGE_IMAGES[id]} resizeMode="contain" style={[{ width: 12, height: 12 }, isDarkMode && badge.tier === 1 && { tintColor: '#e2e8f0' }]} />
               ) : (
                 <Text style={{ fontSize: 10 }}>{badge.emoji}</Text>
               )}

@@ -5,6 +5,7 @@
         "app_settings": "APP-EINSTELLUNGEN",
         "haptic_feedback": "Vibration",
         "chat_notifications": "Chat-Benachrichtigungen",
+        "value_update_notifications": "Benachrichtigungen bei Wertänderungen",
         "theme": "Design",
         "theme_system": "SYSTEM",
         "theme_light": "HELL",
@@ -2186,7 +2187,9 @@
         "trial_weeks_one": "{{count}} Woche",
         "trial_weeks_other": "{{count}} Wochen",
         "trial_months_one": "{{count}} Monat",
-        "trial_months_other": "{{count}} Monate"
+        "trial_months_other": "{{count}} Monate",
+        "restore_none_title": "Nichts gefunden",
+        "restore_none": "Für dieses Konto gibt es keinen aktiven Pro-Kauf."
     },
     "catalog": {
         "updated": "Werte geladen: {{date}}",

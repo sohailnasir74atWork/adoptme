@@ -5,6 +5,7 @@
         "app_settings": "APP SETTINGS",
         "haptic_feedback": "Haptic Feedback",
         "chat_notifications": "Chat Notifications",
+        "value_update_notifications": "Value Update Notifications",
         "theme": "Theme",
         "theme_system": "SYSTEM",
         "theme_light": "LIGHT",
@@ -2195,7 +2196,9 @@
         "trial_weeks_one": "{{count}} week",
         "trial_weeks_other": "{{count}} weeks",
         "trial_months_one": "{{count}} month",
-        "trial_months_other": "{{count}} months"
+        "trial_months_other": "{{count}} months",
+        "restore_none_title": "Nothing to restore",
+        "restore_none": "This account has no active Pro purchase."
     },
     "catalog": {
         "updated": "Catalog downloaded: {{date}}",

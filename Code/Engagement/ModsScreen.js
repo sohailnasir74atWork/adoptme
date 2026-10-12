@@ -67,7 +67,7 @@ const ModCard = React.memo(({ mod, myVote, onVote, onChat, isDarkMode }) => {
       {/* Avatar */}
       <View style={styles.avatarWrap}>
         {mod.avatar ? (
-          <Image source={{ uri: mod.avatar }} style={styles.avatar} />
+          <Image resizeMethod="resize" source={{ uri: mod.avatar }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, { backgroundColor: roleMeta.color + '20', alignItems: 'center', justifyContent: 'center' }]}>
             <FontAwesome name="user" size={18} color={roleMeta.color} solid />

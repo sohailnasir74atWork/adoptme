@@ -1390,7 +1390,7 @@ const TradeJournal = ({
                 {/* Row: Image + Info + Delete */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   {/* Compact pet image */}
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: getImgUrl(pet.imageUrl || pet.image) }}
                     style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9' }}
                     resizeMode="contain"
@@ -1582,7 +1582,7 @@ const TradeJournal = ({
                   const demand = getDemandScore(pet.name, analyticsMaps.demandMap);
                   return (
                     <View key={`g-${i}`} style={{ alignItems: 'center' }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: getImgUrl(pet.image) }}
                         style={styles.tlPetImg}
                         resizeMode="contain"
@@ -1608,7 +1608,7 @@ const TradeJournal = ({
                   const demand = getDemandScore(pet.name, analyticsMaps.demandMap);
                   return (
                     <View key={`r-${i}`} style={{ alignItems: 'center' }}>
-                      <Image
+                      <Image resizeMethod="resize"
                         source={{ uri: getImgUrl(pet.image) }}
                         style={styles.tlPetImg}
                         resizeMode="contain"
