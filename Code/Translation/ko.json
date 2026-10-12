@@ -3604,7 +3604,23 @@
     "edit_saved": "생일이 변경됐어요 🎂",
     "home_soon_shown": "생일 당일에 다른 플레이어가 축하를 보낼 수 있어요 🎂",
     "home_soon_hidden": "내 생일은 다른 플레이어에게 숨겨져 있어요.",
-    "edit_year": "연도"
+    "edit_year": "연도",
+    "wish_all": "모두 축하하기 ({{count}})",
+    "wished_all": "오늘 모두를 축하했어요",
+    "see_all": "{{count}}명 모두 보기",
+    "thank_all": "모두에게 고마워하기 ({{count}})",
+    "thanked_all": "축하해 준 모두에게 고마움을 전했어요",
+    "thank_sent": "감사 인사를 보냈어요 💖",
+    "wish_all_sent_one": "생일 축하 {{count}}개를 보냈어요 🎉",
+    "wish_all_sent_other": "생일 축하 {{count}}개를 보냈어요 🎉",
+    "tomorrow_line_one": "내일 생일인 플레이어 {{count}}명. 내일 와서 축하해 주세요!",
+    "tomorrow_line_other": "내일 생일인 플레이어 {{count}}명. 내일 와서 축하해 주세요!",
+    "reason": {
+      "dm": "대화한 적 있어요",
+      "squad": "내 스쿼드",
+      "group": "같은 그룹",
+      "wished_you": "나를 축하해 줬어요"
+    }
   },
   "reports": {
     "title": "불편 신고 & 아이디어",

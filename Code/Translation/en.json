@@ -3615,7 +3615,23 @@
         "edit_saved": "Birthday updated 🎂",
         "home_soon_shown": "Other players can send you a wish on the day 🎂",
         "home_soon_hidden": "Your birthday is hidden from other players.",
-        "edit_year": "Year"
+        "edit_year": "Year",
+        "wish_all": "Wish everyone ({{count}})",
+        "wished_all": "You wished everyone today",
+        "see_all": "See all {{count}}",
+        "thank_all": "Thank everyone ({{count}})",
+        "thanked_all": "You thanked everyone who wished you",
+        "thank_sent": "Thank-you sent 💖",
+        "wish_all_sent_one": "Sent {{count}} birthday wish 🎉",
+        "wish_all_sent_other": "Sent {{count}} birthday wishes 🎉",
+        "tomorrow_line_one": "{{count}} birthday tomorrow. Come back to wish them!",
+        "tomorrow_line_other": "{{count}} birthdays tomorrow. Come back to wish them!",
+        "reason": {
+            "dm": "You've chatted",
+            "squad": "Your squad",
+            "group": "In your group",
+            "wished_you": "Wished you before"
+        }
     },
     "reports": {
         "title": "Complaints & ideas",

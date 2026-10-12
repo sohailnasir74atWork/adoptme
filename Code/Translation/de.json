@@ -3597,7 +3597,23 @@
         "edit_saved": "Geburtstag aktualisiert 🎂",
         "home_soon_shown": "An dem Tag können dir andere Spieler gratulieren 🎂",
         "home_soon_hidden": "Dein Geburtstag ist für andere Spieler verborgen.",
-        "edit_year": "Jahr"
+        "edit_year": "Jahr",
+        "wish_all": "Allen gratulieren ({{count}})",
+        "wished_all": "Du hast heute allen gratuliert",
+        "see_all": "Alle {{count}} ansehen",
+        "thank_all": "Allen danken ({{count}})",
+        "thanked_all": "Du hast allen gedankt, die dir gratuliert haben",
+        "thank_sent": "Danke gesendet 💖",
+        "wish_all_sent_one": "{{count}} Geburtstagsgruß gesendet 🎉",
+        "wish_all_sent_other": "{{count}} Geburtstagsgrüße gesendet 🎉",
+        "tomorrow_line_one": "Morgen hat {{count}} Spieler Geburtstag. Komm wieder und gratuliere!",
+        "tomorrow_line_other": "Morgen haben {{count}} Spieler Geburtstag. Komm wieder und gratuliere!",
+        "reason": {
+            "dm": "Ihr habt gechattet",
+            "squad": "Dein Squad",
+            "group": "In deiner Gruppe",
+            "wished_you": "Hat dir schon gratuliert"
+        }
     },
     "reports": {
         "title": "Beschwerden & Ideen",
