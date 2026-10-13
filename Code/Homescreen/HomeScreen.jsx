@@ -20,7 +20,7 @@ import { tradeHighlight, TONE_STYLE } from '../Helper/tradeAdvice';
 import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
-import InterstitialAdManager from '../Ads/IntAd';
+import PostAdManager from '../Ads/PostAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
@@ -1154,6 +1154,7 @@ const HomeScreen = ({ selectedTheme }) => {
       setType('create');
       setRobloxUsername(user?.robloxUsername || ''); // Pre-fill from profile
       setModalVisible(true);
+      PostAdManager.prepare('trade');
       // Clean up after execution
       delete timeoutRefs.current[timeoutKey];
     }, 100); // Small delay to allow React state to settle
@@ -1404,7 +1405,7 @@ const HomeScreen = ({ selectedTheme }) => {
                 if (!isMountedRef.current) return;
 
                 try {
-                  InterstitialAdManager.showAd(() => { });
+                  PostAdManager.show('trade');
                 } catch (err) {
                   console.warn('[AdManager] Failed to show ad:', err);
                 }

@@ -30,6 +30,13 @@ const config = {
   // back to the anchored banner unit — same ads, just reported under it.
   andriodFeedBanner: isNoman ? 'ca-app-pub-1340655056171083/1946047534' : null, // feed_inline_banner (thinktech777 account)
   IOsFeedBanner: isNoman ? 'ca-app-pub-5740215782746766/3033924612' : '', // feed_inline_banner
+  // Post interstitials (Code/Ads/PostAd.js): own units so AdMob reports the
+  // trade-post and feed-post placements apart; no AdMob frequency cap on them
+  // (created 2026-10-13).
+  andriodTradePostInterstitial: 'ca-app-pub-1340655056171083/8548599426', // int_trade_post (thinktech777 account)
+  andriodFeedPostInterstitial: 'ca-app-pub-1340655056171083/4477317461', // int_feed_post (thinktech777 account)
+  IOsTradePostInterstitial: 'ca-app-pub-5740215782746766/6988105741', // int_trade_post
+  IOsFeedPostInterstitial: 'ca-app-pub-5740215782746766/5089445577', // int_feed_post
 
   apiKey: isNoman ? rev_cat_id : rev_cat_id,
 

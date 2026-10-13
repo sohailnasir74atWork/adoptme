@@ -18,7 +18,7 @@ import { safeCompressImage } from '../../Helper/safeCompressImage';
 import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
-import InterstitialAdManager from '../../Ads/IntAd';
+import PostAdManager from '../../Ads/PostAd';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 // import { onValue, ref } from '@react-native-firebase/database';
 import { showMessage } from 'react-native-flash-message';
@@ -227,6 +227,12 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
   }, [imageUris, user?.id]);
 
 
+  // Warm the feed-post ad while the user writes, so it is ready when the
+  // post lands (PostAd.js).
+  useEffect(() => {
+    if (visible) PostAdManager.prepare('feed');
+  }, [visible]);
+
   const handleSubmit = useCallback(async () => {
     // ✅ Guard: Prevent multiple simultaneous submissions
     if (loading) return;
@@ -305,29 +311,30 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
           description: t('feed.post_created_success'),
           type: 'success',
         });
+        return true;
       } catch (err) {
         Alert.alert(t('feed.upload_failed'), t('feed.post_failed_desc'));
         console.log(err);
         // ✅ Reset loading on error so user can retry
         setLoading(false);
+        return false;
       }
     };
 
-    // Upload first, then show ad after
-    await callbackfunction();
-
-    // Show ad AFTER upload completes (non-blocking, for non-Pro users)
-    if (!localState.isPro) {
+    // Upload first; the feed-post ad (PostAd.js) shows only once the post is
+    // live — never before it, never on a failed upload.
+    callbackfunction().then((posted) => {
+      if (!posted || localState.isPro) return;
       requestAnimationFrame(() => {
         setTimeout(() => {
           try {
-            InterstitialAdManager.showAd(() => {});
+            PostAdManager.show('feed');
           } catch (err) {
             console.warn('[AdManager] Failed to show ad:', err);
           }
         }, 400);
       });
-    }
+    });
 
   }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime, t]);
 

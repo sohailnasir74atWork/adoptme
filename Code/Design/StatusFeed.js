@@ -39,7 +39,7 @@ import RNFS from 'react-native-fs';
 import FontAwesome from 'react-native-vector-icons/FontAwesome6';
 import { useTranslation } from 'react-i18next';
 import { addXP, XP_ACTIONS } from '../Engagement/xpUtils';
-import InterstitialAdManager from '../Ads/IntAd';
+import PostAdManager from '../Ads/PostAd';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useLocalState } from '../LocalGlobelStats';
 import { useGlobalState } from '../GlobelStats';
@@ -656,6 +656,11 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   // ── Post status (local-first, no re-fetch) ──
   const { localState } = useLocalState();
 
+  // Warm the feed-post ad while the status composer is open (PostAd.js).
+  useEffect(() => {
+    if (showCreator) PostAdManager.prepare('feed');
+  }, [showCreator]);
+
   const handlePostStatus = useCallback(async () => {
     if (!user?.id || !firestoreDB) return;
     // ✅ Ban check — banned users cannot post status (covers email + device ban)
@@ -675,6 +680,9 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       return;
     }
 
+    // The feed-post ad (PostAd.js) shows only once the status is live —
+    // never before it, never on a failed upload.
+    let posted = false;
     const doUpload = async () => {
       setUploading(true);
       try {
@@ -775,6 +783,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
         setIsPollMode(false);
         setPollOptions(['', '']);
         setShowCreator(false);
+        posted = true;
       } catch (err) {
         console.warn('[StatusFeed] post error:', err?.message);
         Alert.alert(t('status_feed.error'), t('status_feed.post_error'));
@@ -784,12 +793,11 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
 
     await doUpload();
 
-    // Show ad AFTER upload completes (non-blocking, for non-Pro users)
-    if (!localState.isPro) {
+    if (posted && !localState.isPro) {
       requestAnimationFrame(() => {
         setTimeout(() => {
           try {
-            InterstitialAdManager.showAd(() => {});
+            PostAdManager.show('feed');
           } catch (err) {
             console.warn('[StatusFeed] Ad failed:', err);
           }
