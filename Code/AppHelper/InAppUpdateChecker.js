@@ -76,6 +76,9 @@ export const checkForUpdate = async () => {
 
     if (Platform.OS === 'android') {
       armFlexibleInstall();
+      // Leaving for Play's update screen is not a return worth an app-open ad.
+      // (iOS opens the store through Linking, which leaveAppGuard.js covers.)
+      require('../Ads/openApp').default.skipNextForeground(2 * 60 * 1000);
       await inAppUpdates.startUpdate({ updateType: IAUUpdateKind.FLEXIBLE });
     } else if (Platform.OS === 'ios') {
       // iOS has no in-app update flow: open the store listing.

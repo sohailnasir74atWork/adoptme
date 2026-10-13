@@ -158,6 +158,15 @@ dependencies {
     // Meta Audience Network and Unity stay signed as bidding sources in the
     // AdMob console; without their adapters in the binary they simply win
     // nothing. No console change is needed when the lines come back.
+    //
+    // NEXT-GEN (2026-10-13): app.json now builds Android on Google's Next-Gen
+    // ads SDK (react-native-google-mobile-ads 17.2, "android_sdk": "nextgen"),
+    // which must not share the app with the classic SDK. Do NOT paste the
+    // play-services-ads line back. Each adapter that returns needs
+    //   exclude group: "com.google.android.gms", module: "play-services-ads"
+    //   exclude group: "com.google.android.gms", module: "play-services-ads-lite"
+    // and both networks added to the UMP partner list (Blox_Fruit
+    // ADS_V17_NEXTGEN_PLAN.md §7.1 step 8).
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
         // Keep in step with the RNFB BoM override in android/build.gradle

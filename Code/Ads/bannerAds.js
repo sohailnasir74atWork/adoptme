@@ -3,6 +3,8 @@ import { View, Platform } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { useLocalState } from '../LocalGlobelStats';
+import { useAdsReady } from './init';
+import { logAdRevenue } from './adTelemetry';
 
 // NPA gating: only force non-personalized ads when we truly have to.
 // Forcing NPA on every user (the old behaviour) cut eCPM ~40-60% for ~80%
@@ -28,6 +30,9 @@ const BannerAdComponent = ({
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const { localState } = useLocalState();
   const unitId = getAdUnitId(adType);
+  // Nothing mounts — so nothing is requested — before UMP consent, the
+  // request configuration (rating T) and initialize() (Code/Ads/init.js).
+  const adsReady = useAdsReady();
 
   // No-fill retry: a banner's FIRST load can fail (no fill / transient
   // network). The <BannerAd> won't re-request on its own until something
@@ -79,6 +84,10 @@ const BannerAdComponent = ({
   // user collapses it; refreshes are ordinary banners. iOS banners earned the
   // same without it, so iOS stays a plain strip.
   const isCollapsible = collapsible && Platform.OS === 'android';
+  const handlePaid = useCallback(
+    (paid) => logAdRevenue('banner', isCollapsible ? 'banner_collapsible' : 'banner', paid, unitId),
+    [isCollapsible, unitId],
+  );
   const requestOptions = useMemo(
     () => ({
       requestNonPersonalizedAdsOnly: npaRequiredFor(localState?.consentStatus),
@@ -87,7 +96,7 @@ const BannerAdComponent = ({
     [localState?.consentStatus, isCollapsible],
   );
 
-  if (!visible) return null;
+  if (!visible || !adsReady) return null;
 
   // The BannerAd is mounted ONCE and never unmounted while visible. The
   // old code conditionally re-rendered a *different* BannerAd once
@@ -117,6 +126,7 @@ const BannerAdComponent = ({
         requestOptions={requestOptions}
         onAdLoaded={handleAdLoaded}
         onAdFailedToLoad={handleAdFailedToLoad}
+        onPaid={handlePaid}
       />
     </View>
   );

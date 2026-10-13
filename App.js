@@ -13,6 +13,8 @@ import { useGlobalState } from './Code/GlobelStats';
 // Imported at the top on purpose: its launch clock is the cold-start ad budget.
 import AppOpenAdManager from './Code/Ads/openApp';
 import { markAdsReady } from './Code/Ads/adsGate';
+import { ensureAdsInitialized, openConsentStep } from './Code/Ads/init';
+import { installLeaveAppGuard } from './Code/Ads/leaveAppGuard';
 import { useLocalState } from './Code/LocalGlobelStats';
 import { AdsConsent } from 'react-native-google-mobile-ads';
 import MainTabs from './Code/AppHelper/MainTabs';
@@ -70,6 +72,10 @@ async function ensureAttRequested(beforePrompt) {
 }
 
 const Stack = createNativeStackNavigator();
+
+// Picker / share / sign-in / links: our own trips out never come back to an
+// app-open ad (Code/Ads/leaveAppGuard.js).
+installLeaveAppGuard();
 
 
 // Wrapper for PrivateChat used from root stack (SocialDashboard → Chat)
@@ -229,6 +235,11 @@ function App() {
       if (Platform.OS === 'ios') {
         await ensureAttRequested(showAttPrimer);
       }
+      // ATT is settled (iOS): this session's UMP step may run now. Ad managers
+      // that asked for init earlier (the app-open manager starts at JS load)
+      // held their consent step for this, so UMP never comes before ATT
+      // (Code/Ads/init.js).
+      openConsentStep();
 
       // Gather UMP consent AND initialise the SDK through the single shared
       // choke point in Code/Ads/init.js. That helper runs, in order:
@@ -244,7 +255,6 @@ function App() {
       // tagForUnderAgeOfConsent is intentionally NOT set: the UMP flow already
       // handles the under-16 case via the IAB TCF v2 string, so setting it
       // globally would suppress personalised ads for every user.
-      const { ensureAdsInitialized } = require('./Code/Ads/init');
       await ensureAdsInitialized();
 
       // Record the resolved status for our own UI/analytics. getConsentInfo()
@@ -259,6 +269,8 @@ function App() {
     } catch (error) {
       // Silently handle consent errors
     } finally {
+      // Never leave the consent step held, whatever failed above.
+      openConsentStep();
       // Onboarding is over (App only mounts after it) and ATT → UMP have run,
       // including a consent form refreshed alongside init: open the gate that
       // the one-time notification permission ask waits on (Code/Ads/adsGate.js).
@@ -489,9 +501,19 @@ export default function AppWrapper() {
         AppOpenAdManager.prepareColdStart();
       }
     }
-    if (localState.showOnBoardingScreen || localState.isPro) return undefined;
+    if (localState.isPro) {
+      // Pro bought mid-session (RevenueCat or squad Pro, both land in isPro):
+      // drop the warm app-open and interstitial ads and their timers now, not
+      // at the next launch.
+      AppOpenAdManager.stop();
+      require('./Code/Ads/IntAd').default.cleanup();
+      return undefined;
+    }
+    if (localState.showOnBoardingScreen) return undefined;
     // Registers the AppState listener so the App Open ad shows on every
     // background→foreground return (capped + Pro-gated), not just once.
+    // Returning users past onboarding were already started at JS load
+    // (bottom of Code/Ads/openApp.js); this is a no-op for them.
     AppOpenAdManager.start();
     return undefined;
   }, [localState.isPro, localState.showOnBoardingScreen]);

@@ -17,6 +17,8 @@ import { View, useWindowDimensions } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import getAdUnitId from './ads';
 import { useLocalState } from '../LocalGlobelStats';
+import { useAdsReady } from './init';
+import { logAdRevenue } from './adTelemetry';
 
 // Horizontal gutter the feed cards use, so the ad lines up with content.
 const CARD_GUTTER = 12;
@@ -32,6 +34,8 @@ const npaRequiredFor = (status) =>
 const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
   const { width: screenWidth } = useWindowDimensions();
   const { localState } = useLocalState();
+  // No request before UMP consent + request configuration + initialize().
+  const adsReady = useAdsReady();
   const [loaded, setLoaded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const retriedRef = useRef(false);
@@ -48,6 +52,7 @@ const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
   );
 
   const handleAdLoaded = useCallback(() => setLoaded(true), []);
+  const handlePaid = useCallback((paid) => logAdRevenue('banner', 'feed', paid, unitId), [unitId]);
 
   const handleAdFailedToLoad = useCallback(() => {
     setLoaded(false);
@@ -71,7 +76,7 @@ const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
     retriedRef.current = false;
   }, [adKey]);
 
-  if (localState?.isPro) return null;
+  if (localState?.isPro || !adsReady) return null;
 
   return (
     <View
@@ -96,6 +101,7 @@ const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
         requestOptions={requestOptions}
         onAdLoaded={handleAdLoaded}
         onAdFailedToLoad={handleAdFailedToLoad}
+        onPaid={handlePaid}
       />
     </View>
   );
