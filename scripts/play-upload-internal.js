@@ -4,9 +4,13 @@
 //   node scripts/play-upload-internal.js [--notes "What's new"] [--dry-run]
 //
 // Uses the shared Play service account (Blox_Fruit/.secrets/play-sa-key.json,
-// or $PLAY_SA_KEY; not copied into this repo). Steps: open an edit, upload the bundle and its R8
-// mapping.txt (so Play Console shows readable crash stacks), set the internal
-// track to this version only, commit. --dry-run validates and discards the edit.
+// or $PLAY_SA_KEY; not copied into this repo). Steps: open an edit, upload the
+// bundle, set the internal track to this version only, commit. --dry-run
+// validates and discards the edit.
+// No separate mapping.txt upload (same as Blox): the AAB already carries the
+// R8 mapping and native debug symbols, and Play extracts both. Uploading
+// mapping.txt separately left 181 (2026-10-13) with the mapping but WITHOUT
+// native debug symbols, and Play refuses to add files to a committed bundle.
 const fs = require('fs');
 const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
@@ -14,7 +18,6 @@ const { GoogleAuth } = require('google-auth-library');
 const ROOT = path.join(__dirname, '..');
 const PKG = 'com.adoptmevaluescalc';
 const AAB = path.join(ROOT, 'android/app/build/outputs/bundle/release/app-release.aab');
-const MAPPING = path.join(ROOT, 'android/app/build/outputs/mapping/release/mapping.txt');
 const DRY = process.argv.includes('--dry-run');
 const notesIdx = process.argv.indexOf('--notes');
 const NOTES = notesIdx > -1 ? process.argv[notesIdx + 1] : 'Bug fixes and performance improvements.';
@@ -43,13 +46,6 @@ const UPLOAD = `https://androidpublisher.googleapis.com/upload/androidpublisher/
       method: 'POST', body: fs.readFileSync(AAB), headers: { 'Content-Type': 'application/octet-stream' },
     });
     console.log('bundle uploaded: versionCode', bundle.versionCode, 'sha256', bundle.sha256?.slice(0, 12));
-
-    if (fs.existsSync(MAPPING)) {
-      await call(`${UPLOAD}/edits/${edit.id}/apks/${bundle.versionCode}/deobfuscationFiles/proguard?uploadType=media`, {
-        method: 'POST', body: fs.readFileSync(MAPPING), headers: { 'Content-Type': 'application/octet-stream' },
-      });
-      console.log('mapping.txt uploaded');
-    }
 
     const track = await call(`${API}/edits/${edit.id}/tracks/internal`, {
       method: 'PUT',
