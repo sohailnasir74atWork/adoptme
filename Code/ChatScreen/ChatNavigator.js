@@ -30,6 +30,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsReconnecting, setGroupsReconnecting] = useState(false);
   const [groupUnreadCount, setGroupUnreadCount] = useState(0); // Total unread count for groups
   const unreadDebounceRef = useRef(null);
   const groupDebounceRef = useRef(null);
@@ -144,20 +145,34 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
     setGroupsLoading(true);
     const groupsMap = new Map();
+    let reconnectTimer = null;
+
+    const flushGroups = () => {
+      const sortedGroups = Array.from(groupsMap.values()).sort(
+        (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
+      );
+      setGroups(sortedGroups);
+      const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
+      setGroupUnreadCount(totalGroupUnread);
+    };
 
     const recalcAndSetState = () => {
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
       groupDebounceRef.current = setTimeout(() => {
-        requestIdleCallback(() => {
-          const sortedGroups = Array.from(groupsMap.values()).sort(
-            (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
-          );
-          setGroups(sortedGroups);
-          const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
-          setGroupUnreadCount(totalGroupUnread);
-        }, { timeout: 1000 });
+        requestIdleCallback(flushGroups, { timeout: 1000 });
       }, 300);
     };
+
+    // Drop the skeleton with whatever rows are in hand. Flush first so the
+    // list doesn't flash "no groups" while the 300 ms debounce is pending.
+    const finishLoading = () => {
+      if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
+      flushGroups();
+      setGroupsLoading(false);
+    };
+    // Backstop: the initial load waits on a Firebase token + one Supabase
+    // request, and nothing may hold the skeleton forever (2026-10-14 reports).
+    const loadingFallback = setTimeout(finishLoading, 5000);
 
     const handleUpsert = (g) => {
       if (!g || !g.groupId) return;
@@ -190,11 +205,32 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       onRemove: handleRemove,
       // Initial load + first SUBSCRIBED both landed → safe to drop the
       // spinner even if the user has zero groups (no rows ever delivered).
-      onReady: () => setGroupsLoading(false),
+      onReady: () => {
+        clearTimeout(loadingFallback);
+        finishLoading();
+      },
+      // Same reconnecting pill as the inbox: only after >1.5 s degraded.
+      onStatus: (status) => {
+        if (status === 'SUBSCRIBED') {
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+          setGroupsReconnecting(false);
+          return;
+        }
+        if (!reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            setGroupsReconnecting(true);
+          }, 1500);
+        }
+      },
     });
 
     return () => {
       unsubscribe();
+      clearTimeout(loadingFallback);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      setGroupsReconnecting(false);
       if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
     };
   }, [user?.id, appdatabase]);
@@ -265,7 +301,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         name="Groups"
         options={{ title: t('chat.groups') }}
       >
-        {props => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} />}
+        {props => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} groupsReconnecting={groupsReconnecting} />}
       </Stack.Screen>
 
       <Stack.Screen

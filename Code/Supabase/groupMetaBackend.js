@@ -105,19 +105,24 @@ export async function loadGroupMeta(userId) {
 //     INSERT/UPDATE.
 //   * onRemove fires per DELETE (when a user leaves a group, or
 //     cleanupGroups removes the row).
-//   * onReady fires once initial load + first SUBSCRIBED both land.
+//   * onReady fires once, when the initial load lands. It used to also wait
+//     for the first SUBSCRIBED, so whenever realtime could not join (outage,
+//     rejected join) the groups list sat on its skeleton forever although the
+//     rows were already loaded (2026-10-14 reports). A SUBSCRIBED that lands
+//     after the load gap-fills (see .subscribe below), so nothing is lost.
 export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onStatus } = {}) {
   if (!userId) return () => {};
 
   let cancelled = false;
   let initialDone = false;
-  let subscribedOnce = false;
+  let readyFired = false;
   let prevStatus = null;   // last channel status (reconnect detection)
   let maxKnownTs = 0;      // newest last_message_timestamp_ms delivered
   let gapFillInFlight = false;
 
   const tryReady = () => {
-    if (initialDone && subscribedOnce && !cancelled) {
+    if (initialDone && !readyFired && !cancelled) {
+      readyFired = true;
       onReady?.();
     }
   };
@@ -184,11 +189,11 @@ export function subscribeToGroupMeta(userId, { onUpsert, onRemove, onReady, onSt
     .subscribe((status, err) => {
       onStatus?.(status, err);
       if (status === 'SUBSCRIBED') {
-        // SUBSCRIBED after a non-SUBSCRIBED status = reconnect. The first
-        // subscribe is covered by the initial load below.
-        if (prevStatus && prevStatus !== 'SUBSCRIBED') runGapFill();
-        subscribedOnce = true;
-        tryReady();
+        // SUBSCRIBED after a non-SUBSCRIBED status = reconnect. A first
+        // subscribe that lands after the initial load (slow join — seen take
+        // 5 min on a bad connection) also gap-fills: changes in between were
+        // in neither the load nor the stream.
+        if (prevStatus ? prevStatus !== 'SUBSCRIBED' : initialDone) runGapFill();
       }
       prevStatus = status;
     });

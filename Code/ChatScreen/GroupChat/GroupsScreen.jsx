@@ -33,7 +33,7 @@ import CreateGroupModal from './CreateGroupModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { getThemeColors } from '../../Helper/themeColors';
-import { ChatListSkeleton } from './ChatListSkeleton';
+import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 const BUNNY_STORAGE_HOST = 'storage.bunnycdn.com';
 const BUNNY_STORAGE_ZONE = 'post-gag';
@@ -85,7 +85,7 @@ const truncateGroupName = (name, maxLength = 25) => {
   return name.substring(0, maxLength).trim() + '...';
 };
 
-const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
+const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsReconnecting = false }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user, theme, appdatabase, firestoreDB, isAdmin } = useGlobalState();
@@ -147,6 +147,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
     }
 
     setInvitationsLoading(true);
+    // Invitations only add a section above the list; never let a listener
+    // that hasn't answered yet hold the whole groups list on the skeleton.
+    const invitationsFallback = setTimeout(() => setInvitationsLoading(false), 4000);
     const invitationsQuery = query(
       collection(firestoreDB, 'group_invitations'),
       where('invitedUserId', '==', user.id),
@@ -168,15 +171,20 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
           }
         });
         setPendingInvitations(invitations);
+        clearTimeout(invitationsFallback);
         setInvitationsLoading(false);
       },
       (error) => {
         console.error('Error loading invitations:', error);
+        clearTimeout(invitationsFallback);
         setInvitationsLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(invitationsFallback);
+      unsubscribe();
+    };
   }, [firestoreDB, user?.id]);
 
   // ✅ Fetch total group count
@@ -1487,6 +1495,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false }) => {
       )}
 
       {/* Groups List */}
+      <SyncBanner visible={groupsReconnecting && !groupsLoading && activeTab === 'joined'} isDarkMode={isDarkMode} />
       {groupsLoading || invitationsLoading ? (
         <ChatListSkeleton count={6} isDarkMode={isDarkMode} />
       ) : activeTab === 'joined' ? (
