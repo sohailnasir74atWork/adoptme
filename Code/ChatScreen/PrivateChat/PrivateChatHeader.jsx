@@ -116,6 +116,7 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           profileFrame:           cached?.profileFrame ?? null,
         };
         headerUserCache.set(selectedUserId, { data, at: Date.now() });
+        if (!isMounted) return; // a reply for a player we already left
         setUserData(data);
       } catch (error) {
         console.error('Error fetching user data in PrivateChatHeader:', error);
