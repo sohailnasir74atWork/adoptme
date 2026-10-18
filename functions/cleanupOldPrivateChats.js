@@ -1,7 +1,7 @@
 /**
- * Cloud Function: Cleanup old private chat messages (older than 20 days)
+ * Cloud Function: Cleanup old private chat messages (older than 60 days)
  *
- * Runs daily at 4:00 AM UTC. Deletes messages older than 20 days from
+ * Runs daily at 4:00 AM UTC. Deletes messages older than 60 days from
  * private chat conversations in Realtime Database.
  *
  * Only deletes messages — metadata (chat_meta_data), lastRead, trade,
@@ -49,7 +49,7 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-const TWENTY_DAYS_MS = 20 * 24 * 60 * 60 * 1000;
+const RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 const BATCH_SIZE = 500;          // message keys deleted per multi-path write
 const CHAT_CONCURRENCY = 25;     // chats processed in parallel
 const TIME_BUDGET_MS = 480 * 1000; // stop at 480s, leaving 60s to save the cursor
@@ -130,7 +130,7 @@ exports.cleanupOldPrivateChats = functions
     const startedAt = Date.now();
     const outOfTime = () => (Date.now() - startedAt) > TIME_BUDGET_MS;
 
-    const cutoffTimestamp = Date.now() - TWENTY_DAYS_MS;
+    const cutoffTimestamp = Date.now() - RETENTION_MS;
     const cutoffKey = String(cutoffTimestamp);
     const db = admin.database();
     const dbUrl = admin.app().options.databaseURL;

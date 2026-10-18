@@ -30,6 +30,7 @@ import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
 import BirthdayHomeCard from '../Birthdays/BirthdayHomeCard';
+import { openReportForm } from '../Reports/openReportForm';
 import { GAMES, GAME_ICONS, openMiniGame } from '../Engagement/miniGames';
 import BannerAdComponent from '../Ads/bannerAds';
 import {
@@ -587,6 +588,23 @@ const HomeTabScreen = ({ selectedTheme }) => {
                     </Text>
                   </View>
                 )}
+
+                {/* Appeal: opens More ▸ Complaints & ideas with "Ban appeal"
+                    picked (2026-10-18; players had no way to appeal and
+                    filed appeals under any category). */}
+                <View style={[styles.banAppealRow, isDarkMode ? styles.banAppealRowDark : styles.banAppealRowLight]}>
+                  <Text style={[styles.banAppealQuestion, isDarkMode ? styles.banAppealQuestionDark : styles.banAppealQuestionLight]}>
+                    {t('home_tab.ban_appeal_question')}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => requireSignIn(() => openReportForm({ category: 'ban_appeal' }))}
+                    activeOpacity={0.85}
+                    style={styles.banAppealBtn}
+                  >
+                    <Text style={styles.banAppealBtnText}>{t('home_tab.ban_appeal_button')}</Text>
+                    <Ionicons name="chevron-forward" size={13} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })()}
@@ -912,6 +930,23 @@ const HomeTabScreen = ({ selectedTheme }) => {
 };
 
 const styles = StyleSheet.create({
+  // Ban card ▸ "Think this is a mistake?" row (2026-10-18)
+  banAppealRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  banAppealRowLight: { borderTopColor: '#FCE4E4' },
+  banAppealRowDark: { borderTopColor: 'rgba(255,255,255,0.06)' },
+  banAppealQuestion: { flex: 1, fontSize: 12.5 },
+  banAppealQuestionLight: { color: '#6B7280' },
+  banAppealQuestionDark: { color: '#bbb' },
+  banAppealBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#7C3AED', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  banAppealBtnText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
   container: {
     flex: 1,
   },

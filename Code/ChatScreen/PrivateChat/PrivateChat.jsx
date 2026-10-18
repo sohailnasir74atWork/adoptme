@@ -34,6 +34,7 @@ import { showSuccessMessage, showErrorMessage } from '../../Helper/MessageHelper
 import { showMessage } from 'react-native-flash-message';
 import { validateContent } from '../../Helper/ContentModeration';
 import BannerAdComponent from '../../Ads/bannerAds';
+import TranslateTip from '../TranslateTip';
 import InterstitialAdManager from '../../Ads/IntAd';
 import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
@@ -364,7 +365,11 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       let newAverage = 0;
       let newCount = oldCount;
 
-      if (oldRating !== undefined && oldRating !== null) {
+      // A summary reset to 0 (or one that lost count of my old rating) made the
+      // update branch divide by zero; the NaN/Infinity average then failed the
+      // Firestore rule (0..5) and the rating could never be saved. Count it as
+      // new in that case, and keep the average inside the rule's range.
+      if (oldRating !== undefined && oldRating !== null && oldCount > 0) {
         // 🔁 Updating existing rating
         newAverage = ((oldAverage * oldCount) - oldRating + rating) / oldCount;
       } else {
@@ -372,6 +377,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         newCount = oldCount + 1;
         newAverage = ((oldAverage * oldCount) + rating) / newCount;
       }
+      newAverage = Number.isFinite(newAverage) ? Math.min(5, Math.max(0, newAverage)) : rating;
 
       // ✅ FIRESTORE ONLY: Update user_ratings_summary (single source of truth)
       await setDoc(
@@ -1275,6 +1281,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               </View>
             )}
 
+            {messages.length > 0 && <TranslateTip gesture="tap" />}
             {messages.length === 0 ? (
               // No messages yet
               loading ? (

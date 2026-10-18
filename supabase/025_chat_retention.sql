@@ -72,7 +72,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- 2. Private messages — 20 days (matches cleanupOldPrivateChats)
+-- 2. Private messages — 20 days (raised to 60 days in 057_private_retention_60d.sql)
 -- ---------------------------------------------------------------------
 create or replace function public.retention_private_messages()
 returns void

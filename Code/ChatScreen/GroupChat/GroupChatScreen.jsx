@@ -51,6 +51,7 @@ import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
 import InterstitialAdManager from '../../Ads/IntAd';
 import BannerAdComponent from '../../Ads/bannerAds';
+import TranslateTip from '../TranslateTip';
 import { seedCurrentUser, getCachedProfile } from '../../Helper/profileCache';
 
 
@@ -1469,6 +1470,7 @@ const GroupChatScreen = () => {
             onJump={jumpToPin}
             onUnpin={handleUnpin}
           />
+          {messages.length > 0 && <TranslateTip gesture="long" />}
           {messages.length === 0 && !loading ? (
             // No messages yet - show empty state but keep input visible
             <View style={styles.emptyContainer}>

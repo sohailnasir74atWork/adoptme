@@ -23,8 +23,10 @@ import SubscriptionScreen from '../SettingScreen/OfferWall';
 import InterstitialAdManager from '../Ads/IntAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import FeedBannerAd from '../Ads/FeedBannerAd';
+import { useFeedAdGate, FEED_AD_VIEWABILITY } from '../Ads/feedAdGate';
 import RewardedAdManager from '../Ads/RewardedAdManager';
-import { bannerAware, ABOVE_BANNER, FLOATING_BUTTON_ICON_SIZE, FLOATING_BUTTON_RIGHT } from '../Helper/floatingButtonLayout';
+import { bannerAware, FLOATING_BUTTON_ICON_SIZE, FLOATING_BUTTON_RIGHT, aboveBanner } from '../Helper/floatingButtonLayout';
+import { useBannerHeight } from '../Ads/bannerHeight';
 
 // Free users can feature one trade per 24h by watching a rewarded ad. Pro keeps
 // its two instant boosts, so paying still buys both quantity and the
@@ -106,6 +108,8 @@ const VARIANT_FILTERS = [
 const VARIANT_FILTER_KEYS = VARIANT_FILTERS.map((v) => v.key);
 
 const TradeList = ({ route }) => {
+  // Floating buttons clear the real banner height (Ads/bannerHeight.js).
+  const bannerHeight = useBannerHeight();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInHas, setSearchInHas] = useState(true); // ✅ Search in "ME" side (hasItems)
   const [searchInWants, setSearchInWants] = useState(true); // ✅ Search in "YOU" side (wantsItems)
@@ -1638,11 +1642,13 @@ const TradeList = ({ route }) => {
     }
     return out;
   }, [filteredTrades, isProStatus]);
+  // Feed ad rows load only near the screen (Ads/feedAdGate.js).
+  const feedAdGate = useFeedAdGate(tradesWithAds);
 
   const renderTrade = ({ item, index }) => {
     // In-feed ad row (interleaved into the data below for non-Pro users).
     if (item?.__type === 'ad') {
-      return <FeedBannerAd adKey={item.id} isDarkMode={isDarkMode} />;
+      return <FeedBannerAd adKey={item.id} isDarkMode={isDarkMode} gate={feedAdGate} />;
     }
     const formattedTime = item.timestamp ? dayjs(item.timestamp.toDate()).fromNow() : t('trade.time_unknown');
     // Function to group items and count duplicates
@@ -2230,6 +2236,8 @@ const TradeList = ({ route }) => {
       <FlatList
         ref={flatListRef}
         data={tradesWithAds}
+        onViewableItemsChanged={feedAdGate.onViewableItemsChanged}
+        viewabilityConfig={FEED_AD_VIEWABILITY}
         renderItem={renderTrade}
         extraData={analyticsMaps}
         keyExtractor={(item) => item.__type === 'ad' ? item.id : item.isFeatured ? `featured-${item.id}` : item.id}
@@ -2316,7 +2324,7 @@ const TradeList = ({ route }) => {
         <Animated.View
           style={[
             styles.scrollToTopButton,
-            { bottom: bannerAware(ABOVE_BANNER, !!localState.isPro) },
+            { bottom: bannerAware(aboveBanner(bannerHeight), !!localState.isPro, bannerHeight) },
             {
               opacity: scrollButtonOpacity,
               transform: [

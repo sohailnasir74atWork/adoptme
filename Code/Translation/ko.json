@@ -89,6 +89,10 @@
       "verify_error": "아이디를 인증하지 못했어요: {{error}}",
       "code_not_found": "로블록스 프로필 소개글에서 인증 코드를 찾지 못했어요",
       "verify_failed": "인증하지 못했어요. 다시 시도해 주세요.",
+      "busy": "지금 Roblox가 바빠요. 1분 기다린 뒤 다시 인증을 눌러 주세요.",
+      "copy_code": "코드 복사",
+      "code_copied_title": "코드를 복사했어요",
+      "code_copied": "{{code}}를 복사했어요. Roblox 프로필 소개에 붙여 넣고 저장한 뒤, 돌아와서 다시 인증을 눌러 주세요.",
       "enter_username": "로블록스 아이디를 입력해 주세요",
       "invalid_username_title": "아이디를 확인해 주세요",
       "verify_title": "로블록스 아이디 인증",
@@ -783,7 +787,8 @@
     "update_error": "리뷰를 수정하지 못했어요",
     "rating_count_one": "평점 {{count}}개",
     "rating_count_other": "평점 {{count}}개",
-    "edited": "(수정됨)"
+    "edited": "(수정됨)",
+    "report": "리뷰 신고"
   },
   "signin": {
     "title_signin": "로그인",
@@ -876,7 +881,9 @@
     "scammer_desc": "거래하기 전에 아이디를 확인해 보세요",
     "news_desc": "앱 팀이 전하는 새 소식",
     "birthdays_desc": "다른 플레이어의 생일을 축하해요",
-    "reports_desc": "문제를 신고하거나 아이디어를 공유해 보세요"
+    "reports_desc": "문제를 신고하거나 아이디어를 공유해 보세요",
+    "tracker_title": "펫 트래커",
+    "tracker_desc": "펫이 다 자랄 때까지 남은 시간을 확인해요"
   },
   "chat": {
     "top_rated": "평점 높은 순",
@@ -1247,7 +1254,9 @@
     "go_to_message": "메시지로 이동",
     "pin_limit": "메시지는 최대 {{max}}개까지 고정할 수 있어요. 먼저 하나를 해제해 주세요.",
     "pinned_gone": "이 메시지는 더 이상 채팅에 없어요.",
-    "photo": "사진"
+    "photo": "사진",
+    "translate_tip_long": "팁: 메시지를 길게 누르면 번역할 수 있어요.",
+    "translate_tip_tap": "팁: 메시지를 누르면 번역할 수 있어요."
   },
   "first": {
     "continue_guest": "게스트로 둘러보기",
@@ -1693,7 +1702,9 @@
     "ban_reason_title": "이유",
     "cosmetics_title": "꾸미기",
     "cosmetics_egg_desc": "알을 부화시켜 꾸미기 아이템을 받아요",
-    "cosmetics_collection_desc": "모은 꾸미기 아이템을 보고 장착해요"
+    "cosmetics_collection_desc": "모은 꾸미기 아이템을 보고 장착해요",
+    "ban_appeal_question": "실수라고 생각하나요?",
+    "ban_appeal_button": "이의 신청하기"
   },
   "trade_journal": {
     "tabs": {
@@ -3637,7 +3648,8 @@
       "moderation": "관리(모더레이션)",
       "scam": "사기 또는 거래",
       "bug": "앱 문제",
-      "other": "기타"
+      "other": "기타",
+      "ban_appeal": "정지 이의 신청"
     },
     "details": "자세한 내용",
     "placeholder_complaint": "무슨 일이 있었는지 알려 주세요. 닉네임, 날짜, 스크린샷이 있으면 큰 도움이 돼요.",
@@ -3658,6 +3670,9 @@
     "sign_in": "불편 신고나 아이디어를 보내려면 로그인하세요.",
     "mine_title": "내 신고",
     "status_open": "접수됨",
-    "status_done": "확인 완료"
+    "status_done": "확인 완료",
+    "placeholder_ban_appeal": "무슨 일이 있었는지, 왜 정지가 실수라고 생각하는지 알려 주세요. 스크린샷이 있으면 도움이 돼요.",
+    "placeholder_false_review": "이 리뷰가 왜 가짜인가요? 채팅 스크린샷이 있으면 도움이 돼요.",
+    "reported_review": "신고하는 리뷰"
   }
 }

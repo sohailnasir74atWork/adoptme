@@ -10,6 +10,8 @@ export const getStyles = (isDarkMode) => {
       backgroundColor: c.bg,
       padding: 8,
     },
+    // Reviews I received: date over the report flag.
+    reviewSide: { alignItems: 'flex-end', gap: 8 },
     cardContainer: {
       backgroundColor: c.bgAlt,
       borderRadius: 10,

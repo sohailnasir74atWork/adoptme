@@ -13,7 +13,8 @@ import {
   Animated,
 } from 'react-native';
 import { getStyles } from './../Style';
-import { bannerAware, ABOVE_CHAT_INPUT_AND_BANNER, FLOATING_BUTTON_ICON_SIZE } from '../../Helper/floatingButtonLayout';
+import { bannerAware, FLOATING_BUTTON_ICON_SIZE, aboveChatInputAndBanner } from '../../Helper/floatingButtonLayout';
+import { useBannerHeight } from '../../Ads/bannerHeight';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import ReportPopup from './../ReportPopUp';
 import { parseMessageText } from '../ChatHelper';
@@ -71,6 +72,8 @@ const MessagesList = ({
   pendingCount = 0,
 
 }) => {
+  // Floating buttons clear the real banner height (Ads/bannerHeight.js).
+  const bannerHeight = useBannerHeight();
   const c = getThemeColors(isDarkMode);
   // ✅ Memoize styles
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
@@ -712,7 +715,7 @@ const MessagesList = ({
             styles.scrollToBottomButton,
             // hasComposer: group chat has a message input bar beneath this,
             // which Trades and the Feed do not.
-            { bottom: bannerAware(ABOVE_CHAT_INPUT_AND_BANNER, !!localState?.isPro) },
+            { bottom: bannerAware(aboveChatInputAndBanner(bannerHeight), !!localState?.isPro, bannerHeight) },
             {
               opacity: scrollButtonOpacity,
               transform: [

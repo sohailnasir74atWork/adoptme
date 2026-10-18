@@ -88,6 +88,10 @@
             "verify_error": "No se pudo verificar el usuario: {{error}}",
             "code_not_found": "No encontramos el código de verificación en la descripción de tu perfil de Roblox",
             "verify_failed": "No se pudo verificar. Inténtalo de nuevo.",
+            "busy": "Roblox está ocupado ahora mismo. Espera un minuto y vuelve a tocar Verificar.",
+            "copy_code": "Copiar código",
+            "code_copied_title": "Código copiado",
+            "code_copied": "{{code}} está copiado. Pégalo en «Acerca de» de tu perfil de Roblox, guarda, vuelve y toca Verificar otra vez.",
             "enter_username": "Escribe un usuario de Roblox",
             "invalid_username_title": "Usuario no válido",
             "verify_title": "Verifica tu usuario de Roblox",
@@ -798,7 +802,8 @@
         "update_error": "No se pudo actualizar la reseña",
         "rating_count_one": "{{count}} valoración",
         "rating_count_other": "{{count}} valoraciones",
-        "edited": "(Editada)"
+        "edited": "(Editada)",
+        "report": "Denunciar reseña"
     },
     "signin": {
         "title_signin": "Iniciar sesión",
@@ -887,7 +892,9 @@
         "scammer_desc": "Revisa un usuario antes de tradear",
         "news_desc": "Las últimas noticias del equipo de la app",
         "birthdays_desc": "Celebra los cumpleaños de otros jugadores",
-        "reports_desc": "Reporta un problema o comparte una idea"
+        "reports_desc": "Reporta un problema o comparte una idea",
+        "tracker_title": "Seguimiento de mascotas",
+        "tracker_desc": "Mira cuánto le falta a tu mascota para crecer"
     },
     "chat": {
         "top_rated": "Mejor valorados",
@@ -1265,7 +1272,9 @@
         "go_to_message": "Ir al mensaje",
         "pin_limit": "Puedes fijar hasta {{max}} mensajes. Desfija uno primero.",
         "pinned_gone": "Ese mensaje ya no está en el chat.",
-        "photo": "Foto"
+        "photo": "Foto",
+        "translate_tip_long": "Consejo: mantén pulsado cualquier mensaje para traducirlo.",
+        "translate_tip_tap": "Consejo: toca cualquier mensaje para traducirlo."
     },
     "first": {
         "continue_guest": "Continuar como invitado",
@@ -1719,7 +1728,9 @@
         "ban_reason_title": "Motivo",
         "cosmetics_title": "Cosméticos",
         "cosmetics_egg_desc": "Abre huevos para ganar cosméticos",
-        "cosmetics_collection_desc": "Mira y equipa tu colección"
+        "cosmetics_collection_desc": "Mira y equipa tu colección",
+        "ban_appeal_question": "¿Crees que es un error?",
+        "ban_appeal_button": "Enviar una apelación"
     },
     "trade_journal": {
         "tabs": {
@@ -3733,7 +3744,8 @@
             "moderation": "Moderación",
             "scam": "Estafa o trade",
             "bug": "Problema con la app",
-            "other": "Otra cosa"
+            "other": "Otra cosa",
+            "ban_appeal": "Apelación de baneo"
         },
         "details": "Detalles",
         "placeholder_complaint": "Cuéntanos qué pasó. Los nombres de usuario, las fechas y las capturas ayudan mucho.",
@@ -3754,6 +3766,9 @@
         "sign_in": "Inicia sesión para enviar una queja o una idea.",
         "mine_title": "Tus reportes",
         "status_open": "Recibido",
-        "status_done": "Revisado"
+        "status_done": "Revisado",
+        "placeholder_ban_appeal": "Cuéntanos qué pasó y por qué crees que el baneo es un error. Las capturas ayudan.",
+        "placeholder_false_review": "¿Por qué esta reseña es falsa? Las capturas de tu chat ayudan.",
+        "reported_review": "Reseña que estás denunciando"
     }
 }

@@ -29,6 +29,7 @@ import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import { FRUIT_KEYWORDS } from './filter';
 import { getDeviceLanguage } from '../../i18n';
+import { hideTranslateTip } from '../ChatScreen/TranslateTip';
 
 export const useMessageTranslation = () => {
   const { t } = useTranslation();
@@ -38,6 +39,7 @@ export const useMessageTranslation = () => {
     incrementTranslationCount,
     getRemainingTranslationTries,
     localState,
+    updateLocalState,
   } = useLocalState();
 
   const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
@@ -106,6 +108,10 @@ export const useMessageTranslation = () => {
         return;
       }
 
+      // They found Translate: the one-time tip (ChatScreen/TranslateTip) is done.
+      hideTranslateTip();
+      if (localState?.showTranslateTip) updateLocalState('showTranslateTip', false);
+
       const isUnlimited = freeTranslation || localState?.isPro;
 
       if (!isUnlimited && !canTranslate()) {
@@ -140,6 +146,8 @@ export const useMessageTranslation = () => {
       canTranslate,
       freeTranslation,
       localState?.isPro,
+      localState?.showTranslateTip,
+      updateLocalState,
       incrementTranslationCount,
       getRemainingTranslationTries,
       translateText,

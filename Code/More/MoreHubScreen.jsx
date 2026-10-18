@@ -26,6 +26,7 @@ export const MORE_ICONS = {
   admin: require('../../assets/more-hub/admin.png'),
   birthdays: require('../../assets/more-hub/birthdays.png'),
   reports: require('../../assets/more-hub/reports.png'),
+  tracker: require('../../assets/more-hub/tracker.png'),
 };
 
 const chunkPairs = (items) => {
@@ -48,6 +49,8 @@ const MoreHubScreen = ({ navigation, background }) => {
       { key: 'scammer', screen: 'MoreScammers', title: t('tabs.scammer_db'), desc: t('more_hub.scammer_desc'), color: '#DC2626' },
       { key: 'news', screen: 'MoreNews', title: t('tabs.news'), desc: t('more_hub.news_desc'), color: '#EA580C' },
       { key: 'birthdays', screen: 'Birthdays', title: t('birthdays.title'), desc: t('more_hub.birthdays_desc'), color: '#EC4899' },
+      // Root-stack screen; its Home card went in 1a94b79 and players asked for it back.
+      { key: 'tracker', screen: 'PetTracker', title: t('more_hub.tracker_title'), desc: t('more_hub.tracker_desc'), color: '#16A34A' },
       { key: 'reports', screen: 'MoreReport', title: t('reports.title'), desc: t('more_hub.reports_desc'), color: '#7C3AED' },
     ];
     // Staff-only card, left in English like the rest of the staff tools.

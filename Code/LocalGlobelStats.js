@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { AppState } from 'react-native';
 
 import Purchases from 'react-native-purchases';
 import config from './Helper/Environment';
@@ -8,6 +9,18 @@ import { preloadOfferings } from './SettingScreen/PayWall';
 import { trackProPurchase } from './Helper/growthAnalytics';
 import { serverNowMs } from './Helper/serverTime';
 import { isSquadProActive, onSquadProChange } from './Helper/squad';
+
+// Store billing messages ("update your payment method") are shown by us, a few
+// seconds after start, not by RevenueCat inside configure: its automatic call
+// ran before the Activity had a window and crashed at startup (Crashlytics
+// 684f078f, 1.15.55, Android 14–16).
+const BILLING_MESSAGES_DELAY_MS = 5000;
+const showBillingMessagesLater = () => {
+  setTimeout(() => {
+    if (AppState.currentState !== 'active') return;
+    Purchases.showInAppMessages().catch(() => {});
+  }, BILLING_MESSAGES_DELAY_MS);
+};
 
 let storage;
 try {
@@ -115,6 +128,10 @@ export const LocalStateProvider = ({ children }) => {
     // says it once in words, then never again. Cleared on dismiss, and also as
     // soon as the user opens their first chart (they've found it; stop nagging).
     showHistoryHint: storage.getBoolean('showHistoryHint') ?? true,
+    // One-time "long-press a message to translate it" tip in the chats
+    // (2026-10-18: players asked for a translator that already exists).
+    // ChatScreen/TranslateTip clears it the first time it is on screen.
+    showTranslateTip: storage.getBoolean('showTranslateTip') ?? true,
 
   }));
 
@@ -306,7 +323,12 @@ export const LocalStateProvider = ({ children }) => {
 
   const initRevenueCat = useCallback(async () => {
     try {
-      await Purchases.configure({ apiKey: config.apiKey, usesStoreKit2IfAvailable: false });
+      await Purchases.configure({
+        apiKey: config.apiKey,
+        usesStoreKit2IfAvailable: false,
+        shouldShowInAppMessagesAutomatically: false,
+      });
+      showBillingMessagesLater();
       const userID = await Purchases.getAppUserID();
       setCustomerId(userID);
 

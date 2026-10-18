@@ -12,6 +12,7 @@
  *   admin      Admin reports   (a clipboard with a bar chart)
  *   birthdays  Birthdays       (a pink cake with three lit candles)
  *   reports    Complaints & ideas (a purple speech bubble with a "!" and a lit bulb)
+ *   tracker    Pet Tracker     (a green progress ring round a pink paw, gold star at its end)
  *
  * Glossy toy style to sit next to the assets/home-actions art: soft gradients,
  * a white gloss, a soft dark outline so they read on light and dark cards.
@@ -45,6 +46,14 @@ const paw = (x, y, s, fill) => `
     <ellipse cx="3" cy="-9" rx="3" ry="3.8"/>
     <ellipse cx="8" cy="-4" rx="3" ry="3.8"/>
   </g>`;
+
+/** Arc on the circle (cx, cy, r) from angle a0 to a1 in degrees, 0 = top, clockwise. */
+const arc = (cx, cy, r, a0, a1) => {
+  const p = (a) => [cx + r * Math.sin(a * Math.PI / 180), cy - r * Math.cos(a * Math.PI / 180)];
+  const [x0, y0] = p(a0);
+  const [x1, y1] = p(a1);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+};
 
 /** A glossy rounded tile for the hub icon. */
 const appTile = (x, y, id) => `
@@ -191,6 +200,27 @@ const ICONS = {
      <rect x="48.5" y="52" width="8" height="7" rx="2" fill="url(#cap)" stroke="${OUTLINE}" stroke-width="1.1"/>
      <path d="M48.5 55.5 H56.5" stroke="rgba(15,23,42,0.35)" stroke-width="1"/>
      ${sparkle(9, 54, 4.5, '#DDD6FE')}`),
+
+  // A green progress ring three-quarters full round a pink paw, with a gold
+  // "grown" star where the arc ends: Pet Tracker (how far a pet has grown).
+  tracker: svg(
+    grad('ringOn', [[0, '#BBF7D0'], [0.5, '#22C55E'], [1, '#15803D']])
+      + grad('face', [[0, '#FFFFFF'], [1, '#F1F5F9']])
+      + grad('pawG', [[0, '#F9A8D4'], [1, '#DB2777']])
+      + grad('star', [[0, '#FEF9C3'], [0.55, '#FDE047'], [1, '#F59E0B']]),
+    `<circle cx="30" cy="34" r="24" fill="rgba(28,16,48,0.22)"/>
+     <circle cx="30" cy="32" r="24" fill="#E2E8F0" stroke="${OUTLINE}" stroke-width="1.4"/>
+     <path d="${arc(30, 32, 19, 0, 270)}" fill="none" stroke="#14532D" stroke-width="8" stroke-linecap="round" transform="translate(0 1)" opacity="0.35"/>
+     <path d="${arc(30, 32, 19, 0, 270)}" fill="none" stroke="url(#ringOn)" stroke-width="8" stroke-linecap="round"/>
+     <circle cx="30" cy="32" r="14.5" fill="url(#face)" stroke="${OUTLINE}" stroke-width="1.2"/>
+     ${paw(30, 33.5, 0.78, 'url(#pawG)')}
+     <path d="M20 22 C23 18.5 27 17.2 31 17.4" stroke="rgba(255,255,255,0.9)" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+     <g transform="translate(11 32)">
+       <path d="M0 -8.5 L2.5 -2.8 L8.6 -2.6 L3.9 1.3 L5.4 7.3 L0 4 L-5.4 7.3 L-3.9 1.3 L-8.6 -2.6 L-2.5 -2.8 Z"
+             fill="url(#star)" stroke="rgba(180,83,9,0.7)" stroke-width="1.1" stroke-linejoin="round"/>
+     </g>
+     ${sparkle(56, 9, 5, '#FDE68A')}
+     ${sparkle(55, 52, 3.5, '#BBF7D0')}`),
 };
 
 fs.mkdirSync(OUT, { recursive: true });

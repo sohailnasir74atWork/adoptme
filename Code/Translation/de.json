@@ -88,6 +88,10 @@
             "verify_error": "Benutzername konnte nicht geprüft werden: {{error}}",
             "code_not_found": "Der Code steht nicht in deiner Roblox-Profilbeschreibung",
             "verify_failed": "Verifizieren hat nicht geklappt. Versuch es noch mal.",
+            "busy": "Roblox ist gerade ausgelastet. Warte eine Minute und tippe dann noch mal auf Verifizieren.",
+            "copy_code": "Code kopieren",
+            "code_copied_title": "Code kopiert",
+            "code_copied": "{{code}} ist kopiert. Füge ihn bei „Über mich“ in deinem Roblox-Profil ein, speichere, komm zurück und tippe noch mal auf Verifizieren.",
             "enter_username": "Gib einen Roblox-Benutzernamen ein",
             "invalid_username_title": "Ungültiger Benutzername",
             "verify_title": "Roblox-Benutzernamen verifizieren",
@@ -780,7 +784,8 @@
         "update_error": "Bewertung konnte nicht aktualisiert werden",
         "rating_count_one": "{{count}} Bewertung",
         "rating_count_other": "{{count}} Bewertungen",
-        "edited": "(bearbeitet)"
+        "edited": "(bearbeitet)",
+        "report": "Bewertung melden"
     },
     "signin": {
         "title_signin": "Anmelden",
@@ -869,7 +874,9 @@
         "scammer_desc": "Prüf den Namen vor dem Trade",
         "news_desc": "Neuigkeiten vom App-Team",
         "birthdays_desc": "Feier die Geburtstage anderer Spieler",
-        "reports_desc": "Melde ein Problem oder teile eine Idee"
+        "reports_desc": "Melde ein Problem oder teile eine Idee",
+        "tracker_title": "Pet-Tracker",
+        "tracker_desc": "Sieh, wie lange dein Pet noch zum Erwachsenwerden braucht"
     },
     "chat": {
         "top_rated": "Top bewertet",
@@ -1238,7 +1245,9 @@
         "go_to_message": "Zur Nachricht",
         "pin_limit": "Du kannst bis zu {{max}} Nachrichten anheften. Löse zuerst eine.",
         "pinned_gone": "Diese Nachricht ist nicht mehr im Chat.",
-        "photo": "Foto"
+        "photo": "Foto",
+        "translate_tip_long": "Tipp: Halte eine Nachricht gedrückt, um sie zu übersetzen.",
+        "translate_tip_tap": "Tipp: Tippe auf eine Nachricht, um sie zu übersetzen."
     },
     "first": {
         "continue_guest": "Als Gast weiter",
@@ -1684,7 +1693,9 @@
         "ban_reason_title": "Grund",
         "cosmetics_title": "Kosmetik",
         "cosmetics_egg_desc": "Brüte Eier aus und gewinn Kosmetik",
-        "cosmetics_collection_desc": "Sammlung ansehen und ausrüsten"
+        "cosmetics_collection_desc": "Sammlung ansehen und ausrüsten",
+        "ban_appeal_question": "Denkst du, das ist ein Fehler?",
+        "ban_appeal_button": "Einspruch senden"
     },
     "trade_journal": {
         "tabs": {
@@ -3630,7 +3641,8 @@
             "moderation": "Moderation",
             "scam": "Betrug oder Trade",
             "bug": "Problem mit der App",
-            "other": "Etwas anderes"
+            "other": "Etwas anderes",
+            "ban_appeal": "Einspruch gegen Bann"
         },
         "details": "Details",
         "placeholder_complaint": "Erzähl, was passiert ist. Nutzernamen, Daten und Screenshots helfen sehr.",
@@ -3651,6 +3663,9 @@
         "sign_in": "Melde dich an, um eine Beschwerde oder Idee zu senden.",
         "mine_title": "Deine Meldungen",
         "status_open": "Erhalten",
-        "status_done": "Geprüft"
+        "status_done": "Geprüft",
+        "placeholder_ban_appeal": "Erzähl, was passiert ist und warum du den Bann für einen Fehler hältst. Screenshots helfen.",
+        "placeholder_false_review": "Warum ist diese Bewertung falsch? Screenshots von eurem Chat helfen.",
+        "reported_review": "Bewertung, die du meldest"
     }
 }

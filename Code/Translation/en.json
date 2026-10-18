@@ -88,6 +88,10 @@
             "verify_error": "Failed to verify username: {{error}}",
             "code_not_found": "Verification code not found in your Roblox profile description",
             "verify_failed": "Failed to verify. Please try again.",
+            "busy": "Roblox is busy right now. Wait a minute, then tap Verify again.",
+            "copy_code": "Copy code",
+            "code_copied_title": "Code copied",
+            "code_copied": "{{code}} is copied. Paste it into your Roblox profile About, save, then come back and tap Verify again.",
             "enter_username": "Please enter a Roblox username",
             "invalid_username_title": "Invalid Username",
             "verify_title": "Verify Your Roblox Username",
@@ -782,7 +786,8 @@
         "update_error": "Failed to update review",
         "rating_count_one": "{{count}} rating",
         "rating_count_other": "{{count}} ratings",
-        "edited": "(Edited)"
+        "edited": "(Edited)",
+        "report": "Report review"
     },
     "signin": {
         "title_signin": "Sign In",
@@ -875,7 +880,9 @@
         "scammer_desc": "Check a username before you trade",
         "news_desc": "Latest news from the app team",
         "birthdays_desc": "Celebrate players' birthdays",
-        "reports_desc": "Report a problem or share an idea"
+        "reports_desc": "Report a problem or share an idea",
+        "tracker_title": "Pet Tracker",
+        "tracker_desc": "See how long until your pet is grown"
     },
     "chat": {
         "top_rated": "Top Rated",
@@ -1246,7 +1253,9 @@
         "go_to_message": "Go to message",
         "pin_limit": "You can pin up to {{max}} messages. Unpin one first.",
         "pinned_gone": "That message is no longer in the chat.",
-        "photo": "Photo"
+        "photo": "Photo",
+        "translate_tip_long": "Tip: long-press any message to translate it.",
+        "translate_tip_tap": "Tip: tap any message to translate it."
     },
     "first": {
         "continue_guest": "Continue as Guest",
@@ -1692,7 +1701,9 @@
         "ban_reason_title": "Reason",
         "cosmetics_title": "Cosmetics",
         "cosmetics_egg_desc": "Hatch eggs to win cosmetics",
-        "cosmetics_collection_desc": "View and equip your collection"
+        "cosmetics_collection_desc": "View and equip your collection",
+        "ban_appeal_question": "Think this is a mistake?",
+        "ban_appeal_button": "Send an appeal"
     },
     "trade_journal": {
         "tabs": {
@@ -3648,7 +3659,8 @@
             "moderation": "Moderation",
             "scam": "Scam or trade",
             "bug": "App problem",
-            "other": "Something else"
+            "other": "Something else",
+            "ban_appeal": "Ban appeal"
         },
         "details": "Details",
         "placeholder_complaint": "Tell us what happened. Usernames, dates and screenshots help a lot.",
@@ -3669,6 +3681,9 @@
         "sign_in": "Sign in to send a complaint or an idea.",
         "mine_title": "Your reports",
         "status_open": "Received",
-        "status_done": "Reviewed"
+        "status_done": "Reviewed",
+        "placeholder_ban_appeal": "Tell us what happened and why you think the ban is a mistake. Screenshots help.",
+        "placeholder_false_review": "Why is this review false? Screenshots of your chat help.",
+        "reported_review": "Review you're reporting"
     }
 }

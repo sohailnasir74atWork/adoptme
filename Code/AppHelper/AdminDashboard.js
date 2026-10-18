@@ -45,6 +45,7 @@ import {
   update,
 } from '@react-native-firebase/database';
 import { warmProfileCache, getCachedProfile, getOrFetchProfile } from '../Helper/profileCache';
+import { canRemoveReview, canDeleteReviews, deleteReviewAndSummary } from '../Helper/reviewModeration';
 
 import {
   getFirestore,
@@ -58,7 +59,6 @@ import {
   doc,
   getDoc,
   deleteDoc,
-  setDoc,
   addDoc,
   Timestamp,
   updateDoc,
@@ -1492,20 +1492,9 @@ const AdminDashboard = () => {
     if (!review?.id || !selectedUser?.id) return;
 
     // If current user is a mod (not admin), check if the reviewer is also a mod/admin
-    if (!isAdmin && isModerator && review.fromUserId) {
-      try {
-        const reviewerRef = ref(db, `users/${review.fromUserId}`);
-        const reviewerSnap = await get(reviewerRef);
-        if (reviewerSnap.exists()) {
-          const reviewerData = reviewerSnap.val();
-          if (reviewerData?.isModerator || reviewerData?.admin) {
-            Alert.alert('Restricted', 'Moderators cannot delete reviews from other moderators or admins.');
-            return;
-          }
-        }
-      } catch (err) {
-        console.error('Error checking reviewer status:', err);
-      }
+    if (!(await canRemoveReview(db, review.fromUserId, { isAdmin, isModerator }))) {
+      Alert.alert('Restricted', 'Only admins can delete reviews.');
+      return;
     }
 
     Alert.alert(
@@ -1518,36 +1507,12 @@ const AdminDashboard = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const firestoreDB = getFirestore();
-              const reviewRef = doc(firestoreDB, 'reviews', review.id);
-
-              // Get the rating before deleting so we can update the summary
-              const ratingToRemove = parseRatingSafe(review?.rating);
-
-              // Delete the review document
-              await deleteDoc(reviewRef);
-
-              // Update the ratings summary
-              const summaryRef = doc(firestoreDB, 'user_ratings_summary', selectedUser.id);
-              const summarySnap = await getDoc(summaryRef);
-
-              if (summarySnap.exists()) {
-                const s = summarySnap.data();
-                const oldAvg = s?.averageRating || 0;
-                const oldCount = s?.count || 0;
-
-                if (oldCount <= 1) {
-                  // Last review — reset summary
-                  await setDoc(summaryRef, { averageRating: 0, count: 0 }, { merge: true });
-                } else {
-                  const newCount = oldCount - 1;
-                  const newAvg = ((oldAvg * oldCount) - ratingToRemove) / newCount;
-                  await setDoc(summaryRef, {
-                    averageRating: parseFloat(newAvg.toFixed(2)),
-                    count: newCount,
-                  }, { merge: true });
-                }
-              }
+              // Delete the review and update the ratings summary
+              await deleteReviewAndSummary(getFirestore(), {
+                id: review.id,
+                toUserId: selectedUser.id,
+                rating: parseRatingSafe(review?.rating),
+              });
 
               // Remove from local state
               setReviews((prev) => prev.filter((r) => r.id !== review.id));
@@ -4226,12 +4191,14 @@ const AdminDashboard = () => {
                           <Text style={{ color: C.textFaint, marginLeft: 'auto', fontSize: 11 }}>
                             {dateText || '—'}
                           </Text>
-                          <TouchableOpacity
-                            onPress={() => handleDeleteReview(review)}
-                            style={{ marginLeft: 10, padding: 4 }}
-                          >
-                            <Ionicons name="trash-outline" size={16} color={HUE.danger} />
-                          </TouchableOpacity>
+                          {canDeleteReviews({ isAdmin }) && (
+                            <TouchableOpacity
+                              onPress={() => handleDeleteReview(review)}
+                              style={{ marginLeft: 10, padding: 4 }}
+                            >
+                              <Ionicons name="trash-outline" size={16} color={HUE.danger} />
+                            </TouchableOpacity>
+                          )}
                         </View>
 
                         <Text style={{ color: C.text }}>

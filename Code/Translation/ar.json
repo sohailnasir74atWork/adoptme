@@ -88,6 +88,10 @@
             "verify_error": "تعذّر التحقق من اسم المستخدم: {{error}}",
             "code_not_found": "لم نجد رمز التوثيق في وصف ملفك على Roblox",
             "verify_failed": "فشل التوثيق. حاول مرة أخرى.",
+            "busy": "روبلوكس مشغول الآن. انتظر دقيقة ثم اضغط توثيق مرة أخرى.",
+            "copy_code": "نسخ الرمز",
+            "code_copied_title": "تم نسخ الرمز",
+            "code_copied": "تم نسخ {{code}}. الصقه في قسم «نبذة» في ملفك على روبلوكس واحفظ، ثم ارجع واضغط توثيق مرة أخرى.",
             "enter_username": "اكتب اسم مستخدم Roblox",
             "invalid_username_title": "اسم مستخدم غير صالح",
             "verify_title": "وثّق اسم مستخدم Roblox",
@@ -852,7 +856,8 @@
         "update_error": "تعذّر تحديث التقييم",
         "rating_count_one": "{{count}} تقييم",
         "rating_count_other": "{{count}} تقييمات",
-        "edited": "(معدّل)"
+        "edited": "(معدّل)",
+        "report": "الإبلاغ عن التقييم"
     },
     "signin": {
         "title_signin": "تسجيل الدخول",
@@ -941,7 +946,9 @@
         "scammer_desc": "تحقّق من الاسم قبل التبادل",
         "news_desc": "آخر الأخبار من فريق التطبيق",
         "birthdays_desc": "احتفل بأعياد ميلاد اللاعبين",
-        "reports_desc": "أبلغ عن مشكلة أو شارك فكرة"
+        "reports_desc": "أبلغ عن مشكلة أو شارك فكرة",
+        "tracker_title": "متتبع الحيوانات",
+        "tracker_desc": "اعرف كم بقي حتى يكبر حيوانك"
     },
     "chat": {
         "top_rated": "الأعلى تقييماً",
@@ -1346,7 +1353,9 @@
         "go_to_message": "اذهب إلى الرسالة",
         "pin_limit": "يمكنك تثبيت {{max}} رسائل كحد أقصى. ألغِ تثبيت واحدة أولًا.",
         "pinned_gone": "هذه الرسالة لم تعد موجودة في الدردشة.",
-        "photo": "صورة"
+        "photo": "صورة",
+        "translate_tip_long": "نصيحة: اضغط مطولًا على أي رسالة لترجمتها.",
+        "translate_tip_tap": "نصيحة: اضغط على أي رسالة لترجمتها."
     },
     "first": {
         "continue_guest": "المتابعة كضيف",
@@ -1823,7 +1832,9 @@
         "ban_reason_title": "السبب",
         "cosmetics_title": "الزينة",
         "cosmetics_egg_desc": "افقس البيض لتربح زينة",
-        "cosmetics_collection_desc": "استعرض مجموعتك وجهّز ما تريد"
+        "cosmetics_collection_desc": "استعرض مجموعتك وجهّز ما تريد",
+        "ban_appeal_question": "تظن أن هذا خطأ؟",
+        "ban_appeal_button": "أرسل طلب استئناف"
     },
     "trade_journal": {
         "tabs": {
@@ -4077,7 +4088,8 @@
             "moderation": "الإشراف",
             "scam": "احتيال أو تبادل",
             "bug": "مشكلة في التطبيق",
-            "other": "شيء آخر"
+            "other": "شيء آخر",
+            "ban_appeal": "استئناف الحظر"
         },
         "details": "التفاصيل",
         "placeholder_complaint": "احكِ لنا ما حدث. أسماء المستخدمين والتواريخ ولقطات الشاشة تساعد كثيرًا.",
@@ -4098,6 +4110,9 @@
         "sign_in": "سجّل الدخول لإرسال شكوى أو فكرة.",
         "mine_title": "رسائلك",
         "status_open": "تم الاستلام",
-        "status_done": "تمت المراجعة"
+        "status_done": "تمت المراجعة",
+        "placeholder_ban_appeal": "احكِ لنا ما حدث ولماذا تظن أن الحظر خطأ. لقطات الشاشة تساعد.",
+        "placeholder_false_review": "لماذا هذا التقييم مزيّف؟ لقطات شاشة من محادثتكم تساعد.",
+        "reported_review": "التقييم الذي تبلّغ عنه"
     }
 }

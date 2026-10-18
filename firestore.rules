@@ -27,6 +27,12 @@ service cloud.firestore {
     function isStaff() {
       return signedIn() && (isFounder() || exists(/databases/$(database)/documents/staff/$(request.auth.uid)));
     }
+    // Admin only (not moderators): staff/{uid}.admin mirrors RTDB users/{uid}/admin.
+    function isAdmin() {
+      return isFounder() || (signedIn()
+        && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.get('admin', false) == true);
+    }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     // A per-user map field (reactions.{uid}, likes.{uid}, voters.{uid}) where
     // the writer may only add/change/remove their own entry.
@@ -138,7 +144,9 @@ service cloud.firestore {
             && request.resource.data.toUserId != me()
             && docId == request.resource.data.toUserId + '_' + me())
       );
-      allow delete: if isStaff() || (signedIn() && (docId == me() || resource.data.get('fromUserId', null) == me()));
+      // Admins only (owner decision 2026-10-18; moderators could before); a
+      // player may still delete their own review or profile copy.
+      allow delete: if isAdmin() || (signedIn() && (docId == me() || resource.data.get('fromUserId', null) == me()));
     }
 
     // Written by the rater onto the RATED player's doc (and by one-time

@@ -64,6 +64,7 @@ import CompactPortfolio from './CompactPortfolio';
 import ProfileAdminActions from './ProfileAdminActions';
 import StaffEligibilityCard from '../../Elections/StaffEligibilityCard';
 import ProfileReviewsSection from './ProfileReviewsSection';
+import { openReportForm, reviewForReport } from '../../Reports/openReportForm';
 import ProfileTradesSection from './ProfileTradesSection';
 import ProfilePostsSection from './ProfilePostsSection';
 import BadgeShowcase from './BadgeShowcase';
@@ -355,6 +356,13 @@ const ProfileBottomDrawer = ({
   // the same transition.
   const { handoff, onDismiss: onDrawerDismiss } = useModalHandoff();
   useModalTransition(isVisible && !selectedPost);
+
+  // A review's flag: close the drawer, then open Complaints & ideas with the
+  // review attached (Reports/openReportForm).
+  const reportReview = useCallback((rev) => {
+    const payload = reviewForReport(rev, selectedUserId);
+    handoff(toggleModal, () => openReportForm({ category: 'false_review', review: payload }));
+  }, [handoff, toggleModal, selectedUserId]);
 
   // Every route that dismisses the reason modal must also drop the pending
   // action: reasonActionType is what tells the "reset when drawer closes"
@@ -3326,6 +3334,8 @@ const ProfileBottomDrawer = ({
                       formatCreatedAt={formatCreatedAt}
                       starFilter={starFilter}
                       setStarFilter={setStarFilter}
+                      onReportReview={user?.id ? reportReview : null}
+                      viewerId={user?.id || null}
                     />
                   </View>
                 )}

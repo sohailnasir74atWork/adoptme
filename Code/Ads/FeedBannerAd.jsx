@@ -19,6 +19,7 @@ import getAdUnitId from './ads';
 import { useLocalState } from '../LocalGlobelStats';
 import { useAdsReady } from './init';
 import { logAdRevenue } from './adTelemetry';
+import { useFeedAdActive } from './feedAdGate';
 
 // Horizontal gutter the feed cards use, so the ad lines up with content.
 const CARD_GUTTER = 12;
@@ -31,7 +32,11 @@ const RETRY_MS = 30000;
 const npaRequiredFor = (status) =>
   status !== 'OBTAINED' && status !== 'NOT_REQUIRED';
 
-const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
+// `gate` (feedAdGate.js): the feed list's visibility gate. Without one the
+// slot behaves as before and requests as soon as it renders.
+const FeedBannerAd = ({ adKey, isDarkMode = false, gate = null }) => {
+  // No request until the player is about to reach this row.
+  const nearScreen = useFeedAdActive(gate, adKey);
   const { width: screenWidth } = useWindowDimensions();
   const { localState } = useLocalState();
   // No request before UMP consent + request configuration + initialize().
@@ -76,7 +81,7 @@ const FeedBannerAd = ({ adKey, isDarkMode = false }) => {
     retriedRef.current = false;
   }, [adKey]);
 
-  if (localState?.isPro || !adsReady) return null;
+  if (localState?.isPro || !adsReady || !nearScreen) return null;
 
   return (
     <View

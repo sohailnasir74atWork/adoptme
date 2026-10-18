@@ -9,6 +9,8 @@ const STAR_OPTIONS = [null, 5, 4, 3, 2, 1]; // null = All
 /**
  * Reviews section — modernised card design with icon header + star filter pills
  * Reviews are fetched server-side from Firestore (filtered by rating when a star is selected)
+ * `onReportReview` (signed-in viewers only) adds a flag to every review the
+ * viewer did not write; it opens Complaints & ideas with the review attached.
  */
 const ProfileReviewsSection = ({
   isDarkMode,
@@ -22,6 +24,8 @@ const ProfileReviewsSection = ({
   formatCreatedAt,
   starFilter = null,
   setStarFilter,
+  onReportReview = null,
+  viewerId = null,
 }) => {
   const c = getThemeColors(isDarkMode);
   return (
@@ -173,6 +177,16 @@ const ProfileReviewsSection = ({
                       </Text>
                     )}
                     {renderStars(rev?.rating || 0)}
+                    {onReportReview && rev.fromUserId !== viewerId && (
+                      <TouchableOpacity
+                        onPress={() => onReportReview(rev)}
+                        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('reviews.report')}
+                      >
+                        <Icon name="flag-outline" size={13} color={c.textMuted} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
                 {!!rev?.review && (

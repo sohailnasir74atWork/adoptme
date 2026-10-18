@@ -9,6 +9,11 @@
  * (/news_feedback). The poll summary that used to be here went with the polls
  * (2026-10-07). Reads are paged (40 at a time) instead of the old onValue on
  * the whole feedback node. Staff tool: English only, like the dashboard.
+ *
+ * A report sent from a review's flag carries reviewId/reviewedUserId: the card
+ * shows the review as it is now and offers "Remove review", which deletes it,
+ * recounts the rating (Helper/reviewModeration.js, same rule as the dashboard)
+ * and marks the report done (2026-10-18).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,6 +31,7 @@ import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import {
   fetchReportsPage, setReportStatus, deleteReport, fetchLegacyFeedbackPage, deleteLegacyFeedback,
 } from '../Reports/reportsApi';
+import { fetchReview, canRemoveReview, canDeleteReviews, deleteReviewAndSummary } from '../Helper/reviewModeration';
 
 const PAGE = 40;
 const ACCENT = '#7C3AED';
@@ -34,6 +40,7 @@ const DANGER = '#DC2626';
 const CATEGORY_LABEL = {
   false_review: 'False review',
   moderation: 'Moderation',
+  ban_appeal: 'Ban appeal',
   scam: 'Scam / trade',
   bug: 'App problem',
   other: 'Other',
@@ -88,7 +95,42 @@ const Sender = ({ r, c, onOpenProfile, onCopy }) => {
   );
 };
 
-const ReportCard = React.memo(function ReportCard({ r, c, onOpenProfile, onCopy, onView, onToggleDone, onDelete }) {
+const stars = (n) => '★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(n) || 0))).padEnd(5, '☆');
+
+// The reported review as stored now: undefined while loading, null once gone.
+const ReportedReview = ({ r, c, firestoreDB, onRemove }) => {
+  const [review, setReview] = useState(undefined);
+  useEffect(() => {
+    let live = true;
+    if (r.reviewRemoved) { setReview(null); return undefined; }
+    fetchReview(firestoreDB, r.reviewId).then((v) => live && setReview(v)).catch(() => live && setReview(null));
+    return () => { live = false; };
+  }, [firestoreDB, r.reviewId, r.reviewRemoved]);
+  return (
+    <View style={[styles.reviewBox, { backgroundColor: c.bg, borderColor: c.border }]}>
+      {review === undefined ? (
+        <ActivityIndicator color={ACCENT} />
+      ) : review === null ? (
+        <Text style={[styles.reviewMeta, { color: c.textMuted }]}>Reported review · already removed</Text>
+      ) : (
+        <>
+          <Text style={[styles.reviewMeta, { color: c.textMuted }]} numberOfLines={1}>
+            Reported review · by {review.userName || review.fromUserId?.slice(0, 8) || '?'} · <Text style={styles.reviewStars}>{stars(Number(review.rating))}</Text>
+          </Text>
+          {review.review ? <Text style={[styles.body, styles.reviewBody, { color: c.text }]} selectable>{review.review}</Text> : null}
+          {onRemove ? (
+            <TouchableOpacity onPress={() => onRemove(r, review)} style={[styles.btn, styles.removeBtn]}>
+              <Icon name="trash" size={15} color="#FFF" />
+              <Text style={[styles.btnText, styles.white]}>Remove review</Text>
+            </TouchableOpacity>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+};
+
+const ReportCard = React.memo(function ReportCard({ r, c, firestoreDB, onOpenProfile, onCopy, onView, onToggleDone, onDelete, onRemoveReview }) {
   const done = r.status === 'done';
   return (
     <View style={[styles.card, { backgroundColor: c.bgAlt, borderColor: c.border, opacity: done ? 0.75 : 1 }]}>
@@ -104,6 +146,7 @@ const ReportCard = React.memo(function ReportCard({ r, c, onOpenProfile, onCopy,
         </View>
       </View>
       <Text style={[styles.body, { color: c.text }]} selectable>{r.text}</Text>
+      {r.reviewId ? <ReportedReview r={r} c={c} firestoreDB={firestoreDB} onRemove={onRemoveReview} /> : null}
       {r.images?.length ? (
         <View style={styles.thumbs}>
           {r.images.map((u) => (
@@ -149,7 +192,7 @@ const LegacyCard = React.memo(function LegacyCard({ r, c, onOpenProfile, onCopy,
 });
 
 const AdminReportsInbox = () => {
-  const { appdatabase, theme } = useGlobalState();
+  const { appdatabase, firestoreDB, theme, isAdmin, user } = useGlobalState();
   const c = getThemeColors(theme === 'dark');
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -288,9 +331,37 @@ const AdminReportsInbox = () => {
     ]);
   }, [appdatabase]);
 
+  // Same rule as the Admin Dashboard: a moderator who is not an admin cannot
+  // remove a review written by a moderator or an admin.
+  const removeReview = useCallback(async (r, review) => {
+    const roles = { isAdmin, isModerator: !!user?.isModerator };
+    if (!(await canRemoveReview(appdatabase, review.fromUserId, roles))) {
+      Alert.alert('Restricted', 'Only admins can delete reviews.');
+      return;
+    }
+    Alert.alert('Remove review', `Remove this ${Number(review.rating) || 0}-star review${review.userName ? ` by ${review.userName}` : ''}? Their rating is recounted and the report is marked done.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteReviewAndSummary(firestoreDB, { id: review.id, toUserId: review.toUserId || r.reviewedUserId, rating: review.rating });
+          } catch (e) {
+            showErrorMessage('Could not remove the review', e?.message);
+            return;
+          }
+          setReports((list) => list.map((x) => (x.id === r.id ? { ...x, status: 'done', reviewRemoved: true } : x)));
+          setReportStatus(appdatabase, r.id, 'done').catch(() => {});
+          showSuccessMessage('Review removed', 'The rating has been recounted.');
+        },
+      },
+    ]);
+  }, [appdatabase, firestoreDB, isAdmin, user?.isModerator]);
+
   const renderReport = useCallback(({ item }) => (
-    <ReportCard r={item} c={c} onOpenProfile={openProfile} onCopy={copy} onView={setViewer} onToggleDone={toggleDone} onDelete={confirmDelete} />
-  ), [c, openProfile, copy, toggleDone, confirmDelete]);
+    <ReportCard r={item} c={c} firestoreDB={firestoreDB} onOpenProfile={openProfile} onCopy={copy} onView={setViewer} onToggleDone={toggleDone} onDelete={confirmDelete} onRemoveReview={canDeleteReviews({ isAdmin }) ? removeReview : undefined} />
+  ), [c, firestoreDB, openProfile, copy, toggleDone, confirmDelete, removeReview, isAdmin]);
 
   const renderLegacy = useCallback(({ item }) => (
     <LegacyCard r={item} c={c} onOpenProfile={openProfile} onCopy={copy} onDelete={confirmDelete} />
@@ -397,6 +468,12 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, height: 34 },
   btnText: { fontSize: 13, fontWeight: '800' },
+  reviewBox: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 10 },
+  removeBtn: { alignSelf: 'flex-start', marginTop: 10, backgroundColor: DANGER, borderColor: DANGER },
+  reviewMeta: { fontSize: 12 },
+  reviewStars: { color: '#F59E0B' },
+  reviewBody: { marginTop: 4 },
+  white: { color: '#FFF' },
   more: { alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingVertical: 12, marginTop: 12 },
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' },
   viewerClose: { position: 'absolute', right: 18, zIndex: 2 },
