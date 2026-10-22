@@ -10,7 +10,7 @@ import { saveOwnPrivateProfile } from './Helper/privateProfile';
 import { getBlocks, getRoblox, getIdentity, getRoles, getCosmetics, setLastActivity } from './Supabase/userBackend';
 import { useLocalState } from './LocalGlobelStats';
 import { requestPermission } from './Helper/PermissionCheck';
-import { useColorScheme, AppState, Appearance } from 'react-native';
+import { useColorScheme, AppState, Appearance, Platform } from 'react-native';
 import { getFlag } from './Helper/CountryCheck';
 import { setLinksAllowed } from './Helper/linksSwitch';
 import { generateOnePieceUsername } from './Helper/RendomNamegen';
@@ -483,6 +483,7 @@ export const GlobalStateProvider = ({ children }) => {
         if (identityRow.avatar != null)            existing.avatar = identityRow.avatar;
         if (identityRow.dateOfBirth != null)       existing.dateOfBirth = identityRow.dateOfBirth;
         if (identityRow.lastProfileEditAt != null) existing.lastProfileEditAt = identityRow.lastProfileEditAt;
+        if (identityRow.OS != null)                existing.OS = identityRow.OS;
         if (cosmeticsRow) {
           existing.isPro = cosmeticsRow.isPro;
           if (cosmeticsRow.topBadge != null) existing.topBadge = cosmeticsRow.topBadge;
@@ -589,6 +590,14 @@ export const GlobalStateProvider = ({ children }) => {
           id: userId,
           createdAt: existing.createdAt || authCreatedAtMs(loggedInUser)   // fallback if missing
         };
+
+        // Platform ('android' | 'ios') on the user record, for the admin-only
+        // line in the profile drawer. Written only when missing or changed
+        // (the account moved to another phone), so most sign-ins write nothing.
+        if (existing.OS !== Platform.OS) {
+          userData.OS = Platform.OS;
+          update(userRef, { OS: Platform.OS }).catch(() => {});
+        }
 
         // ✅ SELF-HEALING: Persist createdAt to RTDB if it was missing
         // so other users (e.g. BottomDrawer) can see the joined date

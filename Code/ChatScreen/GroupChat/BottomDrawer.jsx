@@ -269,6 +269,20 @@ const ProfileBottomDrawer = ({
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
 
   const selectedUserId = selectedUser?.senderId || selectedUser?.id || null;
+
+  // Android / iOS of the viewed user (users/{uid}/OS), admins only. Falls back
+  // to the OS stamped on the chat message the drawer was opened from.
+  const [userOS, setUserOS] = useState(null);
+  useEffect(() => {
+    setUserOS(null);
+    if (!isVisible || !isAdmin || !selectedUserId || !appdatabase) return;
+    let alive = true;
+    get(ref(appdatabase, `users/${selectedUserId}/OS`))
+      .then((snap) => { if (alive && snap.exists()) setUserOS(snap.val()); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isVisible, isAdmin, selectedUserId, appdatabase]);
+  const platformOS = userOS || selectedUser?.OS || null;
   // Self view (Setting.jsx "View my public profile"): the drawer renders
   // exactly what another player sees, minus the actions that only make
   // sense on someone else (block, chat, follow, mod tools).
@@ -3219,6 +3233,18 @@ const ProfileBottomDrawer = ({
                       <Icon name="calendar-outline" size={11} color={c.textMuted} />
                       <Text style={{ fontSize: 10, color: c.textMuted, fontWeight: '500' }}>
                         {t('settings.joined', { time: createdAtText })}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Android / iOS: admins only */}
+                {isAdmin && (platformOS === 'android' || platformOS === 'ios') && (
+                  <View style={{ alignItems: 'center', marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Icon name={platformOS === 'ios' ? 'logo-apple' : 'logo-android'} size={11} color={platformOS === 'ios' ? '#007AFF' : '#34C759'} />
+                      <Text style={{ fontSize: 10, color: c.textMuted, fontWeight: '500' }}>
+                        {platformOS === 'ios' ? 'iOS' : 'Android'}
                       </Text>
                     </View>
                   </View>
