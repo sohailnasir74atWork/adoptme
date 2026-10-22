@@ -34,6 +34,7 @@ import { getThemeColors } from '../Helper/themeColors';
 import { showErrorMessage } from '../Helper/MessageHelper';
 import config from '../Helper/Environment';
 import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
+import { maybeAskForReview } from '../AppHelper/reviewPrompt';
 import {
   petKey, getDreamKey, setDreamKeyLocal, alertsEnabled, setAlertsEnabled,
   syncTradeInventory, fetchTradeMatches, fetchPetWanters, fetchTradeMatchStats, reportDreamFound,
@@ -372,6 +373,7 @@ export default function TradeMatchScreen() {
       reportDreamFound(dreamKey).then((st) => { if (st && mounted.current) setStats(st); }).catch(() => {});
       syncTradeInventory(uid, newOwned, newWishlist, { dreamKey: null, lang: i18n.language });
       setProofPet({ name: pet.name || pet.Name, image: imageOf(pet.imageUrl || pet.image, imgBase), label: variantLabel({ v: pet.valueType, f: pet.isFly, r: pet.isRide }) });
+      maybeAskForReview('wishlist_got_it');
     } catch (e) {
       console.warn('[TradeMatch] got-it failed:', e?.message);
       showErrorMessage(t('home.alert.error'), t('trade_match.error_save'));

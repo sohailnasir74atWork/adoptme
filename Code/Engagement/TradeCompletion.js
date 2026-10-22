@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { getThemeColors } from '../Helper/themeColors';
 import { useLocalState } from '../LocalGlobelStats';
+import { maybeAskForReview } from '../AppHelper/reviewPrompt';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -193,6 +194,7 @@ const TradeCompletion = ({
       }
 
       setSaved(true);
+      maybeAskForReview('trade_logged');
     } catch (err) {
       console.warn('[TradeCompletion] save error:', err?.message);
       Alert.alert(t('trade_journal.alerts.error'), t('trade_completion.save_error'));

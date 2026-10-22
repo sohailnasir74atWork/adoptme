@@ -28,6 +28,7 @@ import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react
 import { buildVariantTags } from '../Trades/tradeHelpers';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import TradeCompletion from '../Engagement/TradeCompletion';
+import { maybeAskForReview } from '../AppHelper/reviewPrompt';
 import {
   VALUE_SOURCE,
   VALUE_UNIT,
@@ -286,6 +287,14 @@ const HomeScreen = ({ selectedTheme }) => {
   const tradeStatus = useMemo(() =>
     getTradeStatus(hasTotal, wantsTotal)
     , [hasTotal, wantsTotal]);
+
+  // Store review: a Win/Fair result with both sides filled, left unchanged
+  // for 3 s, counts as one finished check (the 5th in a session may ask).
+  useEffect(() => {
+    if (tradeStatus === 'lose' || !(hasTotal > 0 && wantsTotal > 0)) return undefined;
+    const id = setTimeout(() => maybeAskForReview('calculator'), 3000);
+    return () => clearTimeout(id);
+  }, [tradeStatus, hasTotal, wantsTotal]);
 
 
   useEffect(() => {
@@ -631,6 +640,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
     updateLocalState('favorites', newFavorites);
     triggerHapticFeedback('impactLight');
+    if (!isFavorite) maybeAskForReview('collection');
   }, [localState.favorites, updateLocalState, triggerHapticFeedback]);
 
   // Update filteredData to include favorites

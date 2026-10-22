@@ -21,8 +21,8 @@ import MainTabs from './Code/AppHelper/MainTabs';
 import {
   MyDarkTheme,
   MyLightTheme,
-  requestReview,
 } from './Code/AppHelper/AppHelperFunction';
+import { noteReviewActiveDay } from './Code/AppHelper/reviewPrompt';
 import { useTranslation } from 'react-i18next';
 
 import RNBootSplash from "react-native-bootsplash";
@@ -283,30 +283,11 @@ function App() {
     }
   }, [saveConsentStatus, showAttPrimer]);
 
-  // ✅ Fixed: Use ref to track if reviewCount was updated to prevent infinite loop
-  const reviewCountUpdatedRef = React.useRef(false);
+  // Store review: count active days here; the prompt itself is asked at
+  // success moments (Code/AppHelper/reviewPrompt.js), never at launch.
   useEffect(() => {
-    // ✅ Only update reviewCount once on mount, not on every reviewCount change
-    if (!reviewCountUpdatedRef.current) {
-      const { reviewCount } = localState || {};
-      if (reviewCount !== undefined) {
-        reviewCountUpdatedRef.current = true;
-        updateLocalState('reviewCount', Number(reviewCount) + 1);
-      }
-    }
-  }, []); // ✅ Empty deps - only run once on mount
-
-  // ✅ Separate useEffect for review request - only runs when reviewCount changes
-  useEffect(() => {
-    const { reviewCount } = localState || {};
-    if (reviewCount && reviewCount % 6 === 0 && reviewCount > 0) {
-      try {
-        requestReview();
-      } catch (error) {
-        // ✅ Silently handle errors to prevent crashes
-      }
-    }
-  }, [localState?.reviewCount]); // ✅ Only depend on reviewCount, not updateLocalState
+    noteReviewActiveDay();
+  }, []);
 
   // Consent + ATT flow runs on idle. Ads can't show until this finishes
   // anyway, and pushing it off the critical path frees first paint.

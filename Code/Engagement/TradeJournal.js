@@ -30,6 +30,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import { fetchAnalyticsData, getDemandScore, getHotStatus, getMarket, normalizeName } from '../Helper/analyticsDataHelper';
 import { getThemeColors } from '../Helper/themeColors';
 import { syncTradeInventory, setDreamKeyLocal } from '../Helper/tradeMatch';
+import { maybeAskForReview } from '../AppHelper/reviewPrompt';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
 import { useGlobalState } from '../GlobelStats';
 import BannerAdComponent from '../Ads/bannerAds';
@@ -482,8 +483,13 @@ const TradeJournal = ({
   // ── Auto-save pets when they change (debounced) ──
   const hasFetchedRef = useRef(false);
   const saveTimerRef = useRef(null);
+  const petCountRef = useRef(0);
   useEffect(() => {
+    const petCount = (ownedPets?.length || 0) + (wishlistPets?.length || 0);
+    const grew = petCount > petCountRef.current;
+    petCountRef.current = petCount;
     if (!hasFetchedRef.current) return; // Skip initial fetch
+    if (grew) maybeAskForReview('collection');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       savePets(ownedPets, wishlistPets);
