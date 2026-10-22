@@ -75,6 +75,19 @@ const logStartupTiming = (name, params) => {
 // Back-off between profile reloads after a failed login read (see
 // reloadProfileWhenConnected); its length is the per-launch reload cap.
 const PROFILE_RELOAD_DELAYS = [2000, 8000, 20000, 45000, 90000];
+
+// The profile's "Joined" date: when the Firebase Auth account was created,
+// not when this login ran. Stamping Date.now() gave every account whose record
+// lacked createdAt (or was recreated) the date of some later login (21,683
+// Adopt Me users corrected 2026-10-21). In @react-native-firebase 25
+// metadata.creationTime is an ISO string and the getter throws when absent.
+const authCreatedAtMs = (authUser) => {
+  try {
+    const ms = Date.parse(authUser?.metadata?.creationTime);
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  } catch (_) {}
+  return Date.now();
+};
 import { getDeviceFingerprint } from './Helper/deviceFingerprint';
 import { setSquadUser } from './Helper/squad';
 import { getServerTime, warmServerTime } from './Helper/serverTime';
@@ -539,7 +552,7 @@ export const GlobalStateProvider = ({ children }) => {
             email: loggedInUser.email || null,
             displayName: loggedInUser.displayName || 'Anonymous',
             avatar: loggedInUser.photoURL || null,
-            createdAt: Date.now(),
+            createdAt: authCreatedAtMs(loggedInUser),
             // Fields are missing because they weren't read, not because the
             // user lacks them: gates like the DOB prompt must wait (App.js).
             profileIncomplete: true,
@@ -574,7 +587,7 @@ export const GlobalStateProvider = ({ children }) => {
         userData = {
           ...existing,
           id: userId,
-          createdAt: existing.createdAt || Date.now()   // fallback if missing
+          createdAt: existing.createdAt || authCreatedAtMs(loggedInUser)   // fallback if missing
         };
 
         // ✅ SELF-HEALING: Persist createdAt to RTDB if it was missing
@@ -596,7 +609,7 @@ export const GlobalStateProvider = ({ children }) => {
         // 🆕 NEW USER → Set createdAt once
         userData = {
           ...createNewUser(userId, loggedInUser, robloxUsernameRef?.current),
-          createdAt: Date.now()
+          createdAt: authCreatedAtMs(loggedInUser)
         };
 
         // update() instead of set(): identical for a genuinely new node, but if
