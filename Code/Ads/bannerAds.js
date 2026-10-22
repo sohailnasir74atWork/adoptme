@@ -7,6 +7,7 @@ import { useLocalState } from '../LocalGlobelStats';
 import { useAdsReady } from './init';
 import { reportBannerHeight } from './bannerHeight';
 import { logAdRevenue } from './adTelemetry';
+import { collapsibleBannersEnabled } from './collapsibleSwitch';
 
 // NPA gating: only force non-personalized ads when we truly have to.
 // Forcing NPA on every user (the old behaviour) cut eCPM ~40-60% for ~80%
@@ -117,7 +118,11 @@ const BannerAdComponent = ({
   // collapsible banner is unmounted while its screen is out of focus, which
   // removes the overlay, and once its screen has been left it comes back as a
   // plain banner: it can expand only on the first visit. (Port of Blox.)
-  const wantsCollapsible = collapsible && Platform.OS === 'android';
+  // Remote switch, OFF unless RTDB /collapsible_banners_enabled is true
+  // (collapsibleSwitch.js). Read once per mount, so flipping it never
+  // re-requests a banner that is already on screen.
+  const [remoteCollapsible] = useState(collapsibleBannersEnabled);
+  const wantsCollapsible = collapsible && remoteCollapsible && Platform.OS === 'android';
   const isFocused = useScreenFocused();
   const [expandSpent, setExpandSpent] = useState(false);
   useEffect(() => {
