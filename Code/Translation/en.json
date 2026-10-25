@@ -292,7 +292,34 @@
             "safety_3": "Always complete trades with the official trading system inside the game.",
             "safety_4": "Report suspicious users by long-pressing their message and choosing \"Report\".",
             "safety_5": "Check a trader's rating and reviews on their profile before trading with them."
-        }
+        },
+        "section_account": "Account",
+        "section_notifications": "Notifications",
+        "section_appearance": "Appearance",
+        "section_help": "Help and about",
+        "privacy_chat": "Privacy and chat",
+        "privacy_chat_sub": "Who can message you, online status",
+        "who_can_message": "Who can message you",
+        "what_others_see": "What others can see",
+        "allow_general_chat": "Allow general chat",
+        "allow_general_chat_sub": "Public chat, feed, profiles, inbox",
+        "allow_trade_chat": "Allow trade chat",
+        "allow_trade_chat_sub": "When someone opens your trade",
+        "chat_off_note": "Turning a chat off also stops you messaging others there.",
+        "help_feedback": "Help and feedback",
+        "legal_safety": "Legal and safety",
+        "get_pro": "Get Pro",
+        "get_pro_sub": "No ads and all Pro features",
+        "upgrade": "Upgrade",
+        "roblox_account": "Roblox account",
+        "roblox_sheet_desc": "Verified names get a ✓ on trades and chat.",
+        "not_linked": "Not linked",
+        "stat_reviews": "{{count}} reviews",
+        "stat_reviews_one": "{{count}} review",
+        "stat_reviews_other": "{{count}} reviews",
+        "stat_xp": "XP",
+        "stat_stars": "Stars",
+        "version": "Version {{version}}"
     },
     "profile": {
         "display_name": "Display Name",
@@ -2542,7 +2569,10 @@
             "feature_roles": "View group members and their roles.",
             "feature_notifications": "Get notifications for new messages when you're not in the chat.",
             "got_it": "Got It!"
-        }
+        },
+        "inactive_delete_in_one": "Inactive · deleted in {{count}} day",
+        "inactive_delete_in_other": "Inactive · deleted in {{count}} days",
+        "inactive_delete_today": "Inactive · deleted today"
     },
     "inbox": {
         "no_messages_yet": "No messages yet",

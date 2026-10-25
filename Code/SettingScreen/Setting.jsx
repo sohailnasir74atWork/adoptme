@@ -10,12 +10,13 @@ import {
   Pressable,
   Alert,
   ScrollView,
-  Switch,
   Linking,
   Platform,
   ActivityIndicator,
   Animated,
   useWindowDimensions,
+  StyleSheet,
+  BackHandler,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -26,6 +27,8 @@ import { handleGetSuggestions, handleOpenFacebook, handleOpenWebsite, handleRate
 import { usePrivacyOptionsRequired, showPrivacyOptionsForm } from '../Ads/consentOptions';
 import ScreenBottomBanner from '../Ads/ScreenBottomBanner';
 import EmailUpdatesRow from './EmailUpdatesRow';
+import { SettingsGroup, SettingsRow, SubPageHeader, getRowStyles, legacyRowProps } from './SettingsUI';
+import DeviceInfo from 'react-native-device-info';
 import BirthdayVisibilityRow from '../Birthdays/BirthdayVisibilityRow';
 import { logoutUser } from '../Firebase/UserLogics';
 import SignInDrawer from '../Firebase/SigninDrawer';
@@ -552,7 +555,9 @@ export default function SettingsScreen({ selectedTheme }) {
   const [owned, setOwned] = useState(false);
   const [avatarSearch, setAvatarSearch] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "app"
+  // In-screen sub-page of the grouped list: null | 'privacy' | 'help' | 'legal'.
+  const [subPage, setSubPage] = useState(null);
+  const [showRobloxSheet, setShowRobloxSheet] = useState(false);
   const [userReviews, setUserReviews] = useState([]); // Reviews user gave to others
   const [receivedReviews, setReceivedReviews] = useState([]); // Reviews others gave to user
   const [loadingReviews, setLoadingReviews] = useState(false);
@@ -615,7 +620,7 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   // Load user's active cosmetics from MMKV cache (instant, no DB call)
-  const myActiveCosmetics = useMemo(() => getMyCosmetics(), [activeTab]);
+  const myActiveCosmetics = useMemo(() => getMyCosmetics(), [subPage]);
 
   const { t, i18n } = useTranslation();
   // EEA/UK/CH users must be able to revisit their ad-consent choice from the
@@ -631,61 +636,6 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   // ✅ Fixed: 't' → 'tab', added Pressable + haptic for smooth switching
-  const SettingsTabs = () => (
-    <View
-      style={{
-        flexDirection: "row",
-        marginTop: 4,
-        marginBottom: 4,
-        backgroundColor: isDarkMode ? "#1b1b1b" : "#f2f2f2",
-        borderRadius: 6,
-        padding: 4,
-      }}
-    >
-      {[
-        { key: "profile", label: t('settings.profile_settings') },
-        { key: "app", label: t('settings.app_settings') },
-      ].map((tab) => {
-        const isActive = activeTab === tab.key;
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => {
-              triggerHapticFeedback('impactLight');
-              setActiveTab(tab.key);
-            }}
-            // 2026-10-03: on the New Architecture the ripple, set as this view's
-            // Android *background*, replaced the backgroundColor, so the active
-            // tab lost its fill and its white label vanished in light mode. The
-            // fill now lives on an inner View and the ripple draws over it.
-            android_ripple={{ color: 'rgba(255,255,255,0.25)', foreground: true }}
-            style={{ flex: 1, borderRadius: 10, overflow: 'hidden' }}
-          >
-            <View
-              style={{
-                paddingVertical: 10,
-                borderRadius: 10,
-                alignItems: "center",
-                backgroundColor: isActive ? config.colors.primary : "transparent",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: 'bold',
-                  color: isActive ? "#fff" : (isDarkMode ? "#ddd" : "#333"),
-                }}
-              >
-                {tab.label}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-
-
   const parsedValuesData = useMemo(() => {
     try {
       const raw = localState?.data;
@@ -2872,6 +2822,22 @@ export default function SettingsScreen({ selectedTheme }) {
     };
   }, [user?.id, user?.displayName, user?.avatar, user?.flage, user?.robloxUsername, user?.robloxUsernameVerified, user?.isPro, t]);
 
+  const openSubPage = useCallback((page) => {
+    triggerHapticFeedback('impactLight');
+    setSubPage(page);
+  }, [triggerHapticFeedback]);
+  const closeSubPage = useCallback(() => setSubPage(null), []);
+
+  // Android back on a sub-page returns to the main list, not out of Settings.
+  useEffect(() => {
+    if (!subPage) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSubPage(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [subPage]);
+
   const handleViewPublicProfile = useCallback(() => {
     triggerHapticFeedback('impactLight');
     if (!publicProfileUser) {
@@ -2928,817 +2894,442 @@ export default function SettingsScreen({ selectedTheme }) {
 
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  const rs = useMemo(() => getRowStyles(c, isDarkMode), [c, isDarkMode]);
   return (
     <View style={styles.container}>
-      <SettingsTabs />
+      {subPage === 'privacy' ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          <SubPageHeader title={t('settings.privacy_chat')} onBack={closeSubPage} c={c} color={config.colors.primary} />
 
-      {/* User Profile Section */}
-      {activeTab === "profile" ? <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-        <View style={styles.cardContainer}>
-          <View style={[styles.optionuserName, styles.option]}>
-            {/* flex:1 + minWidth:0 bounds the avatar+name block to the row's
-                free width so a long username truncates instead of shoving the
-                edit icon off the right edge (RN flexShrink defaults to 0). */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
-              {(() => {
-                const avatarUrl = typeof selectedImage === 'string' && selectedImage.trim()
-                  ? selectedImage
-                  : user?.avatar && typeof user.avatar === 'string' && user.avatar.trim()
-                    ? user.avatar.trim()
-                    : 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png';
-                return (
-                  <FramedAvatar
-                    avatarUri={avatarUrl}
-                    frame={myActiveCosmetics?.profileFrame || null}
-                    isDarkMode={isDarkMode}
-                    avatarSize={56}
-                  />
-                );
-              })()}
-              <TouchableOpacity onPress={user?.id ? () => { } : () => { setOpenSignin(true) }} disabled={user?.id !== null} style={{ paddingLeft: 10, flex: 1, minWidth: 0 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Text
-                    style={[!user?.id ? styles.userNameLogout : styles.userName, { flexShrink: 1 }]}
-                    numberOfLines={1}
-                  >
-                    {!user?.id ? t("settings.login_register") : displayName}
-                  </Text>
-                  {user?.isPro &&
-                    <Image resizeMethod="resize"
-                      source={require('../../assets/pro.png')}
-                      style={{ width: 14, height: 14, marginLeft: 4 }}
+          <SettingsGroup rs={rs} title={t('settings.who_can_message')}>
+            {/* Chat availability — two independent doors. Trade chat is what
+                opens from the Trades screen; general chat is everywhere else
+                (public chat, feed, leaderboard, inbox, profiles). Each switch
+                blocks both directions for that door. Switch reads "chat on";
+                storage stays chatOff* (true = blocked). */}
+            <SettingsRow
+              rs={rs}
+              icon="chatbubbles-outline"
+              label={t('settings.allow_general_chat')}
+              subtitle={t('settings.allow_general_chat_sub')}
+              switchValue={!user?.chatOffGeneral}
+              onSwitch={(v) => { triggerHapticFeedback('impactLight'); updateLocalStateAndDatabase('chatOffGeneral', !v); }}
+            />
+            <SettingsRow
+              rs={rs}
+              icon="swap-horizontal-outline"
+              label={t('settings.allow_trade_chat')}
+              subtitle={t('settings.allow_trade_chat_sub')}
+              switchValue={!user?.chatOffTrade}
+              onSwitch={(v) => { triggerHapticFeedback('impactLight'); updateLocalStateAndDatabase('chatOffTrade', !v); }}
+            />
+          </SettingsGroup>
+          <Text style={rs.note}>{t('settings.chat_off_note')}</Text>
+
+          {user?.id && (
+            <SettingsGroup rs={rs} title={t('settings.what_others_see')}>
+              <SettingsRow
+                rs={rs}
+                icon="radio-button-on-outline"
+                label={t('settings.online_status')}
+                switchValue={localState.showOnlineStatus ?? true}
+                onSwitch={handleToggleOnlineStatus}
+              />
+              <SettingsRow
+                rs={rs}
+                icon="checkmark-done-outline"
+                label={t('settings.read_receipts')}
+                switchValue={localState.showReadReceipts ?? true}
+                onSwitch={handleToggleReadReceipts}
+              />
+              <BirthdayVisibilityRow
+                uid={user.id}
+                knownDob={user?.dateOfBirth || null}
+                {...legacyRowProps(rs)}
+                onHaptic={() => triggerHapticFeedback('impactLight')}
+              />
+            </SettingsGroup>
+          )}
+        </ScrollView>
+      ) : subPage === 'help' ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          <SubPageHeader title={t('settings.help_feedback')} onBack={closeSubPage} c={c} color={config.colors.primary} />
+          <SettingsGroup rs={rs}>
+            <SettingsRow rs={rs} icon="bulb-outline" label={t('settings.give_suggestions')} chevron
+              onPress={() => { handleGetSuggestions(user); triggerHapticFeedback('impactLight'); }} />
+            <SettingsRow rs={rs} icon="flag-outline" label={t('settings.report_abuse')} chevron
+              onPress={() => { handleReport(user); triggerHapticFeedback('impactLight'); }} />
+            <SettingsRow rs={rs} icon="briefcase-outline" label={t('settings.business_enquiries')} subtitle="thesolanalabs@gmail.com" chevron
+              onPress={() => Linking.openURL('mailto:thesolanalabs@gmail.com')} />
+            <SettingsRow rs={rs} icon="globe-outline" label={t('settings.visit_website')} chevron="open-outline"
+              onPress={() => { handleOpenWebsite(); triggerHapticFeedback('impactLight'); }} />
+          </SettingsGroup>
+        </ScrollView>
+      ) : subPage === 'legal' ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          <SubPageHeader title={t('settings.legal_safety')} onBack={closeSubPage} c={c} color={config.colors.primary} />
+          <SettingsGroup rs={rs}>
+            <SettingsRow rs={rs} icon="document-text-outline" label={t('settings.privacy_policy')} chevron="open-outline"
+              onPress={() => { handleOpenPrivacy(); triggerHapticFeedback('impactLight'); }} />
+            {privacyOptionsRequired && (
+              <SettingsRow rs={rs} icon="options-outline" label={t('settings.privacy_options', { defaultValue: 'Privacy options' })} chevron
+                onPress={() => { showPrivacyOptionsForm(); triggerHapticFeedback('impactLight'); }} />
+            )}
+            <SettingsRow rs={rs} icon="shield-outline" label={t('settings.child_safety')} chevron="open-outline"
+              onPress={() => { handleOpenChild(); triggerHapticFeedback('impactLight'); }} />
+          </SettingsGroup>
+        </ScrollView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+          {/* Profile card: tap opens the profile others see (bio, reviews,
+              badges live there); the pencil opens the edit drawer. */}
+          <View style={[rs.card, { marginTop: 6 }]}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={user?.id ? handleViewPublicProfile : () => setOpenSignin(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}
+            >
+              {/* flex:1 + minWidth:0 bounds the avatar+name block so a long
+                  username truncates instead of shoving the edit icon off. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                {(() => {
+                  const avatarUrl = typeof selectedImage === 'string' && selectedImage.trim()
+                    ? selectedImage
+                    : user?.avatar && typeof user.avatar === 'string' && user.avatar.trim()
+                      ? user.avatar.trim()
+                      : 'https://bloxfruitscalc.com/wp-content/uploads/2025/placeholder.png';
+                  return (
+                    <FramedAvatar
+                      avatarUri={avatarUrl}
+                      frame={myActiveCosmetics?.profileFrame || null}
+                      isDarkMode={isDarkMode}
+                      avatarSize={56}
                     />
-                  }
-                </View>
-
-                {/* Every badge as a labelled chip, as on the profile drawer
-                    (Code/Helper/UserBadgeRail.jsx); Unverified rides along. */}
-                {user?.id && (
-                  <UserBadgeRail
-                    user={myBadgeUser}
-                    variant="full"
-                    isDarkMode={isDarkMode}
-                    style={{ justifyContent: 'flex-start', marginTop: 4 }}
-                  >
-                    {user?.robloxUsername && !user?.robloxUsernameVerified && (
-                      <View style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 4,
-                        backgroundColor: isDarkMode ? 'rgba(251,191,36,0.15)' : 'rgba(217,119,6,0.1)',
-                        borderWidth: 1, borderColor: isDarkMode ? 'rgba(251,191,36,0.3)' : 'rgba(217,119,6,0.25)',
-                        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
-                      }}>
-                        <Icon name="alert-circle-outline" size={10} color={isDarkMode ? '#fbbf24' : '#d97706'} />
-                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>{t('profile.unverified')}</Text>
-                      </View>
-                    )}
-                  </UserBadgeRail>
-                )}
-
-                {/* Roblox Username Display */}
-                {user?.id && user?.robloxUsername && (
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: '#00A8FF', // Nice blue color for Roblox
-                      marginTop: 4,
-                      fontWeight: '500',
-                    }}
-                  >
-                    @{user.robloxUsername}
-                  </Text>
-                )}
-
-                {!user?.id && <Text style={styles.rewardLogout}>{t('settings.login_description')}</Text>}
-                {user?.id && (
-                  <View style={{ marginTop: 4 }}>
-                    {(user?.rewardPoints || 0) > 0 ? (
-                      /* User has old points — show convert button */
-                      <TouchableOpacity
-                        onPress={async () => {
-                          const pts = user?.rewardPoints || 0;
-                          const xpToAdd = Math.floor(pts / 4);
-                          if (xpToAdd <= 0) return;
-                          try {
-                            // Add XP
-                            await addXP(appdatabase, user.id, xpToAdd);
-                            // Zero out reward points
-                            await update(ref(appdatabase, `users/${user.id}`), { rewardPoints: 0 });
-                            updateLocalStateAndDatabase('rewardPoints', 0);
-                            showSuccessMessage(
-                              t('settings.points.converted_title'),
-                              t('settings.points.converted_message', {
-                                count: pts,
-                                points: pts.toLocaleString(),
-                                xp: xpToAdd.toLocaleString(),
-                              })
-                            );
-                          } catch (e) {
-                            showErrorMessage(t('alert.error'), t('settings.points.convert_error'));
-                          }
-                        }}
-                        activeOpacity={0.8}
-                        style={{
+                  );
+                })()}
+                <View style={{ paddingLeft: 12, flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[!user?.id ? styles.userNameLogout : styles.userName, { flexShrink: 1 }]}
+                      numberOfLines={1}
+                    >
+                      {!user?.id ? t("settings.login_register") : displayName}
+                    </Text>
+                    {user?.isPro &&
+                      <Image resizeMethod="resize"
+                        source={require('../../assets/pro.png')}
+                        style={{ width: 14, height: 14, marginLeft: 4 }}
+                      />
+                    }
+                  </View>
+                  {!user?.id && <Text style={styles.rewardLogout}>{t('settings.login_description')}</Text>}
+                  {user?.id && user?.robloxUsername && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Text style={{ fontSize: 12, color: '#0EA5E9', fontWeight: '600' }} numberOfLines={1}>@{user.robloxUsername}</Text>
+                      {robloxUsernameVerified && <Icon name="checkmark-circle" size={13} color="#16a34a" style={{ marginLeft: 3 }} />}
+                    </View>
+                  )}
+                  {/* Every badge as a labelled chip, as on the profile drawer
+                      (Code/Helper/UserBadgeRail.jsx); Unverified rides along. */}
+                  {user?.id && (
+                    <UserBadgeRail
+                      user={myBadgeUser}
+                      variant="full"
+                      isDarkMode={isDarkMode}
+                      style={{ justifyContent: 'flex-start', marginTop: 4 }}
+                    >
+                      {user?.robloxUsername && !user?.robloxUsernameVerified && (
+                        <View style={{
                           flexDirection: 'row', alignItems: 'center', gap: 4,
-                          backgroundColor: '#F59E0B', paddingHorizontal: 8, paddingVertical: 4,
-                          borderRadius: 8,
-                        }}
+                          backgroundColor: isDarkMode ? 'rgba(251,191,36,0.15)' : 'rgba(217,119,6,0.1)',
+                          borderWidth: 1, borderColor: isDarkMode ? 'rgba(251,191,36,0.3)' : 'rgba(217,119,6,0.25)',
+                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+                        }}>
+                          <Icon name="alert-circle-outline" size={10} color={isDarkMode ? '#fbbf24' : '#d97706'} />
+                          <Text style={{ fontSize: 9, fontWeight: '700', color: isDarkMode ? '#fbbf24' : '#d97706' }}>{t('profile.unverified')}</Text>
+                        </View>
+                      )}
+                    </UserBadgeRail>
+                  )}
+                </View>
+              </View>
+              {user?.id ? (
+                <TouchableOpacity
+                  onPress={handleProfileUpdate}
+                  style={{ flexShrink: 0, paddingLeft: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.save_changes')}
+                >
+                  <Icon name="create-outline" size={22} color={c.textSecondary} />
+                </TouchableOpacity>
+              ) : (
+                <Icon name="chevron-forward" size={16} color={c.textMuted} />
+              )}
+            </TouchableOpacity>
+
+            {user?.id && (
+              <View style={{ flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }}>
+                {[
+                  {
+                    key: 'rating',
+                    value: loadingRating ? '…' : ratingSummary ? `${ratingSummary.value.toFixed(1)} ★` : '–',
+                    label: ratingSummary
+                      ? t('settings.stat_reviews', { count: ratingSummary.count })
+                      : t('settings.not_rated'),
+                  },
+                  { key: 'xp', value: (user?.xp?.total || 0).toLocaleString(), label: t('settings.stat_xp') },
+                  { key: 'stars', value: realStarBalance.toLocaleString(), label: t('settings.stat_stars') },
+                ].map((s, i) => (
+                  <View key={s.key} style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderLeftWidth: i ? StyleSheet.hairlineWidth : 0, borderLeftColor: c.border }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: c.text }}>{s.value}</Text>
+                    <Text style={{ fontSize: 11, color: c.textSecondary, marginTop: 1 }} numberOfLines={1}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Pro: one card. Free → upgrade; Pro → plan name + Manage. */}
+          {localState.isPro ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={manageSubscription}
+              style={[rs.card, { flexDirection: 'row', alignItems: 'center', padding: 14, marginTop: 12, borderWidth: 1, borderColor: isDarkMode ? '#3b2e6e' : '#ffcc4d' }]}
+            >
+              <Image resizeMethod="resize" source={require('../../assets/pro.png')} style={{ width: 22, height: 22, marginRight: 12 }} />
+              <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: c.text }} numberOfLines={1}>
+                {mySubscriptions.length === 0
+                  ? t('settings.paid')
+                  : `${t('settings.paid')} · ${mySubscriptions.map(sub => formatPlanName(sub.plan)).join(', ')}`}
+              </Text>
+              <View style={{ backgroundColor: isDarkMode ? '#273449' : '#f1f2f5', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>{t('settings.manage')}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setShowofferWall(true)}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 14, marginTop: 12, borderRadius: 14, backgroundColor: config.colors.primary }}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>{t('settings.get_pro')}</Text>
+                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.92)', marginTop: 2 }} numberOfLines={2}>{t('settings.get_pro_sub')}</Text>
+              </View>
+              <View style={{ backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, marginLeft: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: config.colors.primary }}>{t('settings.upgrade')}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {user?.id && (
+            <SettingsGroup rs={rs} title={t('settings.section_account')}>
+              <SettingsRow
+                rs={rs}
+                icon="game-controller-outline"
+                label={t('settings.roblox_account')}
+                value={robloxUsernameVerified
+                  ? t('settings.roblox.verified_badge')
+                  : user?.robloxUsername ? t('profile.unverified') : t('settings.not_linked')}
+                valueStyle={robloxUsernameVerified ? { color: '#16a34a', fontWeight: '600' } : user?.robloxUsername ? { color: '#d97706', fontWeight: '600' } : null}
+                chevron
+                onPress={() => { triggerHapticFeedback('impactLight'); setShowRobloxSheet(true); }}
+              />
+              <SettingsRow
+                rs={rs}
+                icon="star-outline"
+                label={t('settings.reviews.title')}
+                value={ratingSummary ? t('settings.stat_reviews', { count: ratingSummary.count }) : null}
+                chevron
+                onPress={() => setShowReceivedReviewsModal(true)}
+              />
+              <SettingsRow rs={rs} icon="people-outline" label={t('settings.followers.title')} chevron
+                onPress={() => setShowFollowersModal(true)} />
+              <SettingsRow rs={rs} icon="trophy-outline" label={t('settings.badges', { defaultValue: 'Badges & Achievements' })} chevron
+                onPress={() => { settingsNav.navigate('BadgesScreen'); triggerHapticFeedback('impactLight'); }} />
+              {(user?.rewardPoints || 0) > 0 && (
+                /* Old reward points: one-time convert to XP (4 points = 1 XP). */
+                <SettingsRow
+                  rs={rs}
+                  icon="diamond-outline"
+                  label={t('settings.points.convert_button', {
+                    points: (user?.rewardPoints || 0).toLocaleString(),
+                    xp: Math.floor((user?.rewardPoints || 0) / 4).toLocaleString(),
+                  })}
+                  chevron
+                  onPress={async () => {
+                    const pts = user?.rewardPoints || 0;
+                    const xpToAdd = Math.floor(pts / 4);
+                    if (xpToAdd <= 0) return;
+                    try {
+                      await addXP(appdatabase, user.id, xpToAdd);
+                      await update(ref(appdatabase, `users/${user.id}`), { rewardPoints: 0 });
+                      updateLocalStateAndDatabase('rewardPoints', 0);
+                      showSuccessMessage(
+                        t('settings.points.converted_title'),
+                        t('settings.points.converted_message', {
+                          count: pts,
+                          points: pts.toLocaleString(),
+                          xp: xpToAdd.toLocaleString(),
+                        })
+                      );
+                    } catch (e) {
+                      showErrorMessage(t('alert.error'), t('settings.points.convert_error'));
+                    }
+                  }}
+                />
+              )}
+            </SettingsGroup>
+          )}
+
+          <SettingsGroup rs={rs} title={t('settings.section_notifications')}>
+            <SettingsRow rs={rs} icon="chatbubble-outline" label={t('settings.chat_notifications')}
+              switchValue={isPermissionGranted} onSwitch={handleToggleNotification} />
+            {/* Value update notifications: guests too (topic push, no account needed) */}
+            <SettingsRow rs={rs} icon="trending-up-outline" label={t('settings.value_update_notifications')}
+              switchValue={localState.valueUpdateNotifications ?? true} onSwitch={handleToggleValueUpdates} />
+            {user?.id && (
+              <EmailUpdatesRow
+                uid={user.id}
+                appdatabase={appdatabase}
+                knownDob={user?.dateOfBirth || null}
+                {...legacyRowProps(rs)}
+                onHaptic={() => triggerHapticFeedback('impactLight')}
+              />
+            )}
+          </SettingsGroup>
+
+          <SettingsGroup rs={rs} style={{ marginTop: 18 }}>
+            <SettingsRow rs={rs} icon="lock-closed-outline" label={t('settings.privacy_chat')}
+              subtitle={t('settings.privacy_chat_sub')} chevron onPress={() => openSubPage('privacy')} />
+          </SettingsGroup>
+
+          <SettingsGroup rs={rs} title={t('settings.section_appearance')}>
+            <SettingsRow
+              rs={rs}
+              icon="contrast-outline"
+              label={t('settings.theme')}
+              right={
+                <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#273449' : '#f1f2f5', borderRadius: 9, padding: 2 }}>
+                  {['system', 'light', 'dark'].map((key, index) => {
+                    const on = localState.theme === key;
+                    const label = themes[index] || key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        onPress={() => { triggerHapticFeedback('impactLight'); updateLocalState('theme', key); }}
+                        style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: on ? c.bgAlt : 'transparent' }}
                       >
-                        <Text style={{ fontSize: 10 }}>💎</Text>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#fff' }}>
-                          {t('settings.points.convert_button', {
-                            points: (user?.rewardPoints || 0).toLocaleString(),
-                            xp: Math.floor((user?.rewardPoints || 0) / 4).toLocaleString(),
-                          })}
+                        <Text style={{ fontSize: 12, fontWeight: on ? '700' : '500', color: on ? c.text : c.textSecondary }}>
+                          {label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()}
                         </Text>
                       </TouchableOpacity>
-                    ) : (
-                      /* No points — show XP & stars */
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={[styles.reward, { fontSize: 10 }]}>{t('settings.xp_balance', { xp: (user?.xp?.total || 0).toLocaleString() })}</Text>
-                        <Text style={[styles.reward, { fontSize: 10 }]}>{t('settings.stars_balance', { stars: realStarBalance.toLocaleString() })}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={handleProfileUpdate}
-              style={{ flexShrink: 0, paddingLeft: 8 }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {user?.id && <Icon name="create" size={24} color={'#566D5D'} />}
-            </TouchableOpacity>
-          </View>
-
-          {/* ⭐ Rating summary - Below profile picture section */}
-          {user?.id && (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginTop: 12,
-                marginBottom: 12,
-                paddingVertical: 8,
-                paddingHorizontal: 12,
-                backgroundColor: c.bgAlt,
-                borderRadius: 8,
-              }}
-            >
-              {loadingRating ? (
-                <ActivityIndicator
-                  size="small"
-                  color={config.colors.primary}
-                />
-              ) : ratingSummary ? (
-                <>
-                  {renderStars(ratingSummary.value)}
-                  <Text
-                    style={{
-                      marginLeft: 6,
-                      fontSize: 12,
-                      color: c.textSecondary,
-                    }}
-                  >
-                    {t('settings.rating_summary', {
-                      count: ratingSummary.count,
-                      value: ratingSummary.value.toFixed(1),
-                    })}
-                  </Text>
-                </>
-              ) : (
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: c.textSecondary,
-                  }}
-                >
-                  {t('settings.not_rated')}
-                </Text>
-              )}
-
-              {!loadingRating && createdAtText && (
-                <Text
-                  style={{
-                    fontSize: 10,
-                    backgroundColor: isDarkMode ? '#FACC15' : '#16A34A',
-                    paddingHorizontal: 5,
-                    borderRadius: 4,
-                    paddingVertical: 1,
-                    color: 'white',
-                    marginLeft: 5,
-                  }}
-                >
-                  {t('settings.joined', { time: createdAtText })}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* 📝 Bio Section - Below rating box */}
-          {user?.id && (
-            <View
-              style={{
-                borderRadius: 12,
-                padding: 12,
-                backgroundColor: c.bg,
-                marginBottom: 12,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: 'bold',
-                  marginBottom: 6,
-                  color: c.text,
-                }}
-              >
-                {t('settings.profile.bio')}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 13,
-                  color: c.text,
-                  lineHeight: 18,
-                }}
-              >
-                {bio || t('settings.roblox.default_bio')}
-              </Text>
-            </View>
-          )}
-
-          {/* 👁 View my public profile — opens the same drawer others see */}
-          {user?.id && (
-            <TouchableOpacity style={styles.option} onPress={handleViewPublicProfile}>
-              <Icon name="eye-outline" size={18} color={'white'} style={{ backgroundColor: '#0EA5E9', padding: 5, borderRadius: 5 }} />
-              <Text style={[styles.optionText, { flex: 1 }]} numberOfLines={1}>{t('settings.view_public_profile')}</Text>
-              <Icon name="chevron-forward" size={16} color={c.textMuted} />
-            </TouchableOpacity>
-          )}
-
-          {/* Read Receipts Toggle */}
-          {user?.id && (
-            <View style={styles.option}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center' }}
-                  onPress={() => handleToggleReadReceipts(!(localState.showReadReceipts ?? true))}
-                >
-                  <Icon name="checkmark-done-outline" size={18} color={'white'} style={{ backgroundColor: '#3B82F6', padding: 5, borderRadius: 5 }} />
-                  <Text style={styles.optionText}>{t('settings.read_receipts')}</Text>
-                </TouchableOpacity>
-                <Switch
-                  value={localState.showReadReceipts ?? true}
-                  onValueChange={handleToggleReadReceipts}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* ✅ Show Online Status Toggle */}
-          {user?.id && (<View style={styles.option}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => handleToggleOnlineStatus(!localState.showOnlineStatus)}
-              >
-                <Icon name="radio-button-on-outline" size={18} color={'white'} style={{ backgroundColor: '#4CAF50', padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>{t('settings.online_status')}</Text>
-              </TouchableOpacity>
-              <Switch
-                value={localState.showOnlineStatus ?? true}
-                onValueChange={handleToggleOnlineStatus}
-              />
-            </View>
-          </View>)}
-
-          <View style={styles.option}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Icon name="notifications" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>{t('settings.chat_notifications')}</Text>
-              </TouchableOpacity>
-              <Switch
-                value={isPermissionGranted}
-                onValueChange={handleToggleNotification}
-              />
-            </View>
-          </View>
-
-          {/* Value update notifications: guests too (topic push, no account needed) */}
-          <View style={styles.option}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => handleToggleValueUpdates(!(localState.valueUpdateNotifications ?? true))}
-              >
-                <Icon name="trending-up" size={18} color={'white'} style={{ backgroundColor: '#2563EB', padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>{t('settings.value_update_notifications')}</Text>
-              </TouchableOpacity>
-              <Switch
-                value={localState.valueUpdateNotifications ?? true}
-                onValueChange={handleToggleValueUpdates}
-              />
-            </View>
-          </View>
-
-          {user?.id && (
-            <EmailUpdatesRow
-              uid={user.id}
-              appdatabase={appdatabase}
-              knownDob={user?.dateOfBirth || null}
-              styles={styles}
-              onHaptic={() => triggerHapticFeedback('impactLight')}
-            />
-          )}
-
-          {user?.id && (
-            <BirthdayVisibilityRow
-              uid={user.id}
-              knownDob={user?.dateOfBirth || null}
-              styles={styles}
-              onHaptic={() => triggerHapticFeedback('impactLight')}
-            />
-          )}
-
-          {/* Chat availability — two independent doors. Trade chat is what
-              opens from the Trades screen; general chat is everywhere else
-              (public chat, feed, leaderboard, inbox, profiles). Each switch
-              blocks both directions for that door. */}
-          <View style={styles.option}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Icon name="chatbubble-ellipses-outline" size={18} color={'white'} style={{ backgroundColor: '#8B5CF6', padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>
-                  {user?.chatOffGeneral
-                    ? t('settings.general_chat_off', { defaultValue: 'General Chat Off' })
-                    : t('settings.general_chat_on', { defaultValue: 'General Chat On' })}
-                </Text>
-              </TouchableOpacity>
-              <Switch
-                value={!user?.chatOffGeneral}
-                onValueChange={(v) => {
-                  triggerHapticFeedback('impactLight');
-                  // Switch reads "chat on"; storage stays chatOff* (true = blocked).
-                  updateLocalStateAndDatabase('chatOffGeneral', !v);
-                }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.option}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Icon name="swap-horizontal-outline" size={18} color={'white'} style={{ backgroundColor: '#F59E0B', padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>
-                  {user?.chatOffTrade
-                    ? t('settings.trade_chat_off', { defaultValue: 'Trade Chat Off' })
-                    : t('settings.trade_chat_on', { defaultValue: 'Trade Chat On' })}
-                </Text>
-              </TouchableOpacity>
-              <Switch
-                value={!user?.chatOffTrade}
-                onValueChange={(v) => {
-                  triggerHapticFeedback('impactLight');
-                  // Switch reads "chat on"; storage stays chatOff* (true = blocked).
-                  updateLocalStateAndDatabase('chatOffTrade', !v);
-                }}
-              />
-            </View>
-          </View>
-
-          {/* ✅ Roblox Username Section */}
-          {user?.id && (
-            <View style={styles.option}>
-              <View style={{ width: '100%' }}>
-                {/* Header with icon and label */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                  <Icon
-                    name="game-controller-outline"
-                    size={18}
-                    color={'white'}
-                    style={{
-                      backgroundColor: '#00A8FF',
-                      padding: 5,
-                      borderRadius: 5,
-                      marginRight: 8
-                    }}
-                  />
-                  <Text style={styles.optionText}>{t('settings.roblox_username')}</Text>
-                  {robloxUsernameVerified && (
-                    <View style={{
-                      marginLeft: 8,
-                      backgroundColor: '#4CAF50',
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                      borderRadius: 4
-                    }}>
-                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
-                        {t('settings.roblox.verified_badge')}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Input and Verify button row */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  marginBottom: 4,
-                  width: '100%',
-                }}>
-                  <TextInput
-                    style={{
-                      flex: 1,
-                      marginRight: 8,
-                      backgroundColor: c.bgAlt,
-                      color: c.text,
-                      paddingVertical: 8,
-                      paddingHorizontal: 12,
-                      borderRadius: 6,
-                      fontSize: 14,
-                      height: 30,
-                    }}
-                    placeholder={t('settings.roblox.enter_username_placeholder')}
-                    placeholderTextColor={c.textMuted}
-                    value={robloxUsername}
-                    onChangeText={setRobloxUsername}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {isVerifyingRoblox ? (
-                    <View style={{
-                      height: 30,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      width: 80,
-                    }}>
-                      <ActivityIndicator size="small" color={config.colors.primary} />
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={handleUpdateRobloxUsername}
-                      style={{
-                        backgroundColor: config.colors.primary,
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                        borderRadius: 6,
-                        minWidth: 80,
-                        height: 30,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                        {robloxUsernameVerified ? t('settings.roblox.reverify_button') : t('settings.roblox.verify_button')}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* Warning text for unverified */}
-                {robloxUsername && !robloxUsernameVerified && (
-                  <Text style={{
-                    fontSize: 11,
-                    color: '#FFA500',
-                    marginTop: 4,
-                    marginLeft: 0,
-                  }}>
-                    {t('settings.roblox.unverified_warning')}
-                  </Text>
-                )}
-              </View>
-            </View>
-          )}
-
-
-
-          {/* Followers Section */}
-          <View style={styles.reviewsSection}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: c.text, marginBottom: 12 }}>
-              {t('settings.followers.title')}
-            </Text>
-
-            {!user?.id ? (
-              <Text style={styles.reviewsEmptyText}>
-                {t('settings.followers.login_msg')}
-              </Text>
-            ) : (
-              <TouchableOpacity
-                onPress={() => setShowFollowersModal(true)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: c.bg,
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  paddingHorizontal: 12,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                }}
-              >
-                <Icon name="people-outline" size={18} color="#4A90E2" style={{ marginRight: 6 }} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
-                  {t('settings.followers.view_button')}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Reviews Section - Two Small Modern Buttons */}
-          <View style={styles.reviewsSection}>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: c.text, marginBottom: 12 }}>
-              {t('settings.reviews.title')}
-            </Text>
-
-            {!user?.id ? (
-              <Text style={styles.reviewsEmptyText}>
-                {t('settings.reviews.login_msg')}
-              </Text>
-            ) : (
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {/* Reviews I Gave Button */}
-                <TouchableOpacity
-                  onPress={() => setShowGaveReviewsModal(true)}
-                  style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: c.bg,
-                    borderRadius: 10,
-                    paddingVertical: 12,
-                    paddingHorizontal: 12,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                  }}
-                >
-                  <Icon name="star" size={18} color="#4A90E2" style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
-                    {t('settings.reviews.i_gave')}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Reviews I Received Button */}
-                <TouchableOpacity
-                  onPress={() => setShowReceivedReviewsModal(true)}
-                  style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: c.bg,
-                    borderRadius: 10,
-                    paddingVertical: 12,
-                    paddingHorizontal: 12,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                  }}
-                >
-                  <Icon name="heart" size={18} color="#9B59B6" style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>
-                    {t('settings.reviews.i_received')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-      </ScrollView>
-
-        : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-          {/* <Text style={styles.subtitle}>{t('settings.app_settings')}</Text> */}
-          <View style={styles.cardContainer}>
-            <View style={styles.option} onPress={() => {
-              handleToggle(); triggerHapticFeedback('impactLight');
-            }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Icon name="radio-outline" size={18} color={'white'} style={{ backgroundColor: '#B76E79', padding: 5, borderRadius: 5 }} />
-                  <Text style={styles.optionText}>{t('settings.haptic_feedback')}</Text>
-                </TouchableOpacity>
-                <Switch value={localState.isHaptic} onValueChange={handleToggle} />
-              </View>
-
-            </View>
-
-            <View style={styles.optionLast} onPress={() => {
-              handleShareApp(); triggerHapticFeedback('impactLight');
-            }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Icon name="contrast-outline" size={18} color={'white'} style={{ backgroundColor: '#4A90E2', padding: 5, borderRadius: 5 }} />
-                  <Text style={styles.optionText}>{t('settings.theme')}</Text></TouchableOpacity>
-                <View style={styles.containertheme}>
-                  {themes.map((theme, index) => (
-                    <TouchableOpacity
-                      key={theme}
-                      style={[
-                        styles.box,
-                        localState.theme === ['system', 'light', 'dark'][index].toLowerCase() && styles.selectedBox, // Highlight selected box
-                      ]}
-                      onPress={() => updateLocalState('theme', ['system', 'light', 'dark'][index])}
-                    >
-
-                      <Text
-                        style={[
-                          styles.text,
-                          localState.theme === ['system', 'light', 'dark'][index] && styles.selectedText, // Highlight selected text
-                        ]}
-                      >
-                        {theme}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-            </View>
-          </View>
-
-
-          <Text style={styles.subtitle}>{t('settings.pro_subscription')}</Text>
-          <View style={[styles.cardContainer, { backgroundColor: isDarkMode ? '#1e1040' : '#fff8e5', borderWidth: 1, borderColor: isDarkMode ? '#3b2e6e' : '#ffcc4d' }]}>
-
-            <TouchableOpacity style={[styles.optionLast]} onPress={() => {
-              setShowofferWall(true);
-            }}>
-              <Icon name="prism-outline" size={18} color={'white'} style={{ backgroundColor: config.colors.hasBlockGreen, padding: 5, borderRadius: 5 }} />
-              <Text style={[styles.optionText, { color: isDarkMode ? '#FFD93D' : '#8B6914' }]}>
-                {t('settings.active_plan_value', { plan: localState.isPro ? t('settings.paid') : t('settings.free') })}
-              </Text>
-            </TouchableOpacity>
-            {localState.isPro && (
-              <View style={styles.subscriptionContainer}>
-                <Text style={styles.subscriptionText}>
-                  {t('settings.active_plan_value', {
-                    plan: mySubscriptions.length === 0
-                      ? t('settings.paid')
-                      : mySubscriptions.map(sub => formatPlanName(sub.plan)).join(', '),
+                    );
                   })}
-                </Text>
-
-                <TouchableOpacity onPress={manageSubscription} style={styles.manageButton}>
-                  <Text style={styles.manageButtonText}>{t('settings.manage')}</Text>
-                </TouchableOpacity>
-
-              </View>
-            )}
-          </View>
-          <Text style={styles.subtitle}>{t('settings.other_settings')}</Text>
-
-          <View style={styles.cardContainer}>
-
-
-            <TouchableOpacity style={styles.option} onPress={() => {
-              handleShareApp(); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="share-social-outline" size={18} color={'white'} style={{ backgroundColor: '#B76E79', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.share_app')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={() => {
-              handleGetSuggestions(user); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="mail-outline" size={18} color={'white'} style={{ backgroundColor: '#566D5D', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.give_suggestions')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={() => {
-              handleReport(user); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="warning" size={18} color={'pink'} style={{ backgroundColor: '#566D5D', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.report_abuse')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={() => { handleRateApp(); triggerHapticFeedback('impactLight'); }
-            }>
-              <Icon name="star-outline" size={18} color={'white'} style={{ backgroundColor: '#A2B38B', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.rate_us')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={() => { setShowGuidesModal(true); triggerHapticFeedback('impactLight'); }}>
-              <Icon name="book-outline" size={18} color={'white'} style={{ backgroundColor: '#6366F1', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.how_it_works', { defaultValue: 'How It Works' })}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.option} onPress={() => { settingsNav.navigate('BadgesScreen'); triggerHapticFeedback('impactLight'); }}>
-              <Icon name="trophy-outline" size={18} color={'white'} style={{ backgroundColor: '#f59e0b', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.badges', { defaultValue: 'Badges & Achievements' })}</Text>
-            </TouchableOpacity>
-            {/* <TouchableOpacity style={styles.option} onPress={() => {
-            handleOpenFacebook(); triggerHapticFeedback('impactLight');
-          }}>
-            <Icon name="logo-facebook" size={18} color={'white'} style={{backgroundColor:'#566D5D', padding:5, borderRadius:5}}/>
-            <Text style={styles.optionText}>{t('settings.visit_facebook_group')}</Text>
-          </TouchableOpacity> */}
-            <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
-              handleOpenWebsite(); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="link-outline" size={18} color={'white'} style={{ backgroundColor: '#4B4453', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.visit_website')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
-              handleOpenPrivacy(); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="link-outline" size={18} color={'white'} style={{ backgroundColor: 'green', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.privacy_policy')}</Text>
-            </TouchableOpacity>
-            {privacyOptionsRequired && (
-              <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
-                showPrivacyOptionsForm(); triggerHapticFeedback('impactLight');
-              }}>
-                <Icon name="shield-checkmark-outline" size={18} color={'white'} style={{ backgroundColor: 'green', padding: 5, borderRadius: 5 }} />
-                <Text style={styles.optionText}>{t('settings.privacy_options', { defaultValue: 'Privacy options' })}</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={user?.id ? styles.option : styles.optionLast} onPress={() => {
-              handleOpenChild(); triggerHapticFeedback('impactLight');
-            }}>
-              <Icon name="link-outline" size={18} color={'white'} style={{ backgroundColor: 'blue', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionText}>{t('settings.child_safety')}</Text>
-            </TouchableOpacity>
-            {user?.id && <TouchableOpacity style={styles.option} onPress={handleLogout} >
-              <Icon name="person-outline" size={18} color={'white'} style={{ backgroundColor: '#4B4453', padding: 5, borderRadius: 5 }} />
-              <Text style={styles.optionTextLogout}>{t('settings.logout')}</Text>
-            </TouchableOpacity>}
-            {user?.id && <TouchableOpacity style={styles.optionDelete} onPress={handleDeleteUser} >
-              <Icon name="warning-outline" size={24} color={'#4B4453'} />
-              <Text style={styles.optionTextDelete}>{t('settings.delete_my_account')}</Text>
-            </TouchableOpacity>}
-
-          </View>
-
-          {/* 📖 Guides Modal */}
-          <GuidesScreen visible={showGuidesModal} onClose={() => setShowGuidesModal(false)} />
-          {/* 🏆 Badges Modal */}
-
-
-          <Text style={styles.subtitle}>{t('settings.other_apps')}</Text>
-
-          <View style={styles.cardContainer}>
-
-
-            <TouchableOpacity style={styles.option} onPress={() => {
-              handleBloxFruit(); triggerHapticFeedback('impactLight');
-            }}>
-              <Image resizeMethod="resize"
-                source={require('../../assets/logo.webp')}
-                style={{ width: 40, height: 40, borderRadius: 5 }}
-              />
-
-              <Text style={styles.optionText}>{t('settings.app_bloxfruits')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.optionLast} onPress={() => {
-              handleadoptme(); triggerHapticFeedback('impactLight');
-            }}>
-              <Image resizeMethod="resize"
-                source={require('../../assets/MM2logo.webp')}
-                style={{ width: 40, height: 40, borderRadius: 5 }}
-              />
-
-              <Text style={styles.optionText}>{t('settings.app_mm2')}</Text>
-            </TouchableOpacity>
-
-
-
-          </View>
-          <Text style={styles.subtitle}>{t('settings.business_enquiries')}
-          </Text>
-
-          <Text style={styles.textlink}>
-            {t('settings.business_text')}{' '}
-            <TouchableOpacity onPress={() => Linking.openURL('mailto:thesolanalabs@gmail.com')}>
-              <Text style={styles.emailText}>thesolanalabs@gmail.com</Text>
-            </TouchableOpacity>
-          </Text>
-          {/* <Text style={styles.subtitle}>Our Other APPS</Text> */}
-
-          {/* <View style={styles.cardContainer}> */}
-
-
-
-          {/* <TouchableOpacity style={styles.optionLast} onPress={() => {
-            handleMM2(); triggerHapticFeedback('impactLight');
-          }}>
-            <Image
-              source={require('../../assets/MM2logo.webp')}
-              style={{ width: 40, height: 40, borderRadius: 5 }}
+                </View>
+              }
             />
+            <SettingsRow rs={rs} icon="pulse-outline" label={t('settings.haptic_feedback')}
+              switchValue={localState.isHaptic} onSwitch={handleToggle} />
+          </SettingsGroup>
 
-            <Text style={styles.optionText}>MM2 Values</Text>
-          </TouchableOpacity> */}
+          <SettingsGroup rs={rs} title={t('settings.section_help')}>
+            <SettingsRow rs={rs} icon="book-outline" label={t('settings.how_it_works', { defaultValue: 'How It Works' })} chevron
+              onPress={() => { setShowGuidesModal(true); triggerHapticFeedback('impactLight'); }} />
+            <SettingsRow rs={rs} icon="help-buoy-outline" label={t('settings.help_feedback')} chevron onPress={() => openSubPage('help')} />
+            <SettingsRow rs={rs} icon="shield-checkmark-outline" label={t('settings.legal_safety')} chevron onPress={() => openSubPage('legal')} />
+            <SettingsRow rs={rs} icon="heart-outline" label={t('settings.rate_us')} chevron
+              onPress={() => { handleRateApp(); triggerHapticFeedback('impactLight'); }} />
+            <SettingsRow rs={rs} icon="share-social-outline" label={t('settings.share_app')} chevron
+              onPress={() => { handleShareApp(); triggerHapticFeedback('impactLight'); }} />
+          </SettingsGroup>
 
+          <Text style={rs.sectionTitle}>{t('settings.other_apps')}</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {[
+              { key: 'blox', logo: require('../../assets/logo.webp'), label: t('settings.app_bloxfruits'), onPress: handleBloxFruit },
+              { key: 'mm2', logo: require('../../assets/MM2logo.webp'), label: t('settings.app_mm2'), onPress: handleadoptme },
+            ].map((app) => (
+              <TouchableOpacity
+                key={app.key}
+                activeOpacity={0.8}
+                onPress={() => { app.onPress(); triggerHapticFeedback('impactLight'); }}
+                style={[rs.card, { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 10 }]}
+              >
+                <Image resizeMethod="resize" source={app.logo} style={{ width: 36, height: 36, borderRadius: 8 }} />
+                <Text style={{ flex: 1, marginLeft: 9, fontSize: 13, fontWeight: '600', color: c.text }} numberOfLines={2}>{app.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-          {/* </View> */}
-          {/* <Text style={styles.subtitle}>Business Enquiries
-</Text> */}
+          {user?.id && (
+            <>
+              <TouchableOpacity activeOpacity={0.8} onPress={handleLogout} style={[rs.card, { marginTop: 22, paddingVertical: 14, alignItems: 'center' }]}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: config.colors.primary }}>{t('settings.logout')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDeleteUser} style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <Text style={{ fontSize: 14, color: '#ef4444' }}>{t('settings.delete_my_account')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          <Text style={{ textAlign: 'center', fontSize: 12, color: c.textMuted, marginTop: user?.id ? 0 : 18, lineHeight: 18 }}>
+            {t('settings.version', { version: DeviceInfo.getVersion() })}
+          </Text>
+        </ScrollView>
+      )}
 
-          {/* <Text style={styles.text}>
-    For collaborations, partnerships, or other business-related queries, feel free to contact us at:{' '}
-    <TouchableOpacity onPress={() => Linking.openURL('mailto:thesolanalabs@gmail.com')}>
-      <Text style={styles.emailText}>thesolanalabs@gmail.com</Text>
-    </TouchableOpacity>
-  </Text> */}
+      {/* 📖 Guides Modal */}
+      <GuidesScreen visible={showGuidesModal} onClose={() => setShowGuidesModal(false)} />
 
-
-        </ScrollView>}
+      {/* Roblox account sheet: the username box + Verify used to sit inline. */}
+      <Modal
+        visible={showRobloxSheet}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRobloxSheet(false)}
+      >
+        <Pressable style={styles.overlay} onPress={() => setShowRobloxSheet(false)} />
+        <ConditionalKeyboardWrapper>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <SwipeableBottomDrawer onClose={() => setShowRobloxSheet(false)} isDarkMode={isDarkMode} showPill={true} style={{ backgroundColor: c.bgAlt, padding: 20 }}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: c.text }}>{t('settings.roblox_account')}</Text>
+              <Text style={{ fontSize: 13, color: c.textSecondary, marginTop: 4 }}>{t('settings.roblox_sheet_desc')}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, backgroundColor: c.bg }}>
+                <Icon name="game-controller-outline" size={18} color={c.textSecondary} />
+                <TextInput
+                  style={{ flex: 1, color: c.text, fontSize: 16, paddingVertical: 12, marginLeft: 8 }}
+                  placeholder={t('settings.roblox.enter_username_placeholder')}
+                  placeholderTextColor={c.textMuted}
+                  value={robloxUsername}
+                  onChangeText={setRobloxUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {robloxUsernameVerified && (
+                  <Text style={{ color: '#16a34a', fontSize: 12, fontWeight: '700' }}>{t('settings.roblox.verified_badge')}</Text>
+                )}
+              </View>
+              {robloxUsername && !robloxUsernameVerified ? (
+                <Text style={{ fontSize: 12, color: '#d97706', marginTop: 8 }}>{t('settings.roblox.unverified_warning')}</Text>
+              ) : null}
+              <TouchableOpacity
+                onPress={handleUpdateRobloxUsername}
+                disabled={isVerifyingRoblox}
+                style={{ backgroundColor: config.colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 18, marginBottom: 8 }}
+              >
+                {isVerifyingRoblox ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                    {robloxUsernameVerified ? t('settings.roblox.reverify_button') : t('settings.roblox.verify_button')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </SwipeableBottomDrawer>
+          </View>
+        </ConditionalKeyboardWrapper>
+      </Modal>
       <ScreenBottomBanner ad={false} />
 
       {/* Public profile preview: the shared profile drawer pointed at yourself */}
@@ -3965,7 +3556,20 @@ export default function SettingsScreen({ selectedTheme }) {
         }}>
           <SwipeableBottomDrawer onClose={() => { setShowReceivedReviewsModal(false); setModalReceivedReviews([]); setModalLastReceivedDoc(null); setModalHasMoreReceived(false); }} isDarkMode={isDarkMode} style={[styles.drawer, { maxHeight: '90%' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={styles.drawerSubtitle}>{t('settings.reviews.received_title')}</Text>
+              <Text style={[styles.drawerSubtitle, { flex: 1 }]} numberOfLines={1}>{t('settings.reviews.received_title')}</Text>
+              {/* Settings has one Reviews row; the reviews you gave are one tap away here. */}
+              <TouchableOpacity
+                onPress={() => {
+                  setShowReceivedReviewsModal(false);
+                  setModalReceivedReviews([]);
+                  setModalLastReceivedDoc(null);
+                  setModalHasMoreReceived(false);
+                  setShowGaveReviewsModal(true);
+                }}
+                style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: c.bg, marginRight: 10 }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '600', color: c.text }}>{t('settings.reviews.i_gave')}</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => {
                 setShowReceivedReviewsModal(false);
                 setModalReceivedReviews([]);

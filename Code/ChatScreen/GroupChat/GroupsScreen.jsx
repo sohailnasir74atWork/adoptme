@@ -1,5 +1,5 @@
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useGlobalState } from '../../GlobelStats';
 import Icon from 'react-native-vector-icons/Ionicons';
+import InactiveGroupWarning, { useGroupsLastActivity } from './InactiveGroupWarning';
 import config from '../../Helper/Environment';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
@@ -102,6 +103,9 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
   const [allGroups, setAllGroups] = useState([]);
   const [allGroupsLoading, setAllGroupsLoading] = useState(false);
   const [allGroupsLoadingMore, setAllGroupsLoadingMore] = useState(false);
+  // Bumped on every new All Groups load (tab open, search, clear). A response
+  // whose number is no longer current belongs to an older search: dropped.
+  const allGroupsRequestRef = useRef(0);
   const [allGroupsSearchQuery, setAllGroupsSearchQuery] = useState('');
   const [creatorNames, setCreatorNames] = useState({}); // Cache creator names
   const [allGroupsHasMore, setAllGroupsHasMore] = useState(true);
@@ -738,6 +742,13 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
   }, [user?.id, firestoreDB, appdatabase, uploadToBunny, setGroups, isAdmin, groups, t]);
 
   // Render group item
+  // lastActivityAt per joined group, for the inactive-group countdown.
+  const myGroupIds = useMemo(
+    () => (Array.isArray(groups) ? groups : []).map((g) => g?.groupId).filter(Boolean),
+    [groups],
+  );
+  const groupActivity = useGroupsLastActivity(firestoreDB, myGroupIds);
+
   const renderGroupItem = useCallback(({ item }) => {
     if (!item || typeof item !== 'object') return null;
 
@@ -794,6 +805,10 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
             <Text style={styles.lastMessage} numberOfLines={1}>
               {lastMessage}
             </Text>
+            <InactiveGroupWarning
+              lastActivityAt={Math.max(groupActivity[groupId] || 0, Number(item.lastMessageTimestamp) || 0)}
+              isDarkMode={isDarkMode}
+            />
           </View>
           {unreadCount > 0 && (
             <View style={styles.unreadBadge}>
@@ -878,7 +893,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
         </Menu>
       </View>
     );
-  }, [styles, handleOpenGroup, handleLeaveGroup, handleUpdateGroupIcon, handleEditGroup, handleDeleteGroup, handleToggleMute, user?.id, isDarkMode, isAdmin, groups, mutedGroups, t]);
+  }, [styles, handleOpenGroup, handleLeaveGroup, handleUpdateGroupIcon, handleEditGroup, handleDeleteGroup, handleToggleMute, user?.id, isDarkMode, isAdmin, groups, mutedGroups, t, groupActivity]);
 
   const filteredGroups = useMemo(() => {
     if (!Array.isArray(groups)) return [];
@@ -935,13 +950,18 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
 
   // ✅ Load initial 8 groups when "All Groups" tab is active
   useEffect(() => {
-    if (activeTab === 'all' && firestoreDB && appdatabase && !allGroupsLoading) {
+    // No `!allGroupsLoading` guard: it skipped a search pressed while the first
+    // page was still loading, and nothing re-ran it. A newer load wins instead.
+    if (activeTab === 'all' && firestoreDB && appdatabase) {
+      const requestId = ++allGroupsRequestRef.current;
+      const isCurrent = () => requestId === allGroupsRequestRef.current;
       const loadAllGroups = async () => {
         setAllGroupsLoading(true);
         setAllGroupsHasMore(true);
         setAllGroupsLastDoc(null);
         try {
           const result = await getAllGroups(firestoreDB, 'all', allGroupsSearchQuery, 8, null);
+          if (!isCurrent()) return;
           if (result.success) {
             // Show all groups (including user's own groups)
             const availableGroups = (result.groups || []).filter(group => {
@@ -955,6 +975,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
             // Creator names — single Supabase batch instead of N RTDB reads.
             const creatorIds = [...new Set(availableGroups.map(g => g.createdBy).filter(Boolean))];
             const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
+            if (!isCurrent()) return;
             const namesMap = {};
             for (const id of creatorIds) {
               // Missing names fall back to a translated label at render time.
@@ -966,11 +987,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
             setAllGroupsHasMore(false);
           }
         } catch (error) {
+          if (!isCurrent()) return;
           console.error('Error loading all groups:', error);
           setAllGroups([]);
           setAllGroupsHasMore(false);
         } finally {
-          setAllGroupsLoading(false);
+          if (isCurrent()) setAllGroupsLoading(false);
         }
       };
 
@@ -980,7 +1002,6 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
     // message in any joined group changed it, which re-ran this whole fetch,
     // flashed the spinner and reset pagination. "Already joined" is computed
     // at render time from filteredGroups, so it stays current without this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, firestoreDB, appdatabase, allGroupsSearchQuery]);
 
   // ✅ Load more groups on scroll
@@ -989,9 +1010,12 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
       return;
     }
 
+    const requestId = allGroupsRequestRef.current;
+    const isCurrent = () => requestId === allGroupsRequestRef.current;
     setAllGroupsLoadingMore(true);
     try {
       const result = await getAllGroups(firestoreDB, 'all', allGroupsSearchQuery, 8, allGroupsLastDoc);
+      if (!isCurrent()) return;
       if (result.success) {
         // Filter out groups user is already a member of
         // Show all groups (including user's own groups)
@@ -1004,6 +1028,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
         const creatorIds = [...new Set(newGroups.map(g => g.createdBy).filter(Boolean))];
         // ✅ OPTIMIZED: Fetch only displayName instead of full user object
         const identityMap = await getIdentityBatch(creatorIds).catch(() => new Map());
+        if (!isCurrent()) return;
         const namesMap = {};
         for (const id of creatorIds) {
           namesMap[id] = identityMap.get(id)?.displayName || null;
@@ -1017,6 +1042,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
         setAllGroupsHasMore(false);
       }
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('Error loading more groups:', error);
       setAllGroupsHasMore(false);
     } finally {
@@ -1027,6 +1053,8 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
   // ✅ Reset all groups when switching to joined tab
   useEffect(() => {
     if (activeTab === 'joined') {
+      allGroupsRequestRef.current += 1; // drop any All Groups load still in flight
+      setAllGroupsLoading(false);
       setAllGroups([]);
       setAllGroupsSearchQuery('');
       setCreatorNames({});
@@ -1650,6 +1678,7 @@ const GroupsScreen = ({ groups = [], setGroups, groupsLoading = false, groupsRec
                         }}>
                           {t('groups.member_count', { count: memberCount })}
                         </Text>
+                        <InactiveGroupWarning lastActivityAt={item.lastActivityAt} isDarkMode={isDarkMode} />
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 2 }}>
                         {isAlreadyJoined ? (

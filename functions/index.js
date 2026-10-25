@@ -25,6 +25,7 @@
 exports.mirrorUsersToSupabase = require('./mirrorUsersToSupabase').mirrorUsersToSupabase;
 exports.mirrorUsersPrivateToSupabase = require('./mirrorUsersToSupabase').mirrorUsersPrivateToSupabase;
 exports.mirrorGroupMetaToSupabase = require('./mirrorGroupMetaToSupabase').mirrorGroupMetaToSupabase;
+exports.syncGroupNameLower = require('./syncGroupNameLower').syncGroupNameLower;
 
 // ── Private email / date of birth (round 2, 2026-09) ──────────────────
 // privatizeUserPII is a group (…-email, …-decodedEmail, …-dateOfBirth):

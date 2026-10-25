@@ -331,7 +331,32 @@
             "safety_3": "أتمم التبادلات دائمًا عبر نظام التبادل الرسمي داخل اللعبة.",
             "safety_4": "بلّغ عن المستخدمين المشبوهين بالضغط مطولًا على رسالتهم واختيار «إبلاغ».",
             "safety_5": "راجع نجوم التاجر وتقييماته في ملفه قبل أن تتبادل معه."
-        }
+        },
+        "section_account": "الحساب",
+        "section_notifications": "الإشعارات",
+        "section_appearance": "المظهر",
+        "section_help": "المساعدة والمعلومات",
+        "privacy_chat": "الخصوصية والدردشة",
+        "privacy_chat_sub": "من يمكنه مراسلتك، حالة الاتصال",
+        "who_can_message": "من يمكنه مراسلتك",
+        "what_others_see": "ما يراه الآخرون",
+        "allow_general_chat": "السماح بالدردشة العامة",
+        "allow_general_chat_sub": "الدردشة العامة، الخلاصة، الملفات الشخصية، الوارد",
+        "allow_trade_chat": "السماح بدردشة التبادل",
+        "allow_trade_chat_sub": "عندما يفتح أحد تبادلك",
+        "chat_off_note": "إيقاف الدردشة يمنعك أيضًا من مراسلة الآخرين فيها.",
+        "help_feedback": "المساعدة والملاحظات",
+        "legal_safety": "القانونية والأمان",
+        "get_pro": "احصل على Pro",
+        "get_pro_sub": "بدون إعلانات وكل ميزات Pro",
+        "upgrade": "ترقية",
+        "roblox_account": "حساب Roblox",
+        "roblox_sheet_desc": "الأسماء الموثّقة تحصل على ✓ في التبادلات والدردشة.",
+        "not_linked": "غير مرتبط",
+        "stat_reviews": "التقييمات: {{count}}",
+        "stat_xp": "XP",
+        "stat_stars": "النجوم",
+        "version": "الإصدار {{version}}"
     },
     "profile": {
         "display_name": "اسم العرض",
@@ -2755,7 +2780,14 @@
             "feature_roles": "اعرض أعضاء المجموعة وأدوارهم.",
             "feature_notifications": "تصلك إشعارات بالرسائل الجديدة عندما تكون خارج الدردشة.",
             "got_it": "فهمت!"
-        }
+        },
+        "inactive_delete_in_zero": "غير نشطة · تُحذف خلال {{count}} يوم",
+        "inactive_delete_in_one": "غير نشطة · تُحذف خلال يوم واحد",
+        "inactive_delete_in_two": "غير نشطة · تُحذف خلال يومين",
+        "inactive_delete_in_few": "غير نشطة · تُحذف خلال {{count}} أيام",
+        "inactive_delete_in_many": "غير نشطة · تُحذف خلال {{count}} يومًا",
+        "inactive_delete_in_other": "غير نشطة · تُحذف خلال {{count}} يوم",
+        "inactive_delete_today": "غير نشطة · تُحذف اليوم"
     },
     "inbox": {
         "no_messages_yet": "لا توجد رسائل بعد",

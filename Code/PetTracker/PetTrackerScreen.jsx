@@ -306,7 +306,9 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: c.bg }}>
-        <SafeAreaView edges={['top']} style={{ backgroundColor: c.bg }}>
+        {/* A SafeAreaView inside a Modal reads 0 on iOS (the close button sat
+            under the status bar); the context insets are right here. */}
+        <View style={{ backgroundColor: c.bg, paddingTop: insets.top }}>
           <View style={styles.header}>
             <TouchableOpacity onPress={pet ? () => setPet(null) : onClose} style={styles.headerBtn}>
               <Ionicons name={pet ? 'arrow-back' : 'close'} size={22} color={c.text} />
@@ -318,7 +320,7 @@ const NewGrindModal = ({ visible, onClose, pets, imgurl, c, t, onCreated }) => {
             </Text>
             <View style={styles.headerBtn} />
           </View>
-        </SafeAreaView>
+        </View>
 
         {!pet ? (
           <>

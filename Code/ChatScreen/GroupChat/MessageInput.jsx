@@ -4,6 +4,7 @@ import { getStyles } from './../Style';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
 import { useHaptic } from '../../Helper/HepticFeedBack';
+import { useModalWindowInsets } from '../../Helper/useNavBarInset';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import InterstitialAdManager from '../../Ads/IntAd';
@@ -79,6 +80,8 @@ const MessageInput = ({
   const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
   const isDark = theme === 'dark';
   const [showEmojiPopup, setShowEmojiPopup] = useState(false);
+  // The emoji sheet sits under Android's nav bar / the iOS home indicator.
+  const insets = useModalWindowInsets();
 
   // ✅ Memoize computed values
   const hasFruits = useMemo(() => Array.isArray(selectedFruits) && selectedFruits.length > 0, [selectedFruits]);
@@ -249,7 +252,7 @@ const MessageInput = ({
           onPress={() => setShowEmojiPopup(false)}
           activeOpacity={1}
         >
-          <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e293b' : '#fff' }]} onStartShouldSetResponder={() => true}>
+          <View style={[modalStyles.sheet, { backgroundColor: isDark ? '#1e293b' : '#fff', paddingBottom: 20 + insets.bottom }]} onStartShouldSetResponder={() => true}>
             <ScrollView
               style={modalStyles.emojiScrollContainer}
               showsVerticalScrollIndicator={false}

@@ -27,6 +27,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { getThemeColors } from '../Helper/themeColors';
 import ValueHistoryChart from './ValueHistoryChart';
+import { useModalWindowInsets } from '../Helper/useNavBarInset';
 import {
   SERIES,
   loadItemHistory,
@@ -54,6 +55,8 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
   const { width: screenWidth } = useWindowDimensions();
   const c = getThemeColors(isDarkMode);
   const styles = useMemo(() => getStyles(c), [c]);
+  // The sheet's bottom edge sits under Android's nav bar / the iOS home indicator.
+  const insets = useModalWindowInsets();
 
   const [seriesKey, setSeriesKey] = useState('D');
   const [state, setState] = useState({ status: 'loading', points: [] });
@@ -179,7 +182,7 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <TouchableOpacity style={styles.backdropTap} activeOpacity={1} onPress={onClose} />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: 24 + insets.bottom }]}>
           <View style={styles.grabber} />
 
           <View style={styles.headerRow}>

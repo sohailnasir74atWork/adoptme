@@ -301,7 +301,34 @@
             "safety_3": "Haz tus tradeos siempre con el sistema oficial de tradeo dentro del juego.",
             "safety_4": "Reporta a usuarios sospechosos: mantén presionado su mensaje y elige \"Reportar\".",
             "safety_5": "Antes de tradear con alguien, checa su calificación y sus reseñas en su perfil."
-        }
+        },
+        "section_account": "Cuenta",
+        "section_notifications": "Notificaciones",
+        "section_appearance": "Apariencia",
+        "section_help": "Ayuda e información",
+        "privacy_chat": "Privacidad y chat",
+        "privacy_chat_sub": "Quién puede escribirte, estado en línea",
+        "who_can_message": "Quién puede escribirte",
+        "what_others_see": "Lo que ven los demás",
+        "allow_general_chat": "Permitir chat general",
+        "allow_general_chat_sub": "Chat público, feed, perfiles, bandeja",
+        "allow_trade_chat": "Permitir chat de intercambio",
+        "allow_trade_chat_sub": "Cuando alguien abre tu intercambio",
+        "chat_off_note": "Si desactivas un chat, tampoco podrás escribir a otros ahí.",
+        "help_feedback": "Ayuda y sugerencias",
+        "legal_safety": "Legal y seguridad",
+        "get_pro": "Hazte Pro",
+        "get_pro_sub": "Sin anuncios y todas las funciones Pro",
+        "upgrade": "Mejorar",
+        "roblox_account": "Cuenta de Roblox",
+        "roblox_sheet_desc": "Los nombres verificados llevan un ✓ en intercambios y chat.",
+        "not_linked": "Sin vincular",
+        "stat_reviews": "{{count}} reseñas",
+        "stat_reviews_one": "{{count}} reseña",
+        "stat_reviews_other": "{{count}} reseñas",
+        "stat_xp": "XP",
+        "stat_stars": "Estrellas",
+        "version": "Versión {{version}}"
     },
     "profile": {
         "display_name": "Nombre",
@@ -2581,7 +2608,10 @@
             "feature_roles": "Ve a los miembros del grupo y sus roles.",
             "feature_notifications": "Recibe notificaciones de mensajes nuevos cuando no estás en el chat.",
             "got_it": "¡Entendido!"
-        }
+        },
+        "inactive_delete_in_one": "Inactivo · se elimina en {{count}} día",
+        "inactive_delete_in_other": "Inactivo · se elimina en {{count}} días",
+        "inactive_delete_today": "Inactivo · se elimina hoy"
     },
     "inbox": {
         "no_messages_yet": "Aún no hay mensajes",

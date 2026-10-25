@@ -35,6 +35,11 @@ const MAX_GROUP_MEMBERS = 50; // Maximum members per group
 // 2026-10-07: was 1). Client-side only, like the rest of group creation.
 export const MAX_GROUPS_PER_USER = 2;
 
+// Search key for the All Groups search: Firestore range queries are
+// case-sensitive, so groups also store their name lowercased. Same rule as
+// functions/syncGroupNameLower.js, which fills it for older builds and the web.
+export const toGroupNameLower = (name) => String(name || '').trim().toLowerCase();
+
 /**
  * Every active group the user created (newest first), at most
  * MAX_GROUPS_PER_USER + 1 so an over-limit account still reads as full.
@@ -126,6 +131,7 @@ export const createGroup = async (firestoreDB, appdatabase, creatorData, memberI
       id: groupId,
       name: finalGroupName,
       groupName: finalGroupName, // Also store as groupName for consistency
+      groupNameLower: toGroupNameLower(finalGroupName), // All Groups search key
       description: finalDescription,
       createdBy: creatorData.id,
       creatorDisplayName: creatorData.displayName || 'Anonymous', // Store creator display name for explore feature
@@ -1274,6 +1280,7 @@ export const updateGroupName = async (firestoreDB, appdatabase, groupId, userId,
     await updateDoc(groupRef, {
       groupName: trimmedName,
       name: trimmedName, // Also update name field for compatibility
+      groupNameLower: toGroupNameLower(trimmedName),
       updatedAt: serverTimestamp(),
     });
 
@@ -1940,26 +1947,24 @@ export const getAllGroups = async (firestoreDB, filter = 'all', searchQuery = ''
 
     // Handle Search Query (Prefix Search)
     if (searchQuery && searchQuery.trim()) {
-      const searchTerm = searchQuery.trim();
-      // Note: Firestore string search is case-sensitive. 
-      // For case-insensitive search, we'd need a separate lowercase field in the DB.
-      // Using 'groupName' for ordering and range query
+      // Prefix match on the lowercased name, so "pets" finds "Pets Trading".
+      const searchTerm = toGroupNameLower(searchQuery);
 
       if (lastDoc) {
+        // One start cursor only: lastDoc already sorts after searchTerm.
         groupsQuery = query(
           groupsRef,
           ...baseConstraints,
-          orderBy('groupName'),
-          startAt(searchTerm),
-          endAt(searchTerm + '\uf8ff'),
+          orderBy('groupNameLower'),
           startAfter(lastDoc),
+          endAt(searchTerm + '\uf8ff'),
           limit(limitCount)
         );
       } else {
         groupsQuery = query(
           groupsRef,
           ...baseConstraints,
-          orderBy('groupName'),
+          orderBy('groupNameLower'),
           startAt(searchTerm),
           endAt(searchTerm + '\uf8ff'),
           limit(limitCount)

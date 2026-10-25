@@ -52,6 +52,7 @@ import {
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { safeCompressImage } from '../Helper/safeCompressImage';
+import useNavBarInset, { useModalWindowInsets } from '../Helper/useNavBarInset';
 import { useGlobalState } from '../GlobelStats';
 import { useLocalState } from '../LocalGlobelStats';
 import InterstitialAdManager from '../Ads/IntAd';
@@ -155,6 +156,9 @@ const ScammerDatabaseScreen = () => {
     const { theme, user, isAdmin } = useGlobalState();
     const { localState } = useLocalState();
     const { t } = useTranslation();
+    // Both sheets below sit on the bottom edge: clear Android's nav bar / the iOS home indicator.
+    const sheetInsets = useModalWindowInsets();
+    const formNavBarInset = useNavBarInset();
     const isDark = theme === 'dark';
     const isMod = isAdmin || user?.isModerator || user?.isMod;
 
@@ -844,7 +848,7 @@ const ScammerDatabaseScreen = () => {
                 onRequestClose={() => (fullscreenImage ? setFullscreenImage(null) : closeDetail())}
             >
                 <View style={s.modalOverlay}>
-                    <View style={[s.modalContent, { backgroundColor: C.card }]}>
+                    <View style={[s.modalContent, { backgroundColor: C.card, paddingBottom: 20 + sheetInsets.bottom }]}>
                         <ScrollView showsVerticalScrollIndicator={false}>
                             {/* Close */}
                             <View style={s.modalHeader}>
@@ -955,7 +959,7 @@ const ScammerDatabaseScreen = () => {
                         {!!fullscreenImage && (
                             <View style={s.fullscreenOverlay}>
                                 <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setFullscreenImage(null)} />
-                                <TouchableOpacity style={s.fullscreenClose} onPress={() => setFullscreenImage(null)}>
+                                <TouchableOpacity style={[s.fullscreenClose, { top: sheetInsets.top + 8 }]} onPress={() => setFullscreenImage(null)}>
                                     <Icon name="close-circle" size={32} color="#FFF" />
                                 </TouchableOpacity>
                                 <Image resizeMethod="resize"
@@ -975,7 +979,7 @@ const ScammerDatabaseScreen = () => {
             {/* ════════════════════════════════════════ */}
             <Modal visible={showReportModal} animationType="slide" transparent onRequestClose={() => setShowReportModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-                    <View style={[s.modalContent, { backgroundColor: C.card, maxHeight: '90%' }]}>
+                    <View style={[s.modalContent, { backgroundColor: C.card, maxHeight: '90%', paddingBottom: 20 + formNavBarInset }]}>
                         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             {/* Header */}
                             <View style={s.modalHeader}>
@@ -1199,7 +1203,7 @@ const s = StyleSheet.create({
         borderTopRightRadius: 20,
         paddingHorizontal: 18,
         paddingTop: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+        paddingBottom: 20,
         maxHeight: '85%',
     },
     modalHeader: {
@@ -1220,7 +1224,7 @@ const s = StyleSheet.create({
 
     // Fullscreen image viewer
     fullscreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center', zIndex: 9999 },
-    fullscreenClose: { position: 'absolute', top: Platform.OS === 'ios' ? 56 : 20, right: 20, zIndex: 10 },
+    fullscreenClose: { position: 'absolute', right: 20, zIndex: 10 },
     fullscreenImg: { width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.8 },
 
     // Mod

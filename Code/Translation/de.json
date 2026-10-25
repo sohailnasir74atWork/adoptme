@@ -291,7 +291,34 @@
             "safety_3": "Schließ Trades immer über das offizielle Trade-System im Spiel ab.",
             "safety_4": "Melde verdächtige Nutzer: Halte ihre Nachricht gedrückt und wähl „Melden“.",
             "safety_5": "Check vor dem Trade das Rating und die Bewertungen auf dem Profil des Traders."
-        }
+        },
+        "section_account": "Konto",
+        "section_notifications": "Benachrichtigungen",
+        "section_appearance": "Darstellung",
+        "section_help": "Hilfe und Info",
+        "privacy_chat": "Privatsphäre und Chat",
+        "privacy_chat_sub": "Wer dir schreiben darf, Online-Status",
+        "who_can_message": "Wer dir schreiben darf",
+        "what_others_see": "Was andere sehen",
+        "allow_general_chat": "Allgemeinen Chat erlauben",
+        "allow_general_chat_sub": "Öffentlicher Chat, Feed, Profile, Posteingang",
+        "allow_trade_chat": "Handels-Chat erlauben",
+        "allow_trade_chat_sub": "Wenn jemand deinen Handel öffnet",
+        "chat_off_note": "Wenn du einen Chat ausschaltest, kannst du dort auch anderen nicht schreiben.",
+        "help_feedback": "Hilfe und Feedback",
+        "legal_safety": "Rechtliches und Sicherheit",
+        "get_pro": "Pro holen",
+        "get_pro_sub": "Keine Werbung und alle Pro-Funktionen",
+        "upgrade": "Upgraden",
+        "roblox_account": "Roblox-Konto",
+        "roblox_sheet_desc": "Verifizierte Namen bekommen ein ✓ bei Trades und im Chat.",
+        "not_linked": "Nicht verknüpft",
+        "stat_reviews": "{{count}} Bewertungen",
+        "stat_reviews_one": "{{count}} Bewertung",
+        "stat_reviews_other": "{{count}} Bewertungen",
+        "stat_xp": "XP",
+        "stat_stars": "Sterne",
+        "version": "Version {{version}}"
     },
     "profile": {
         "display_name": "Anzeigename",
@@ -2524,7 +2551,10 @@
             "feature_roles": "Sieh dir die Mitglieder und ihre Rollen an.",
             "feature_notifications": "Bekomm Benachrichtigungen für neue Nachrichten, wenn du nicht im Chat bist.",
             "got_it": "Alles klar!"
-        }
+        },
+        "inactive_delete_in_one": "Inaktiv · wird in {{count}} Tag gelöscht",
+        "inactive_delete_in_other": "Inaktiv · wird in {{count}} Tagen gelöscht",
+        "inactive_delete_today": "Inaktiv · wird heute gelöscht"
     },
     "inbox": {
         "no_messages_yet": "Noch keine Nachrichten",

@@ -5,18 +5,23 @@
  *
  * Two tasks:
  * 1. Delete messages older than 7 days from ALL groups (RTDB)
- * 2. Delete entire groups inactive for 15+ days:
- *    - Firestore: groups/{groupId}
- *    - RTDB: group_messages/{groupId}
- *    - RTDB: group_meta_data/{userId}/{groupId} for all members
- *    - RTDB: activeGroupChats/{groupId}
+ * 2. Inactive groups (2026-10-25, owner request): no message for 15 days
+ *    (counting from creation when it never had one) → deleted, with a backup
+ *    in groups_deleted:
+ *    - Supabase: group_messages, every member's group_meta_data row
+ *    - RTDB: group_messages/{id}, groups/{id}, activeGroupChats/{id},
+ *      group_meta_data/{member}/{id}
+ *    - Firestore: group_invitations, group_join_requests, groups/{id}
  *    - Bunny CDN: group avatar image
+ *    Every other group gets its lastActivityAt brought up to date; the app
+ *    shows "deleted in N days" on the group list from day 7 of quiet.
+ *    notifyGroupMessage bumps lastActivityAt on each message (at most hourly),
+ *    so the warning clears as soon as someone texts.
  *
  * Cost optimization:
- * - Firestore query uses lastMessageTimestamp index
+ * - One Supabase index probe + one shallow RTDB query per group
  * - RTDB message cleanup uses orderByChild('timestamp') + endAt()
  * - Multi-path deletes for batch RTDB writes
- * - Sequential processing to avoid memory spikes
  *
  * Deployment:
  * firebase deploy --only functions:cleanupGroups
@@ -25,13 +30,17 @@
 const admin = require('firebase-admin');
 const functions = require('firebase-functions/v1');
 const https = require('https');
+const { getSupabaseAdmin } = require('./_supabaseAdmin');
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WARN_AFTER_MS = 7 * DAY_MS;      // GroupsScreen shows the countdown from here
+const INACTIVE_MS = 15 * DAY_MS;       // deleted from here
+const MAX_DELETE_PER_RUN = 200;
 const BATCH_SIZE = 500;
 
 // Bunny CDN config
@@ -122,67 +131,202 @@ async function cleanOldMessages(db, groupId, cutoffTimestamp) {
   return deleted;
 }
 
+/** createdAt may be a Firestore Timestamp, a number, or absent. */
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (value._seconds != null) return value._seconds * 1000;
+  return 0;
+}
+
+/** Runs fn over items with at most `limit` in flight. */
+async function mapWithConcurrency(items, limit, fn) {
+  const out = [];
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const index = i++;
+      out[index] = await fn(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 /**
- * Fully delete an inactive group: Firestore doc, RTDB messages,
- * RTDB metadata for all members, activeGroupChats, and avatar.
+ * Newest message time for a group: Supabase group_messages (the store since
+ * the chat migration; retention keeps the newest 300 per group, so the newest
+ * row is always there) and RTDB group_messages (old builds). Throws when
+ * Supabase can't answer — the caller must then leave the group alone.
  */
-async function deleteInactiveGroup(firestore, db, groupDoc) {
-  const groupId = groupDoc.id;
-  const groupData = groupDoc.data();
-  const memberIds = groupData.memberIds || [];
+async function lastMessageAt(sb, db, groupId) {
+  const { data, error } = await sb
+    .from('group_messages')
+    .select('created_at')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`supabase: ${error.message}`);
+  let newest = data && data[0] ? Date.parse(data[0].created_at) || 0 : 0;
 
-  // 1. Delete all messages + their images from RTDB
-  await db.ref(`group_messages/${groupId}`).remove();
+  const snap = await db.ref(`group_messages/${groupId}/messages`)
+    .orderByChild('timestamp').limitToLast(1).once('value');
+  snap.forEach((child) => {
+    const ts = Number(child.val() && child.val().timestamp);
+    if (Number.isFinite(ts)) newest = Math.max(newest, ts);
+    return false;
+  });
+  return newest;
+}
 
-  // 2. Delete group_meta_data for all members + activeGroupChats
-  const rtdbUpdates = {};
-  rtdbUpdates[`activeGroupChats/${groupId}`] = null;
+/** Every member id we can find, Firestore and RTDB both (see deleteGroup in the app). */
+async function collectMemberIds(db, groupId, data) {
+  const ids = new Set();
+  for (const id of data.memberIds || []) if (id && typeof id === 'string') ids.add(id);
+  for (const id of Object.keys(data.members || {})) if (id) ids.add(id);
+  try {
+    const val = (await db.ref(`groups/${groupId}`).once('value')).val();
+    if (val) {
+      const fromRtdb = Array.isArray(val.memberIds)
+        ? val.memberIds
+        : Object.keys(val.memberIds || val.members || {});
+      for (const id of fromRtdb) if (id && typeof id === 'string') ids.add(id);
+    }
+  } catch (e) {
+    console.warn(`could not read groups/${groupId}: ${e.message}`);
+  }
+  return [...ids];
+}
+
+/** Deletes every doc of a collection that points at the group. */
+async function deleteWhereGroup(firestore, collectionName, groupId) {
+  for (;;) {
+    const snap = await firestore.collection(collectionName)
+      .where('groupId', '==', groupId).limit(BATCH_SIZE).get();
+    if (snap.empty) return;
+    const batch = firestore.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.size < BATCH_SIZE) return;
+  }
+}
+
+/**
+ * Fully delete an inactive group: a backup in groups_deleted, then Supabase
+ * messages + every member's inbox row, RTDB messages / group node / member
+ * meta / activeGroupChats, the avatar, invitations, join requests, and the
+ * Firestore doc last (so a failure part-way leaves the group findable and
+ * the next run finishes the job).
+ */
+async function deleteInactiveGroup({ firestore, db, sb }, groupId, groupData, lastActivityAt) {
+  const memberIds = await collectMemberIds(db, groupId, groupData);
+
+  await firestore.collection('groups_deleted').doc(groupId).set({
+    group: groupData,
+    reason: 'inactive_15_days',
+    lastActivityAt,
+    deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  // Supabase: a dead group has no one watching its messages, so these
+  // deletes reach no Realtime subscriber; inbox rows by primary key.
+  const msgDel = await sb.from('group_messages').delete().eq('group_id', groupId);
+  if (msgDel.error) throw new Error(`supabase messages: ${msgDel.error.message}`);
+  for (let i = 0; i < memberIds.length; i += 100) {
+    const metaDel = await sb.from('group_meta_data').delete()
+      .eq('group_id', groupId).in('user_id', memberIds.slice(i, i + 100));
+    if (metaDel.error) throw new Error(`supabase meta: ${metaDel.error.message}`);
+  }
+
+  const rtdbUpdates = {
+    [`group_messages/${groupId}`]: null,
+    [`groups/${groupId}`]: null,
+    [`activeGroupChats/${groupId}`]: null,
+  };
   for (const memberId of memberIds) {
     rtdbUpdates[`group_meta_data/${memberId}/${groupId}`] = null;
   }
   await db.ref().update(rtdbUpdates);
 
-  // 3. Delete group avatar from Bunny CDN
-  if (groupData.avatar && groupData.avatar.startsWith('http')) {
+  if (typeof groupData.avatar === 'string' && groupData.avatar.startsWith('http')) {
     await deleteBunnyFile(groupData.avatar);
   }
 
-  // 4. Delete pending invitations for this group
-  const invitesSnap = await firestore.collection('group_invitations')
-    .where('groupId', '==', groupId)
-    .limit(BATCH_SIZE)
-    .get();
-  if (!invitesSnap.empty) {
-    const inviteBatch = firestore.batch();
-    invitesSnap.docs.forEach((doc) => inviteBatch.delete(doc.ref));
-    await inviteBatch.commit();
-  }
-
-  // 5. Delete pending join requests for this group
-  const requestsSnap = await firestore.collection('group_join_requests')
-    .where('groupId', '==', groupId)
-    .limit(BATCH_SIZE)
-    .get();
-  if (!requestsSnap.empty) {
-    const requestBatch = firestore.batch();
-    requestsSnap.docs.forEach((doc) => requestBatch.delete(doc.ref));
-    await requestBatch.commit();
-  }
-
-  // 6. Delete Firestore group document
+  await deleteWhereGroup(firestore, 'group_invitations', groupId);
+  await deleteWhereGroup(firestore, 'group_join_requests', groupId);
   await firestore.doc(`groups/${groupId}`).delete();
 
-  console.log(`🗑️ Deleted inactive group: ${groupId} (${groupData.name || 'unnamed'}, ${memberIds.length} members)`);
+  console.log(`🗑️ Deleted inactive group: ${groupId} (${groupData.name || 'unnamed'}, ${memberIds.length} members, last activity ${new Date(lastActivityAt).toISOString()})`);
+}
+
+/**
+ * Task 2. Activity = the newest of: the group's lastActivityAt (bumped by
+ * notifyGroupMessage on every message, at most hourly), the newest message in
+ * Supabase / RTDB, and createdAt. Firestore's lastMessageTimestamp is never
+ * written after createGroup, so it is not used.
+ *   - quiet 15 days or more → deleted (up to MAX_DELETE_PER_RUN a run)
+ *   - otherwise lastActivityAt is written back when it is behind, so the app
+ *     can show "deleted in N days" from day 7 (GroupsScreen).
+ * A group whose activity can't be read (Supabase error, no createdAt and no
+ * message) is left alone.
+ */
+async function runInactiveGroupCleanup(deps, { apply = true } = {}) {
+  const { firestore, db, sb } = deps;
+  const now = deps.now ? deps.now() : Date.now();
+  const cutoff = now - INACTIVE_MS;
+  const snap = await firestore.collection('groups').get();
+  const report = {
+    mode: apply ? 'apply' : 'dry_run',
+    groups: snap.size, inactive: 0, deleted: 0, warned: 0, activityWritten: 0, unknown: 0, failed: 0, sample: [],
+  };
+
+  const verdicts = await mapWithConcurrency(snap.docs, 10, async (doc) => {
+    const data = doc.data() || {};
+    const stored = Number(data.lastActivityAt) || 0;
+    try {
+      const activity = Math.max(stored, toMillis(data.createdAt), await lastMessageAt(sb, db, doc.id));
+      return { doc, data, stored, activity };
+    } catch (e) {
+      console.error(`❌ activity of ${doc.id}: ${e.message}`);
+      return { doc, data, stored, activity: 0, failed: true };
+    }
+  });
+
+  for (const v of verdicts) {
+    if (!v.activity) { report.unknown += 1; if (v.failed) report.failed += 1; continue; }
+    if (v.activity < cutoff) {
+      report.inactive += 1;
+      if (report.sample.length < 20) report.sample.push(`${v.doc.id} "${v.data.name || ''}" ${new Date(v.activity).toISOString()}`);
+      if (!apply || report.deleted >= MAX_DELETE_PER_RUN) continue;
+      try {
+        await deleteInactiveGroup(deps, v.doc.id, v.data, v.activity);
+        report.deleted += 1;
+      } catch (e) {
+        report.failed += 1;
+        console.error(`❌ Error deleting group ${v.doc.id}:`, e);
+      }
+      continue;
+    }
+    if (v.activity < now - WARN_AFTER_MS) report.warned += 1;
+    if (v.activity - v.stored > 60 * 1000) {
+      report.activityWritten += 1;
+      if (apply) {
+        await v.doc.ref.update({ lastActivityAt: v.activity })
+          .catch((e) => console.error(`❌ lastActivityAt ${v.doc.id}: ${e.message}`));
+      }
+    }
+  }
+  return report;
 }
 
 exports.cleanupGroups = functions
-  .runWith({ memory: '512MB', timeoutSeconds: 540 })
+  .runWith({ secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'], memory: '512MB', timeoutSeconds: 540 })
   .pubsub.schedule('every day 07:00')
   .timeZone('UTC')
   .onRun(async () => {
     const now = Date.now();
     const messageCutoff = now - SEVEN_DAYS_MS;
-    const inactiveCutoff = admin.firestore.Timestamp.fromMillis(now - FIFTEEN_DAYS_MS);
     const firestore = admin.firestore();
     const db = admin.database();
 
@@ -191,7 +335,7 @@ exports.cleanupGroups = functions
 
     console.log(`🧹 Starting group cleanup.`);
     console.log(`   Message cutoff: ${new Date(messageCutoff).toISOString()}`);
-    console.log(`   Inactive group cutoff: ${inactiveCutoff.toDate().toISOString()}`);
+    console.log(`   Inactive group cutoff: ${new Date(now - INACTIVE_MS).toISOString()}`);
 
     // ══════════════════════════════════════════════
     // TASK 1: Delete old messages from ALL groups
@@ -218,51 +362,12 @@ exports.cleanupGroups = functions
     }
 
     // ══════════════════════════════════════════════
-    // TASK 2: Delete entire inactive groups (15+ days)
+    // TASK 2: Delete groups quiet for 15+ days; keep lastActivityAt current
     // ══════════════════════════════════════════════
     try {
-      let hasMore = true;
-
-      while (hasMore) {
-        const snapshot = await firestore.collection('groups')
-          .where('lastMessageTimestamp', '<', inactiveCutoff)
-          .limit(50)
-          .get();
-
-        if (snapshot.empty) {
-          hasMore = false;
-          break;
-        }
-
-        for (const groupDoc of snapshot.docs) {
-          try {
-            await deleteInactiveGroup(firestore, db, groupDoc);
-            totalGroupsDeleted++;
-          } catch (error) {
-            console.error(`❌ Error deleting group ${groupDoc.id}:`, error);
-          }
-        }
-
-        if (snapshot.size < 50) hasMore = false;
-      }
-
-      // Also catch groups that never had a message (lastMessageTimestamp is null)
-      // These are created but abandoned — use createdAt instead
-      const abandonedSnapshot = await firestore.collection('groups')
-        .where('lastMessageTimestamp', '==', null)
-        .where('createdAt', '<', inactiveCutoff)
-        .limit(100)
-        .get();
-
-      for (const groupDoc of abandonedSnapshot.docs) {
-        try {
-          await deleteInactiveGroup(firestore, db, groupDoc);
-          totalGroupsDeleted++;
-        } catch (error) {
-          console.error(`❌ Error deleting abandoned group ${groupDoc.id}:`, error);
-        }
-      }
-
+      const report = await runInactiveGroupCleanup({ firestore, db, sb: getSupabaseAdmin() });
+      totalGroupsDeleted = report.deleted;
+      console.log('[inactiveGroups]', JSON.stringify(report));
     } catch (error) {
       console.error('❌ Error in inactive group cleanup:', error);
     }
@@ -270,3 +375,5 @@ exports.cleanupGroups = functions
     console.log(`🧹 Group cleanup complete. Messages deleted: ${totalMessagesDeleted}, Groups deleted: ${totalGroupsDeleted}`);
     return null;
   });
+
+module.exports._internal = { runInactiveGroupCleanup, lastMessageAt };

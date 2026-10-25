@@ -34,6 +34,8 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+const ACTIVITY_WRITE_EVERY_MS = 60 * 60 * 1000;
+
 function validateWebhookOrSend(req, res) {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
@@ -87,6 +89,14 @@ exports.notifyGroupMessage = functions
         return;
       }
       const groupData = groupDoc.data() || {};
+      // A message makes the group active again: cleanupGroups deletes groups
+      // quiet for 15 days and the app counts down from lastActivityAt. At most
+      // one write an hour per group.
+      const now = Date.now();
+      if (!(Number(groupData.lastActivityAt) > now - ACTIVITY_WRITE_EVERY_MS)) {
+        await groupDoc.ref.update({ lastActivityAt: now })
+          .catch((e) => console.warn(`lastActivityAt ${groupId}: ${e.message}`));
+      }
       const memberIds = (groupData.memberIds || []).filter((id) => id && id !== senderId);
       if (memberIds.length === 0) {
         res.status(200).send('Skipped: no other members');

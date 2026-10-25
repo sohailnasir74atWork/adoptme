@@ -7,7 +7,7 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useModalWindowInsets } from '../Helper/useNavBarInset';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../GlobelStats';
 import { useTranslation } from 'react-i18next';
@@ -120,13 +120,17 @@ export default function GuidesScreen({ visible, onClose }) {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
+  const insets = useModalWindowInsets();
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
+      {/* A Modal is its own window: a SafeAreaView here reads 0 insets on iOS
+          and the close button ended up under the status bar. */}
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -189,7 +193,7 @@ export default function GuidesScreen({ visible, onClose }) {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

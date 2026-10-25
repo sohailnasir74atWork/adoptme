@@ -7,7 +7,6 @@ import {
   Modal,
   ScrollView,
   Pressable,
-  Platform,
   Linking,
   Alert,
 } from 'react-native';
@@ -15,6 +14,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
 import { getThemeColors } from '../../Helper/themeColors';
 import config from '../../Helper/Environment';
+import { useModalWindowInsets } from '../../Helper/useNavBarInset';
 import { useTranslation } from 'react-i18next';
 import ChatRulesModal from './ChatRuleModal';
 import OnlineUsersList from './OnlineUsersList';
@@ -39,6 +39,8 @@ const ChatHeaderContent = ({
   const [pinMessageOpen, setPinMessageOpen] = useState(false);
 
   const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  // The pinned-messages sheet sits under Android's nav bar / the iOS home indicator.
+  const insets = useModalWindowInsets();
 
   const renderMessageWithLinks = useCallback((message) => {
     if (!message || typeof message !== 'string') {
@@ -125,7 +127,7 @@ const ChatHeaderContent = ({
       >
         <View style={styles.modalOverlay}>
           <Pressable style={{ flex: 1 }} onPress={() => setPinMessageOpen(false)} />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: 20 + insets.bottom }]}>
             {/* Handle */}
             <View style={styles.handleBar} />
 
@@ -304,7 +306,7 @@ const getStyles = (isDarkMode) => StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    paddingBottom: 20,
     maxHeight: '80%',
   },
   handleBar: {
