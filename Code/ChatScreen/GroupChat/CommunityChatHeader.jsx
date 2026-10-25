@@ -7,13 +7,48 @@ import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from '@react-native-firebase/firestore';
+import { useChatBadges, acknowledgeDmBadge, acknowledgeGroupBadge } from '../chatBadgeStore';
+
+// Red/green count bubble on a header button, pulsing while it shows.
+const PulsingBadge = ({ label, color }) => {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Animated.View style={[styles.badge, { backgroundColor: color, transform: [{ scale: pulse }] }]}>
+      <Text style={styles.badgeText}>{label}</Text>
+    </Animated.View>
+  );
+};
+
+const countLabel = (n) => (n > 9 ? '9+' : n);
+
+// The two unread badges read chatBadgeStore themselves, so a new message
+// re-renders only the badge, not this header (and not ChatStack, which used
+// to hold these counts in state).
+const InboxBadge = () => {
+  const { dm } = useChatBadges();
+  if (dm <= 0) return null;
+  return <PulsingBadge label={countLabel(dm)} color="#EF4444" />;
+};
+
+// "!" for pending invitations or join requests (prioritized), else the unread count.
+const GroupsBadge = ({ hasPending }) => {
+  const { group } = useChatBadges();
+  if (!hasPending && group <= 0) return null;
+  return <PulsingBadge label={hasPending ? '!' : countLabel(group)} color="#10B981" />;
+};
 
 const CommunityChatHeader = ({
   selectedTheme,
-  unreadcount,
-  setunreadcount,
-  groupUnreadCount = 0,
-  setGroupUnreadCount,
   triggerHapticFeedback,
   onOnlineUsersPress,
 }) => {
@@ -23,22 +58,6 @@ const CommunityChatHeader = ({
   const [pendingGroupInvitationsCount, setPendingGroupInvitationsCount] = useState(0);
   const [pendingJoinRequestsCount, setPendingJoinRequestsCount] = useState(0);
   const isDarkMode = theme === 'dark';
-  const badgePulse = useRef(new Animated.Value(1)).current;
-
-  // Badge pulse animation — only react to presence/absence, not exact count
-  const hasNotif = unreadcount > 0 || pendingGroupInvitationsCount > 0 || groupUnreadCount > 0;
-  useEffect(() => {
-    if (hasNotif) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(badgePulse, { toValue: 1.3, duration: 600, useNativeDriver: true }),
-          Animated.timing(badgePulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [hasNotif]);
 
   // Listen to pending group invitations
   useEffect(() => {
@@ -93,12 +112,11 @@ const CommunityChatHeader = ({
     return () => unsubscribe();
   }, [firestoreDB, user?.id]);
 
-  const groupBadge = (pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0)
-    ? '!'
-    : (groupUnreadCount > 0 ? groupUnreadCount : 0);
+  const hasPendingGroupItems = pendingGroupInvitationsCount > 0 || pendingJoinRequestsCount > 0;
 
   // ── Reusable Icon Button ──
-  const Btn = ({ icon, bg, color, onPress, badge, badgeColor = '#EF4444', animated, emoji }) => (
+  // `badge` is a static count; `badgeElement` a self-updating badge component.
+  const Btn = ({ icon, bg, color, onPress, badge, badgeColor = '#EF4444', badgeElement, emoji }) => (
     <TouchableOpacity
       onPress={() => {
         onPress();
@@ -114,17 +132,11 @@ const CommunityChatHeader = ({
           <Icon name={icon} size={18} color={color} />
         )}
       </View>
-      {badge > 0 || badge === '!' ? (
-        <Animated.View
-          style={[
-            styles.badge,
-            { backgroundColor: badgeColor },
-            animated ? { transform: [{ scale: badgePulse }] } : {},
-          ]}
-        >
-          <Text style={styles.badgeText}>{typeof badge === 'number' ? (badge > 9 ? '9+' : badge) : badge}</Text>
-        </Animated.View>
-      ) : null}
+      {badgeElement || (badge > 0 ? (
+        <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+          <Text style={styles.badgeText}>{countLabel(badge)}</Text>
+        </View>
+      ) : null)}
     </TouchableOpacity>
   );
 
@@ -137,11 +149,11 @@ const CommunityChatHeader = ({
         icon="mail"
         bg="#8B5CF620"
         color="#8B5CF6"
-        badge={unreadcount}
-        badgeColor="#EF4444"
-        animated
+        badgeElement={<InboxBadge />}
         onPress={() => {
           navigation.navigate('Inbox');
+          // The badge now shows only what arrives after this tap.
+          acknowledgeDmBadge();
         }}
       />
 
@@ -150,11 +162,10 @@ const CommunityChatHeader = ({
         icon="people"
         bg="#10B98118"
         color="#10B981"
-        badge={groupBadge}
-        badgeColor="#10B981"
-        animated
+        badgeElement={<GroupsBadge hasPending={hasPendingGroupItems} />}
         onPress={() => {
           navigation.navigate('Groups');
+          acknowledgeGroupBadge();
         }}
       />
 

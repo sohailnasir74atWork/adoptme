@@ -90,7 +90,7 @@ const CHANNELS = [
 ];
 
 const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatFocused,
-  setModalVisibleChatinfo, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }) => {
+  setModalVisibleChatinfo, onlineUsersVisible, setOnlineUsersVisible }) => {
   const { user, theme, appdatabase, setUser, isAdmin, currentUserEmail, strikeInfo, isUserBlocked } = useGlobalState();
   const [messages, setMessages] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
@@ -259,7 +259,9 @@ const ChatScreen = ({ selectedTheme, bannedUsers, modalVisibleChatinfo, setChatF
   }, [user?.id, user?.avatar]);
 
 
-  const INITIAL_PAGE_SIZE = 5; // ✅ Initial load: 5 messages
+  // 10, not 5: five messages did not fill the screen, so onEndReached paged
+  // the room up in steps right after it opened (looked jumpy). Blox uses 10.
+  const INITIAL_PAGE_SIZE = 10;
   const PAGE_SIZE = 10; // ✅ Pagination: load 10 messages per batch
   const PENDING_CAP = 50;
   // Cap the live in-memory list. Without this the array grew unbounded for

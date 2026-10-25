@@ -17,23 +17,36 @@ import { useTranslation } from 'react-i18next';
 import { subscribeToChatMetaShared, resetUnreadCount } from '../Supabase/chatMetaBackend';
 import { subscribeToGroupMetaShared } from '../Supabase/groupMetaBackend';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  setDmUnread, removeDmUnread, clearDmUnread,
+  setGroupUnread, removeGroupUnread, clearGroupUnread,
+} from './chatBadgeStore';
 
 const Stack = createNativeStackNavigator();
+
+// GroupChatScreen sets its own header title and buttons.
+const groupChatDetailOptions = {
+  headerBackVisible: true,
+  headerTitle: () => null,
+  headerRight: () => null,
+};
+
+// A busy group updates every member's group_meta_data row on every message.
+// The groups list is redrawn at most this often while such updates stream in.
+const GROUPS_FLUSH_MS = 400;
+
+const ADMIN_DASHBOARD_OPTIONS = { title: 'Admin Dashboard' };
 
 export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo }) => {
   const { user, appdatabase } = useGlobalState();
   const [bannedUsers, setBannedUsers] = useState([]);
   const { triggerHapticFeedback } = useHaptic();
-  const [unreadcount, setunreadcount] = useState(0);
   const { localState } = useLocalState()
   const { t } = useTranslation();
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsReconnecting, setGroupsReconnecting] = useState(false);
-  const [groupUnreadCount, setGroupUnreadCount] = useState(0); // Total unread count for groups
-  const unreadDebounceRef = useRef(null);
-  const groupDebounceRef = useRef(null);
   const isInChildScreenRef = useRef(false); // Track if user is in a child screen (chat, inbox, etc.)
   const insets = useSafeAreaInsets();
 
@@ -68,6 +81,11 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   // row arrives once via the initial load, then realtime
   // INSERT/UPDATE/DELETE keep the unread tally fresh.
   //
+  // Counts go to chatBadgeStore, not ChatStack state: a state update here
+  // re-rendered the whole stack (and every mounted chat screen, since this
+  // app does not freeze screens) once per incoming message. The old 500 ms +
+  // idle debounce cut the redraws but held the badge back during a burst.
+  //
   // Read the banned list through a ref inside the subscription handler so a
   // change to `bannedUsers` (array identity changes on every localState
   // update) does NOT tear down and re-create the realtime channel. Each
@@ -76,21 +94,8 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   bannedUsersRef.current = bannedUsers;
 
   useEffect(() => {
-    if (!user?.id || !appdatabase) {
-      setunreadcount(0);
-      return;
-    }
-
-    let totalUnread = 0;
-    const unreadCounts = new Map();
-
-    const recalcUnread = () => {
-      totalUnread = Array.from(unreadCounts.values()).reduce((sum, count) => sum + count, 0);
-      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
-      unreadDebounceRef.current = setTimeout(() => {
-        requestIdleCallback(() => setunreadcount(totalUnread), { timeout: 1000 });
-      }, 500);
-    };
+    clearDmUnread();
+    if (!user?.id || !appdatabase) return;
 
     const handleUpsert = (chatData) => {
       if (!chatData || !chatData.partnerId) return;
@@ -106,17 +111,14 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         resetUnreadCount(user.id, chatPartnerId).catch((error) => {
           console.error("Error resetting unread count:", error);
         });
-        unreadCounts.set(chatPartnerId, 0);
-      } else {
-        unreadCounts.set(chatPartnerId, isBlocked ? 0 : rawUnread);
       }
 
-      recalcUnread();
+      setDmUnread(chatPartnerId, isBlocked ? 0 : rawUnread);
     };
 
     const handleRemove = (partnerId) => {
-      unreadCounts.delete(partnerId);
-      recalcUnread();
+      if (!partnerId) return;
+      removeDmUnread(partnerId);
     };
 
     const unsubscribe = subscribeToChatMetaShared(user.id, {
@@ -126,7 +128,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
 
     return () => {
       unsubscribe();
-      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current);
+      clearDmUnread();
     };
     // bannedUsers intentionally omitted: read via bannedUsersRef (see above).
   }, [user?.id, appdatabase]);
@@ -137,6 +139,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
   // /activeGroupChats presence are unaffected. mirrorGroupMetaToSupabase
   // tails those writes into this table.
   useEffect(() => {
+    clearGroupUnread();
     if (!user?.id || !appdatabase) {
       setGroups([]);
       setGroupsLoading(false);
@@ -146,27 +149,32 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     setGroupsLoading(true);
     const groupsMap = new Map();
     let reconnectTimer = null;
+    let flushTimer = null;
+    let listShown = false; // the first load has been painted
 
     const flushGroups = () => {
-      const sortedGroups = Array.from(groupsMap.values()).sort(
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      listShown = true;
+      setGroups(Array.from(groupsMap.values()).sort(
         (a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp
-      );
-      setGroups(sortedGroups);
-      const totalGroupUnread = sortedGroups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
-      setGroupUnreadCount(totalGroupUnread);
+      ));
     };
 
-    const recalcAndSetState = () => {
-      if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
-      groupDebounceRef.current = setTimeout(() => {
-        requestIdleCallback(flushGroups, { timeout: 1000 });
-      }, 300);
+    // The badge updates per row (chatBadgeStore, cheap); the list is redrawn
+    // at most every GROUPS_FLUSH_MS. This used to restart a 300 ms timer on
+    // every row, so a busy group kept the list (and the badge) from updating
+    // until it went quiet. Rows that arrive before the first load is painted
+    // wait for it.
+    const scheduleGroupsFlush = () => {
+      if (!listShown || flushTimer) return;
+      flushTimer = setTimeout(flushGroups, GROUPS_FLUSH_MS);
     };
 
-    // Drop the skeleton with whatever rows are in hand. Flush first so the
-    // list doesn't flash "no groups" while the 300 ms debounce is pending.
+    // Drop the skeleton with whatever rows are in hand.
     const finishLoading = () => {
-      if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
       flushGroups();
       setGroupsLoading(false);
     };
@@ -192,12 +200,15 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
         // of the groups list.
         muted: !!g.muted,
       });
-      recalcAndSetState();
+      setGroupUnread(g.groupId, g.unreadCount || 0);
+      scheduleGroupsFlush();
     };
 
     const handleRemove = (groupId) => {
+      if (!groupId) return;
       groupsMap.delete(groupId);
-      recalcAndSetState();
+      removeGroupUnread(groupId);
+      scheduleGroupsFlush();
     };
 
     const unsubscribe = subscribeToGroupMetaShared(user.id, {
@@ -231,12 +242,13 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       clearTimeout(loadingFallback);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       setGroupsReconnecting(false);
-      if (groupDebounceRef.current) clearTimeout(groupDebounceRef.current);
+      if (flushTimer) clearTimeout(flushTimer);
+      clearGroupUnread();
     };
   }, [user?.id, appdatabase]);
 
   // ✅ COST-OPTIMIZED: No re-fetch on navigation return
-  // Listeners update state continuously via debounce — state is always current
+  // Listeners update state continuously — state is always current
   // Removed 2x full get() calls that fired every time user navigated back
   const handleNavigationStateChange = useCallback((e) => {
     const state = e?.data?.state;
@@ -245,7 +257,10 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     isInChildScreenRef.current = currentRoute !== 'GroupChat';
   }, []);
 
+  const screenListeners = useMemo(() => ({ state: handleNavigationStateChange }), [handleNavigationStateChange]);
+
   const [onlineUsersVisible, setOnlineUsersVisible] = useState(false);
+  const openOnlineUsers = useCallback(() => setOnlineUsersVisible(true), []);
 
   const getGroupChatOptions = useCallback(({ navigation }) => ({
     // Show "Community Chat" title only when NOT logged in
@@ -262,103 +277,122 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
     headerRight: () => (
       <CommunityChatHeader
         selectedTheme={selectedTheme}
-        unreadcount={unreadcount}
-        setunreadcount={setunreadcount}
-        groupUnreadCount={groupUnreadCount}
-        setGroupUnreadCount={setGroupUnreadCount}
         triggerHapticFeedback={triggerHapticFeedback}
-        onOnlineUsersPress={() => setOnlineUsersVisible(true)}
+        onOnlineUsersPress={openOnlineUsers}
       />
     ),
     headerRightContainerStyle: {
       paddingRight: 0,
       marginRight: 0,
     },
-  }), [selectedTheme, unreadcount, setunreadcount, groupUnreadCount, setGroupUnreadCount, triggerHapticFeedback, user?.id, t]);
+  }), [selectedTheme, triggerHapticFeedback, openOnlineUsers, user?.id, t]);
+
+  const inboxOptions = useMemo(() => ({ title: t('misc.inbox') }), [t]);
+  const groupsOptions = useMemo(() => ({ title: t('chat.groups') }), [t]);
+  const blockedUsersOptions = useMemo(() => ({ title: t('chat.blocked_users') }), [t]);
+  const imageViewerOptions = useMemo(() => ({ title: t('inbox.image_viewer_title') }), [t]);
+
+  // Screen render functions are memoized on purpose. React Navigation skips
+  // re-rendering a screen only when its render function is the same one as
+  // last time; inline arrows here were new on every ChatStack render, so
+  // every mounted chat screen re-rendered with it (no enableFreeze in this
+  // app) — the public chat under the Inbox, the DM screen itself.
+  const renderGroupChat = useCallback(() => (
+    <ChatScreen
+      {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, onlineUsersVisible, setOnlineUsersVisible }}
+    />
+  ), [selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, triggerHapticFeedback, onlineUsersVisible]);
+
+  const renderInbox = useCallback(
+    (props) => <InboxScreen {...props} bannedUsers={bannedUsers} />,
+    [bannedUsers]
+  );
+
+  const renderGroups = useCallback(
+    (props) => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} groupsReconnecting={groupsReconnecting} />,
+    [groups, groupsLoading, groupsReconnecting]
+  );
+
+  const renderGroupChatDetail = useCallback((props) => <GroupChatScreen {...props} />, []);
+
+  const renderBlockedUsers = useCallback(
+    (props) => <BlockedUsersScreen {...props} bannedUsers={bannedUsers} />,
+    [bannedUsers]
+  );
+
+  const getPrivateChatOptions = useCallback(({ route }) => ({
+    headerTitle: () => (
+      <PrivateChatHeader
+        // New header per player, so nothing from the previous chat carries over.
+        key={route.params?.selectedUser?.senderId || 'none'}
+        selectedUser={route.params?.selectedUser}
+        selectedTheme={selectedTheme}
+        bannedUsers={bannedUsers}
+        isDrawerVisible={isDrawerVisible}
+        setIsDrawerVisible={setIsDrawerVisible}
+      />
+    ),
+  }), [selectedTheme, bannedUsers, isDrawerVisible]);
+
+  const renderPrivateChat = useCallback((props) => (
+    <PrivateChatScreen
+      // New screen per player: params changing in place (a quick second tap)
+      // left the previous player's state behind.
+      key={props.route?.params?.selectedUser?.senderId || 'none'}
+      {...props}
+      bannedUsers={bannedUsers}
+      isDrawerVisible={isDrawerVisible}
+      setIsDrawerVisible={setIsDrawerVisible}
+    />
+  ), [bannedUsers, isDrawerVisible]);
 
   return (
-    <Stack.Navigator screenOptions={headerOptions} screenListeners={{ state: handleNavigationStateChange }}>
+    <Stack.Navigator screenOptions={headerOptions} screenListeners={screenListeners}>
       <Stack.Screen
         name="GroupChat"
         options={getGroupChatOptions}
       >
-        {() => (
-          <ChatScreen
-            {...{ selectedTheme, setChatFocused, modalVisibleChatinfo, setModalVisibleChatinfo, bannedUsers, setBannedUsers, triggerHapticFeedback, unreadcount, setunreadcount, onlineUsersVisible, setOnlineUsersVisible }}
-          />
-        )}
+        {renderGroupChat}
       </Stack.Screen>
 
-      {/* ✅ Optimized: Pass `chats` & `setChats` via `screenProps` instead of inline function */}
+      {/* InboxScreen manages its own state — only needs bannedUsers */}
       <Stack.Screen
         name="Inbox"
-        options={{ title: t('misc.inbox') }}
+        options={inboxOptions}
       >
-        {props => <InboxScreen {...props} bannedUsers={bannedUsers} />}
+        {renderInbox}
       </Stack.Screen>
 
       <Stack.Screen
         name="Groups"
-        options={{ title: t('chat.groups') }}
+        options={groupsOptions}
       >
-        {props => <GroupsScreen {...props} groups={groups} setGroups={setGroups} groupsLoading={groupsLoading} groupsReconnecting={groupsReconnecting} />}
+        {renderGroups}
       </Stack.Screen>
 
       <Stack.Screen
         name="GroupChatDetail"
-        options={({ route, navigation }) => ({
-          headerBackVisible: true,
-          headerTitle: () => {
-            // This will be set dynamically by GroupChatScreen
-            return null;
-          },
-          headerRight: () => {
-            // This will be set dynamically by GroupChatScreen
-            return null;
-          },
-        })}
+        options={groupChatDetailOptions}
       >
-        {(props) => <GroupChatScreen {...props} />}
+        {renderGroupChatDetail}
       </Stack.Screen>
 
       <Stack.Screen
         name="BlockedUsers"
-        options={{ title: t('chat.blocked_users') }} >
-        {props => <BlockedUsersScreen {...props} bannedUsers={bannedUsers} />}
+        options={blockedUsersOptions} >
+        {renderBlockedUsers}
       </Stack.Screen>
 
       <Stack.Screen
         name="PrivateChat"
-        options={({ route }) => ({
-          headerTitle: () => (
-            <PrivateChatHeader
-              // New header per player, so nothing from the previous chat carries over.
-              key={route.params?.selectedUser?.senderId || 'none'}
-              selectedUser={route.params?.selectedUser}
-              selectedTheme={selectedTheme}
-              bannedUsers={bannedUsers}
-              isDrawerVisible={isDrawerVisible}
-              setIsDrawerVisible={setIsDrawerVisible}
-            />
-          ),
-        })}
+        options={getPrivateChatOptions}
       >
-        {(props) => (
-          <PrivateChatScreen
-            // New screen per player: params changing in place (a quick second tap)
-            // left the previous player's state behind.
-            key={props.route?.params?.selectedUser?.senderId || 'none'}
-            {...props}
-            bannedUsers={bannedUsers}
-            isDrawerVisible={isDrawerVisible}
-            setIsDrawerVisible={setIsDrawerVisible}
-          />
-        )}
+        {renderPrivateChat}
       </Stack.Screen>
       <Stack.Screen
         name="ImageViewerScreenChat"
         component={ImageViewerScreenChat}
-        options={{ title: t('inbox.image_viewer_title') }}
+        options={imageViewerOptions}
       />
 
 
@@ -366,7 +400,7 @@ export const ChatStack = ({ selectedTheme, setChatFocused, modalVisibleChatinfo,
       <Stack.Screen
         name="AdminDashboard"
         component={AdminDashboard}
-        options={{ title: 'Admin Dashboard' }}
+        options={ADMIN_DASHBOARD_OPTIONS}
       />
     </Stack.Navigator>
   );

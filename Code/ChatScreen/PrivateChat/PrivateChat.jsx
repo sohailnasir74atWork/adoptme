@@ -15,7 +15,7 @@ import PrivateMessageList from './PrivateMessageList';
 import { useGlobalState } from '../../GlobelStats';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { clearActiveChat, useOnlineStatus, setActiveChat, updateLastRead, flushLastRead, useOtherLastRead } from '../utils';
-import { resetUnreadCount } from '../../Supabase/chatMetaBackend';
+import { resetUnreadCount, setActiveChatPartner, clearActiveChatPartner } from '../../Supabase/chatMetaBackend';
 import {
   loadPrivateMessages,
   loadPrivateMessagesSince,
@@ -1024,6 +1024,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       setActiveChat(user.id, chatKey).then(() => {
         resetUnreadCount(user.id, selectedUserId); // fire-and-forget
       });
+      // While this chat is open the Inbox and the header badge show it as
+      // read, even as the partner's messages raise the server count.
+      setActiveChatPartner(user.id, selectedUserId);
 
       // ✅ Mark messages as read — but only if the user has read receipts ON.
       // Otherwise the other side would see a blue tick on their messages
@@ -1045,8 +1048,12 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         // Phantom-badge fix: messages received while we were viewing bumped
         // our unread_count server-side. Clear it once on blur, but only if a
         // partner message actually arrived — keeps this to ~1 extra write per
-        // visit (and zero for quiet visits).
-        if (unreadWhileFocusedRef.current) {
+        // visit (and zero for quiet visits). clearActiveChatPartner also
+        // zeroes the cached Inbox row now, and reports whether the server
+        // still holds unread for this chat (e.g. a message that landed
+        // between the focus reset and the realtime subscription).
+        const serverHasUnread = clearActiveChatPartner(user.id, selectedUserId);
+        if (unreadWhileFocusedRef.current || serverHasUnread) {
           unreadWhileFocusedRef.current = false;
           resetUnreadCount(user.id, selectedUserId); // fire-and-forget
         }
@@ -1054,6 +1061,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     }, [user?.id, selectedUserId, chatKey, localState?.isPro, localState?.showReadReceipts])
   );
   // console.log(selectedUser.senderId)
+
+  // Stable so PrivateMessageList (memo) doesn't re-render on every keystroke.
+  const handleReply = useCallback((message) => setReplyTo(message), []);
+  const handleCancelReply = useCallback(() => setReplyTo(null), []);
 
   // Handle refresh
   const handleRefresh = useCallback(async () => {
@@ -1090,7 +1101,13 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         gapFillInFlight = true;
         loadPrivateMessagesSince(chatKey, cursorOf(messagesRef.current[0]), { limit: 50 })
           .then((rows) => {
-            if (active && rows.length > 0) setMessages(prev => mergeIncoming(prev, rows));
+            if (!active || rows.length === 0) return;
+            // Partner rows fetched here raised the server unread count just
+            // like realtime ones: the blur handler must reset it.
+            if (rows.some(m => m?.senderId && m.senderId !== myUserId)) {
+              unreadWhileFocusedRef.current = true;
+            }
+            setMessages(prev => mergeIncoming(prev, rows));
           })
           .catch((e) => console.warn('[PrivateChat] gap-fill failed:', e?.message))
           .finally(() => { gapFillInFlight = false; });
@@ -1308,7 +1325,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 isBanned={isBanned}
                 selectedUser={selectedUser}
                 user={user}
-                onReply={(message) => setReplyTo(message)}
+                onReply={handleReply}
                 onDeleteMessage={handleDeleteMessage}
                 canRate={canRate}
                 hasRated={hasRated}
@@ -1350,7 +1367,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
               safeChatMode={safeChatMode}
               bannedUsers={bannedUsers}
               replyTo={replyTo}
-              onCancelReply={() => setReplyTo(null)}
+              onCancelReply={handleCancelReply}
               input={input}
               setInput={setInput}
               selectedTheme={selectedTheme}

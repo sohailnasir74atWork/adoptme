@@ -38,188 +38,73 @@ import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
 // Above this many pets a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
 
+// Calendar day in local time; two messages share a date separator when equal.
+const dayKey = (timestamp) => {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};
 
+const dismissKeyboard = () => Keyboard.dismiss();
+// No optimistic bubbles in this chat (a sent message appears when the
+// realtime insert lands with its server id), so the server id is the key.
+const messageKey = (item, index) => item?.id || `msg-${index}`;
 
-const PrivateMessageList = ({
-  messages,
-  userId,
-  user,
-  selectedUser,
-  handleLoadMore,
-  refreshing,
-  onRefresh,
-  isBanned,
-  onReply,
-  onDeleteMessage,
-  onReportSubmit,
-  loading,
-  canRate,
-  hasRated,
-  setShowRatingModal,
-  isPaginating,
-  chatKey, // 👈 Add chatKey to construct messagePath for private messages
-  otherLastRead, // 👈 Other user's lastRead timestamp for read receipts
-  onTradeInvite, // "Trade in game" line in the safety strip (null when the chat is closed)
+// Reply preview text (matching group chat)
+const replyPreviewText = (replyTo, t) => {
+  if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
+  if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
+    return replyTo.text;
+  }
+  if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
+    return t('chat.reply_preview_image');
+  }
+  if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
+    const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
+    return count > 0 ? t('chat.reply_preview_items', { count }) : t('chat.reply_preview_items_none');
+  }
+  return t('chat.deleted_message_placeholder');
+};
+
+const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
+
+// One message bubble plus its date separator. Memoized on simple props: a
+// new message, a read receipt or a keystroke in the input used to re-render
+// every bubble on screen, each with its popup menu and time formatting.
+// receipt: null (no tick) | 'read' | 'sent'. dateLabel: null = no separator.
+// bubbleColor / textColor are plain strings: the profile cache returns a
+// freshly parsed object on every read, which would defeat the memo.
+const PrivateMessageRow = memo(({
+  item, isMyMessage, highlighted, receipt, dateLabel, bubbleColor, textColor,
+  isDarkMode, c, styles, fruitColors, canDelete, t, actions,
 }) => {
-  const { theme, isAdmin, api, freeTranslation } = useGlobalState();
-  const isDarkMode = theme === 'dark';
-  const c = getThemeColors(isDarkMode);
-  // ✅ Memoize styles
-  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+  // Template messages carry their id in `tpl`, so render the phrase in the
+  // READER's language instead of the sender's. Rows written before `tpl`
+  // existed are matched back by their canonical English, which is what the
+  // drawer has always sent. Anything unrecognised renders as stored.
+  const tplId = item.tpl || (item.text ? TEMPLATE_ID_BY_TEXT[item.text] : null);
+  let displayText = item.text;
+  if (tplId === GAME_ID_TEMPLATE_ID) {
+    displayText = t('chat.game_id_body', {
+      name: item.text,
+      defaultValue: '🎮 My game ID: {{name}}',
+    });
+  } else if (tplId && TEMPLATE_BY_ID[tplId]) {
+    displayText = t(TEMPLATE_BY_ID[tplId].key, { defaultValue: TEMPLATE_BY_ID[tplId].en });
+  }
 
-  const fruitColors = useMemo(
-    () => ({
-      wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
-      name: isDarkMode ? '#f9fafb' : '#111827',
-      value: c.textSecondary,
-      divider: isDarkMode ? '#ffffff22' : '#00000011',
-      totalLabel: c.textSecondary,
-      totalValue: isDarkMode ? '#f97373' : '#b91c1c',
-    }),
-    [isDarkMode],
-  );
-  const { t } = useTranslation();
-  const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
+  // fruits helpers
+  const fruits = Array.isArray(item.fruits) ? item.fruits : [];
+  const hasFruits = fruits.length > 0;
+  // Past 9 pets the single-column list grows taller than the screen, so
+  // switch to two columns — 18 pets then occupy the same 9 rows.
+  const isCompactFruits = fruits.length > COMPACT_FRUITS_THRESHOLD;
+  const totalFruitValue = hasFruits
+    ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
+    : 0;
 
-  // (fruit-name masking moved into useMessageTranslation)
-
-
-  const [selectedMessage, setSelectedMessage] = useState(null);
-  const [showReportPopup, setShowReportPopup] = useState(false);
-  const { triggerHapticFeedback } = useHaptic();
-
-  // Get reply preview text (matching group chat)
-  const getReplyPreview = useCallback((replyTo) => {
-    if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
-    if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
-      return replyTo.text;
-    }
-    if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
-      return t('chat.reply_preview_image');
-    }
-    if (replyTo.hasFruits || (Array.isArray(replyTo.fruits) && replyTo.fruits.length > 0)) {
-      const count = replyTo.fruitsCount || (Array.isArray(replyTo.fruits) ? replyTo.fruits.length : 0);
-      return count > 0 ? t('chat.reply_preview_items', { count }) : t('chat.reply_preview_items_none');
-    }
-    return t('chat.deleted_message_placeholder');
-  }, [t]);
-  const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
-  const navigation = useNavigation()
-
-
-  // ✅ Memoize handleCopy
-  const handleCopy = useCallback((message) => {
-    if (!message || !message.text) return;
-    Clipboard.setString(message.text);
-    triggerHapticFeedback('impactLight');
-    showSuccessMessage(t('chat.success'), t('chat.message_copied'));
-  }, [triggerHapticFeedback, t]);
-
-  // ✅ Memoize filteredMessages. Dedup-by-id guards against duplicate keys
-  // reaching the FlatList (can happen briefly when realtime onInsert races
-  // with pagination, or if the channel resubscribes and replays the buffer).
-  const filteredMessages = useMemo(() => {
-    if (!Array.isArray(messages)) return [];
-    const base = (isBanned && userId)
-      ? messages.filter((message) => message?.senderId === userId)
-      : messages;
-    const seen = new Set();
-    const out = [];
-    for (const m of base) {
-      const id = m?.id != null ? String(m.id) : null;
-      if (id && seen.has(id)) continue;
-      if (id) seen.add(id);
-      out.push(m);
-    }
-    return out;
-  }, [messages, isBanned, userId]);
-
-  // ✅ PERF: Store filteredMessages in a ref so renderMessage doesn't depend on the array
-  const filteredMessagesRef = useRef(filteredMessages);
-  filteredMessagesRef.current = filteredMessages;
-
-  // ✅ Memoize handleReport
-  const handleReport = useCallback((message) => {
-    if (!message) return;
-    triggerHapticFeedback('impactLight');
-    setSelectedMessage(message);
-    setShowReportPopup(true);
-  }, [triggerHapticFeedback]);
-
-  // ✅ Memoize handleReportSuccess - called when report succeeds
-  const handleReportSuccess = useCallback((reportedMessageId) => {
-    if (!reportedMessageId) return;
-    triggerHapticFeedback('impactLight');
-    // Call parent's onReportSubmit if provided
-    if (onReportSubmit && typeof onReportSubmit === 'function' && selectedMessage) {
-      onReportSubmit(selectedMessage, 'reported');
-    }
-  }, [onReportSubmit, selectedMessage, triggerHapticFeedback]);
-  // console.log(selectedUserId === userId)
-
-
-
-  // Translation lives in Helper/useMessageTranslation.js (2026-09-02) — one
-  // implementation shared by community, group and private chat, all drawing on
-  // the same daily allowance from useLocalState. Behaviour here is unchanged.
-  const { handleTranslate } = useMessageTranslation();
-
-  // ✅ Date separator helper
-  const getDateLabel = useCallback((timestamp) => {
-    if (!timestamp) return '';
-    const msgDate = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (msgDate.toDateString() === today.toDateString()) return t('chat.today', { defaultValue: 'Today' });
-    if (msgDate.toDateString() === yesterday.toDateString()) return t('chat.yesterday', { defaultValue: 'Yesterday' });
-    return msgDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }, [t]);
-
-  // ✅ PERF: Store scrollToMessage and highlightedMessageId in refs so renderMessage stays stable
-  const scrollToMessageRef = useRef(null);
-  const highlightedMessageIdRef = useRef(null);
-
-  // ✅ Memoize renderMessage
-  const renderMessage = useCallback(({ item, index }) => {
-    const scrollToMessage = scrollToMessageRef.current;
-    const highlightedMessageId = highlightedMessageIdRef.current;
-    // ✅ Safety checks
-    if (!item || typeof item !== 'object') return null;
-
-    const isMyMessage = item.senderId === userId;
-    const isHighlighted = highlightedMessageId === item.id;
-
-    // Template messages carry their id in `tpl`, so render the phrase in the
-    // READER's language instead of the sender's. Rows written before `tpl`
-    // existed are matched back by their canonical English, which is what the
-    // drawer has always sent. Anything unrecognised renders as stored.
-    const tplId = item.tpl || (item.text ? TEMPLATE_ID_BY_TEXT[item.text] : null);
-    let displayText = item.text;
-    if (tplId === GAME_ID_TEMPLATE_ID) {
-      displayText = t('chat.game_id_body', {
-        name: item.text,
-        defaultValue: '🎮 My game ID: {{name}}',
-      });
-    } else if (tplId && TEMPLATE_BY_ID[tplId]) {
-      displayText = t(TEMPLATE_BY_ID[tplId].key, { defaultValue: TEMPLATE_BY_ID[tplId].en });
-    }
-
-    // fruits helpers
-    const fruits = Array.isArray(item.fruits) ? item.fruits : [];
-    const hasFruits = fruits.length > 0;
-    // Past 9 pets the single-column list grows taller than the screen, so
-    // switch to two columns — 18 pets then occupy the same 9 rows.
-    const isCompactFruits = fruits.length > COMPACT_FRUITS_THRESHOLD;
-    const totalFruitValue = hasFruits
-      ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
-      : 0;
-
-    const profile = getCachedProfile(item.senderId);
-    const bubbleBg = profile?.chatBubbleBg;
-
-    const msgBubble = (
+  return (
+    <>
       <View
         style={{
           alignSelf: isMyMessage ? 'flex-end' : 'flex-start',
@@ -230,10 +115,10 @@ const PrivateMessageList = ({
       >
         {/* WhatsApp-style bubble — no avatar */}
         <View style={{
-          backgroundColor: isHighlighted
+          backgroundColor: highlighted
             ? (isDarkMode ? '#ffffff30' : '#00000015')
-            : bubbleBg
-              ? (isDarkMode ? bubbleBg.darkColor : bubbleBg.color)
+            : bubbleColor
+              ? bubbleColor
               : isMyMessage
                 ? (isDarkMode ? '#0B5E3F' : '#DCF8C6')
                 : (isDarkMode ? '#1E293B' : '#FFFFFF'),
@@ -253,7 +138,7 @@ const PrivateMessageList = ({
           {item.replyTo && (
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => scrollToMessage && scrollToMessage(item.replyTo.id)}
+              onPress={() => actions.scrollTo(item.replyTo.id)}
               style={{
                 backgroundColor: isDarkMode ? '#ffffff15' : '#00000008',
                 borderLeftWidth: 2,
@@ -265,7 +150,7 @@ const PrivateMessageList = ({
               }}
             >
               <Text style={{ fontSize: 12, color: c.textSecondary }} numberOfLines={1}>
-                {t('chat.replying_to_text', { text: getReplyPreview(item.replyTo) })}
+                {t('chat.replying_to_text', { text: replyPreviewText(item.replyTo, t) })}
               </Text>
             </TouchableOpacity>
           )}
@@ -292,12 +177,7 @@ const PrivateMessageList = ({
                     <TouchableOpacity
                       key={`img-${imgIndex}`}
                       activeOpacity={0.8}
-                      onPress={() =>
-                        navigation.navigate('ImageViewerScreenChat', {
-                          images: imageArray,
-                          initialIndex: imgIndex,
-                        })
-                      }
+                      onPress={() => actions.openImages(imageArray, imgIndex)}
                     >
                       <Image resizeMethod="resize"
                         source={{ uri: imageUri }}
@@ -315,7 +195,7 @@ const PrivateMessageList = ({
             );
           })()}
           <MenuTrigger
-            onLongPress={() => triggerHapticFeedback('impactMedium')}
+            onLongPress={() => actions.haptic('impactMedium')}
             customStyles={{ triggerTouchable: { activeOpacity: 1 } }}
           >
             {/* Optional image message */}
@@ -437,15 +317,15 @@ const PrivateMessageList = ({
                 sender's. `displayText` falls back to the stored English for
                 free-typed messages and for rows written before `tpl` existed. */}
             {!!displayText && (
-              isMultiColorText(profile?.chatTextColor)
+              isMultiColorText(textColor)
                 ? <RainbowText
-                    colors={getMultiColorPalette(profile.chatTextColor)}
+                    colors={getMultiColorPalette(textColor)}
                     style={[{ fontSize: 12, color: c.text, lineHeight: 20 }]}
                   >{displayText}</RainbowText>
                 : <Text
                     style={[
                       { fontSize: 12, color: c.text, lineHeight: 20 },
-                      profile?.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile?.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
+                      textColor ? { color: getSafeTextColor(textColor, bubbleColor) } : null,
                     ]}
                   >
                     {displayText}
@@ -461,42 +341,23 @@ const PrivateMessageList = ({
               optionText: styles.menuOptionText,
             }}
           >
-            <MenuOption onSelect={() => handleCopy(item)}>
+            <MenuOption onSelect={() => actions.copy(item)}>
               <Text style={styles.menuOptionText}>{t('chat.copy')}</Text>
             </MenuOption>
-            <MenuOption onSelect={() => handleTranslate(item)}>
+            <MenuOption onSelect={() => actions.translate(item)}>
               <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
             </MenuOption>
-            <MenuOption onSelect={() => {
-              if (onReply) {
-                triggerHapticFeedback('impactLight');
-                onReply(item);
-              }
-            }}>
+            <MenuOption onSelect={() => actions.reply(item)}>
               <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
             </MenuOption>
             {/* Delete — admin-only; normal users cannot delete messages (not even their own) */}
-            {isAdmin && onDeleteMessage && (
-              <MenuOption onSelect={() => {
-                triggerHapticFeedback('impactMedium');
-                Alert.alert(
-                  t('chat.delete', { defaultValue: 'Delete' }),
-                  t('chat.delete_message_confirmation', { defaultValue: 'Delete this message? It will be removed for both of you.' }),
-                  [
-                    { text: t('chat.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-                    {
-                      text: t('chat.delete', { defaultValue: 'Delete' }),
-                      style: 'destructive',
-                      onPress: () => onDeleteMessage(item.id),
-                    },
-                  ]
-                );
-              }}>
+            {canDelete && (
+              <MenuOption onSelect={() => actions.deleteMessage(item)}>
                 <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete')}</Text>
               </MenuOption>
             )}
             {!isMyMessage && (
-              <MenuOption onSelect={() => handleReport(item)}>
+              <MenuOption onSelect={() => actions.report(item)}>
                 <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
               </MenuOption>
             )}
@@ -517,11 +378,11 @@ const PrivateMessageList = ({
               }) : ''}
             </Text>
             {/* ✅ WhatsApp-style read receipts for own messages */}
-            {isMyMessage && (localState?.showReadReceipts ?? true) && (
+            {receipt && (
               <Icon
                 name="checkmark-done"
                 size={16}
-                color={otherLastRead && item.timestamp && Number(item.timestamp) <= Number(otherLastRead)
+                color={receipt === 'read'
                   ? (isDarkMode ? '#7FDBFF' : '#1E88E5')         // blue = read (brighter in dark)
                   : (isDarkMode ? '#ffffff77' : '#00000044')}    // grey = unread
                 style={{ marginLeft: 2 }}
@@ -530,27 +391,142 @@ const PrivateMessageList = ({
           </View>
         </View>
       </View>
-    );
-
-    // Date separator: in inverted list, next item in array is older
-    const nextMsg = filteredMessagesRef.current[index + 1];
-    const showDateSep = !nextMsg || getDateLabel(item.timestamp) !== getDateLabel(nextMsg.timestamp);
-
-    return (
-      <>
-        {msgBubble}
-        {showDateSep && (
-          <View style={{ alignItems: 'center', marginVertical: 6 }}>
-            <View style={{ backgroundColor: c.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 11, color: c.textSecondary, fontWeight: '600' }}>
-                {getDateLabel(item.timestamp)}
-              </Text>
-            </View>
+      {dateLabel !== null && (
+        <View style={{ alignItems: 'center', marginVertical: 6 }}>
+          <View style={{ backgroundColor: c.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 11, color: c.textSecondary, fontWeight: '600' }}>
+              {dateLabel}
+            </Text>
           </View>
-        )}
-      </>
-    );
-  }, [userId, selectedUser, user, styles, fruitColors, handleCopy, handleTranslate, handleReport, onReply, navigation, t, getDateLabel, getReplyPreview, isDarkMode, otherLastRead, localState?.showReadReceipts]);
+        </View>
+      )}
+    </>
+  );
+});
+
+const PrivateMessageList = ({
+  messages,
+  userId,
+  user,
+  selectedUser,
+  handleLoadMore,
+  refreshing,
+  onRefresh,
+  isBanned,
+  onReply,
+  onDeleteMessage,
+  onReportSubmit,
+  loading,
+  canRate,
+  hasRated,
+  setShowRatingModal,
+  isPaginating,
+  chatKey, // 👈 Add chatKey to construct messagePath for private messages
+  otherLastRead, // 👈 Other user's lastRead timestamp for read receipts
+  onTradeInvite, // "Trade in game" line in the safety strip (null when the chat is closed)
+}) => {
+  const { theme, isAdmin, api, freeTranslation } = useGlobalState();
+  const isDarkMode = theme === 'dark';
+  const c = useMemo(() => getThemeColors(isDarkMode), [isDarkMode]);
+  // ✅ Memoize styles
+  const styles = useMemo(() => getStyles(isDarkMode), [isDarkMode]);
+
+  const fruitColors = useMemo(
+    () => ({
+      wrapperBg: isDarkMode ? '#0f172a55' : '#e5e7eb55',
+      name: isDarkMode ? '#f9fafb' : '#111827',
+      value: c.textSecondary,
+      divider: isDarkMode ? '#ffffff22' : '#00000011',
+      totalLabel: c.textSecondary,
+      totalValue: isDarkMode ? '#f97373' : '#b91c1c',
+    }),
+    [isDarkMode, c],
+  );
+  const { t } = useTranslation();
+  const deviceLanguage = useMemo(() => getDeviceLanguage(), []);
+
+  // (fruit-name masking moved into useMessageTranslation)
+
+
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [showReportPopup, setShowReportPopup] = useState(false);
+  const { triggerHapticFeedback } = useHaptic();
+
+  const { canTranslate, incrementTranslationCount, getRemainingTranslationTries, localState } = useLocalState();
+  const navigation = useNavigation()
+
+
+  // ✅ Memoize handleCopy
+  const handleCopy = useCallback((message) => {
+    if (!message || !message.text) return;
+    Clipboard.setString(message.text);
+    triggerHapticFeedback('impactLight');
+    showSuccessMessage(t('chat.success'), t('chat.message_copied'));
+  }, [triggerHapticFeedback, t]);
+
+  // ✅ Memoize filteredMessages. Dedup-by-id guards against duplicate keys
+  // reaching the FlatList (can happen briefly when realtime onInsert races
+  // with pagination, or if the channel resubscribes and replays the buffer).
+  const filteredMessages = useMemo(() => {
+    if (!Array.isArray(messages)) return [];
+    const base = (isBanned && userId)
+      ? messages.filter((message) => message?.senderId === userId)
+      : messages;
+    const seen = new Set();
+    const out = [];
+    for (const m of base) {
+      const id = m?.id != null ? String(m.id) : null;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      out.push(m);
+    }
+    return out;
+  }, [messages, isBanned, userId]);
+
+  // For scrollToMessage (a stable callback). renderMessage reads the array
+  // directly, so the date separators follow pages loaded below.
+  const filteredMessagesRef = useRef(filteredMessages);
+  filteredMessagesRef.current = filteredMessages;
+
+  // ✅ Memoize handleReport
+  const handleReport = useCallback((message) => {
+    if (!message) return;
+    triggerHapticFeedback('impactLight');
+    setSelectedMessage(message);
+    setShowReportPopup(true);
+  }, [triggerHapticFeedback]);
+
+  // ✅ Memoize handleReportSuccess - called when report succeeds
+  const handleReportSuccess = useCallback((reportedMessageId) => {
+    if (!reportedMessageId) return;
+    triggerHapticFeedback('impactLight');
+    // Call parent's onReportSubmit if provided
+    if (onReportSubmit && typeof onReportSubmit === 'function' && selectedMessage) {
+      onReportSubmit(selectedMessage, 'reported');
+    }
+  }, [onReportSubmit, selectedMessage, triggerHapticFeedback]);
+  // console.log(selectedUserId === userId)
+
+
+
+  // Translation lives in Helper/useMessageTranslation.js (2026-09-02) — one
+  // implementation shared by community, group and private chat, all drawing on
+  // the same daily allowance from useLocalState. Behaviour here is unchanged.
+  const { handleTranslate } = useMessageTranslation();
+
+  // ✅ Date separator helper
+  const getDateLabel = useCallback((timestamp) => {
+    if (!timestamp) return '';
+    const msgDate = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (msgDate.toDateString() === today.toDateString()) return t('chat.today', { defaultValue: 'Today' });
+    if (msgDate.toDateString() === yesterday.toDateString()) return t('chat.yesterday', { defaultValue: 'Yesterday' });
+    return msgDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }, [t]);
+
 
   // ✅ Add FlatList reference and scrollToMessage functionality
   const flatListRef = useRef(null);
@@ -581,9 +557,6 @@ const PrivateMessageList = ({
     }
   }, [t]);
 
-  // Keep refs in sync for renderMessage
-  scrollToMessageRef.current = scrollToMessage;
-  highlightedMessageIdRef.current = highlightedMessageId;
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -592,10 +565,96 @@ const PrivateMessageList = ({
     };
   }, []);
 
-  // ✅ Memoize keyExtractor
-  const keyExtractor = useCallback((item, index) => {
-    return item?.id || `msg-${index}`;
-  }, []);
+
+  // Latest handlers for the rows. `actions` keeps one identity for the life
+  // of the list, so it never breaks PrivateMessageRow's memo (onReply and
+  // friends used to be renderMessage dependencies).
+  const actionsRef = useRef(null);
+  actionsRef.current = {
+    copy: handleCopy,
+    translate: handleTranslate,
+    reply: (item) => {
+      if (onReply) {
+        triggerHapticFeedback('impactLight');
+        onReply(item);
+      }
+    },
+    deleteMessage: (item) => {
+      if (!onDeleteMessage) return;
+      triggerHapticFeedback('impactMedium');
+      Alert.alert(
+        t('chat.delete', { defaultValue: 'Delete' }),
+        t('chat.delete_message_confirmation', { defaultValue: 'Delete this message? It will be removed for both of you.' }),
+        [
+          { text: t('chat.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+          {
+            text: t('chat.delete', { defaultValue: 'Delete' }),
+            style: 'destructive',
+            onPress: () => onDeleteMessage(item.id),
+          },
+        ]
+      );
+    },
+    report: handleReport,
+    scrollTo: scrollToMessage,
+    openImages: (images, initialIndex) => navigation.navigate('ImageViewerScreenChat', { images, initialIndex }),
+    haptic: triggerHapticFeedback,
+  };
+  const actions = useMemo(() => ({
+    copy: (m) => actionsRef.current.copy(m),
+    translate: (m) => actionsRef.current.translate(m),
+    reply: (m) => actionsRef.current.reply(m),
+    deleteMessage: (m) => actionsRef.current.deleteMessage(m),
+    report: (m) => actionsRef.current.report(m),
+    scrollTo: (id) => actionsRef.current.scrollTo(id),
+    openImages: (images, i) => actionsRef.current.openImages(images, i),
+    haptic: (type) => actionsRef.current.haptic(type),
+  }), []);
+
+  const showReceipts = localState?.showReadReceipts ?? true;
+  const canDelete = !!(isAdmin && onDeleteMessage);
+
+  // FlatList calls this for every rendered cell whenever it re-renders, so it
+  // only works out the row's simple props; PrivateMessageRow skips the rows
+  // whose props did not change. Deliberately not a useCallback reading the
+  // list from a ref: it must see the current array, or a cell whose
+  // neighbour changed (an older page loaded below it) keeps a stale date
+  // separator.
+  const renderMessage = ({ item, index }) => {
+    if (!item || typeof item !== 'object') return null;
+
+    const isMyMessage = item.senderId === userId;
+    const isRead = !!(otherLastRead && item.timestamp && Number(item.timestamp) <= Number(otherLastRead));
+
+    // Cosmetics: still read from the cache on every list render so they stay
+    // fresh, but handed to the row as plain strings.
+    const profile = getCachedProfile(item.senderId);
+    const bubbleBg = profile?.chatBubbleBg;
+    const bubbleColor = bubbleBg ? ((isDarkMode ? bubbleBg.darkColor : bubbleBg.color) || null) : null;
+
+    // Date separator: in inverted list, next item in array is older
+    const nextMsg = filteredMessages[index + 1];
+    const showDateSep = !nextMsg || dayKey(item.timestamp) !== dayKey(nextMsg.timestamp);
+
+    return (
+      <PrivateMessageRow
+        item={item}
+        isMyMessage={isMyMessage}
+        highlighted={highlightedMessageId === item.id}
+        receipt={isMyMessage && showReceipts ? (isRead ? 'read' : 'sent') : null}
+        dateLabel={showDateSep ? getDateLabel(item.timestamp) : null}
+        bubbleColor={bubbleColor}
+        textColor={profile?.chatTextColor || null}
+        isDarkMode={isDarkMode}
+        c={c}
+        styles={styles}
+        fruitColors={fruitColors}
+        canDelete={canDelete}
+        t={t}
+        actions={actions}
+      />
+    );
+  };
 
   return (
     <View style={[styles.container]}>
@@ -610,13 +669,13 @@ const PrivateMessageList = ({
               ref={flatListRef}
               data={filteredMessages}
               removeClippedSubviews={false}
-              keyExtractor={keyExtractor}
+              keyExtractor={messageKey}
               renderItem={renderMessage}
               inverted
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.3}
-              onScroll={() => Keyboard.dismiss()}
-              onTouchStart={() => Keyboard.dismiss()}
+              onScrollBeginDrag={dismissKeyboard}
+              onTouchStart={dismissKeyboard}
               keyboardShouldPersistTaps="handled"
               maxToRenderPerBatch={10}
               windowSize={10}
