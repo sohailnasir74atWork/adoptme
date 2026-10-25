@@ -746,3 +746,59 @@ there too.
 
 **Security side-finding (not changed):** `banned_devices` and
 `banned_users_by_email` are still world-writable (see §6 for the role lock).
+
+---
+
+## 8. Cloud Functions runtime: Node 20 → Node 22 (2026-10-02)
+
+The 2026-10-02 `runStaffElections` deploy warned that the Node.js 20 runtime was
+deprecated on 2026-04-30 and is **decommissioned on 2026-10-30**, after which no
+deploy works without an upgrade. Done the same evening (18:49–19:26 UTC):
+
+- `functions/package.json`: `engines.node` 20 → **22**; `firebase-functions`
+  ^6.3.2 → **^7.4.0** (7.4.0 installed); `firebase-functions-test` ^3.1.0 → ^3.5.0.
+  `firebase-admin` stays at ^12.7.0 on purpose: it supports Node 22,
+  firebase-functions 7 accepts ^12, and the code uses none of the APIs removed in
+  admin 13 (legacy FCM `sendToDevice` / `sendMulticast` …) or admin 14 (Instance
+  ID, legacy namespace). Only `messaging().send` and `sendEachForMulticast` are used.
+- firebase-functions 7.0.0 breaking changes checked against the code: Node 16
+  dropped, `functions.config()` removed (never used here), TS 5 / ES2022 build,
+  v1 `Event` type renamed `LegacyEvent`. The `firebase-functions/v1` entry point
+  every module uses is unchanged (`runWith`, `pubsub.schedule`, `database.ref`,
+  `firestore.document`, `https`, `auth` all present), and all 37 live modules
+  load under 7.4.0 with the CLI's `FIREBASE_CONFIG`.
+- Tests: `npx jest __tests__/runStaffElections.cf.test.js` 10/10 on Node 22; the
+  full suite is at its baseline (205/206, `safeChat` and `App.test.tsx` failing
+  as before).
+- Rollout, every step through `./functions-deploy/deploy.sh` (never a bare
+  deploy): `runStaffElections` first (18:51 UTC, `nodejs22 ACTIVE`, first
+  scheduled run at 19:21 ok), then four batches: scheduled maintenance (11),
+  feeds / rosters / leaderboards (11, including the 2nd-gen
+  `updateTrustedTraders`), RTDB/Firestore triggers and mirrors (10; six of them
+  only updated on a second pass, the first attempt's error text was not
+  captured), push notifications (10). Final sweep: all 41 live functions report
+  `nodejs22`, none `nodejs20`. Nothing was deleted by the rollout.
+- `functions-deploy/deploy.sh`: its export self-check now runs with the same
+  `FIREBASE_CONFIG` / `GCLOUD_PROJECT` the CLI injects, because modules that call
+  `admin.database()` while loading (`clearPresenceNode` and others) failed the
+  check with "Can't determine Firebase Database URL".
+- Not deployed on purpose: `privatizeUserPII` / `privatizePostEmail` (cutover
+  only), the DANGER list in the script, and the already-deleted
+  `updateLeaderboardCacheManual`.
+
+### World Cup 2026 removed (2026-10-02, owner's request)
+
+`fetchWorldCupDataScheduled` (every 30 min) and `updateWorldCupLeaderboard`
+(hourly) had been no-ops since `/worldcup_enabled` went false ("skipping sync"
+on every run): about 72 wasted invocations a day. Deleted with
+`firebase functions:delete … --force`; their Cloud Scheduler jobs and Pub/Sub
+topics are gone (verified with `gcloud`). Removed from the repo:
+`functions/fetchWorldCupData.js`, `seedWorldCup.local.js`,
+`seedWorldCupDemoLeaderboard.local.js`, `setWorldCupFlag.local.js`,
+`WORLDCUP_FEATURE.md`, the exports in `functions/index.js`, the
+`worldCupEnabled` flag in `Code/GlobelStats.js` and the hidden ⚽ button in
+`CommunityChatHeader.jsx`. **Kept on purpose:** the RTDB `/worldcup_enabled`
+rule and node, and the `wc2026_*` Firestore rules and data, because builds from
+Jul–Sep 2026 still read them (see the comment in `firestore.rules`). Once those
+builds are gone, drop the rules and delete the `wc2026_meta`,
+`wc2026_predictions`, `wc2026_scores` and `wc2026_user_picks` collections.

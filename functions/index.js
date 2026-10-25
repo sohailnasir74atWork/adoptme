@@ -6,11 +6,16 @@
 // same source the deployed archive contained (recovered 2026-09-02) plus the
 // cosmetics-compare fix in mirrorUsersToSupabase.
 //
-// Deliberately NOT exported (0 invocations in 30 days — manual HTTPS triggers):
-//   fetchWorldCupDataNow, updateLeaderboardCacheManual
-// Deploying this codebase with `--only functions` never deletes a live function
-// that is missing here; delete those two explicitly:
-//   firebase functions:delete fetchWorldCupDataNow updateLeaderboardCacheManual --project adoptme-7b50c
+// Deliberately NOT exported: updateLeaderboardCacheManual (manual HTTPS trigger,
+// 0 invocations in 30 days; no longer live in production).
+//
+// 2026-10-02: World Cup 2026 is over. fetchWorldCupDataScheduled and
+// updateWorldCupLeaderboard were deleted from production (with their scheduler
+// jobs and topics) and functions/fetchWorldCupData.js plus the World Cup
+// *.local.js seed scripts were removed. The RTDB /worldcup_enabled flag and the
+// wc2026_* Firestore rules stay, because builds from Jul–Sep 2026 still read them.
+//
+// 2026-10-02: runtime is Node 22 (engines in package.json), firebase-functions 7.
 //
 // Repo modules that are NOT deployed (legacy, kept for reference only):
 //   mirrorChatMetaToRtdb, mirrorChatMetaToSupabase, mirrorPrivateMessageToRtdb,
@@ -18,8 +23,8 @@
 //   notifyNewMessageLegacy, sendDeprecationCountdown, sendUpdateNoticeMessage,
 //   syncBadgeRoster, *.local.js
 //
-// Deploy:  firebase deploy --only functions --project adoptme-7b50c
-// One:     firebase deploy --only functions:mirrorUsersToSupabase --project adoptme-7b50c
+// Deploy one or more functions by name with ../functions-deploy/deploy.sh
+// (see its header). Never run a bare `firebase deploy --only functions`.
 
 // ── RTDB → Supabase mirrors ────────────────────────────────────────────
 exports.mirrorUsersToSupabase = require('./mirrorUsersToSupabase').mirrorUsersToSupabase;
@@ -90,8 +95,10 @@ const rosters = require('./syncRosterMaintenance');
 exports.refreshAllRosters = rosters.refreshAllRosters;
 exports.seedAllRosters = rosters.seedAllRosters;
 
-// ── Staff elections (supabase/038): count closed races, apply MOD/JMD roles,
-// mirror squad sizes for the badge rule. See functions/runStaffElections.js.
+// ── Staff elections (supabase/038 + 040 + 041): count closed races, tell the
+// admins, apply the ADMIN's appoint / remove decisions to RTDB, mirror squad
+// sizes for the badge rule. Nothing is appointed without an admin.
+// See functions/runStaffElections.js.
 exports.runStaffElections = require('./runStaffElections').runStaffElections;
 
 // ── Moderation ────────────────────────────────────────────────────────
@@ -100,8 +107,3 @@ exports.runStaffElections = require('./runStaffElections').runStaffElections;
 // admin dashboard's list query (orderByChild('bannedAt')) cannot see a
 // record missing that key. See functions/stampBanTimestamp.js.
 exports.stampBanTimestamp = require('./stampBanTimestamp').stampBanTimestamp;
-
-// ── World Cup 2026 ────────────────────────────────────────────────────
-const worldCup = require('./fetchWorldCupData');
-exports.fetchWorldCupDataScheduled = worldCup.fetchWorldCupDataScheduled;
-exports.updateWorldCupLeaderboard = worldCup.updateWorldCupLeaderboard;

@@ -33,6 +33,12 @@
 # was posting into RTDB chat every 3 minutes), sendUpdateNoticeMessage,
 # notifyNewMessageLegacy, notifyGroupMessageLegacy, mirrorChatMetaToSupabase,
 # mirrorPrivateMessageToSupabase. Naming one of those here would bring it back.
+#
+# 2026-10-02: every live function moved from Node 20 to Node 22 (firebase-functions
+# 7.4.0, firebase-admin 12.7.0 unchanged) ahead of the 2026-10-30 Node 20
+# decommission. Same day, World Cup 2026 being over, fetchWorldCupDataScheduled
+# and updateWorldCupLeaderboard were deleted from production and their module
+# removed from ../functions.
 
 set -euo pipefail
 
@@ -128,6 +134,12 @@ ln -s "$SRC/node_modules" "$STAGING/node_modules"
 } > "$STAGING/index.js"
 
 echo "▸ Staged $(echo $files | wc -w | tr -d ' ') module(s) for: $*"
+# Some modules open the RTDB (admin.database()) while loading, e.g.
+# clearPresenceNode. The Firebase CLI exports FIREBASE_CONFIG when it analyzes
+# the code; give the export check the same, scoped to this one command so the
+# `firebase deploy` below is untouched. (2026-10-02, Node 22 rollout.)
+FIREBASE_CONFIG="{\"projectId\":\"$PROJECT\",\"databaseURL\":\"https://$PROJECT-default-rtdb.firebaseio.com\",\"storageBucket\":\"$PROJECT.firebasestorage.app\"}" \
+GCLOUD_PROJECT="$PROJECT" \
 node -e "const m=require('$STAGING/index.js');const got=Object.keys(m).sort().join(',');const want='$(printf '%s\n' "$@" | sort | tr '\n' ',' | sed 's/,$//')';if(got!==want){console.error('✖ export mismatch\n  got:  '+got+'\n  want: '+want);process.exit(1)}console.log('▸ index.js loads; exports exactly: '+got)"
 
 ONLY="$(printf 'functions:%s,' "$@" | sed 's/,$//')"
