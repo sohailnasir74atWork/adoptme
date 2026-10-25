@@ -27,8 +27,8 @@ android {
         applicationId "com.adoptmevaluescalc"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 185
-        versionName "1.15.59"
+        versionCode 186
+        versionName "1.15.60"
 
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
