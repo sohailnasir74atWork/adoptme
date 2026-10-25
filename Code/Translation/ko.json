@@ -589,6 +589,7 @@
     "search": "검색"
   },
   "trade": {
+    "roblox_verified_locked": "인증된 Roblox 이름입니다. 바꾸려면 설정에서 새 이름을 인증하세요.",
     "search_placeholder": "검색",
     "filter_has": "가진 것",
     "filter_wants": "원하는 것",
@@ -886,6 +887,7 @@
     "tracker_desc": "펫이 다 자랄 때까지 남은 시간을 확인해요"
   },
   "chat": {
+    "who_reacted": "반응한 사람",
     "top_rated": "평점 높은 순",
     "groups": "그룹",
     "create": "그룹 만들기",
@@ -3674,5 +3676,11 @@
     "placeholder_ban_appeal": "무슨 일이 있었는지, 왜 정지가 실수라고 생각하는지 알려 주세요. 스크린샷이 있으면 도움이 돼요.",
     "placeholder_false_review": "이 리뷰가 왜 가짜인가요? 채팅 스크린샷이 있으면 도움이 돼요.",
     "reported_review": "신고하는 리뷰"
+  },
+  "app_update": {
+    "title": "업데이트 가능",
+    "message": "앱의 새 버전이 나왔어요. 최고의 경험을 위해 업데이트하세요.",
+    "update": "업데이트",
+    "later": "나중에"
   }
 }

@@ -602,6 +602,7 @@
         "search": "Buscar"
     },
     "trade": {
+        "roblox_verified_locked": "Tu nombre de Roblox verificado. Para cambiarlo, verifica un nombre nuevo en Ajustes.",
         "search_placeholder": "Buscar",
         "filter_has": "Tiene",
         "filter_wants": "Quiere",
@@ -897,6 +898,7 @@
         "tracker_desc": "Mira cuánto le falta a tu mascota para crecer"
     },
     "chat": {
+        "who_reacted": "Quién reaccionó",
         "top_rated": "Mejor valorados",
         "groups": "Grupos",
         "create": "Crear grupo",
@@ -3770,5 +3772,11 @@
         "placeholder_ban_appeal": "Cuéntanos qué pasó y por qué crees que el baneo es un error. Las capturas ayudan.",
         "placeholder_false_review": "¿Por qué esta reseña es falsa? Las capturas de tu chat ayudan.",
         "reported_review": "Reseña que estás denunciando"
+    },
+    "app_update": {
+        "title": "Actualización disponible",
+        "message": "Ya salió una nueva versión de la app. Actualiza para tener la mejor experiencia.",
+        "update": "Actualizar",
+        "later": "Más tarde"
     }
 }

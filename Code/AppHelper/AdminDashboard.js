@@ -45,6 +45,7 @@ import {
   update,
 } from '@react-native-firebase/database';
 import { warmProfileCache, getCachedProfile, getOrFetchProfile } from '../Helper/profileCache';
+import ProGrantPanel from './ProGrantPanel';
 import { canRemoveReview, canDeleteReviews, deleteReviewAndSummary } from '../Helper/reviewModeration';
 
 import {
@@ -4106,6 +4107,15 @@ const AdminDashboard = () => {
                     {selectedUser.id}
                   </Text>
                 </TouchableOpacity>
+              )}
+
+              {isAdmin && selectedUser.id && (
+                <ProGrantPanel
+                  uid={selectedUser.id}
+                  name={selectedUser.displayName}
+                  adminUid={currentUser?.id}
+                  colors={C}
+                />
               )}
 
               {/* Account facts — a compact 3-up strip rather than three

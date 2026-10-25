@@ -9,6 +9,7 @@ import InterstitialAdManager from '../../Ads/IntAd';
 import { CHAT_MESSAGES_PER_AD } from '../../Ads/adPolicy';
 import { useLocalState } from '../../LocalGlobelStats';
 import { safeCompressImage } from '../../Helper/safeCompressImage';
+import { MAX_MESSAGE_LENGTH, capMessageText } from '../ChatHelper';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 import { validateContent, containsLink, isAllowedLink } from '../../Helper/ContentModeration';
@@ -309,7 +310,7 @@ const GroupMessageInput = ({
   const getReplyPreview = (replyTo) => {
     if (!replyTo) return t('chat.deleted_message_placeholder');
     if (replyTo.text && replyTo.text.trim().length > 0) {
-      return replyTo.text;
+      return capMessageText(replyTo.text);
     }
     if (replyTo.imageUrl) {
       return t('chat.reply_preview_image');
@@ -372,6 +373,7 @@ const GroupMessageInput = ({
           placeholderTextColor="#888"
           value={input}
           onChangeText={setInput}
+          maxLength={MAX_MESSAGE_LENGTH}
           multiline
           editable={!isBanned}
         />

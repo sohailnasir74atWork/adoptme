@@ -293,6 +293,25 @@
       ".read": true,
       ".write": false
     },
+    "pro_grants": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (auth.token.email_verified === true && (auth.token.email === 'thesolanalabs@gmail.com' || auth.token.email === 'sohailnasir74business@gmail.com' || auth.token.email === 'sohailnasir74@gmail.com')))",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (auth.token.email_verified === true && (auth.token.email === 'thesolanalabs@gmail.com' || auth.token.email === 'sohailnasir74business@gmail.com' || auth.token.email === 'sohailnasir74@gmail.com')))",
+        ".validate": "newData.hasChildren(['until', 'at'])",
+        "until": {
+          ".validate": "newData.isNumber()"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "by": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "news": {
       ".read": true,
       ".write": false,

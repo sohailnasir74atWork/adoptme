@@ -588,6 +588,7 @@
         "search": "Search"
     },
     "trade": {
+        "roblox_verified_locked": "Your verified Roblox name. To change it, verify a new name in Settings.",
         "search_placeholder": "Search",
         "filter_has": "Has",
         "filter_wants": "Wants",
@@ -885,6 +886,7 @@
         "tracker_desc": "See how long until your pet is grown"
     },
     "chat": {
+        "who_reacted": "Who reacted",
         "top_rated": "Top Rated",
         "groups": "Groups",
         "create": "Create Group",
@@ -3685,5 +3687,11 @@
         "placeholder_ban_appeal": "Tell us what happened and why you think the ban is a mistake. Screenshots help.",
         "placeholder_false_review": "Why is this review false? Screenshots of your chat help.",
         "reported_review": "Review you're reporting"
+    },
+    "app_update": {
+        "title": "Update available",
+        "message": "A new version of the app is out. Update for the best experience.",
+        "update": "Update",
+        "later": "Later"
     }
 }

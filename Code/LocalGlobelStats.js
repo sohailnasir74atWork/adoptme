@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { AppState } from 'react-native';
 
 import Purchases from 'react-native-purchases';
+import { getAnalytics, getAppInstanceId } from '@react-native-firebase/analytics';
 import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
@@ -9,6 +10,7 @@ import { preloadOfferings } from './SettingScreen/PayWall';
 import { trackProPurchase } from './Helper/growthAnalytics';
 import { serverNowMs } from './Helper/serverTime';
 import { isSquadProActive, onSquadProChange } from './Helper/squad';
+import { isProGrantActive, onProGrantChange, startProGrants } from './Helper/proGrant';
 
 // Store billing messages ("update your payment method") are shown by us, a few
 // seconds after start, not by RevenueCat inside configure: its automatic call
@@ -283,12 +285,13 @@ export const LocalStateProvider = ({ children }) => {
   }, []);
 
   // Pro = a RevenueCat purchase OR Pro earned through the Squad (server-side,
-  // supabase/034_squad.sql). RevenueCat is the only thing that sets rcPro;
-  // Squad Pro changes (earned, expired, sign-out) re-run the merge.
+  // supabase/034_squad.sql) OR Pro an admin gave (RTDB pro_grants,
+  // Helper/proGrant.js). RevenueCat is the only thing that sets rcPro;
+  // Squad / admin Pro changes (earned, expired, sign-out) re-run the merge.
   const rcProRef = useRef(null);
   const applyPro = useCallback((rcPro) => {
     if (typeof rcPro === 'boolean') rcProRef.current = rcPro;
-    const squadPro = isSquadProActive();
+    const squadPro = isSquadProActive() || isProGrantActive();
     if (rcProRef.current === null) {
       // RevenueCat hasn't answered yet: only ever add Pro here, never remove it.
       if (squadPro) updateLocalState('isPro', true);
@@ -297,6 +300,11 @@ export const LocalStateProvider = ({ children }) => {
     updateLocalState('isPro', rcProRef.current || squadPro);
   }, [updateLocalState]);
   useEffect(() => onSquadProChange(() => applyPro()), [applyPro]);
+  useEffect(() => {
+    const stop = onProGrantChange(() => applyPro());
+    startProGrants();
+    return stop;
+  }, [applyPro]);
 
   const checkEntitlements = useCallback(async () => {
     try {
@@ -329,6 +337,12 @@ export const LocalStateProvider = ({ children }) => {
         shouldShowInAppMessagesAutomatically: false,
       });
       showBillingMessagesLater();
+      // Lets RevenueCat's Firebase integration send renewals, refunds and
+      // cancellations to GA4 for this device, so a Google Ads campaign's
+      // revenue keeps counting after the first payment. Never awaited.
+      getAppInstanceId(getAnalytics())
+        .then((id) => (id ? Purchases.setFirebaseAppInstanceID(id) : null))
+        .catch(() => {});
       const userID = await Purchases.getAppUserID();
       setCustomerId(userID);
 

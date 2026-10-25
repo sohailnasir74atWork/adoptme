@@ -17,7 +17,7 @@ import { bannerAware, FLOATING_BUTTON_ICON_SIZE, aboveChatInputAndBanner } from 
 import { useBannerHeight } from '../../Ads/bannerHeight';
 import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
 import ReportPopup from './../ReportPopUp';
-import { parseMessageText } from '../ChatHelper';
+import { parseMessageText, capMessageText } from '../ChatHelper';
 import { useHaptic } from '../../Helper/HepticFeedBack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
@@ -33,6 +33,7 @@ import { getDeviceLanguage } from '../../../i18n';
 import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { useMessageTranslation } from '../../Helper/useMessageTranslation';
 import MessageActionDrawer from './MessageActionDrawer';
+import { loadReactionsFor } from '../../Supabase/chatBackend';
 import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 
 import FramedAvatar from './FramedAvatar';
@@ -41,6 +42,11 @@ import { BirthdayCake } from '../../Birthdays/BirthdayBits';
 
 // Above this many items a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
+
+// Fresh reactions for one message, for the staff "who reacted" list (public
+// chat reactions are not live). Module-level so the drawer prop stays stable.
+const loadMessageReactions = async (messageId) =>
+  (await loadReactionsFor([messageId]))[messageId] || {};
 
 
 
@@ -293,7 +299,7 @@ const MessagesList = ({
     if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
 
     if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
-      return replyTo.text;
+      return capMessageText(replyTo.text);
     }
 
     if (replyTo.gif) {
@@ -460,7 +466,7 @@ const MessagesList = ({
                       ? <RainbowText
                           colors={getMultiColorPalette(profile.chatTextColor)}
                           style={[item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly]}
-                        >{item.text}</RainbowText>
+                        >{capMessageText(item.text)}</RainbowText>
                       : <Text style={[
                           item.senderId === user?.id ? styles.myMessageTextOnly : styles.otherMessageTextOnly,
                           profile.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
@@ -782,6 +788,8 @@ const MessagesList = ({
         // Public chat: no self-delete. Messages stay so the conversation and any
         // moderation history remain intact; admins/mods can still remove them.
         allowSelfDelete={false}
+        onUserPress={toggleDrawer}
+        loadReactions={supabaseRoomId ? loadMessageReactions : null}
       />
     </>
   );

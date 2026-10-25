@@ -10,6 +10,13 @@ export const trackGrowthEvent = (event, params = {}) => {
   }
 };
 
+// The events below are meant to be marked as key events in GA4 and imported
+// into Google Ads as app-campaign conversions (same names as the MM2 app).
+
+// GA4's recommended sign_up event. Only for accounts created just now, not
+// for returning users signing in. method: 'google' | 'apple' | 'email'.
+export const trackSignUp = method => trackGrowthEvent('sign_up', {method});
+
 // ── Offer wall ──
 // The same three events in the MM2, Adopt Me and Blox Fruit apps:
 //   paywall_view  — the wall was shown
@@ -52,3 +59,9 @@ export const trackProPurchase = (pkg, track) => {
     ...paywallParams(track),
   });
 };
+
+// The "engaged user" signal for Google Ads: someone who posted a trade got
+// real use out of the app, which an install alone doesn't show. valueSource is
+// the catalogue that priced the trade (Code/Helper/valueSources.js).
+export const trackTradePosted = valueSource =>
+  trackGrowthEvent('trade_posted', {value_source: valueSource || 'unknown'});

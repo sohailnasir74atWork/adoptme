@@ -1,15 +1,12 @@
-import { AppState, Platform, Linking } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import SpInAppUpdates, { IAUUpdateKind, IAUInstallStatus } from 'sp-react-native-in-app-updates';
 import { createMMKV } from 'react-native-mmkv';
+import { startIosUpdatePrompt } from './iosUpdatePrompt';
 
-// Initialize updater for both platforms
+// Android only: Play in-app updates. iOS is iosUpdatePrompt.js.
 const inAppUpdates = new SpInAppUpdates(
   false // isDebug: false for production behavior
 );
-
-const IOS_APP_ID = '6745400111';
-const IOS_STORE_DEEPLINK = `itms-apps://itunes.apple.com/app/id${IOS_APP_ID}`;
-const IOS_STORE_HTTP = `https://apps.apple.com/app/id${IOS_APP_ID}`;
 
 // How often one store version is pushed at the user. Before this cap the
 // check ran on every cold start, so for the days between a release going
@@ -65,8 +62,12 @@ const armFlexibleInstall = () => {
 };
 
 export const checkForUpdate = async () => {
+  if (Platform.OS === 'ios') {
+    startIosUpdatePrompt();
+    return;
+  }
+  if (Platform.OS !== 'android') return;
   try {
-    // Checks Play Store (Android) or App Store (iOS) directly.
     const result = await inAppUpdates.checkNeedsUpdate();
     if (!result?.shouldUpdate) return;
 
@@ -74,20 +75,10 @@ export const checkForUpdate = async () => {
     if (nudgedRecently(storeVersion)) return;
     markNudged(storeVersion);
 
-    if (Platform.OS === 'android') {
-      armFlexibleInstall();
-      // Leaving for Play's update screen is not a return worth an app-open ad.
-      // (iOS opens the store through Linking, which leaveAppGuard.js covers.)
-      require('../Ads/openApp').default.skipNextForeground(2 * 60 * 1000);
-      await inAppUpdates.startUpdate({ updateType: IAUUpdateKind.FLEXIBLE });
-    } else if (Platform.OS === 'ios') {
-      // iOS has no in-app update flow: open the store listing.
-      try {
-        await Linking.openURL(result.storeUrl || IOS_STORE_DEEPLINK);
-      } catch {
-        await Linking.openURL(IOS_STORE_HTTP);
-      }
-    }
+    armFlexibleInstall();
+    // Leaving for Play's update screen is not a return worth an app-open ad.
+    require('../Ads/openApp').default.skipNextForeground(2 * 60 * 1000);
+    await inAppUpdates.startUpdate({ updateType: IAUUpdateKind.FLEXIBLE });
   } catch (err) {
     console.warn('Update check failed:', err?.message || err);
   }

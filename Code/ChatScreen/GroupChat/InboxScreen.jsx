@@ -32,6 +32,7 @@ import {
   deleteChatMeta,
 } from '../../Supabase/chatMetaBackend';
 import { chatIdForPair } from '../../Supabase/privateMessagesBackend';
+import { capMessageText } from '../ChatHelper';
 import { ChatListSkeleton, SyncBanner } from './ChatListSkeleton';
 
 // While realtime updates stream in, the list is redrawn at most about this
@@ -73,7 +74,7 @@ const ChatRow = React.memo(({
           <Text style={{ fontSize: 12, marginTop: 2, color: isDarkMode ? '#fff' : '#000' }}>🔥 {streak}</Text>
         )}
         <Text style={styles.lastMessage} numberOfLines={1}>
-          {lastMessage}
+          {capMessageText(lastMessage)}
         </Text>
       </View>
       {unreadCount > 0 && (

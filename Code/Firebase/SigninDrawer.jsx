@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { showSuccessMessage, showErrorMessage, showWarningMessage } from '../Helper/MessageHelper';
 import { requestPermission } from '../Helper/PermissionCheck';
 import { setPendingSigninChoice, clearPendingSigninChoice } from '../Helper/emailOptIn';
+import { trackSignUp } from '../Helper/growthAnalytics';
 import { handleOpenPrivacy, handleOpenTerms } from '../SettingScreen/settinghelper';
 // import { showMessage } from 'react-native-flash-message';
 
@@ -225,7 +226,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
       if (!identityToken) throw new Error(t('signin.error_apple_token'));
 
       const appleCredential = AppleAuthProvider.credential(identityToken, nonce);
-      await signInWithCredential(auth, appleCredential);
+      const appleResult = await signInWithCredential(auth, appleCredential);
+      if (appleResult?.additionalUserInfo?.isNewUser) trackSignUp('apple');
 
       showSuccessMessage(t('home.alert.success'), t('signin.success_signin'));
       setTimeout(onClose, 200);
@@ -294,6 +296,7 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         clearPendingSigninChoice();
         // 🔐 Register new user
         const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
+        trackSignUp('email');
         const user = userCredential.user;
 
         // Send verification email then sign out
@@ -369,7 +372,8 @@ const SignInDrawer = ({ visible, onClose, selectedTheme, message, screen }) => {
         .then((tk) => tk?.accessToken || null)
         .catch(() => null);
       const googleCredential = GoogleAuthProvider.credential(idToken, accessToken);
-      await signInWithCredential(auth, googleCredential);
+      const googleResult = await signInWithCredential(auth, googleCredential);
+      if (googleResult?.additionalUserInfo?.isNewUser) trackSignUp('google');
 
       showSuccessMessage(t('signin.alert_welcome_back'), t('signin.success_signin'));
       setTimeout(onClose, 200);

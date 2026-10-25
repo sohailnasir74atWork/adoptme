@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import SwipeableBottomDrawer from '../../Helper/SwipeableBottomDrawer';
+import ReactorsList from './ReactorsList';
 import { useTranslation } from 'react-i18next';
 
 const REACTION_EMOJIS = ['❤️', '🔥', '😍', '💀', '🎯'];
@@ -38,6 +39,10 @@ const MessageActionDrawer = ({
     // Public chat switches this off: regular users must not be able to delete
     // their own messages there. Admin/mod delete below is unaffected.
     allowSelfDelete = true,
+    // Staff "who reacted" list: opens a reactor's profile; loadReactions
+    // (public chat) re-reads this message's reactions when the drawer opens.
+    onUserPress = null,
+    loadReactions = null,
 }) => {
     const { t } = useTranslation();
 
@@ -118,6 +123,17 @@ const MessageActionDrawer = ({
                             );
                         })}
                     </View>
+
+                    {/* ── Who reacted (staff only) ── */}
+                    {isAdminOrMod && (
+                        <ReactorsList
+                            message={message}
+                            loadReactions={loadReactions}
+                            onUserPress={onUserPress}
+                            onClose={onClose}
+                            isDarkMode={isDarkMode}
+                        />
+                    )}
 
                     {/* ── Divider ── */}
                     <View style={styles.divider} />

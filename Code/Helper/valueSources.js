@@ -3,7 +3,7 @@
  *
  * 📅 2026-09-17. The app carries two catalogues of Adopt Me item values:
  *
- *   Elvebredd  https://adoptme.b-cdn.net                      3,491 items
+ *   Elvebredd  https://adoptme.b-cdn.net/data.json            3,491 items
  *   GG         https://adoptme-gg-values.b-cdn.net/gg.json    1,134 items
  *
  * Both are bare arrays in the same shape — same field names, same key order,
@@ -102,8 +102,12 @@ export const SOURCE_LABEL = {
   [VALUE_SOURCE.GG]: 'GG Values',
 };
 
+// adoptme.b-cdn.net serves the catalogue at every path but caches each path
+// separately; /data.json is the URL the publish pipeline confirms first.
+// Older builds read the bare root, which the pipeline's whole-zone purge
+// (DataFetching/publish-all) keeps fresh too.
 export const SOURCE_URL = {
-  [VALUE_SOURCE.ELVEBREDD]: 'https://adoptme.b-cdn.net',
+  [VALUE_SOURCE.ELVEBREDD]: 'https://adoptme.b-cdn.net/data.json',
   [VALUE_SOURCE.GG]: 'https://adoptme-gg-values.b-cdn.net/gg.json',
 };
 

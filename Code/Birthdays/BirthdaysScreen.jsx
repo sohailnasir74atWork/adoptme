@@ -31,7 +31,7 @@ import { showErrorMessage, showSuccessMessage } from '../Helper/MessageHelper';
 import { trackGrowthEvent } from '../Helper/growthAnalytics';
 import { useHaptic } from '../Helper/HepticFeedBack';
 import SafeLottieView from '../Helper/SafeLottieView';
-import { getCardsState, setCardsUser, enableCardsMockForPreview } from '../PetCards/cardsApi';
+import { getCardsState, setCardsUser, enableCardsMockForPreview, errorKey } from '../PetCards/cardsApi';
 import {
   setBirthdayUser, getMyBirthday, peekMyBirthday, peekBirthdayList, setBirthdayVisibility, listBirthdays,
   loadMoreBirthdays, sendBirthdayWish, markWished, birthdayErrorKey, invalidateBirthdays, isBirthdayMockActive,
@@ -325,7 +325,10 @@ export default function BirthdaysScreen() {
 
   const openGift = useCallback(async () => {
     try {
-      if (isBirthdayMockActive()) enableCardsMockForPreview();
+      // Debug builds show the sample birthday when signed out too (birthdayApi
+      // answers from the mock per call), so the pack must come from the mock
+      // as well: the real open_card_pack refuses a signed-out player.
+      if (isBirthdayMockActive() || (__DEV__ && !uid)) enableCardsMockForPreview();
       setCardsUser(uid);
       const st = await getCardsState({ force: true });
       const pack = (st?.sets || []).find((s) => s.kind === 'pack' && s.open && s.total > 0);
@@ -334,7 +337,8 @@ export default function BirthdaysScreen() {
       trackGrowthEvent('birthday_pack_open', {});
       navigation.navigate('PackOpening', { setId: pack.id, source: 'birthday', theme: pack.theme });
     } catch (e) {
-      showErrorMessage(t('home.alert.error'), t('birthdays.err.generic'));
+      const k = errorKey(e);
+      showErrorMessage(t('home.alert.error'), k === 'generic' ? t('birthdays.err.generic') : t(`pet_cards.err.${k}`));
     }
   }, [uid, navigation, t]);
 

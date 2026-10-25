@@ -586,6 +586,7 @@
         "search": "Suchen"
     },
     "trade": {
+        "roblox_verified_locked": "Dein verifizierter Roblox-Name. Um ihn zu ändern, verifiziere in den Einstellungen einen neuen Namen.",
         "search_placeholder": "Suchen",
         "filter_has": "Hat",
         "filter_wants": "Sucht",
@@ -879,6 +880,7 @@
         "tracker_desc": "Sieh, wie lange dein Pet noch zum Erwachsenwerden braucht"
     },
     "chat": {
+        "who_reacted": "Wer reagiert hat",
         "top_rated": "Top bewertet",
         "groups": "Gruppen",
         "create": "Gruppe erstellen",
@@ -3667,5 +3669,11 @@
         "placeholder_ban_appeal": "Erzähl, was passiert ist und warum du den Bann für einen Fehler hältst. Screenshots helfen.",
         "placeholder_false_review": "Warum ist diese Bewertung falsch? Screenshots von eurem Chat helfen.",
         "reported_review": "Bewertung, die du meldest"
+    },
+    "app_update": {
+        "title": "Update verfügbar",
+        "message": "Eine neue Version der App ist da. Aktualisiere für das beste Erlebnis.",
+        "update": "Aktualisieren",
+        "later": "Später"
     }
 }

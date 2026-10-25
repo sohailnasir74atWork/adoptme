@@ -20,12 +20,14 @@ import { tradeHighlight, TONE_STYLE } from '../Helper/tradeAdvice';
 import { tradeStatus as wflStatus } from '../Helper/tradeStatus';
 // useLanguage removed - using i18n.language from useTranslation hook
 import { showSuccessMessage, showErrorMessage } from '../Helper/MessageHelper';
+import { trackTradePosted } from '../Helper/growthAnalytics';
 import PostAdManager from '../Ads/PostAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { buildVariantTags } from '../Trades/tradeHelpers';
+import { verifiedRobloxName, readVerifiedRobloxName, robloxFieldsForTrade } from '../Helper/robloxIdentity';
 import SubscriptionScreen from '../SettingScreen/OfferWall';
 import TradeCompletion from '../Engagement/TradeCompletion';
 import { maybeAskForReview } from '../AppHelper/reviewPrompt';
@@ -152,6 +154,8 @@ const HomeScreen = ({ selectedTheme }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [robloxUsername, setRobloxUsername] = useState('');
+  // Verified in Settings → the trade form shows this name read-only.
+  const lockedRobloxName = verifiedRobloxName(user);
   const [isSigninDrawerVisible, setIsSigninDrawerVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { t, i18n } = useTranslation();
@@ -1173,8 +1177,8 @@ const HomeScreen = ({ selectedTheme }) => {
   const handleCreateTrade = useCallback(async () => {
     if (isSubmitting) return;
 
-    // ✅ Roblox username required
-    if (!robloxUsername.trim()) {
+    // ✅ Roblox username required (a verified name is filled in for them)
+    if (!lockedRobloxName && !robloxUsername.trim()) {
       showErrorMessage(t('home.alert.error'), t('trade.roblox_required', { defaultValue: 'Please enter your Roblox username to post a trade.' }));
       return;
     }
@@ -1188,6 +1192,15 @@ const HomeScreen = ({ selectedTheme }) => {
 
     setIsSubmitting(true);
     try {
+      // The name on the trade comes from the stored record: a verified player
+      // posts under the verified name whatever the form holds.
+      const verifiedName = await readVerifiedRobloxName(appdatabase, user?.id, user);
+      const robloxFields = robloxFieldsForTrade(verifiedName, robloxUsername);
+      if (!robloxFields.robloxUsername) {
+        showErrorMessage(t('home.alert.error'), t('trade.roblox_required', { defaultValue: 'Please enter your Roblox username to post a trade.' }));
+        return;
+      }
+
       // ✅ FIRESTORE ONLY: Read rating summary from user_ratings_summary (single source of truth)
       let userRating = null;
       let ratingCount = 0;
@@ -1306,8 +1319,8 @@ const HomeScreen = ({ selectedTheme }) => {
         // ✅ Only include truthy profile fields (saves storage)
         ...(user?.avatar ? { avatar: user.avatar } : {}),
         ...(localState.isPro ? { isPro: true } : {}),
-        robloxUsername: robloxUsername.trim(),
-        ...(user?.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
+        robloxUsername: robloxFields.robloxUsername,
+        ...(robloxFields.robloxUsernameVerified ? { robloxUsernameVerified: true } : {}),
         ...(user?.topBadge ? { topBadge: user.topBadge } : {}),
         ...(user?.isAdmin ? { isAdmin: true } : {}),
         ...(user?.isModerator ? { isModerator: true } : {}),
@@ -1333,6 +1346,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
 
       const tradeRef = await addDoc(tradesCollection, newTrade);
+      trackTradePosted(valueSource);
 
       // ✅ Track activity for followers' feed
       try {
@@ -1376,10 +1390,11 @@ const HomeScreen = ({ selectedTheme }) => {
       resetState();
       setDescription(''); // ✅ Clear description input
 
-      // ✅ Save Roblox username to user profile if new/changed
-      if (robloxUsername.trim() && robloxUsername.trim() !== user?.robloxUsername) {
+      // ✅ Save Roblox username to user profile if new/changed. Never for a
+      // verified player: only Settings may change a verified name.
+      if (!robloxFields.robloxUsernameVerified && robloxFields.robloxUsername !== user?.robloxUsername) {
         try {
-          update(ref(appdatabase, `users/${user.id}`), { robloxUsername: robloxUsername.trim() });
+          update(ref(appdatabase, `users/${user.id}`), { robloxUsername: robloxFields.robloxUsername });
         } catch (e) {
           console.warn('[HomeScreen] Failed to save roblox username:', e?.message);
         }
@@ -1438,7 +1453,7 @@ const HomeScreen = ({ selectedTheme }) => {
         setIsSubmitting(false);
       }
     }
-  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, type, lastTradeTime, tradesCollection, t, resetState, isBanned, banDetails]);
+  }, [isSubmitting, user, localState.isPro, hasItems, wantsItems, description, robloxUsername, lockedRobloxName, appdatabase, type, lastTradeTime, tradesCollection, t, resetState, isBanned, banDetails]);
 
   const handleShareTrade = useCallback(() => {
     const hasItemsCount = hasItems.filter(Boolean).length;
@@ -2135,15 +2150,27 @@ const HomeScreen = ({ selectedTheme }) => {
                     value={description}
                     onChangeText={setDescription}
                   />
-                  <TextInput
-                    style={[styles.input, { marginTop: 8 }]}
-                    placeholder={t('trade.roblox_username_placeholder', { defaultValue: 'Roblox Username (required)' })}
-                    maxLength={30}
-                    value={robloxUsername}
-                    onChangeText={setRobloxUsername}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+                  {lockedRobloxName ? (
+                    <>
+                      <View style={[styles.input, styles.robloxLockedRow]}>
+                        <Text style={styles.robloxLockedName} numberOfLines={1}>{lockedRobloxName}</Text>
+                        <Image source={require('../../assets/verification.png')} style={styles.robloxLockedBadge} />
+                      </View>
+                      <Text style={styles.robloxLockedHint}>
+                        {t('trade.roblox_verified_locked', { defaultValue: 'Your verified Roblox name. To change it, verify a new name in Settings.' })}
+                      </Text>
+                    </>
+                  ) : (
+                    <TextInput
+                      style={[styles.input, { marginTop: 8 }]}
+                      placeholder={t('trade.roblox_username_placeholder', { defaultValue: 'Roblox Username (required)' })}
+                      maxLength={30}
+                      value={robloxUsername}
+                      onChangeText={setRobloxUsername}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  )}
                   <View style={styles.buttonContainer}>
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
@@ -2777,6 +2804,26 @@ const getStyles = (isDarkMode, c) => {
       marginBottom: 20,
       color: c.text,
 
+    },
+    robloxLockedRow: {
+      marginTop: 8,
+      marginBottom: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    robloxLockedName: {
+      flexShrink: 1,
+      color: c.text,
+    },
+    robloxLockedBadge: {
+      width: 14,
+      height: 14,
+      marginLeft: 6,
+    },
+    robloxLockedHint: {
+      fontSize: 10,
+      marginBottom: 16,
+      color: c.textMuted,
     },
     buttonContainer: {
       flexDirection: 'row',

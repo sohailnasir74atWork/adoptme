@@ -30,6 +30,7 @@ import {
 
 
 import { safeCompressImage } from '../../Helper/safeCompressImage';
+import { MAX_MESSAGE_LENGTH, capMessageText } from '../ChatHelper';
 import { launchImageLibrary } from 'react-native-image-picker';
 import RNFS from 'react-native-fs';
 
@@ -457,7 +458,7 @@ const PrivateMessageInput = ({
         <View style={styles.replyContainer}>
           <Text style={styles.replyText}>
             {replyTo?.text
-              ? t('chat.replying_to_text', { text: replyTo.text })
+              ? t('chat.replying_to_text', { text: capMessageText(replyTo.text) })
               : t('chat.replying_to_message')}
           </Text>
           <TouchableOpacity
@@ -599,6 +600,7 @@ const PrivateMessageInput = ({
               placeholderTextColor="#888"
               value={input}
               onChangeText={handleTextChange}
+              maxLength={MAX_MESSAGE_LENGTH}
               multiline
               editable={!isBanned}
             />

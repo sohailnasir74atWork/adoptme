@@ -10,6 +10,7 @@ import InterstitialAdManager from '../../Ads/IntAd';
 import { CHAT_MESSAGES_PER_AD } from '../../Ads/adPolicy';
 import { useGlobalState } from '../../GlobelStats';
 import { validateContent } from '../../Helper/ContentModeration';
+import { MAX_MESSAGE_LENGTH, capMessageText } from '../ChatHelper';
 import { showMessage } from 'react-native-flash-message';
 
 // ✅ Move Emojies array outside component to prevent recreation
@@ -162,7 +163,7 @@ const MessageInput = ({
       {replyTo && (
         <View style={styles.replyContainer}>
           <Text style={styles.replyText}>
-            {t('chat.replying_to')}: {replyTo.text}
+            {t('chat.replying_to')}: {capMessageText(replyTo.text)}
           </Text>
           <TouchableOpacity
             onPress={onCancelReply}
@@ -192,6 +193,7 @@ const MessageInput = ({
           placeholderTextColor="#888"
           value={input}
           onChangeText={setInput}
+          maxLength={MAX_MESSAGE_LENGTH}
           multiline
         />
 

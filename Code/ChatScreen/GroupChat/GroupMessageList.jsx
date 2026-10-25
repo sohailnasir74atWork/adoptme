@@ -23,7 +23,7 @@ import { FRUIT_KEYWORDS } from '../../Helper/filter';
 import { fruitStyles } from '../PrivateChat/PrivateMessageList';
 import Icon from 'react-native-vector-icons/Ionicons';
 import config from '../../Helper/Environment';
-import { parseMessageText } from '../ChatHelper';
+import { parseMessageText, capMessageText } from '../ChatHelper';
 import MessageActionDrawer from './MessageActionDrawer';
 import { resolveProfile, seedFromMessage, warmProfileCache, getCachedProfile } from '../../Helper/profileCache';
 import FramedAvatar from './FramedAvatar';
@@ -121,7 +121,7 @@ const GroupMessageList = ({
     if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
 
     if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
-      return replyTo.text;
+      return capMessageText(replyTo.text);
     }
 
     if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
@@ -491,7 +491,7 @@ const GroupMessageList = ({
                     ? <RainbowText
                         colors={getMultiColorPalette(profile.chatTextColor)}
                         style={[isMyMessage ? styles.myMessageTextOnly : styles.otherMessageTextOnly]}
-                      >{typeof parseMessageText === 'function' ? item.text : item.text}</RainbowText>
+                      >{capMessageText(item.text)}</RainbowText>
                     : <Text style={[
                         isMyMessage ? styles.myMessageTextOnly : styles.otherMessageTextOnly,
                         profile.chatTextColor ? { color: getSafeTextColor(profile.chatTextColor, profile.chatBubbleBg ? (isDarkMode ? profile.chatBubbleBg.darkColor : profile.chatBubbleBg.color) : null) } : null,
@@ -703,6 +703,7 @@ const GroupMessageList = ({
         isAdminOrMod={isAdminOrMod}
         userId={userId}
         isDarkMode={isDarkMode}
+        onUserPress={onUserPress || null}
       />
     </>
   );

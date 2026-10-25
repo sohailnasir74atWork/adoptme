@@ -34,6 +34,7 @@ import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
 import { getCachedProfile } from '../../Helper/profileCache';
 import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
+import { capMessageText } from '../ChatHelper';
 
 // Above this many pets a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
@@ -54,7 +55,7 @@ const messageKey = (item, index) => item?.id || `msg-${index}`;
 const replyPreviewText = (replyTo, t) => {
   if (!replyTo || typeof replyTo !== 'object') return t('chat.deleted_message_placeholder');
   if (replyTo.text && typeof replyTo.text === 'string' && replyTo.text.trim().length > 0) {
-    return replyTo.text;
+    return capMessageText(replyTo.text);
   }
   if (replyTo.imageUrl || (Array.isArray(replyTo.imageUrls) && replyTo.imageUrls.length > 0)) {
     return t('chat.reply_preview_image');
@@ -83,10 +84,10 @@ const PrivateMessageRow = memo(({
   // existed are matched back by their canonical English, which is what the
   // drawer has always sent. Anything unrecognised renders as stored.
   const tplId = item.tpl || (item.text ? TEMPLATE_ID_BY_TEXT[item.text] : null);
-  let displayText = item.text;
+  let displayText = capMessageText(item.text);
   if (tplId === GAME_ID_TEMPLATE_ID) {
     displayText = t('chat.game_id_body', {
-      name: item.text,
+      name: capMessageText(item.text),
       defaultValue: '🎮 My game ID: {{name}}',
     });
   } else if (tplId && TEMPLATE_BY_ID[tplId]) {

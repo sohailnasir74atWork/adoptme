@@ -602,6 +602,7 @@
         "search": "Rechercher"
     },
     "trade": {
+        "roblox_verified_locked": "Ton pseudo Roblox vérifié. Pour le changer, vérifie un nouveau pseudo dans les Paramètres.",
         "search_placeholder": "Rechercher",
         "filter_has": "Possède",
         "filter_wants": "Recherche",
@@ -897,6 +898,7 @@
         "tracker_desc": "Vois dans combien de temps ton animal sera adulte"
     },
     "chat": {
+        "who_reacted": "Qui a réagi",
         "top_rated": "Mieux notés",
         "groups": "Groupes",
         "create": "Créer un groupe",
@@ -3770,5 +3772,11 @@
         "placeholder_ban_appeal": "Raconte ce qui s'est passé et pourquoi tu penses que le bannissement est une erreur. Les captures d'écran aident.",
         "placeholder_false_review": "Pourquoi cet avis est-il faux ? Les captures de ta discussion aident.",
         "reported_review": "Avis que tu signales"
+    },
+    "app_update": {
+        "title": "Mise à jour dispo",
+        "message": "Une nouvelle version de l'appli est sortie. Mets-la à jour pour en profiter pleinement.",
+        "update": "Mettre à jour",
+        "later": "Plus tard"
     }
 }
