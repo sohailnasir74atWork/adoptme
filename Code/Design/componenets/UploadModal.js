@@ -19,6 +19,7 @@ import config from '../../Helper/Environment';
 import { useGlobalState } from '../../GlobelStats';
 import { useLocalState } from '../../LocalGlobelStats';
 import PostAdManager from '../../Ads/PostAd';
+import { useModalHandoff } from '../../Helper/modalPresentation';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
 // import { onValue, ref } from '@react-native-firebase/database';
 import { showMessage } from 'react-native-flash-message';
@@ -49,6 +50,8 @@ const BUNNY_CDN_BASE = 'https://pull-gag.b-cdn.net';
 
 
 const UploadModal = ({ visible, onClose, onUpload, user }) => {
+  // The feed-post ad is queued until this sheet has finished closing (iOS).
+  const { handoff: afterSheetClosed, onDismiss: onSheetDismissed } = useModalHandoff();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [desc, setDesc] = useState('');
@@ -325,7 +328,9 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
     // live — never before it, never on a failed upload.
     callbackfunction().then((posted) => {
       if (!posted || localState.isPro) return;
-      requestAnimationFrame(() => {
+      // iOS: wait for the composer's onDismiss — UIKit silently refuses an
+      // ad presented while the modal is still closing (bugs LOG 2026-10-18).
+      afterSheetClosed(null, () => requestAnimationFrame(() => {
         setTimeout(() => {
           try {
             PostAdManager.show('feed');
@@ -333,16 +338,16 @@ const UploadModal = ({ visible, onClose, onUpload, user }) => {
             console.warn('[AdManager] Failed to show ad:', err);
           }
         }, 400);
-      });
+      }));
     });
 
-  }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime, t]);
+  }, [loading, user?.id, desc, imageUris, selectedTags, uploadToBunny, onUpload, onClose, localState.isPro, currentUserEmail, lastPostTime, t, afterSheetClosed]);
 
 
   const themedStyles = useMemo(() => getStyles(isDark), [isDark]);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onDismiss={onSheetDismissed}>
       {/* presentationStyle="pageSheet" is an iOS hint; on Android this is a
           full-screen, edge-to-edge surface, so the header needs the status
           bar inset or it sits under the clock. */}

@@ -44,7 +44,7 @@ import SwipeableBottomDrawer from '../Helper/SwipeableBottomDrawer';
 import { useLocalState } from '../LocalGlobelStats';
 import { useGlobalState } from '../GlobelStats';
 import ProfileBottomDrawer from '../ChatScreen/GroupChat/BottomDrawer';
-import { useModalTransition } from '../Helper/modalPresentation';
+import { useModalHandoff, useModalTransition } from '../Helper/modalPresentation';
 import CommentModal from './componenets/CommentsModal';
 
 
@@ -267,6 +267,8 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
   const [drawerUser, setDrawerUser] = useState(null);  // user for BottomDrawer profile
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [showCreator, setShowCreator] = useState(false);
+  // The feed-post ad is queued until the creator modal has finished closing (iOS).
+  const { handoff: afterCreatorClosed, onDismiss: onCreatorDismissed } = useModalHandoff();
 
   // Tell the ad layer when these modals are animating. On iOS a full-screen
   // ad is presented from the topmost view controller, and UIKit refuses to
@@ -808,7 +810,9 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
     await doUpload();
 
     if (posted && !localState.isPro) {
-      requestAnimationFrame(() => {
+      // iOS: wait for the composer's onDismiss — UIKit silently refuses an
+      // ad presented while the modal is still closing (bugs LOG 2026-10-18).
+      afterCreatorClosed(null, () => requestAnimationFrame(() => {
         setTimeout(() => {
           try {
             PostAdManager.show('feed');
@@ -816,9 +820,9 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
             console.warn('[StatusFeed] Ad failed:', err);
           }
         }, 400);
-      });
+      }));
     }
-  }, [user, firestoreDB, appdatabase, caption, selectedImage, uploadToBunny, localState.isPro, isUserBlocked, strikeInfo, deviceBanInfo]);
+  }, [user, firestoreDB, appdatabase, caption, selectedImage, uploadToBunny, localState.isPro, isUserBlocked, strikeInfo, deviceBanInfo, afterCreatorClosed]);
 
   // ── Delete status (local-first, no re-fetch) ──
   const handleDeleteStatus = useCallback(async (statusId) => {
@@ -1664,7 +1668,7 @@ const StatusFeed = ({ user, firestoreDB, appdatabase, isDarkMode, onRequireSignI
       })()}
 
       {/* ── Status Creator Modal ── */}
-      <Modal visible={showCreator} transparent animationType="slide" onRequestClose={() => setShowCreator(false)}>
+      <Modal visible={showCreator} transparent animationType="slide" onRequestClose={() => setShowCreator(false)} onDismiss={onCreatorDismissed}>
         <KeyboardAvoidingView 
           style={styles.creatorOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
