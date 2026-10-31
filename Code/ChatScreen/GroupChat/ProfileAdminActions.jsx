@@ -1,6 +1,7 @@
 import React from 'react';
 import { getThemeColors } from '../../Helper/themeColors';
 import { View, Text, TouchableOpacity } from 'react-native';
+import BadgeManager from '../../Helper/BadgeManager';
 
 const ProfileAdminActions = ({
   isAdmin, isDarkMode, isBanned, mergedUser,
@@ -10,10 +11,11 @@ const ProfileAdminActions = ({
   canManageBabyMod = false, targetIsBabyMod = false,
   canManageModerator = false,
   handleMakeBabyMod, handleRemoveBabyMod,
-  canManageBadges = false, targetIsTrusted = false, targetIsCMSR = false, targetIsArtCMSR = false, targetIsHelper = false,
-  badgeAllowed = true, targetSquad = 0, badgeMinSquad = 3,
-  handleMakeTrusted, handleRemoveTrusted, handleMakeCMSR, handleRemoveCMSR,
-  handleMakeArtCMSR, handleRemoveArtCMSR, handleMakeHelper, handleRemoveHelper,
+  // Badges (Trusted / CMSR / Helper + colours + custom badges): one panel,
+  // Code/Helper/BadgeManager.jsx. It writes RTDB itself and reports changes
+  // back through onTargetChange so the drawer's merged user stays current.
+  canManageBadges = false, badgeAllowed = true, targetSquad = 0, badgeMinSquad = 3,
+  appdatabase, targetUid, userName, viewerUid, onTargetChange,
   canResetAvatar = false, targetHasAvatar = false, handleResetAvatar,
   handleDeleteUserData, deletingUser = false,
   canDeleteUser = false,
@@ -29,8 +31,6 @@ const ProfileAdminActions = ({
   // exactly two chips — Make/Remove Mod and Make/Remove Junior Mod.
   const grantOnly = !isStaff;
   const noSanctions = grantOnly || !canSanction;
-  // Badges: a grant needs badgeMinSquad squad friends; removing never does.
-  const showMakeBadge = canManageBadges && badgeAllowed;
 
   const bg = c.bg;
   const border = c.border;
@@ -112,19 +112,6 @@ const ProfileAdminActions = ({
             onPress={targetIsBabyMod ? handleRemoveBabyMod : handleMakeBabyMod}
           />
         )}
-        {canManageBadges && (targetIsTrusted
-          ? <Chip label="Remove Trusted" color="#f59e0b" onPress={handleRemoveTrusted} />
-          : showMakeBadge && <Chip label="Make Trusted" color="#10b981" onPress={handleMakeTrusted} />)}
-        {/* CMSR is two badges with one name: House (isCMSR) and Art (isArtCMSR). */}
-        {canManageBadges && (targetIsCMSR
-          ? <Chip label="Remove House CMSR" color="#f59e0b" onPress={handleRemoveCMSR} />
-          : showMakeBadge && <Chip label="Make House CMSR" color="#6366f1" onPress={handleMakeCMSR} />)}
-        {canManageBadges && (targetIsArtCMSR
-          ? <Chip label="Remove Art CMSR" color="#f59e0b" onPress={handleRemoveArtCMSR} />
-          : showMakeBadge && <Chip label="Make Art CMSR" color="#e11d48" onPress={handleMakeArtCMSR} />)}
-        {canManageBadges && (targetIsHelper
-          ? <Chip label="Remove Helper" color="#f59e0b" onPress={handleRemoveHelper} />
-          : showMakeBadge && <Chip label="Make Helper" color="#14b8a6" onPress={handleMakeHelper} />)}
         {/* Only offered when there's a custom avatar to clear — resetting a
             user who already shows the default would be a no-op. */}
         {canResetAvatar && targetHasAvatar && handleResetAvatar && (
@@ -136,10 +123,23 @@ const ProfileAdminActions = ({
         )}
       </View>
 
-      {canManageBadges && !badgeAllowed && (
-        <Text style={{ fontSize: 11, color: dim, marginTop: 10, lineHeight: 16 }}>
-          Badges need {badgeMinSquad} squad friends. This player has {targetSquad}.
-        </Text>
+      {/* Badges: worn list with colours, add (role or custom, max 3), create custom. */}
+      {canManageBadges && targetUid && (
+        <View style={{ marginTop: 12 }}>
+          <View style={{ height: 1, backgroundColor: border, marginBottom: 10 }} />
+          <BadgeManager
+            appdatabase={appdatabase}
+            targetUid={targetUid}
+            userName={userName}
+            target={mergedUser}
+            viewerUid={viewerUid}
+            canGrant={badgeAllowed}
+            targetSquad={targetSquad}
+            badgeMinSquad={badgeMinSquad}
+            onTargetChange={onTargetChange}
+            isDarkMode={isDarkMode}
+          />
+        </View>
       )}
 
       {/* Delete User Data — admins + owner UID */}

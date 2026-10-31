@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useGlobalState } from '../../GlobelStats';
@@ -15,7 +16,9 @@ import { getThemeColors } from '../../Helper/themeColors';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { doc, getDoc } from '@react-native-firebase/firestore';
 import { ref, get } from '@react-native-firebase/database';
-import { getTrustedRoster, getCmsrRoster, getHelperRoster } from '../../Supabase/userBackend';
+import { getTrustedRoster, getCmsrRoster, getHelperRoster, getIdentityBatch } from '../../Supabase/userBackend';
+import UserBadgePill from '../../Helper/UserBadgePill';
+import { getCustomBadgeHolders, useCustomBadges, resolveCustomBadge, customIdsOf } from '../../Helper/customBadges';
 import { useTranslation } from 'react-i18next';
 import { useLocalState } from '../../LocalGlobelStats';
 import config from '../../Helper/Environment';
@@ -34,7 +37,10 @@ const TABS = [
   { key: 'trusted',  labelKey: 'leaderboard.tab_trusted',   icon: 'shield-checkmark',  color: '#10B981' },
   { key: 'cmsr',     labelKey: 'leaderboard.tab_cmsr',      icon: 'ribbon',            color: '#0EA5E9' },
   { key: 'helper',   labelKey: 'leaderboard.tab_helper',    icon: 'hand-left',         color: '#14B8A6' },
+  // Players wearing a MOD-made custom badge (RTDB worn_badges, Code/Helper/customBadges.js).
+  { key: 'custom',   labelKey: 'leaderboard.tab_custom',    icon: 'sparkles',          color: '#A855F7' },
 ];
+const CUSTOM_HOLDERS_LIMIT = 100; // one query, not paginated
 
 const LeaderboardScreen = () => {
   const { theme, user, appdatabase, firestoreDB } = useGlobalState();
@@ -44,12 +50,14 @@ const LeaderboardScreen = () => {
   const { triggerHapticFeedback } = useHaptic();
   const isDarkMode = theme === 'dark';
   const c = getThemeColors(isDarkMode);
+  useCustomBadges(); // redraw the Custom tab's pills when a badge is renamed / recoloured
 
   const [activeTab, setActiveTab] = useState('topRated');
   const [topRatedData, setTopRatedData] = useState([]);
   const [trustedData, setTrustedData] = useState([]);
   const [cmsrData, setCmsrData] = useState([]);
   const [helperData, setHelperData] = useState([]);
+  const [customData, setCustomData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadedTabs, setLoadedTabs] = useState({}); // lazy-load tracker
@@ -126,9 +134,32 @@ const LeaderboardScreen = () => {
 
   // Fetch first page of a role roster from Supabase. Backs the initial
   // tab open + pull-to-refresh. The local MMKV cache only stores page 1.
+  // Custom tab: holders from RTDB (worn_badges orderByChild customCount), names
+  // and avatars from the identity mirror in one batch.
+  const fetchCustomHolders = useCallback(async () => {
+    if (!appdatabase) return [];
+    const holders = await getCustomBadgeHolders(appdatabase, { limit: CUSTOM_HOLDERS_LIMIT });
+    if (holders.length === 0) return [];
+    const identityMap = await getIdentityBatch(holders.map((h) => h.uid)).catch(() => new Map());
+    return holders.map((h) => {
+      const ident = identityMap.get(h.uid);
+      return {
+        userId: h.uid,
+        displayName: ident?.displayName || 'Unknown',
+        avatar: ident?.avatar || null,
+        role: 'custom',
+        customBadges: h.custom,
+        badgeStyles: h.styles,
+        updatedAt: h.updatedAt,
+      };
+    });
+  }, [appdatabase]);
+
   const fetchRoster = useCallback(async (node, cacheKey) => {
     try {
-      const raw = node === 'trusted'
+      const raw = node === 'custom'
+        ? await fetchCustomHolders()
+        : node === 'trusted'
         ? await getTrustedRoster({ limit: ROSTER_PAGE_SIZE, offset: 0 })
         : node === 'cmsr'
           ? await getCmsrRoster({ limit: ROSTER_PAGE_SIZE, offset: 0 })
@@ -145,7 +176,7 @@ const LeaderboardScreen = () => {
       console.warn(`[Leaderboard] ${node} fetch error:`, e?.message);
       return [];
     }
-  }, [updateLocalState]);
+  }, [updateLocalState, fetchCustomHolders]);
 
   // Append the next page on scroll. Bails out if already loading or no more
   // rows. Not cached — only the first page persists in MMKV.
@@ -237,6 +268,13 @@ const LeaderboardScreen = () => {
         setLoadedTabs(prev => ({ ...prev, helper: true }));
         return;
       }
+    } else if (tabKey === 'custom') {
+      const cached = localState.customBadgeRoster;
+      if (cached?.data?.length > 0 && isCacheValid(cached, ROSTER_CACHE_MS)) {
+        setCustomData(cached.data);
+        setLoadedTabs(prev => ({ ...prev, custom: true }));
+        return;
+      }
     }
 
     setLoading(true);
@@ -251,10 +289,13 @@ const LeaderboardScreen = () => {
     } else if (tabKey === 'helper') {
       const list = await fetchRoster('helper', 'helperRoster');
       setHelperData(list);
+    } else if (tabKey === 'custom') {
+      const list = await fetchRoster('custom', 'customBadgeRoster');
+      setCustomData(list);
     }
     setLoadedTabs(prev => ({ ...prev, [tabKey]: true }));
     setLoading(false);
-  }, [fetchTopRated, fetchRoster, loadedTabs, triggerHapticFeedback, localState.trustedRoster, localState.cmsrRoster, localState.helperRoster, isCacheValid]);
+  }, [fetchTopRated, fetchRoster, loadedTabs, triggerHapticFeedback, localState.trustedRoster, localState.cmsrRoster, localState.helperRoster, localState.customBadgeRoster, isCacheValid]);
 
   // ── Pull-to-refresh: bypass cache and re-fetch the active tab ──
   const handleRefresh = useCallback(async () => {
@@ -270,6 +311,9 @@ const LeaderboardScreen = () => {
     } else if (activeTab === 'helper') {
       const list = await fetchRoster('helper', 'helperRoster');
       setHelperData(list);
+    } else if (activeTab === 'custom') {
+      const list = await fetchRoster('custom', 'customBadgeRoster');
+      setCustomData(list);
     }
     setRefreshing(false);
   }, [activeTab, fetchTopRated, fetchRoster]);
@@ -353,26 +397,37 @@ const LeaderboardScreen = () => {
 
   const renderRosterItem = useCallback(({ item }) => {
     const tabMeta = TABS.find(tab => tab.key === activeTab);
+    // Custom tab: the player's own badges (name + icon + colour), not the tab label.
+    const customPills = activeTab === 'custom'
+      ? customIdsOf(item.customBadges).map((id) => resolveCustomBadge(id, item.customBadges[id])).filter(Boolean)
+      : [];
     return (
       <TouchableOpacity style={styles.userItem} onPress={() => handleUserClick(item)} activeOpacity={0.7}>
         <Image resizeMethod="resize" source={{ uri: item.avatar || DEFAULT_AVATAR }} style={styles.avatar} />
         <View style={styles.userInfo}>
           <Text style={styles.userName} numberOfLines={1}>{item.displayName || t('leaderboard.unknown_user')}</Text>
-          <View style={[styles.rolePill, { backgroundColor: tabMeta.color + '18' }]}>
-            <Icon name={tabMeta.icon} size={10} color={tabMeta.color} />
-            <Text style={[styles.rolePillText, { color: tabMeta.color }]}>{t(tabMeta.labelKey)}</Text>
-          </View>
+          {activeTab === 'custom' ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+              {customPills.map((p) => <UserBadgePill key={p.id} custom={p} size="sm" isDarkMode={isDarkMode} />)}
+            </View>
+          ) : (
+            <View style={[styles.rolePill, { backgroundColor: tabMeta.color + '18' }]}>
+              <Icon name={tabMeta.icon} size={10} color={tabMeta.color} />
+              <Text style={[styles.rolePillText, { color: tabMeta.color }]}>{t(tabMeta.labelKey)}</Text>
+            </View>
+          )}
         </View>
         <Icon name="chatbubble-outline" size={20} color={config.colors.primary} />
       </TouchableOpacity>
     );
-  }, [styles, handleUserClick, activeTab, t]);
+  }, [styles, handleUserClick, activeTab, t, isDarkMode]);
 
   // ── Active state ──
   const activeData =
     activeTab === 'topRated' ? topRatedData :
     activeTab === 'trusted'  ? trustedData  :
     activeTab === 'cmsr'     ? cmsrData     :
+    activeTab === 'custom'   ? customData   :
     helperData;
 
   const activeRenderer = activeTab === 'topRated' ? renderTopRatedItem : renderRosterItem;
@@ -390,6 +445,7 @@ const LeaderboardScreen = () => {
     : activeTab === 'topRated' ? t('leaderboard.empty_top_picks', { rating: '3.7' })
     : activeTab === 'trusted'  ? t('leaderboard.empty_trusted')
     : activeTab === 'cmsr'     ? t('leaderboard.empty_cmsr')
+    : activeTab === 'custom'   ? t('leaderboard.empty_custom')
     : t('leaderboard.empty_helper');
 
   const emptySubtext = isLoggedOut
@@ -400,8 +456,13 @@ const LeaderboardScreen = () => {
   return (
     <>
       <View style={styles.container}>
-        {/* Tab bar */}
-        <View style={[styles.tabBar, { borderBottomColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}>
+        {/* Tab bar — five tabs: grows to fill, scrolls when a phone is too narrow. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, flexShrink: 0 }}
+          contentContainerStyle={[styles.tabBar, { borderBottomColor: isDarkMode ? '#1e293b' : '#e2e8f0', minWidth: '100%' }]}
+        >
           {TABS.map(tab => {
             const isActive = activeTab === tab.key;
             return (
@@ -418,7 +479,7 @@ const LeaderboardScreen = () => {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* List / loading / empty */}
         {loading && activeData.length === 0 ? (
@@ -503,12 +564,13 @@ const getStyles = (isDarkMode, c) => StyleSheet.create({
     backgroundColor: isDarkMode ? '#0f172a' : '#fff',
   },
   tab: {
-    flex: 1,
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     paddingVertical: 12,
+    paddingHorizontal: 10,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },

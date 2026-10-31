@@ -57,6 +57,7 @@ import auth from '@react-native-firebase/auth';
 import dayjs from 'dayjs';
 import { banUserwithEmail, unbanUserWithEmail, checkBanStatus, makeModerator, removeModerator, setUserStrike, muteUser, useOnlineStatus, canStaffBanMute, canSanctionTarget } from '../utils';
 import { canGrantBadge, BADGE_MIN_SQUAD } from '../../Helper/staffElections';
+import { fetchWornBadges } from '../../Helper/customBadges';
 import ModEvidencePicker from '../../AppHelper/ModEvidencePicker';
 import { uploadEvidence } from '../../Helper/modEvidenceUpload';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -534,11 +535,26 @@ const ProfileBottomDrawer = ({
               robloxUsernameVerified:  robloxRow?.robloxUsernameVerified ?? false,
               flage:                   identityRow?.flag                 ?? null,
             };
+            // Badge colours + custom badges (Code/Helper/customBadges.js): the
+            // 060 columns on the roles row, else the one worn_badges leaf.
+            if (rolesRow && rolesRow.badgeStyles !== undefined) {
+              newUserData.badgeStyles = rolesRow.badgeStyles || null;
+              newUserData.customBadges = rolesRow.customBadges || null;
+            } else {
+              const worn = await fetchWornBadges(appdatabase, selectedUserId);
+              if (!isMounted) return;
+              newUserData.badgeStyles = worn.styles;
+              newUserData.customBadges = worn.custom;
+            }
           } else {
             // Full RTDB fallback — mirror lag or brand-new user.
             rtdbRecord = await getOrFetchFullProfile(appdatabase, selectedUserId);
             if (!isMounted) return;
             newUserData = buildFromRecord(rtdbRecord);
+            const worn = await fetchWornBadges(appdatabase, selectedUserId);
+            if (!isMounted) return;
+            newUserData.badgeStyles = worn.styles;
+            newUserData.customBadges = worn.custom;
           }
 
           if (badgesMap && badgesMap.size > 0) {
@@ -730,8 +746,12 @@ const ProfileBottomDrawer = ({
       isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
       dateOfBirth: userData.dateOfBirth || null,
       flage: userData.flage ?? selectedUser?.flage ?? null,
+      // Mod badge colours + custom badges (worn_badges / its mirror; a grant
+      // made on this device wins over the mirror until it catches up).
+      badgeStyles: getRoleOverride(selectedUserId)?.badgeStyles ?? userData.badgeStyles ?? selectedUser?.badgeStyles ?? null,
+      customBadges: getRoleOverride(selectedUserId)?.customBadges ?? userData.customBadges ?? selectedUser?.customBadges ?? null,
     };
-  }, [selectedUser, userData]);
+  }, [selectedUser, userData, selectedUserId]);
 
   // ✅ Check if current user is following this user (Firestore)
   useEffect(() => {
@@ -1464,11 +1484,6 @@ const ProfileBottomDrawer = ({
   // A MOD on Admin Dashboard → Badge Access (/badge_granters) skips the bar.
   const targetSquad = Number(mergedUser?.squadCount) || 0;
   const badgeAllowed = canGrantBadge({ isAdmin, anySquad: !!canGrantBadgeAnySquad, targetSquad });
-  const badgeBlocked = () => {
-    if (badgeAllowed) return false;
-    Alert.alert('Not eligible yet', `${userName} has ${targetSquad} squad friend${targetSquad === 1 ? '' : 's'}. Badges need at least ${BADGE_MIN_SQUAD}.`);
-    return true;
-  };
   const canDeleteUser = isAdmin;
   // Staff targets are off-limits to everyone but admins (2026-09-20). Drives
   // the UI only; utils.js/canSanctionTarget and the RTDB rule are what
@@ -1521,159 +1536,6 @@ const ProfileBottomDrawer = ({
     }
   };
 
-  // ── Trusted badge handlers ──
-  const handleMakeTrusted = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    if (badgeBlocked()) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Trusted', `Give ${userName} the Trusted badge?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Confirm', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isTrusted: true, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('trustedRoster', null);
-      setUserData(prev => ({ ...prev, isTrusted: true }));
-      Alert.alert('Success', `${userName} now has the Trusted badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to set Trusted badge');
-    }
-  };
-
-  const handleRemoveTrusted = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Remove Trusted', `Remove the Trusted badge from ${userName}?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isTrusted: null, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('trustedRoster', null);
-      setUserData(prev => ({ ...prev, isTrusted: false }));
-      Alert.alert('Success', `${userName} no longer has the Trusted badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to remove Trusted badge');
-    }
-  };
-
-  // ── CMSR badge handlers ──
-  // CMSR is two badges with one name: House CMSR (isCMSR, the original flag)
-  // and Art CMSR (isArtCMSR). A player can wear both. Each handler is one
-  // atomic update carrying the flag plus rolesUpdatedAt (see handleMakeHelper).
-  const handleMakeCMSR = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    if (badgeBlocked()) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Commissioner', `Give ${userName} the House CMSR badge?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Confirm', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isCMSR: true, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('cmsrRoster', null);
-      setUserData(prev => ({ ...prev, isCMSR: true }));
-      Alert.alert('Success', `${userName} now has the House CMSR badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to set House CMSR badge');
-    }
-  };
-
-  const handleRemoveCMSR = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Remove Commissioner', `Remove the House CMSR badge from ${userName}?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isCMSR: null, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('cmsrRoster', null);
-      setUserData(prev => ({ ...prev, isCMSR: false }));
-      Alert.alert('Success', `${userName} no longer has the House CMSR badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to remove House CMSR badge');
-    }
-  };
-
-  const handleMakeArtCMSR = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    if (badgeBlocked()) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Commissioner', `Give ${userName} the Art CMSR badge?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Confirm', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isArtCMSR: true, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('cmsrRoster', null);
-      setUserData(prev => ({ ...prev, isArtCMSR: true }));
-      Alert.alert('Success', `${userName} now has the Art CMSR badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to set Art CMSR badge');
-    }
-  };
-
-  const handleRemoveArtCMSR = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Remove Commissioner', `Remove the Art CMSR badge from ${userName}?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isArtCMSR: null, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('cmsrRoster', null);
-      setUserData(prev => ({ ...prev, isArtCMSR: false }));
-      Alert.alert('Success', `${userName} no longer has the Art CMSR badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to remove Art CMSR badge');
-    }
-  };
-
-  // ── Helper badge handlers ──
-  const handleMakeHelper = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    if (badgeBlocked()) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Make Helper', `Give ${userName} the Helper badge?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Confirm', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      // Matches the Trusted / CMSR / Junior Mod handlers: one atomic update on
-      // the parent carrying the flag plus a rolesUpdatedAt stamp, so the
-      // Supabase mirror re-runs even when the flag's value is unchanged.
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isHelper: true, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('helperRoster', null);
-      setUserData(prev => ({ ...prev, isHelper: true }));
-      Alert.alert('Success', `${userName} now has the Helper badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to set Helper badge');
-    }
-  };
-
   // ── Avatar moderation ──
   // Clears users/{uid}/avatar so the profile falls back to the default
   // display-pic everywhere it's rendered. No Supabase write needed: `avatar` is
@@ -1702,25 +1564,6 @@ const ProfileBottomDrawer = ({
     }
   };
 
-  const handleRemoveHelper = async () => {
-    if (!selectedUserId || !appdatabase) return;
-    const confirm = await new Promise((resolve) => {
-      Alert.alert('Remove Helper', `Remove the Helper badge from ${userName}?`, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
-      ]);
-    });
-    if (!confirm) return;
-    try {
-      await update(ref(appdatabase, `users/${selectedUserId}`), { isHelper: null, rolesUpdatedAt: Date.now() });
-      invalidateFullProfile(selectedUserId);
-      updateLocalState('helperRoster', null);
-      setUserData(prev => ({ ...prev, isHelper: false }));
-      Alert.alert('Success', `${userName} no longer has the Helper badge`);
-    } catch (err) {
-      Alert.alert('Error', 'Failed to remove Helper badge');
-    }
-  };
 
   // Reset when drawer closes
   useEffect(() => {
@@ -3587,18 +3430,11 @@ const ProfileBottomDrawer = ({
                         badgeAllowed={badgeAllowed}
                         targetSquad={targetSquad}
                         badgeMinSquad={BADGE_MIN_SQUAD}
-                        targetIsTrusted={!!mergedUser?.isTrusted}
-                        targetIsCMSR={!!mergedUser?.isCMSR}
-                        targetIsArtCMSR={!!mergedUser?.isArtCMSR}
-                        targetIsHelper={!!mergedUser?.isHelper}
-                        handleMakeTrusted={handleMakeTrusted}
-                        handleRemoveTrusted={handleRemoveTrusted}
-                        handleMakeCMSR={handleMakeCMSR}
-                        handleRemoveCMSR={handleRemoveCMSR}
-                        handleMakeArtCMSR={handleMakeArtCMSR}
-                        handleRemoveArtCMSR={handleRemoveArtCMSR}
-                        handleMakeHelper={handleMakeHelper}
-                        handleRemoveHelper={handleRemoveHelper}
+                        appdatabase={appdatabase}
+                        targetUid={selectedUserId}
+                        userName={userName}
+                        viewerUid={user?.id}
+                        onTargetChange={(patch) => setUserData((prev) => ({ ...(prev || {}), ...patch }))}
                         canResetAvatar={canManageBadges}
                         targetHasAvatar={!!mergedUser?.avatar}
                         handleResetAvatar={handleResetAvatar}

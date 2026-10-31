@@ -4,8 +4,8 @@
  * One list for every surface (UserBadgeRail.jsx draws it), in this order:
  *
  *   authority role (admin > mod > jmd) → trusted → cmsr (house, then art)
- *   → helper → squad rank (3+ friends inline; any friend on the profile)
- *   → verified
+ *   → helper → custom badges (oldest grant first) → squad rank (3+ friends
+ *   inline; any friend on the profile) → verified
  *
  * Inline rows show every badge (no cap) as icons and move the one labelled
  * authority chip to the end (inlineOrder); the profile drawer keeps ORDER.
@@ -14,13 +14,19 @@
  * and Art CMSR (`isArtCMSR`). Same "CMSR" label, different icon; a player can
  * wear both.
  *
+ * Custom badges (2026-10-31, Code/Helper/customBadges.js) ride on
+ * `u.customBadges` ({ badgeId: { color } }) and appear as 'custom:<id>' keys;
+ * `u.badgeStyles` ({ roleKey: '#hex' }) recolours a role badge. Both come
+ * from worn_badges/{uid} (or its Supabase mirror) — see profileCache.js.
+ *
  * Pro is not in the list: it is never cut (the paywall promises it next to
  * the name), so the rail draws it on its own.
  */
 
 import { rankFor } from './squad';
+import { customIdsOf, customKey } from './customBadges';
 
-export const ORDER = ['admin', 'mod', 'jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified'];
+export const ORDER = ['admin', 'mod', 'jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'custom', 'squad', 'verified'];
 export const AUTHORITY = ['admin', 'mod', 'jmd'];
 
 const count = (u) => Number(u.squadCount) || 0;
@@ -44,11 +50,21 @@ const HAS = {
 /**
  * Badge keys this user wears, in ORDER. `allowed` lets a surface leave some
  * out (group chats never show app-wide Admin/Mod); `squad` is 'rank' or 'any'.
+ * 'custom' in `allowed` expands to one 'custom:<id>' key per worn custom badge.
  */
 export const badgeKeysFor = (u, { allowed = ORDER, squad = 'rank' } = {}) => {
   if (!u) return [];
   const opts = { squad };
-  return ORDER.filter((k) => allowed.includes(k) && HAS[k](u, opts));
+  const out = [];
+  for (const k of ORDER) {
+    if (!allowed.includes(k)) continue;
+    if (k === 'custom') {
+      for (const id of customIdsOf(u.customBadges)) out.push(customKey(id));
+    } else if (HAS[k](u, opts)) {
+      out.push(k);
+    }
+  }
+  return out;
 };
 
 /** Inline order: the icon badges in ORDER, then the authority chip last. */

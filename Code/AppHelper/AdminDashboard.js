@@ -83,6 +83,7 @@ import { useGlobalState } from '../GlobelStats';
 import { adminApplications, adminReview } from '../Helper/staffElections';
 import ElectionResultsPanel from '../Elections/ElectionResultsPanel';
 import AdminNewsTab from './AdminNewsTab';
+import CustomBadgesTab from './CustomBadgesTab';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -236,7 +237,7 @@ const ACCESS_LISTS = {
     path: 'badge_granters',
     label: 'Badge Access',
     power: 'give badges without the squad requirement',
-    intro: 'A MOD listed here can give Trusted, CMSR (House and Art) and Helper to any player, '
+    intro: 'A MOD listed here can give Trusted, CMSR (House and Art), Helper and custom badges to any player, '
       + 'with no 3-squad-friend requirement — the same as you. It only works while they are a '
       + 'MOD, and you can revoke it at any time.',
     listTitle: 'Can give badges without the squad rule',
@@ -2543,6 +2544,9 @@ const AdminDashboard = () => {
           { key: 'staffAccess', label: 'Staff Access', adminOnly: true },
           // MODs on this list may badge players under the 3-squad bar (/badge_granters).
           { key: 'badgeAccess', label: 'Badge Access', adminOnly: true },
+          // MOD-made badges (RTDB custom_badges): create / edit / delete. Granting
+          // is on the player's profile (Mod Tools ▸ Badges). MODs and admins.
+          { key: 'customBadges', label: 'Custom Badges' },
           { key: 'elections',  label: 'Elections', adminOnly: true },
           // More ▸ News posts (AdminNewsTab).
           { key: 'news',       label: 'News', adminOnly: true },
@@ -3796,6 +3800,8 @@ const AdminDashboard = () => {
             />
           )}
         </View>
+      ) : activeTab === 'customBadges' ? (
+        <CustomBadgesTab db={db} uid={currentUser?.id} isAdmin={isAdmin} isDark={isDark} C={C} accent={HUE.accent} danger={HUE.danger} bottomInset={insets.bottom} />
       ) : activeTab === 'news' && isAdmin ? (
         <AdminNewsTab db={db} uid={currentUser?.id} C={C} accent={HUE.accent} danger={HUE.danger} bottomInset={insets.bottom} />
       ) : activeTab === 'switches' && isAdmin ? (

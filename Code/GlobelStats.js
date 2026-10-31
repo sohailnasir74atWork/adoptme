@@ -1,4 +1,5 @@
 import {trackGrowthEvent} from './Helper/growthAnalytics';
+import { startCustomBadgeRegistry } from './Helper/customBadges';
 import { fetchCatalog, refreshCatalog, usableCatalog, withDeadline } from './Helper/catalogNetwork';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp, getApps, initializeApp } from '@react-native-firebase/app';
@@ -977,6 +978,13 @@ export const GlobalStateProvider = ({ children }) => {
     );
     return () => { try { unsub(); } catch (e) { /* noop */ } };
   }, [user?.id]);
+
+  // Custom badge definitions (RTDB /custom_badges): one listener for the
+  // session, read by every badge rail (Code/Helper/customBadges.js).
+  useEffect(() => {
+    if (!appdatabase) return;
+    try { startCustomBadgeRegistry(appdatabase); } catch (e) { /* cosmetic */ }
+  }, []);
 
   // Badge Access for the signed-in user — same one-leaf pattern, fail closed.
   useEffect(() => {

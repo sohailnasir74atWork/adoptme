@@ -1729,6 +1729,7 @@ const TradeList = ({ route }) => {
                         isAdmin: p.isAdmin ?? item.isAdmin, isModerator: p.isModerator ?? item.isModerator, isBabyMod: p.isBabyMod ?? item.isBabyMod,
                         isTrusted: p.isTrusted ?? item.isTrusted, isCMSR: p.isCMSR ?? item.isCMSR, isArtCMSR: p.isArtCMSR ?? item.isArtCMSR, isHelper: p.isHelper ?? item.isHelper,
                         isPro: item.isPro, robloxUsernameVerified: item.robloxUsernameVerified, squadCount: p.squadCount,
+                        badgeStyles: p.badgeStyles, customBadges: p.customBadges,
                       }}
                       isDarkMode={isDarkMode}
                     />

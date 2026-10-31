@@ -14,15 +14,22 @@
  *
  * Which badges and in what order: Code/Helper/badgeRail.js. Tapping a name
  * already opens the profile drawer, which is where the full set lives.
+ *
+ * 2026-10-31: a MOD can recolour a role badge (`user.badgeStyles[key]`,
+ * drawn as a ring of that colour around the coin inline and as the pill
+ * colour on the profile) and grant custom badges (`user.customBadges`,
+ * 'custom:<id>' keys; definitions from the registry in
+ * Code/Helper/customBadges.js, white mark on a circle of the badge colour).
  */
 
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Icon from 'react-native-vector-icons/Ionicons';
-import UserBadgePill from './UserBadgePill';
+import UserBadgePill, { CustomGlyph } from './UserBadgePill';
 import SquadBadge from '../Squad/SquadBadge';
 import { badgeKeysFor, inlineOrder, AUTHORITY } from './badgeRail';
+import { useCustomBadges, resolveCustomBadge, isCustomKey, customIdOf } from './customBadges';
 
 const PRO = require('../../assets/pro.png');
 const VERIFIED = require('../../assets/verification.png');
@@ -46,11 +53,20 @@ const TONES = {
 };
 const tone = (key, isDarkMode) => TONES[key][isDarkMode ? 'dark' : 'light'];
 
-const Glyph = ({ k, user, size }) => {
+const Glyph = ({ k, user, size, custom }) => {
   if (k === 'squad') return <SquadBadge count={user.squadCount} size={size} />;
+  if (custom) return <CustomGlyph image={custom.image} color={custom.color} size={size} />;
   const src = k === 'verified' ? VERIFIED : ROLE[k];
   if (!src) return null;
-  return <Image resizeMethod="resize" source={src} style={{ width: size, height: size }} resizeMode="contain" />;
+  const icon = <Image resizeMethod="resize" source={src} style={{ width: size, height: size }} resizeMode="contain" />;
+  const tint = user.badgeStyles?.[k];
+  if (!tint) return icon;
+  // Recoloured role badge: the coin keeps its art, the ring shows the MOD's colour.
+  return (
+    <View style={{ width: size + 4, height: size + 4, borderRadius: (size + 4) / 2, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' }}>
+      {icon}
+    </View>
+  );
 };
 
 const SquadPill = ({ count, isDarkMode, t }) => {
@@ -75,7 +91,7 @@ const VerifiedPill = ({ isDarkMode, t }) => {
 
 /**
  * @param user     {isAdmin, isModerator, isBabyMod, isTrusted, isCMSR, isArtCMSR, isHelper,
- *                  isPro, robloxUsernameVerified, squadCount}
+ *                  isPro, robloxUsernameVerified, squadCount, badgeStyles, customBadges}
  * @param variant  'inline' | 'full'
  * @param size     inline icon size in px (Pro and every badge icon)
  * @param allowed  badge keys this surface may show (badgeRail.ORDER by default)
@@ -85,9 +101,16 @@ const UserBadgeRail = React.memo(({
   user, variant = 'inline', size = 14, isDarkMode = false, allowed, style, children,
 }) => {
   const { t } = useTranslation();
+  // Subscribes to the custom-badge registry so a renamed / recoloured /
+  // deleted badge redraws without a reload.
+  useCustomBadges();
   if (!user) return null;
   const full = variant === 'full';
-  const keys = badgeKeysFor(user, { allowed, squad: full ? 'any' : 'rank' });
+  // A custom badge whose definition is unknown (deleted, or the registry has
+  // not answered yet on a cold start) is left out rather than drawn blank.
+  const customOf = (k) => (isCustomKey(k) ? resolveCustomBadge(customIdOf(k), user.customBadges?.[customIdOf(k)]) : null);
+  const keys = badgeKeysFor(user, { allowed, squad: full ? 'any' : 'rank' })
+    .filter((k) => !isCustomKey(k) || !!customOf(k));
   const shown = full ? keys : inlineOrder(keys);
   const showPro = !full && !!user.isPro;
   if (!showPro && shown.length === 0 && !children) return null;
@@ -101,7 +124,9 @@ const UserBadgeRail = React.memo(({
         {shown.map((k) => {
           if (k === 'squad') return <SquadPill key={k} count={user.squadCount} isDarkMode={isDarkMode} t={t} />;
           if (k === 'verified') return <VerifiedPill key={k} isDarkMode={isDarkMode} t={t} />;
-          return <UserBadgePill key={k} type={k} size="md" isDarkMode={isDarkMode} glow={glow === k} />;
+          const custom = customOf(k);
+          if (custom) return <UserBadgePill key={k} custom={custom} size="md" isDarkMode={isDarkMode} glow={glow === k} />;
+          return <UserBadgePill key={k} type={k} color={user.badgeStyles?.[k]} size="md" isDarkMode={isDarkMode} glow={glow === k} />;
         })}
         {children}
       </View>
@@ -113,7 +138,7 @@ const UserBadgeRail = React.memo(({
       {showPro && <Image resizeMethod="resize" source={PRO} style={{ width: size, height: size }} resizeMode="contain" />}
       {shown.map((k) => (AUTHORITY.includes(k)
         ? <UserBadgePill key={k} type={k} size="sm" isDarkMode={isDarkMode} glow={glow === k} />
-        : <Glyph key={k} k={k} user={user} size={size} />))}
+        : <Glyph key={k} k={k} user={user} size={size} custom={customOf(k)} />))}
     </View>
   );
 });

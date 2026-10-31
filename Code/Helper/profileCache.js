@@ -30,6 +30,7 @@ import {
   getIdentity, getRoles, getCosmetics, getRoblox,
   getIdentityBatch, getRolesBatch, getCosmeticsBatch, getRobloxBatch,
 } from '../Supabase/userBackend';
+import { normalizeWorn } from './customBadges';
 
 let cache;
 try {
@@ -162,6 +163,22 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
     const isHelper                = rolesRow?.isHelper                ?? fb?.isHelper;
     const robloxUsernameVerified  = robloxRow?.robloxUsernameVerified ?? fb?.robloxUsernameVerified;
 
+    // Mod-granted badge colours + custom badges (Code/Helper/customBadges.js).
+    // The user_roles mirror carries them as badge_styles / custom_badges
+    // (undefined until supabase/060_worn_badges.sql has run — then, and when
+    // there is no roles row at all, read the one worn_badges/{uid} leaf). A
+    // grant made on this device moments ago wins over the mirror (roleOverrides).
+    let worn;
+    const ov = getRoleOverride(uid);
+    if (ov && (ov.badgeStyles !== undefined || ov.customBadges !== undefined)) {
+      worn = { styles: ov.badgeStyles || {}, custom: ov.customBadges || {} };
+    } else if (rolesRow && rolesRow.badgeStyles !== undefined) {
+      worn = normalizeWorn({ styles: rolesRow.badgeStyles, custom: rolesRow.customBadges });
+    } else {
+      const wornSnap = await get(ref(db, `worn_badges/${uid}`)).catch(() => null);
+      worn = normalizeWorn(wornSnap && wornSnap.exists() ? wornSnap.val() : null);
+    }
+
     if (
       identityRow == null && rolesRow == null && cosmeticsRow == null && robloxRow == null &&
       shopItems == null &&
@@ -208,6 +225,8 @@ const assembleAndCacheProfile = async (db, uid, { identityRow, rolesRow, cosmeti
       chatBubbleBg: chatBubbleBg || null,
       topBadge: topBadge || null,
       squadCount: cosmeticsRow?.squadCount || 0,
+      badgeStyles: worn.styles,
+      customBadges: worn.custom,
     };
     setCachedProfile(uid, profile);
     return profile;
@@ -300,7 +319,7 @@ export const seedFromMessage = (msg) => {
 //  after the cache was filled still wins over the cache.
 // ────────────────────────────────────────────────────────
 export const resolveProfile = (msg) => {
-  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isArtCMSR: false, isHelper: false, squadCount: 0 };
+  if (!msg) return { displayName: 'Anonymous', avatar: null, isPro: false, robloxUsernameVerified: false, chatTextColor: null, profileFrame: null, tradeCardBg: null, chatBubbleBg: null, topBadge: null, isBabyMod: false, isTrusted: false, isCMSR: false, isArtCMSR: false, isHelper: false, squadCount: 0, badgeStyles: null, customBadges: null };
 
   const entry = getCachedEntry(msg.senderId);
   const cached = entry?.d ?? null;
@@ -329,6 +348,10 @@ export const resolveProfile = (msg) => {
     // Qualified squad friends: never on the message, always on the cached
     // cosmetics row (034_squad.sql), so chat rows can show the squad rank.
     squadCount: msg.squadCount ?? cached?.squadCount ?? 0,
+    // Badge colours + custom badges: never on the message, always from the
+    // cached profile (worn_badges / its mirror).
+    badgeStyles: cached?.badgeStyles ?? null,
+    customBadges: cached?.customBadges ?? null,
   };
 };
 
@@ -383,6 +406,8 @@ export const setCachedFullProfile = (uid, record) => {
 const ROLE_OVERRIDE_TTL = 5 * 60 * 1000;
 const roleOverrides = new Map(); // uid -> { flags, t }
 
+// `flags` may also carry `badgeStyles` / `customBadges` (BadgeManager) so the
+// granting MOD's own chat rows and drawer show the new colours at once.
 export const setRoleOverride = (uid, flags) => {
   if (!uid || !flags) return;
   const prev = roleOverrides.get(uid);
@@ -471,6 +496,16 @@ export const seedCurrentUser = async (user, localState, db) => {
       // node behind a 10-minute MMKV TTL and applies the identical expiresAt
       // filtering, and MainTabs already force-syncs it on app start — so on the
       // common path this is now zero RTDB reads instead of one per mount.
+      // Own badge colours + custom badges (one small leaf; the own profile is
+      // seeded once per chat-screen mount).
+      try {
+        const wornSnap = await get(ref(db, `worn_badges/${user.id}`));
+        const worn = normalizeWorn(wornSnap.exists() ? wornSnap.val() : null);
+        profile.badgeStyles = worn.styles;
+        profile.customBadges = worn.custom;
+        setCachedProfile(user.id, profile);
+      } catch (e) { /* cosmetic */ }
+
       // syncMyCosmetics returns the cached value when fresh, fetches when not.
       const { syncMyCosmetics } = require('./cosmeticsCache');
       const cos = await syncMyCosmetics(db, user.id);

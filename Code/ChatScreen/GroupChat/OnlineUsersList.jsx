@@ -163,6 +163,8 @@ const OnlineUsersList = ({
           isCMSR: roles?.isCMSR ?? false,
           isArtCMSR: roles?.isArtCMSR ?? false,
           isHelper: roles?.isHelper ?? false,
+          badgeStyles: roles?.badgeStyles,
+          customBadges: roles?.customBadges,
         };
       }).filter((u) => u !== null);
 
@@ -333,6 +335,8 @@ const OnlineUsersList = ({
           isCMSR: roles?.isCMSR ?? false,
           isArtCMSR: roles?.isArtCMSR ?? false,
           isHelper: roles?.isHelper ?? false,
+          badgeStyles: roles?.badgeStyles,
+          customBadges: roles?.customBadges,
           isOnline: allOnlineUserIds.includes(ident.uid),
         };
       });
@@ -606,7 +610,17 @@ const OnlineUsersList = ({
 
             {/* Squad count rides on the cached cosmetics row; no extra read. */}
             <UserBadgeRail
-              user={{ ...item, squadCount: getCachedProfile(item.id)?.squadCount }}
+              user={(() => {
+                // Squad count, badge colours and custom badges ride on the cached
+                // profile when the roles row predates the 060 columns; no extra read.
+                const cp = getCachedProfile(item.id);
+                return {
+                  ...item,
+                  squadCount: cp?.squadCount,
+                  badgeStyles: item.badgeStyles ?? cp?.badgeStyles ?? null,
+                  customBadges: item.customBadges ?? cp?.customBadges ?? null,
+                };
+              })()}
               isDarkMode={isDarkMode}
               style={{ marginLeft: 4 }}
             />

@@ -2805,6 +2805,9 @@ export default function SettingsScreen({ selectedTheme }) {
     ...user,
     isAdmin: !!isAdmin || !!user.admin,
     squadCount: getCachedProfile(user.id)?.squadCount ?? 0,
+    // Badge colours + custom badges granted to me (seeded by seedCurrentUser).
+    badgeStyles: getCachedProfile(user.id)?.badgeStyles ?? null,
+    customBadges: getCachedProfile(user.id)?.customBadges ?? null,
   } : null), [user, isAdmin]);
 
   const publicProfileUser = useMemo(() => {

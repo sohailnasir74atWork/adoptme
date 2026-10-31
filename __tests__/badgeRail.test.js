@@ -40,7 +40,20 @@ describe('badgeKeysFor: one priority order for every surface', () => {
       squadCount: 50, robloxUsernameVerified: true, isPro: true,
     };
     expect(badgeKeysFor(all)).toEqual(['admin', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified']);
-    expect(badgeKeysFor(all)).toEqual(ORDER.filter((k) => !['mod', 'jmd'].includes(k)));
+    // 'custom' is a slot, not a badge: it expands to the worn custom badges (none here).
+    expect(badgeKeysFor(all)).toEqual(ORDER.filter((k) => !['mod', 'jmd', 'custom'].includes(k)));
+  });
+
+  test('custom badges sit after helper, oldest grant first, as custom:<id> keys', () => {
+    const u = {
+      isHelper: true, squadCount: 3,
+      customBadges: { b2: { color: null, at: 200 }, b1: { color: '#EC4899', at: 100 }, gone: null },
+    };
+    expect(badgeKeysFor(u)).toEqual(['helper', 'custom:b1', 'custom:b2', 'squad']);
+    // A surface that leaves 'custom' out of `allowed` shows none of them.
+    expect(badgeKeysFor(u, { allowed: ['helper', 'squad'] })).toEqual(['helper', 'squad']);
+    // Inline: custom badges are icons too, so the authority chip still goes last.
+    expect(inlineOrder(badgeKeysFor({ ...u, isModerator: true }))).toEqual(['helper', 'custom:b1', 'custom:b2', 'squad', 'mod']);
   });
 
   test('squad shows inline only once it has a rank (3+), on the profile from the first friend', () => {

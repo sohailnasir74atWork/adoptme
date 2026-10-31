@@ -435,6 +435,7 @@ const MessagesList = ({
                         isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isArtCMSR: profile.isArtCMSR, isHelper: profile.isHelper,
                         isPro: profile.isPro, robloxUsernameVerified: profile.robloxUsernameVerified,
                         squadCount: profile.squadCount,
+                        badgeStyles: profile.badgeStyles, customBadges: profile.customBadges,
                       }}
                       isDarkMode={isDarkMode}
                     />

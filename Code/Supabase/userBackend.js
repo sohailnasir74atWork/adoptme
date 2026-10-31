@@ -256,6 +256,12 @@ export function fromRolesRow(row) {
     isCMSR: !!row.is_cmsr,
     isArtCMSR: !!row.is_art_cmsr,
     isHelper: !!row.is_helper,
+    // Mod badge colours + custom badges (supabase/060_worn_badges.sql, mirrored
+    // from RTDB worn_badges/{uid} by functions/mirrorWornBadges.js). Left
+    // undefined when the column is not there yet so profileCache knows to
+    // read the RTDB leaf instead of assuming "no badges".
+    badgeStyles: row.badge_styles === undefined ? undefined : (row.badge_styles || null),
+    customBadges: row.custom_badges === undefined ? undefined : (row.custom_badges || null),
   };
 }
 

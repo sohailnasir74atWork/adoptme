@@ -82,6 +82,23 @@
       ".read": true,
       ".write": "auth != null && root.child('users').child(auth.uid).child('admin').val() === true"
     },
+    "custom_badges": {
+      ".read": true,
+      "$badgeId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || root.child('users').child(auth.uid).child('isModerator').val() === true)",
+        ".validate": "!newData.exists() || (newData.hasChildren(['name', 'icon', 'color']) && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 32 && newData.child('icon').isString() && newData.child('icon').val().length <= 24 && newData.child('color').isString() && newData.child('color').val().matches(/^#[0-9A-Fa-f]{6}$/))"
+      }
+    },
+    "worn_badges": {
+      ".read": true,
+      ".indexOn": [
+        "customCount"
+      ],
+      "$uid": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || root.child('users').child(auth.uid).child('isModerator').val() === true)",
+        ".validate": "!newData.exists() || (newData.child('customCount').isNumber() && newData.child('updatedAt').isNumber())"
+      }
+    },
     "squad_size": {
       ".read": false,
       ".write": false

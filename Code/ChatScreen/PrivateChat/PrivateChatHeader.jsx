@@ -114,6 +114,10 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
           isHelper:               !!(rolesRow?.isHelper             ?? fb?.isHelper),
           squadCount:             Number(cosmeticsRow?.squadCount) || 0,
           profileFrame:           cached?.profileFrame ?? null,
+          // Badge colours + custom badges: the 060 columns when the mirror has
+          // them, else whatever profileCache already resolved (no extra read).
+          badgeStyles:            rolesRow?.badgeStyles !== undefined ? (rolesRow.badgeStyles || null) : (cached?.badgeStyles ?? null),
+          customBadges:           rolesRow?.customBadges !== undefined ? (rolesRow.customBadges || null) : (cached?.customBadges ?? null),
         };
         headerUserCache.set(selectedUserId, { data, at: Date.now() });
         if (!isMounted) return; // a reply for a player we already left
@@ -155,6 +159,8 @@ const PrivateChatHeader = React.memo(({ selectedUser, selectedTheme, bannedUsers
       isHelper: userData.isHelper ?? selectedUser?.isHelper ?? false,
       squadCount: userData.squadCount ?? selectedUser?.squadCount ?? 0,
       profileFrame: selectedUser?.profileFrame || userData.profileFrame || null,
+      badgeStyles: roleOv?.badgeStyles ?? userData.badgeStyles ?? null,
+      customBadges: roleOv?.customBadges ?? userData.customBadges ?? null,
     };
   }, [selectedUser, userData, selectedUserId]);
 

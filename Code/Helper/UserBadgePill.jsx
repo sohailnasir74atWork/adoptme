@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, Text, Animated, Image } from 'react-native';
+import { View, Text, Animated, Image, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getShimmerValue } from './shimmerDriver';
 
@@ -14,6 +14,11 @@ import { getShimmerValue } from './shimmerDriver';
 // thread (see shimmerDriver.js) — adding glow to any number of pills costs
 // the same as adding it to one. JS thread is idle during animation.
 // Default: ON for the new 'helper' badge, OFF for everything else.
+//
+// 2026-10-31 (Code/Helper/customBadges.js): a MOD can recolour a community
+// badge (`color` prop overrides the type's colour; the coin icon stays) and
+// grant custom badges (`custom` prop = { name, image, color }: a white mark
+// drawn inside a circle of the badge colour, see CustomGlyph).
 
 // labelKey is translated at render time (see UserBadgePill).
 const TYPES = {
@@ -80,11 +85,59 @@ const ShimmerOverlay = React.memo(({ isDarkMode }) => {
   );
 });
 
-const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, style, glow }) => {
+// A custom badge's icon: the white mark (assets/custom-badges) on a round
+// swatch of the badge colour, so one PNG serves every colour a MOD picks.
+// Inline rails draw it at the same size as the role coins.
+export const CustomGlyph = React.memo(({ image, color, size = 14, style }) => (
+  <View style={[{
+    width: size, height: size, borderRadius: size / 2, backgroundColor: color || '#64748B',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.22)',
+  }, style]}>
+    {image ? <Image resizeMethod="resize" source={image} style={{ width: size * 0.74, height: size * 0.74 }} resizeMode="contain" /> : null}
+  </View>
+));
+
+const UserBadgePill = ({ type, size = 'md', isDarkMode = false, labelOverride, style, glow, color, custom }) => {
   const { t } = useTranslation();
-  const def = TYPES[type];
-  if (!def) return null;
   const s = SIZES[size] || SIZES.md;
+  const shouldGlowCustom = !!glow;
+
+  // Custom badge: community-tier pill in the badge's own colour.
+  if (custom && custom.name) {
+    const hue = custom.color || '#64748B';
+    const bgC = hexAlpha(hue, isDarkMode ? '26' : '1A');
+    const borderC = hexAlpha(hue, isDarkMode ? '66' : '40');
+    return (
+      <View
+        style={[{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: bgC,
+          borderWidth: 1,
+          borderColor: borderC,
+          paddingLeft: s.pl,
+          paddingRight: s.ph,
+          paddingVertical: s.pv,
+          borderRadius: s.br,
+          gap: s.gap,
+          overflow: shouldGlowCustom ? 'hidden' : undefined,
+        }, style]}
+      >
+        <CustomGlyph image={custom.image} color={hue} size={s.ic} />
+        <Text style={{ color: hue, fontSize: s.fs, fontWeight: '800', letterSpacing: 0.35 }} numberOfLines={1}>
+          {custom.name}
+        </Text>
+        {shouldGlowCustom && <ShimmerOverlay isDarkMode={isDarkMode} />}
+      </View>
+    );
+  }
+
+  const base = TYPES[type];
+  if (!base) return null;
+  // A MOD's colour override only ever applies to community badges; authority
+  // chips keep their fixed colours (moderation trust must look the same everywhere).
+  const def = base.tier === 'community' && color ? { ...base, color } : base;
   const label = labelOverride || t(def.labelKey);
   // Glow is opt-in per pill. Call sites pass glow={firstBadge === '<type>'}
   // so only the first/highest-priority badge a user owns flashes; the rest

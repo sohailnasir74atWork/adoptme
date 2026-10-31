@@ -329,8 +329,9 @@ const GroupMessageList = ({
                         isTrusted: profile.isTrusted, isCMSR: profile.isCMSR, isArtCMSR: profile.isArtCMSR, isHelper: profile.isHelper,
                         isPro: profile.isPro, robloxUsernameVerified: profile.robloxUsernameVerified,
                         squadCount: profile.squadCount,
+                        badgeStyles: profile.badgeStyles, customBadges: profile.customBadges,
                       }}
-                      allowed={['jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'squad', 'verified']}
+                      allowed={['jmd', 'trusted', 'cmsr_house', 'cmsr_art', 'helper', 'custom', 'squad', 'verified']}
                       isDarkMode={isDarkMode}
                     />
                     {item?.isCreator && (

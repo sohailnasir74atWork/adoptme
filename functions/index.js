@@ -24,6 +24,8 @@
 // ── RTDB → Supabase mirrors ────────────────────────────────────────────
 exports.mirrorUsersToSupabase = require('./mirrorUsersToSupabase').mirrorUsersToSupabase;
 exports.mirrorUsersPrivateToSupabase = require('./mirrorUsersToSupabase').mirrorUsersPrivateToSupabase;
+// Mod badge colours + custom badges (worn_badges/{uid} → user_roles.badge_styles / custom_badges, 060).
+exports.mirrorWornBadges = require('./mirrorWornBadges').mirrorWornBadges;
 exports.mirrorGroupMetaToSupabase = require('./mirrorGroupMetaToSupabase').mirrorGroupMetaToSupabase;
 exports.syncGroupNameLower = require('./syncGroupNameLower').syncGroupNameLower;
 
