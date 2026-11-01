@@ -41,6 +41,13 @@ exports.privatizePostEmail = privatize.privatizePostEmail;
 // ── Supabase auth bridge ───────────────────────────────────────────────
 exports.setSupabaseRoleClaim = require('./setSupabaseRoleClaim').setSupabaseRoleClaim;
 
+// New-account posting gate: accounts made after 2026-10-28 cannot post in
+// public chat or Feed until they sign in on the app or are 72 h old.
+// See functions/postingGate.js, supabase/059, firestore.rules postingGateOk().
+const postingGate = require('./postingGate');
+exports.initPostingGate = postingGate.initPostingGate;
+exports.markPostingGateAppSeen = postingGate.markPostingGateAppSeen;
+
 // ── Push notifications ─────────────────────────────────────────────────
 exports.notifyNewMessage = require('./notifyNewMessage').notifyNewMessage;
 exports.notifyGroupMessage = require('./notifyGroupMessage').notifyGroupMessage;
@@ -144,6 +151,10 @@ exports.stampBanTimestamp = require('./stampBanTimestamp').stampBanTimestamp;
 const banMirror = require('./mirrorBansToSupabase');
 exports.mirrorBansToSupabase = banMirror.mirrorBansToSupabase;
 exports.mirrorLinksAllowedToSupabase = banMirror.mirrorLinksAllowedToSupabase;
+
+// A staff-made permanent ban also disables the Firebase Auth account; unban
+// re-enables it. See functions/banDisablesAccount.js.
+exports.banDisablesAccount = require('./banDisablesAccount').banDisablesAccount;
 
 // ── World Cup 2026 ────────────────────────────────────────────────────
 const worldCup = require('./fetchWorldCupData');

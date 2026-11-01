@@ -1156,14 +1156,19 @@ export const GlobalStateProvider = ({ children }) => {
         const ggUrl = `${SOURCE_URL[VALUE_SOURCE.GG]}${bust}`;
 
         const catalogStartedAt = Date.now();
+        // A fresh install (no usable cache) retries a dropped CDN connection
+        // twice before showing the error state; see refreshCatalog.
+        const firstLoadRetries = [1000, 3000];
         const results = await Promise.all([
           refreshCatalog({
             load: () => fetchCatalog(elvebreddUrl), cached: ls.data,
             save: value => updateLocalStateRef.current('data', value),
+            retryDelaysMs: firstLoadRetries,
           }),
           refreshCatalog({
             load: () => fetchCatalog(ggUrl), cached: ls.ggData,
             save: value => updateLocalStateRef.current('ggData', value),
+            retryDelaysMs: firstLoadRetries,
           }),
         ]);
         catalogRefreshed = results.every(r => r.fresh);

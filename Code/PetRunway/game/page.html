@@ -1,0 +1,72 @@
+<div class="phone" id="app">
+
+  <!-- HOME -->
+  <section class="screen" id="scr-home">
+    <div class="topbar" style="padding-top:14px">
+      <button class="iconbtn" id="exitBtn" data-ta="back" aria-label="Back"><svg width="18" height="18" viewBox="0 0 20 20"><path d="M13 3 L6 10 L13 17" stroke="#3A1238" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <h1 class="logo" data-t="title">Pet Runway<small data-t="subtitle">Design a pet card</small></h1>
+    </div>
+    <div class="pad" style="padding-top:6px">
+      <div class="theme-card" id="themeCard">
+        <span class="countdown" id="countdown"></span>
+        <span class="eyebrow" id="ideaLabel" data-t="idea_label">Today's idea</span>
+        <div class="theme-title" id="themeName"></div>
+        <div class="theme-hint" id="themeHint" data-t="idea_hint">Dress up any pet, pick a scene and a frame, draw on it, then press Magic.</div>
+      </div>
+      <button class="cta" data-go="studio" data-t="design_cta">Design my card</button>
+      <div class="staff-row" id="staffRow" hidden><button class="cta alt" id="staffBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3A1238" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10 H21 M8 3 V7 M16 3 V7 M12 13 V18 M9.5 15.5 H14.5"/></svg><span data-t="manage_events">Manage events</span></button></div>
+      <div>
+        <div class="sec-title"><h3 data-t="my_cards">My cards</h3><span id="myCount"></span></div>
+        <div class="mycards" id="myCards"></div>
+      </div>
+      <div class="soon">
+        <svg viewBox="0 0 24 24"><path d="M6 3 H18 V7 a6 6 0 0 1 -12 0Z" fill="#FFC542" stroke="#D18A0F" stroke-width="1.2"/><path d="M6 5 H3 a3 3 0 0 0 3 4 M18 5 H21 a3 3 0 0 1 -3 4" fill="none" stroke="#D18A0F" stroke-width="1.5"/><rect x="10" y="12" width="4" height="5" fill="#FFC542"/><rect x="7" y="17" width="10" height="4" rx="1" fill="#FF4F9A"/></svg>
+        <div><b data-t="soon_title">Daily voting and prizes are coming</b><span data-t="soon_body">Soon you can enter your card in the daily show, vote for others and win stars, frames and Pro.</span></div>
+      </div>
+      <div>
+        <div class="sec-title"><h3 data-t="coming_up">Coming up</h3></div>
+        <div class="next-row" id="nextThemes"></div>
+      </div>
+      <p class="fine" data-t="fine">Free to play. Your cards and pictures stay on this phone.</p>
+    </div>
+  </section>
+
+  <!-- STUDIO -->
+  <section class="screen" id="scr-studio" hidden>
+    <div class="studio-top">
+      <div class="topbar" style="padding:12px 0 8px">
+        <button class="iconbtn" data-go="home" data-ta="back" aria-label="Back"><svg width="18" height="18" viewBox="0 0 20 20"><path d="M13 3 L6 10 L13 17" stroke="#3A1238" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <h2 data-t="studio_title">Card studio</h2>
+        <button class="iconbtn" id="undoBtn" data-ta="undo" aria-label="Undo"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M9 14 L4 9 L9 4 M4 9 H15 a5 5 0 0 1 0 10 H11" stroke="#3A1238" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="iconbtn" id="redoBtn" data-ta="redo" aria-label="Redo"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M15 14 L20 9 L15 4 M20 9 H9 a5 5 0 0 0 0 10 H13" stroke="#3A1238" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="card-host" id="cardHost"></div>
+      <div class="modebar">
+        <div class="seg" id="modeSeg"><button data-mode="move" class="on" data-t="mode_move">Move</button><button data-mode="draw" data-t="mode_draw">Draw</button></div>
+        <div class="meter" id="meter"></div>
+        <button class="showbtn" id="magicBtn"><svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:4px"><path d="M3 21 L14 10" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M17 2 Q17.6 6.4 22 7 Q17.6 7.6 17 12 Q16.4 7.6 12 7 Q16.4 6.4 17 2Z" fill="#fff"/></svg><span data-t="magic">Magic</span></button>
+      </div>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div class="panel" id="panel"></div>
+    <div class="studio-foot"><button class="cta" id="enterBtn" data-t="walk">Walk the runway</button></div>
+  </section>
+
+  <!-- MAGIC PLAYER -->
+  <div class="magic" id="magic" hidden>
+    <div class="top"><button class="iconbtn" id="magicClose" data-ta="close" aria-label="Close"><svg width="16" height="16" viewBox="0 0 20 20"><path d="M4 4 L16 16 M16 4 L4 16" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></button><span class="tag" data-t="magic_tag">MAGIC</span><button class="iconbtn" id="magicSound"></button></div>
+    <div class="mcard" id="magicCard"></div>
+    <div class="moves" id="moves"></div>
+    <div class="acts"><button class="cta alt" id="magicReplay" data-t="replay">Replay</button><button class="cta gold" id="magicShare" data-t="share_picture">Share picture</button></div>
+  </div>
+
+  <!-- RUNWAY SHOW -->
+  <div class="show" id="show" hidden>
+    <div class="beam"></div><div class="floor"></div>
+    <div class="curtain l"></div><div class="curtain r"></div>
+    <div class="top"><button class="iconbtn" id="showClose" data-ta="close" aria-label="Close"><svg width="16" height="16" viewBox="0 0 20 20"><path d="M4 4 L16 16 M16 4 L4 16" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></button><span class="live" data-t="on_runway">ON THE RUNWAY</span><button class="showbtn" id="showMagic" data-t="magic">Magic</button></div>
+    <div class="tilt" id="tilt"><div class="cardwrap" id="cardwrap"></div></div>
+    <div class="caption"><b id="showTitle"></b><span id="showSub"></span><div><span class="counter" id="showHearts"></span></div></div>
+    <div class="acts"><button class="cta alt" id="saveCard" data-t="save_card">Save to My cards</button><button class="cta gold" id="shareCard" data-t="share_picture">Share picture</button></div>
+  </div>
+</div>

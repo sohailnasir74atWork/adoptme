@@ -1022,6 +1022,14 @@ export default function SettingsScreen({ selectedTheme }) {
 
   }, [isDrawerVisible, user?.id]); // ✅ Only initialize when drawer opens or user ID changes
 
+  // The Account row, the ✓ by the Roblox name and the Roblox sheet read these
+  // two, so they follow the saved record. Filled only by the drawer above,
+  // they said "Unverified" for a verified player until Edit Profile was opened.
+  useEffect(() => {
+    setRobloxUsername(user?.robloxUsername || '');
+    setRobloxUsernameVerified(!!user?.robloxUsernameVerified);
+  }, [user?.id, user?.robloxUsername, user?.robloxUsernameVerified]);
+
   // Load bio from Firestore and rating from user_ratings_summary (single source of truth)
   useEffect(() => {
     if (!user?.id || !appdatabase || !firestoreDB) {

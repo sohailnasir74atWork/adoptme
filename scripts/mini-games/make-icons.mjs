@@ -12,6 +12,7 @@
  *   arrow       Arrow Puzzle    (slide the arrows out)
  *   battle      Quiz Battle     (2 players: two question bubbles and a bolt)
  *   showdown    Trade Showdown  (2 players: a balance weighing two pets)
+ *   runway      Pet Runway      (a gold-framed pink pet card with a crown)
  *
  * Glossy toy style to sit next to the assets/home-actions art: soft gradients,
  * a white gloss, a soft dark outline so they read on light and dark cards.
@@ -171,6 +172,19 @@ const ICONS = {
      </g>
      <circle cx="32" cy="12.5" r="4.2" fill="url(#gold)" stroke="${OUTLINE}" stroke-width="1.2"/>
      ${sparkle(56, 8, 4.5, '#FDE68A')}`),
+  // Pet Runway: a gold-framed pink pet card, tilted, with a paw, a crown and sparkles.
+  runway: svg(
+    grad('rcard', [[0, '#FFD1E8'], [0.5, '#FF4F9A'], [1, '#9D174D']]) + grad('rgold', [[0, '#FEF3C7'], [0.45, '#F59E0B'], [1, '#B45309']]),
+    `<g transform="rotate(-8 32 35)">
+       <rect x="14" y="13" width="36" height="46" rx="6" fill="url(#rgold)" stroke="${OUTLINE}" stroke-width="1.4"/>
+       <rect x="17.5" y="16.5" width="29" height="39" rx="4" fill="url(#rcard)"/>
+       <path d="M17.5 47 Q32 41 46.5 47 V51.5 a4 4 0 0 1 -4 4 H21.5 a4 4 0 0 1 -4 -4 Z" fill="#7C1D52" opacity="0.5"/>
+       ${paw(32, 35, 0.9, '#FFFFFF')}
+       <rect x="20" y="18.5" width="24" height="5" rx="2.5" fill="rgba(255,255,255,0.35)"/>
+     </g>
+     <path d="M21 14 L23 5 L28.5 10.5 L32 3 L35.5 10.5 L41 5 L43 14 Z" fill="url(#rgold)" stroke="${OUTLINE}" stroke-width="1.2" stroke-linejoin="round"/>
+     ${sparkle(54, 15, 5, '#FDE68A')}
+     ${sparkle(9, 47, 4, '#FFFFFF')}`),
 };
 
 fs.mkdirSync(OUT, { recursive: true });

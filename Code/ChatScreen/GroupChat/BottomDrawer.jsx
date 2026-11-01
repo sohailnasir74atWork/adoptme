@@ -688,7 +688,6 @@ const ProfileBottomDrawer = ({
     fetchXP();
 
 
-
     // ✅ Fetch active cosmetics (profile frame + text color)
     // Reset immediately to prevent showing previous user's cosmetics
     const isOwnProfile = user?.id && (selectedUserId === user.id || selectedUserId === user.senderId);
@@ -1457,7 +1456,6 @@ const ProfileBottomDrawer = ({
       setUserData(prev => ({ ...prev, isModerator: false }));
     }
   };
-
 
 
   // ─────────────────────────────────────────────
@@ -3125,7 +3123,6 @@ const ProfileBottomDrawer = ({
                     <ActivityIndicator size="small" color={config.colors.primary} />
                   </View>
                 )}
-
 
 
                 {/* 📝 Bio Section */}

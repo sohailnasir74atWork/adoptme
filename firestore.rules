@@ -43,6 +43,20 @@ service cloud.firestore {
     function ownerIs(field) { return signedIn() && resource.data.get(field, null) == me(); }
     function createsAs(field) { return signedIn() && request.resource.data.get(field, null) == me(); }
 
+    // New-account posting gate (2026-10-28, functions/postingGate.js): an
+    // account made after it shipped may post to Feed only once it has signed
+    // in on the app or is 72 h old. Older accounts have no posting_gate doc and
+    // pass. A token minted before the sign-up Cloud Functions ran has neither
+    // the doc nor the `role` claim and waits a moment.
+    function postingGateOk() {
+      return exists(/databases/$(database)/documents/posting_gate/$(request.auth.uid))
+        ? postingGateOpen(get(/databases/$(database)/documents/posting_gate/$(request.auth.uid)).data)
+        : 'role' in request.auth.token;
+    }
+    function postingGateOpen(g) {
+      return g.get('appSeen', false) == true || request.time >= g.restrictedUntil;
+    }
+
     // ── Trades (feed, featured, search; website renders them signed out) ──
     match /trades_new/{tradeId} {
       allow read: if true;
@@ -62,7 +76,7 @@ service cloud.firestore {
     // ── Design feed posts ──
     match /designPosts/{postId} {
       allow read: if true;
-      allow create: if createsAs('userId');
+      allow create: if createsAs('userId') && postingGateOk();
       allow update: if ownerIs('userId') || isStaff()
         || (signedIn()
             && changed().hasOnly(['reactions', 'likes', 'commentCount', 'reportCount', 'report', 'banned'])
@@ -71,11 +85,17 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if createsAs('userId');
+        allow create: if createsAs('userId') && postingGateOk();
         allow update: if ownerIs('userId') || isStaff()
           || (signedIn() && changed().hasOnly(['likes']) && ownEntryOnly('likes'));
         allow delete: if ownerIs('userId') || isStaff();
       }
+    }
+
+    // Written only by Cloud Functions; the owner may read it (the website
+    // explains why a post was refused).
+    match /posting_gate/{uid} {
+      allow read: if signedIn() && me() == uid;
     }
 
     // ── Statuses (stories) ──

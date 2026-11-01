@@ -369,6 +369,8 @@ function App() {
           <Stack.Screen name="MyCosmeticsScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/MyCosmeticsScreen').default} />
           <Stack.Screen name="GameHub" options={{ title: t('mini_games.title'), ...headerOptions }} getComponent={() => require('./Code/Engagement/GameHub').default} />
           <Stack.Screen name="ArrowGameScreen" options={{ headerShown: false }} getComponent={() => require('./Code/Engagement/ArrowGameScreen').default} />
+          <Stack.Screen name="PetRunway" options={{ headerShown: false }} getComponent={() => require('./Code/PetRunway/PetRunwayScreen').default} />
+          <Stack.Screen name="RunwayEvents" options={{ headerShown: false }} getComponent={() => require('./Code/PetRunway/RunwayEventsScreen').default} />
           <Stack.Screen name="QuizBattleScreen" options={{ title: t('mini_games.quiz_battle_name'), ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/QuizBattle').default} />
           <Stack.Screen name="TradeShowdownScreen" options={{ title: t('mini_games.trade_showdown_name'), ...headerOptions }} getComponent={() => require('./Code/ValuesScreen/PetGuessingGame/TradeShowdown').default} />
           <Stack.Screen name="BadgesScreen" options={{ headerShown: false }} getComponent={() => require('./Code/SettingScreen/BadgesScreen').default} />

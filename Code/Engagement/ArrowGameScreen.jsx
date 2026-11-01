@@ -1316,20 +1316,6 @@ const getArrowCells = (arrow) => {
     return cells;
 };
 
-// Cells from arrow head forward to grid edge (exclusive of head)
-const getForwardPath = (arrow) => {
-    const [dc, dr] = DIR_VEC[arrow.dir];
-    const out = [];
-    let r = arrow.r + dr;
-    let c = arrow.c + dc;
-    while (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
-        out.push({ r, c });
-        r += dr;
-        c += dc;
-    }
-    return out;
-};
-
 // Parse level → cells array (walls + arrows)
 const parseLevel = (level) => {
     const cells = [];
@@ -1350,24 +1336,294 @@ const parseLevel = (level) => {
     return cells;
 };
 
-// Is the forward path clear of other arrows' cells and walls?
-// Arrows already in flight (keys in `flyingKeys`) are treated as gone.
-const isPathClear = (cells, arrow, flyingKeys) => {
-    const forward = getForwardPath(arrow);
-    const obstacles = [];
-    cells.forEach((x) => {
-        if (x === arrow) return;
-        if (flyingKeys && flyingKeys.has(x.key)) return;
+// Occupancy map of every blocking cell — walls plus the body cells of every
+// arrow NOT in flight — keyed "r,c" → owner key. Built once per render /
+// tap (useMemo in the screen) instead of once per arrow per render, which
+// used to rebuild every other arrow's cell list for each arrow drawn.
+const buildOccupancy = (cells, flyingKeys) => {
+    const occ = new Map();
+    for (const x of cells) {
+        if (flyingKeys && flyingKeys.has(x.key)) continue; // in flight = gone
         if (x.type === 'wall') {
-            obstacles.push({ r: x.r, c: x.c });
+            occ.set(`${x.r},${x.c}`, x.key);
         } else if (x.type === 'arrow') {
-            obstacles.push(...getArrowCells(x));
+            for (const p of getArrowCells(x)) occ.set(`${p.r},${p.c}`, x.key);
         }
-    });
-    return !forward.some((p) =>
-        obstacles.some((o) => o.r === p.r && o.c === p.c)
-    );
+    }
+    return occ;
 };
+
+// Is the forward path clear of walls and OTHER arrows' cells? An arrow's own
+// body never blocks it (unchanged rule — the snake follows its head out).
+const isPathClearIn = (occ, arrow) => {
+    const [dc, dr] = DIR_VEC[arrow.dir];
+    let r = arrow.r + dr;
+    let c = arrow.c + dc;
+    while (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+        const owner = occ.get(`${r},${c}`);
+        if (owner !== undefined && owner !== arrow.key) return false;
+        r += dr;
+        c += dc;
+    }
+    return true;
+};
+
+// One arrow (head + tail cells). Memoized: a tap re-renders ONLY the arrow
+// that flies and the arrows it unblocks (isFree / showGlow flip), not all
+// ~300 cells. Every prop is stable across taps (primitives, memoized styles,
+// useCallback getters, cell objects that keep identity through
+// `cells.filter`), so the shallow compare holds and the cached native
+// Animated nodes stay attached instead of being torn down and rebuilt.
+const ArrowView = React.memo(function ArrowView({
+    cell, isFlying, showGlow,
+    CELL_SIZE, HALF, STROKE_W, HIT_SLOP,
+    styles, getCellAnim, getShake, cellCenter, glowOpacity, onTap,
+}) {
+    const colorPair = ARROW_COLORS[cell.colorIdx] || ARROW_COLORS[0];
+    const strokeColor = colorPair[1];
+    const body = getArrowCells(cell);
+    const sh = getShake(cell.key, cell.dir);
+
+    // Line-segment rectangle extending from cell center toward `dir`
+    const lineStyleFor = (dir) => {
+        if (dir === 'R') return { left: HALF, top: HALF - STROKE_W / 2, width: HALF, height: STROKE_W };
+        if (dir === 'L') return { left: 0, top: HALF - STROKE_W / 2, width: HALF, height: STROKE_W };
+        if (dir === 'D') return { left: HALF - STROKE_W / 2, top: HALF, width: STROKE_W, height: HALF };
+        return { left: HALF - STROKE_W / 2, top: 0, width: STROKE_W, height: HALF };
+    };
+
+    return (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+            {body.map((bc, idx) => {
+                const isHead = idx === 0;
+                const isEnd = idx === body.length - 1;
+                const anim = getCellAnim(cell, idx);
+                const initPx = cellCenter(bc.r, bc.c);
+
+                // Direction from this cell back to its predecessor (opposite of the
+                // tail-char that led here). Null for head.
+                const prevDir = idx > 0 ? DIR_OPP[cell.tail[idx - 1]] : null;
+                // Direction toward the next cell along the tail.
+                const nextDir = idx < body.length - 1 ? cell.tail[idx] : null;
+
+                return (
+                    <Animated.View
+                        key={`${cell.key}-c${idx}`}
+                        pointerEvents="auto"
+                        style={{
+                            position: 'absolute',
+                            left: initPx.x - HALF,
+                            top: initPx.y - HALF,
+                            width: CELL_SIZE,
+                            height: CELL_SIZE,
+                            opacity: anim.opacity,
+                            transform: [
+                                { translateX: anim.translateX },
+                                { translateY: anim.translateY },
+                            ],
+                            zIndex: isHead ? 10 : 1,
+                        }}
+                    >
+                        {/* At rest: static line-art stems. During flight: hide
+                            so the traveling dots (below) read as a snake. */}
+                        {!isFlying && prevDir && (
+                            <View
+                                pointerEvents="none"
+                                style={[
+                                    styles.stroke,
+                                    lineStyleFor(prevDir),
+                                    { backgroundColor: strokeColor },
+                                ]}
+                            />
+                        )}
+
+                        {!isFlying && nextDir && (
+                            <View
+                                pointerEvents="none"
+                                style={[
+                                    styles.stroke,
+                                    lineStyleFor(nextDir),
+                                    { backgroundColor: strokeColor },
+                                ]}
+                            />
+                        )}
+
+                        {/* Center joint — small at rest, beefier during flight so
+                            each tail cell reads clearly as a traveling rope bead. */}
+                        {!isHead && (
+                            <View
+                                pointerEvents="none"
+                                style={{
+                                    position: 'absolute',
+                                    left: HALF - (isFlying ? STROKE_W * 1.8 : STROKE_W) / 2,
+                                    top: HALF - (isFlying ? STROKE_W * 1.8 : STROKE_W) / 2,
+                                    width: isFlying ? STROKE_W * 1.8 : STROKE_W,
+                                    height: isFlying ? STROKE_W * 1.8 : STROKE_W,
+                                    backgroundColor: strokeColor,
+                                    borderRadius: isFlying ? STROKE_W : 1,
+                                }}
+                            />
+                        )}
+
+                        {/* Rounded end-cap at tail tip (only at rest) */}
+                        {!isFlying && isEnd && !isHead && (
+                            <View
+                                pointerEvents="none"
+                                style={{
+                                    position: 'absolute',
+                                    left: HALF - STROKE_W / 2,
+                                    top: HALF - STROKE_W / 2,
+                                    width: STROKE_W,
+                                    height: STROKE_W,
+                                    backgroundColor: strokeColor,
+                                    borderRadius: STROKE_W / 2,
+                                }}
+                            />
+                        )}
+
+                        {/* Glow pulse on heads with a clear path.
+                            Centered on the arrowhead's visual midpoint (shifted toward
+                            the firing edge so the triangle tip sits inside the glow).
+                            Shown on tutorial levels (1-3) for every free arrow,
+                            or on any level for the one arrow unlocked via Hint. */}
+                        {isHead && showGlow && (() => {
+                            const [dc, dr] = DIR_VEC[cell.dir];
+                            const OFF = CELL_SIZE * 0.25;
+                            const cx = HALF + dc * OFF;
+                            const cy = HALF + dr * OFF;
+                            return (
+                                <Animated.View
+                                    pointerEvents="none"
+                                    style={{
+                                        position: 'absolute',
+                                        left: cx - CELL_SIZE * 0.6,
+                                        top: cy - CELL_SIZE * 0.6,
+                                        width: CELL_SIZE * 1.2,
+                                        height: CELL_SIZE * 1.2,
+                                        borderRadius: CELL_SIZE * 0.6,
+                                        backgroundColor: strokeColor,
+                                        opacity: glowOpacity,
+                                    }}
+                                />
+                            );
+                        })()}
+
+                        {/* Head: forward stem + solid triangular tip at the edge.
+                            Triangle drawn with CSS borders for a crisp look. */}
+                        {isHead && (
+                            <>
+                                {!isFlying && (() => {
+                                    const TIP_LEN = Math.max(6, Math.floor(CELL_SIZE * 0.35));
+                                    const TIP_W = Math.max(6, Math.floor(CELL_SIZE * 0.4));
+                                    // Shortened stem that meets the triangle base cleanly
+                                    const stemShortStyle = (d) => {
+                                        const stemLen = HALF - TIP_LEN + STROKE_W;
+                                        if (stemLen <= 0) return null;
+                                        if (d === 'R') return { left: HALF, top: HALF - STROKE_W / 2, width: stemLen, height: STROKE_W };
+                                        if (d === 'L') return { left: HALF - stemLen, top: HALF - STROKE_W / 2, width: stemLen, height: STROKE_W };
+                                        if (d === 'D') return { left: HALF - STROKE_W / 2, top: HALF, width: STROKE_W, height: stemLen };
+                                        return { left: HALF - STROKE_W / 2, top: HALF - stemLen, width: STROKE_W, height: stemLen };
+                                    };
+                                    const tipStyle = (d) => {
+                                        // Each direction: one border has color, the two perpendicular ones are transparent
+                                        const base = {
+                                            position: 'absolute',
+                                            width: 0, height: 0,
+                                            borderTopColor: 'transparent',
+                                            borderBottomColor: 'transparent',
+                                            borderLeftColor: 'transparent',
+                                            borderRightColor: 'transparent',
+                                        };
+                                        if (d === 'R') return {
+                                            ...base,
+                                            left: CELL_SIZE - TIP_LEN,
+                                            top: HALF - TIP_W / 2,
+                                            borderTopWidth: TIP_W / 2,
+                                            borderBottomWidth: TIP_W / 2,
+                                            borderLeftWidth: TIP_LEN,
+                                            borderLeftColor: strokeColor,
+                                        };
+                                        if (d === 'L') return {
+                                            ...base,
+                                            left: 0,
+                                            top: HALF - TIP_W / 2,
+                                            borderTopWidth: TIP_W / 2,
+                                            borderBottomWidth: TIP_W / 2,
+                                            borderRightWidth: TIP_LEN,
+                                            borderRightColor: strokeColor,
+                                        };
+                                        if (d === 'D') return {
+                                            ...base,
+                                            left: HALF - TIP_W / 2,
+                                            top: CELL_SIZE - TIP_LEN,
+                                            borderLeftWidth: TIP_W / 2,
+                                            borderRightWidth: TIP_W / 2,
+                                            borderTopWidth: TIP_LEN,
+                                            borderTopColor: strokeColor,
+                                        };
+                                        return {
+                                            ...base,
+                                            left: HALF - TIP_W / 2,
+                                            top: 0,
+                                            borderLeftWidth: TIP_W / 2,
+                                            borderRightWidth: TIP_W / 2,
+                                            borderBottomWidth: TIP_LEN,
+                                            borderBottomColor: strokeColor,
+                                        };
+                                    };
+                                    const ss = stemShortStyle(cell.dir);
+                                    return (
+                                        <>
+                                            {ss && (
+                                                <View
+                                                    pointerEvents="none"
+                                                    style={[styles.stroke, ss, { backgroundColor: strokeColor }]}
+                                                />
+                                            )}
+                                            <View pointerEvents="none" style={tipStyle(cell.dir)} />
+                                        </>
+                                    );
+                                })()}
+                                <Pressable
+                                    onPress={() => onTap(cell)}
+                                    hitSlop={HIT_SLOP}
+                                    style={{
+                                        position: 'absolute',
+                                        left: 0, top: 0, right: 0, bottom: 0,
+                                    }}
+                                />
+                            </>
+                        )}
+
+                        {/* Tail cells also tappable — fires the same arrow */}
+                        {!isHead && (
+                            <Pressable
+                                onPress={() => onTap(cell)}
+                                hitSlop={Math.max(10, Math.floor(HIT_SLOP * 0.8))}
+                                style={{
+                                    position: 'absolute',
+                                    left: 0, top: 0, right: 0, bottom: 0,
+                                }}
+                            />
+                        )}
+
+                        {/* Red flash on wrong-tap shake */}
+                        <Animated.View
+                            pointerEvents="none"
+                            style={{
+                                position: 'absolute',
+                                left: 0, top: 0, right: 0, bottom: 0,
+                                backgroundColor: '#EF4444',
+                                borderRadius: 4,
+                                opacity: sh.flash,
+                            }}
+                        />
+                    </Animated.View>
+                );
+            })}
+        </View>
+    );
+});
 
 const STARS_STORE_KEY = 'arrow_game_stars';
 const MAX_LIVES = 3;
@@ -1402,6 +1658,12 @@ const ArrowGameScreen = () => {
     // Guards the level-complete confetti so the scheduled-from-handleTap pop
     // and the useEffect safety-net don't double-fire on the same clear.
     const confettiFiredRef = useRef(false);
+    // Incremented on every level load. Anything scheduled against an older
+    // generation is ignored, so nothing from level N can mutate level N+1.
+    const genRef = useRef(0);
+    // Every setTimeout this screen schedules, so a level change or unmount can
+    // cancel them instead of letting them land on the next level.
+    const pendingTimersRef = useRef([]);
     // Glow animation for free arrows
     const glowAnim = useRef(new Animated.Value(0)).current;
 
@@ -1441,7 +1703,7 @@ const ArrowGameScreen = () => {
         y: GRID_PAD + r * CELL_SIZE + CELL_SIZE / 2,
     }), [CELL_SIZE]);
 
-    // Init sounds on mount
+    // Init ads on mount
     useEffect(() => {
         // Init ads so they're preloaded for hint/level triggers
         InterstitialAdManager.init();
@@ -1459,6 +1721,15 @@ const ArrowGameScreen = () => {
         return () => loop.stop();
     }, [glowAnim]);
 
+    // Blocking cells for this render: shared by the tap handler, the hint and
+    // every arrow's "free" state. Recomputed only when cells / flying change.
+    const occ = useMemo(() => buildOccupancy(cells, flying), [cells, flying]);
+    // One glow interpolation shared by every glowing head (was one per head per render).
+    const glowOpacity = useMemo(
+        () => glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.45] }),
+        [glowAnim],
+    );
+
     // Persist level idx whenever it changes
     useEffect(() => {
         storage.set(LVL_STORE_KEY, levelIdx);
@@ -1468,28 +1739,63 @@ const ArrowGameScreen = () => {
     const anims = useRef({}).current;
     const shakes = useRef({}).current;
 
-    const getCellAnim = (arrowKey, cellIdx) => {
-        const k = `${arrowKey}-${cellIdx}`;
+    // Both getters are referentially stable (deps []) because ArrowView is
+    // memoized on them; `anims` / `shakes` are the stable ref objects.
+    const getShake = useCallback((key, dir) => {
+        if (!shakes[key]) {
+            const value = new Animated.Value(0);
+            const translate = value.interpolate({ inputRange: [-1, 0, 1], outputRange: [-4, 0, 4] });
+            shakes[key] = {
+                value,
+                // Shake across the firing axis: U/D arrows wobble on x, L/R on y.
+                x: dir === 'U' || dir === 'D' ? translate : 0,
+                y: dir === 'L' || dir === 'R' ? translate : 0,
+                flash: value.interpolate({ inputRange: [-1, 0, 1], outputRange: [0.45, 0, 0.45] }),
+            };
+        }
+        return shakes[key];
+    }, [shakes]);
+    const getCellAnim = useCallback((cell, cellIdx) => {
+        const k = `${cell.key}-${cellIdx}`;
         if (!anims[k]) {
+            const sh = getShake(cell.key, cell.dir);
             const progress = new Animated.Value(0);
+            // tx/ty start as plain values at rest; handleTap rebinds them to
+            // interpolations of `progress` at flight time so the whole path
+            // is driven by a single native-driver timing.
+            const tx = new Animated.Value(0);
+            const ty = new Animated.Value(0);
             anims[k] = {
                 progress,
-                // tx/ty start as plain values at rest; handleTap rebinds them to
-                // interpolations of `progress` at flight time so the whole path
-                // is driven by a single native-driver timing.
-                tx: new Animated.Value(0),
-                ty: new Animated.Value(0),
+                tx,
+                ty,
                 opacity: new Animated.Value(1),
+                // The transform nodes the view binds to. Created ONCE here (and
+                // once more at flight time, for the one arrow that flies) —
+                // building `Animated.add(...)` inside render recreated every
+                // cell's native nodes on every tap, which was the visible hang.
+                translateX: Animated.add(tx, sh.x),
+                translateY: Animated.add(ty, sh.y),
             };
         }
         return anims[k];
-    };
-    const getShake = (key) => {
-        if (!shakes[key]) shakes[key] = new Animated.Value(0);
-        return shakes[key];
-    };
+    }, [anims, getShake]);
 
     const loadLevel = useCallback((idx) => {
+        // Bump the generation FIRST. Arrow keys repeat across levels ("a-0",
+        // "a-1", …), and a flight lasts ~2–3s, so a tap-then-Restart left a
+        // stale completion callback that would later delete a same-keyed arrow
+        // from the NEW level — an arrow the player never fired. Callbacks
+        // compare against this and no-op if they belong to an older level.
+        genRef.current += 1;
+        // Stop anything still in flight so its native driver stops too.
+        Object.values(anims).forEach((a) => {
+            a?.progress?.stopAnimation?.();
+            a?.opacity?.stopAnimation?.();
+        });
+        pendingTimersRef.current.forEach(clearTimeout);
+        pendingTimersRef.current = [];
+
         // Fade out, swap, fade in
         Animated.timing(gridOpacity, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
             Object.keys(anims).forEach((k) => delete anims[k]);
@@ -1507,6 +1813,13 @@ const ArrowGameScreen = () => {
         });
     }, [anims, shakes, gridOpacity]);
 
+    // Cancel every pending timer on unmount so nothing fires into a dead tree.
+    useEffect(() => () => {
+        genRef.current += 1;
+        pendingTimersRef.current.forEach(clearTimeout);
+        pendingTimersRef.current = [];
+    }, []);
+
     useEffect(() => {
         if (won || failed) return;
         const remaining = cells.filter((c) => c.type === 'arrow').length;
@@ -1520,7 +1833,12 @@ const ArrowGameScreen = () => {
                 confettiRef.current?.start();
             }
             ReactNativeHapticFeedback.trigger('notificationSuccess');
-            setTimeout(() => setWon(true), 800);
+            // Tracked + generation-guarded: an untracked 800ms timer here could
+            // land after a Restart and flash "Level Clear!" over a fresh board.
+            const myGen = genRef.current;
+            pendingTimersRef.current.push(setTimeout(() => {
+                if (genRef.current === myGen) setWon(true);
+            }, 800));
             const stars = wrongTaps === 0 ? 3 : wrongTaps === 1 ? 2 : 1;
             const starsData = JSON.parse(storage.getString(STARS_STORE_KEY) || '{}');
             const prev = starsData[levelIdx] || 0;
@@ -1534,7 +1852,7 @@ const ArrowGameScreen = () => {
     const handleTap = useCallback((cell) => {
         if (cell.type !== 'arrow' || won || failed) return;
         if (flying.has(cell.key)) return; // already in flight
-        if (!isPathClear(cells, cell, flying)) {
+        if (!isPathClearIn(occ, cell)) {
             // Wrong tap — shake + buzz, cost one life + one star point.
             ReactNativeHapticFeedback.trigger('impactMedium');
             setWrongTaps((w) => w + 1);
@@ -1543,11 +1861,14 @@ const ArrowGameScreen = () => {
                 if (next === 0) {
                     // Failed — trigger fail overlay after the shake settles
                     ReactNativeHapticFeedback.trigger('notificationError');
-                    setTimeout(() => setFailed(true), 300);
+                    const failGen = genRef.current;
+                    pendingTimersRef.current.push(setTimeout(() => {
+                        if (genRef.current === failGen) setFailed(true);
+                    }, 300));
                 }
                 return next;
             });
-            const shake = getShake(cell.key);
+            const shake = getShake(cell.key, cell.dir).value;
             Animated.sequence([
                 Animated.timing(shake, { toValue: 1, duration: 50, useNativeDriver: true }),
                 Animated.timing(shake, { toValue: -1, duration: 50, useNativeDriver: true }),
@@ -1555,7 +1876,7 @@ const ArrowGameScreen = () => {
             ]).start();
             return;
         }
-        // Correct tap — woosh plays when arrow flies. No haptic click here (the
+        // Correct tap — no haptic click here (the
         // vibration motor is audible on some devices and reads as a "bip" sound).
         // Consume hint if this was the hinted arrow.
         if (hintKey === cell.key) setHintKey(null);
@@ -1580,7 +1901,7 @@ const ArrowGameScreen = () => {
 
         const perCellAnims = body.map((bodyCell, i) => {
             const initialPx = cellCenter(bodyCell.r, bodyCell.c);
-            const anim = getCellAnim(cell.key, i);
+            const anim = getCellAnim(cell, i);
 
             const xs = new Array(totalTicks + 1);
             const ys = new Array(totalTicks + 1);
@@ -1609,6 +1930,9 @@ const ArrowGameScreen = () => {
             // nodes; native driver keeps progress advancing across the swap.
             anim.tx = anim.progress.interpolate({ inputRange, outputRange: xs });
             anim.ty = anim.progress.interpolate({ inputRange, outputRange: ys });
+            const sh = getShake(cell.key, cell.dir);
+            anim.translateX = Animated.add(anim.tx, sh.x);
+            anim.translateY = Animated.add(anim.ty, sh.y);
 
             const fadeStart = (i + ticksToExit - 1) * TICK_MS;
             const fadeAnim = Animated.sequence([
@@ -1638,42 +1962,66 @@ const ArrowGameScreen = () => {
         ).length === 0;
         if (isLastArrow && !confettiFiredRef.current) {
             const hideAtMs = (totalTicks - 1) * TICK_MS;
-            setTimeout(() => {
-                if (confettiFiredRef.current) return;
+            // Tracked + generation-guarded like the other timers: a Restart
+            // during the last flight used to pop confetti on the fresh board
+            // and mark it fired, so the real clear of that level got none.
+            const confettiGen = genRef.current;
+            pendingTimersRef.current.push(setTimeout(() => {
+                if (genRef.current !== confettiGen || confettiFiredRef.current) return;
                 confettiFiredRef.current = true;
                 confettiRef.current?.start();
-            }, hideAtMs);
+            }, hideAtMs));
         }
         // Kick off native animation BEFORE setFlying so the first frame of
         // motion is queued at the same time React is asked to paint the
         // "flying" shape swap — user sees shape change + motion together
         // instead of shape-swap → pause → motion.
-        Animated.parallel(perCellAnims).start(() => {
+        // Retiring the arrow is what makes the level winnable — win detection
+        // counts arrows still in `cells`. If this were driven ONLY by the
+        // animation callback, a dropped/interrupted callback would strand the
+        // arrow: still in `cells` (so never a win) and still in `flying` (so
+        // untappable). With the last arrow that is an unrecoverable freeze.
+        // So: run it from whichever fires first, exactly once, and keep a
+        // timer as the backstop the animation cannot cancel.
+        const myGen = genRef.current;
+        let retired = false;
+        const retire = () => {
+            if (retired || genRef.current !== myGen) return; // once, and not across levels
+            retired = true;
             setCells((prev) => prev.filter((x) => x.key !== cell.key));
             setFlying((prev) => {
                 const next = new Set(prev);
                 next.delete(cell.key);
                 return next;
             });
-        });
+        };
+        Animated.parallel(perCellAnims).start(retire);
+        const guard = setTimeout(retire, totalTicks * TICK_MS + 400);
+        pendingTimersRef.current.push(guard);
         setFlying((prev) => {
             const next = new Set(prev);
             next.add(cell.key);
             return next;
         });
-    }, [cells, won, failed, flying, hintKey, levelIdx, loadLevel, CELL_SIZE, GRID_W, GRID_H, cellCenter]);
+    }, [cells, occ, won, failed, flying, hintKey, CELL_SIZE, GRID_W, GRID_H, cellCenter, getCellAnim, getShake]);
+    // ArrowView gets ONE stable tap handler for the life of the screen; the
+    // ref always points at the latest handleTap closure. Passing handleTap
+    // itself would change identity on every tap and re-render every arrow.
+    const handleTapRef = useRef(handleTap);
+    handleTapRef.current = handleTap;
+    const onArrowTap = useCallback((cell) => handleTapRef.current(cell), []);
 
     const handleRestart = () => loadLevel(levelIdx);
     const handleRequestHint = useCallback(() => {
         if (hintKey || won || failed) return;
-        const free = cells.find((c) => c.type === 'arrow' && isPathClear(cells, c, flying));
+        const free = cells.find((c) => c.type === 'arrow' && isPathClearIn(occ, c));
         if (!free) return;
         // Pro users skip the ad; free users see an interstitial (hint reveals
         // either way, since the ad may not be loaded yet).
         if (!isPro) showInterstitial();
         ReactNativeHapticFeedback.trigger('selection');
         setHintKey(free.key);
-    }, [cells, flying, hintKey, won, failed, isPro]);
+    }, [cells, occ, hintKey, won, failed, isPro]);
     const handleNext = () => {
         const next = (levelIdx + 1) % TOTAL_LEVELS;
         if (!isPro && (levelIdx + 1) % 5 === 0) showInterstitial();
@@ -1776,260 +2124,25 @@ const ArrowGameScreen = () => {
                                 />
                             );
                         }
-                        const shake = getShake(cell.key);
-                        const shakeTranslate = shake.interpolate({
-                            inputRange: [-1, 0, 1],
-                            outputRange: [-4, 0, 4],
-                        });
-                        const colorPair = ARROW_COLORS[cell.colorIdx] || ARROW_COLORS[0];
-                        const strokeColor = colorPair[1];
-                        const body = getArrowCells(cell);
                         const isFlying = flying.has(cell.key);
-                        const isFree = !isFlying && isPathClear(cells, cell, flying);
-                        const shakeX = cell.dir === 'U' || cell.dir === 'D' ? shakeTranslate : 0;
-                        const shakeY = cell.dir === 'L' || cell.dir === 'R' ? shakeTranslate : 0;
-
-                        // Line-segment rectangle extending from cell center toward `dir`
-                        const lineStyleFor = (dir) => {
-                            if (dir === 'R') return { left: HALF, top: HALF - STROKE_W / 2, width: HALF, height: STROKE_W };
-                            if (dir === 'L') return { left: 0, top: HALF - STROKE_W / 2, width: HALF, height: STROKE_W };
-                            if (dir === 'D') return { left: HALF - STROKE_W / 2, top: HALF, width: STROKE_W, height: HALF };
-                            return { left: HALF - STROKE_W / 2, top: 0, width: STROKE_W, height: HALF };
-                        };
-
+                        const isFree = !isFlying && isPathClearIn(occ, cell);
                         return (
-                            <View key={cell.key} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-                                {body.map((bc, idx) => {
-                                    const isHead = idx === 0;
-                                    const isEnd = idx === body.length - 1;
-                                    const anim = getCellAnim(cell.key, idx);
-                                    const initPx = cellCenter(bc.r, bc.c);
-
-                                    // Direction from this cell back to its predecessor (opposite of the
-                                    // tail-char that led here). Null for head.
-                                    const prevDir = idx > 0 ? DIR_OPP[cell.tail[idx - 1]] : null;
-                                    // Direction toward the next cell along the tail.
-                                    const nextDir = idx < body.length - 1 ? cell.tail[idx] : null;
-
-                                    return (
-                                        <Animated.View
-                                            key={`${cell.key}-c${idx}`}
-                                            pointerEvents="auto"
-                                            style={{
-                                                position: 'absolute',
-                                                left: initPx.x - HALF,
-                                                top: initPx.y - HALF,
-                                                width: CELL_SIZE,
-                                                height: CELL_SIZE,
-                                                opacity: anim.opacity,
-                                                transform: [
-                                                    { translateX: Animated.add(anim.tx, shakeX) },
-                                                    { translateY: Animated.add(anim.ty, shakeY) },
-                                                ],
-                                                zIndex: isHead ? 10 : 1,
-                                            }}
-                                        >
-                                            {/* At rest: static line-art stems. During flight: hide
-                                                so the traveling dots (below) read as a snake. */}
-                                            {!isFlying && prevDir && (
-                                                <View
-                                                    pointerEvents="none"
-                                                    style={[
-                                                        styles.stroke,
-                                                        lineStyleFor(prevDir),
-                                                        { backgroundColor: strokeColor },
-                                                    ]}
-                                                />
-                                            )}
-
-                                            {!isFlying && nextDir && (
-                                                <View
-                                                    pointerEvents="none"
-                                                    style={[
-                                                        styles.stroke,
-                                                        lineStyleFor(nextDir),
-                                                        { backgroundColor: strokeColor },
-                                                    ]}
-                                                />
-                                            )}
-
-                                            {/* Center joint — small at rest, beefier during flight so
-                                                each tail cell reads clearly as a traveling rope bead. */}
-                                            {!isHead && (
-                                                <View
-                                                    pointerEvents="none"
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: HALF - (isFlying ? STROKE_W * 1.8 : STROKE_W) / 2,
-                                                        top: HALF - (isFlying ? STROKE_W * 1.8 : STROKE_W) / 2,
-                                                        width: isFlying ? STROKE_W * 1.8 : STROKE_W,
-                                                        height: isFlying ? STROKE_W * 1.8 : STROKE_W,
-                                                        backgroundColor: strokeColor,
-                                                        borderRadius: isFlying ? STROKE_W : 1,
-                                                    }}
-                                                />
-                                            )}
-
-                                            {/* Rounded end-cap at tail tip (only at rest) */}
-                                            {!isFlying && isEnd && !isHead && (
-                                                <View
-                                                    pointerEvents="none"
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: HALF - STROKE_W / 2,
-                                                        top: HALF - STROKE_W / 2,
-                                                        width: STROKE_W,
-                                                        height: STROKE_W,
-                                                        backgroundColor: strokeColor,
-                                                        borderRadius: STROKE_W / 2,
-                                                    }}
-                                                />
-                                            )}
-
-                                            {/* Glow pulse on heads with a clear path.
-                                                Centered on the arrowhead's visual midpoint (shifted toward
-                                                the firing edge so the triangle tip sits inside the glow).
-                                                Shown on tutorial levels (1-3) for every free arrow,
-                                                or on any level for the one arrow unlocked via Hint. */}
-                                            {isHead && isFree && !isFlying && (levelIdx < AUTO_HINT_LEVELS || hintKey === cell.key) && (() => {
-                                                const [dc, dr] = DIR_VEC[cell.dir];
-                                                const OFF = CELL_SIZE * 0.25;
-                                                const cx = HALF + dc * OFF;
-                                                const cy = HALF + dr * OFF;
-                                                return (
-                                                    <Animated.View
-                                                        pointerEvents="none"
-                                                        style={{
-                                                            position: 'absolute',
-                                                            left: cx - CELL_SIZE * 0.6,
-                                                            top: cy - CELL_SIZE * 0.6,
-                                                            width: CELL_SIZE * 1.2,
-                                                            height: CELL_SIZE * 1.2,
-                                                            borderRadius: CELL_SIZE * 0.6,
-                                                            backgroundColor: strokeColor,
-                                                            opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.45] }),
-                                                        }}
-                                                    />
-                                                );
-                                            })()}
-
-                                            {/* Head: forward stem + solid triangular tip at the edge.
-                                                Triangle drawn with CSS borders for a crisp look. */}
-                                            {isHead && (
-                                                <>
-                                                    {!isFlying && (() => {
-                                                        const TIP_LEN = Math.max(6, Math.floor(CELL_SIZE * 0.35));
-                                                        const TIP_W = Math.max(6, Math.floor(CELL_SIZE * 0.4));
-                                                        // Shortened stem that meets the triangle base cleanly
-                                                        const stemShortStyle = (d) => {
-                                                            const stemLen = HALF - TIP_LEN + STROKE_W;
-                                                            if (stemLen <= 0) return null;
-                                                            if (d === 'R') return { left: HALF, top: HALF - STROKE_W / 2, width: stemLen, height: STROKE_W };
-                                                            if (d === 'L') return { left: HALF - stemLen, top: HALF - STROKE_W / 2, width: stemLen, height: STROKE_W };
-                                                            if (d === 'D') return { left: HALF - STROKE_W / 2, top: HALF, width: STROKE_W, height: stemLen };
-                                                            return { left: HALF - STROKE_W / 2, top: HALF - stemLen, width: STROKE_W, height: stemLen };
-                                                        };
-                                                        const tipStyle = (d) => {
-                                                            // Each direction: one border has color, the two perpendicular ones are transparent
-                                                            const base = {
-                                                                position: 'absolute',
-                                                                width: 0, height: 0,
-                                                                borderTopColor: 'transparent',
-                                                                borderBottomColor: 'transparent',
-                                                                borderLeftColor: 'transparent',
-                                                                borderRightColor: 'transparent',
-                                                            };
-                                                            if (d === 'R') return {
-                                                                ...base,
-                                                                left: CELL_SIZE - TIP_LEN,
-                                                                top: HALF - TIP_W / 2,
-                                                                borderTopWidth: TIP_W / 2,
-                                                                borderBottomWidth: TIP_W / 2,
-                                                                borderLeftWidth: TIP_LEN,
-                                                                borderLeftColor: strokeColor,
-                                                            };
-                                                            if (d === 'L') return {
-                                                                ...base,
-                                                                left: 0,
-                                                                top: HALF - TIP_W / 2,
-                                                                borderTopWidth: TIP_W / 2,
-                                                                borderBottomWidth: TIP_W / 2,
-                                                                borderRightWidth: TIP_LEN,
-                                                                borderRightColor: strokeColor,
-                                                            };
-                                                            if (d === 'D') return {
-                                                                ...base,
-                                                                left: HALF - TIP_W / 2,
-                                                                top: CELL_SIZE - TIP_LEN,
-                                                                borderLeftWidth: TIP_W / 2,
-                                                                borderRightWidth: TIP_W / 2,
-                                                                borderTopWidth: TIP_LEN,
-                                                                borderTopColor: strokeColor,
-                                                            };
-                                                            return {
-                                                                ...base,
-                                                                left: HALF - TIP_W / 2,
-                                                                top: 0,
-                                                                borderLeftWidth: TIP_W / 2,
-                                                                borderRightWidth: TIP_W / 2,
-                                                                borderBottomWidth: TIP_LEN,
-                                                                borderBottomColor: strokeColor,
-                                                            };
-                                                        };
-                                                        const ss = stemShortStyle(cell.dir);
-                                                        return (
-                                                            <>
-                                                                {ss && (
-                                                                    <View
-                                                                        pointerEvents="none"
-                                                                        style={[styles.stroke, ss, { backgroundColor: strokeColor }]}
-                                                                    />
-                                                                )}
-                                                                <View pointerEvents="none" style={tipStyle(cell.dir)} />
-                                                            </>
-                                                        );
-                                                    })()}
-                                                    <Pressable
-                                                        onPress={() => handleTap(cell)}
-                                                        hitSlop={HIT_SLOP}
-                                                        style={{
-                                                            position: 'absolute',
-                                                            left: 0, top: 0, right: 0, bottom: 0,
-                                                        }}
-                                                    />
-                                                </>
-                                            )}
-
-                                            {/* Tail cells also tappable — fires the same arrow */}
-                                            {!isHead && (
-                                                <Pressable
-                                                    onPress={() => handleTap(cell)}
-                                                    hitSlop={Math.max(10, Math.floor(HIT_SLOP * 0.8))}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: 0, top: 0, right: 0, bottom: 0,
-                                                    }}
-                                                />
-                                            )}
-
-                                            {/* Red flash on wrong-tap shake */}
-                                            <Animated.View
-                                                pointerEvents="none"
-                                                style={{
-                                                    position: 'absolute',
-                                                    left: 0, top: 0, right: 0, bottom: 0,
-                                                    backgroundColor: '#EF4444',
-                                                    borderRadius: 4,
-                                                    opacity: shake.interpolate({
-                                                        inputRange: [-1, 0, 1],
-                                                        outputRange: [0.45, 0, 0.45],
-                                                    }),
-                                                }}
-                                            />
-                                        </Animated.View>
-                                    );
-                                })}
-                            </View>
+                            <ArrowView
+                                key={cell.key}
+                                cell={cell}
+                                isFlying={isFlying}
+                                showGlow={isFree && (levelIdx < AUTO_HINT_LEVELS || hintKey === cell.key)}
+                                CELL_SIZE={CELL_SIZE}
+                                HALF={HALF}
+                                STROKE_W={STROKE_W}
+                                HIT_SLOP={HIT_SLOP}
+                                styles={styles}
+                                getCellAnim={getCellAnim}
+                                getShake={getShake}
+                                cellCenter={cellCenter}
+                                glowOpacity={glowOpacity}
+                                onTap={onArrowTap}
+                            />
                         );
                     })}
                 </Animated.View>

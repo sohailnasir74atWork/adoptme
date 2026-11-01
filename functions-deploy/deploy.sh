@@ -113,6 +113,19 @@ done
 # it is completely separate from the app's root node_modules and nothing here
 # is bundled into the Android build.
 for f in $files; do cp "$SRC/$f" "$STAGING/"; done
+# Local modules the staged ones require (./_chatBanRow, ./mirrorBansToSupabase
+# ...), followed transitively. Copying a module does not deploy its functions:
+# only the names passed here are exported from the staged index.js below.
+while :; do
+  added=""
+  for f in "$STAGING"/*.js; do
+    for dep in $(grep -oE "require\(['\"]\./[A-Za-z0-9_.-]+['\"]\)" "$f" | sed -E "s/require\(['\"]\.\/([^'\"]+)['\"]\)/\1/"); do
+      dep="${dep%.js}.js"
+      if [ ! -f "$STAGING/$dep" ] && [ -f "$SRC/$dep" ]; then cp "$SRC/$dep" "$STAGING/"; added=1; fi
+    done
+  done
+  [ -z "$added" ] && break
+done
 [ -f "$SRC/_supabaseAdmin.js" ] && cp "$SRC/_supabaseAdmin.js" "$STAGING/"
 cp "$SRC/package.json" "$STAGING/"
 [ -f "$SRC/package-lock.json" ] && cp "$SRC/package-lock.json" "$STAGING/"

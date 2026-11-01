@@ -15,10 +15,12 @@ export const GAME_ICONS = {
   arrow: require('../../assets/mini-games/arrow.png'),
   battle: require('../../assets/mini-games/battle.png'),
   showdown: require('../../assets/mini-games/showdown.png'),
+  runway: require('../../assets/mini-games/runway.png'),
 };
 
 // Labels live under mini_games.<id>_name / _desc / _short in the translations.
 export const GAMES = [
+  { id: 'runway', color: '#FF4F9A', tag: 'tag_create' },
   { id: 'ice', color: '#0EA5E9', tag: 'tag_free_daily' },
   { id: 'quiz', color: '#8B5CF6', tag: 'tag_free_daily' },
   { id: 'memory', color: '#10B981', tag: 'tag_free_daily' },
@@ -32,8 +34,9 @@ export const FRIEND_GAMES = [
   { id: 'trade_showdown', icon: 'showdown', color: '#F59E0B', screen: 'TradeShowdownScreen' },
 ];
 
-/** Open a game from anywhere: the Arrow Puzzle is a screen, the rest open inside the Game Hub. */
+/** Open a game from anywhere: Pet Runway and the Arrow Puzzle are screens, the rest open inside the Game Hub. */
 export const openMiniGame = (navigation, id) => {
-  if (id === 'arrow') navigation.navigate('ArrowGameScreen');
+  if (id === 'runway') navigation.navigate('PetRunway');
+  else if (id === 'arrow') navigation.navigate('ArrowGameScreen');
   else navigation.navigate('GameHub', { open: id });
 };

@@ -48,7 +48,8 @@ const GameHub = ({ navigation, route }) => {
   }, []);
 
   const play = useCallback((id) => {
-    if (id === 'arrow') navigation.navigate('ArrowGameScreen');
+    if (id === 'runway') navigation.navigate('PetRunway');
+    else if (id === 'arrow') navigation.navigate('ArrowGameScreen');
     else setOpenGame(id);
   }, [navigation]);
 

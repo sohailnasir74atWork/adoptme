@@ -119,6 +119,8 @@ async function isTrustedWriter(context) {
 }
 
 exports.isTrustedWriter = isTrustedWriter;
+exports.STAFF_FLAGS = STAFF_FLAGS;
+exports.OWNER_EMAILS = OWNER_EMAILS;
 
 exports.mirrorBansToSupabase = functions
   .runWith({

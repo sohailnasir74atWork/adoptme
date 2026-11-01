@@ -25,7 +25,6 @@ import FramedAvatar from '../ChatScreen/GroupChat/FramedAvatar';
 import { getMyCosmetics, syncMyCosmetics, getCachedEggData, getCachedUsername, setCachedUsername, getCachedAvatar, setCachedAvatar } from '../Helper/cosmeticsCache';
 import SafeLottieView from '../Helper/SafeLottieView';
 import HomeCardArt from './HomeCardArt';
-import { getPassCount, onSquadPassesChange, canStillJoin } from '../Helper/squad';
 import { getBrief, homeHighlight, splitDuration } from '../Helper/staffElections';
 import { syncTradeInventory, setDreamKeyLocal, cachedMatchCount } from '../Helper/tradeMatch';
 import PetCardsHomeCard from '../PetCards/PetCardsHomeCard';
@@ -210,14 +209,6 @@ const HomeTabScreen = ({ selectedTheme }) => {
       })();
     }, [user?.id, firestoreDB])
   );
-
-  // 🎟️ Squad card: unused Pro passes, from the phone (squad.js keeps the
-  // count fresh from each ping / Squad screen load; no extra reads here).
-  const [squadPasses, setSquadPasses] = useState(() => getPassCount(user?.id));
-  useEffect(() => {
-    setSquadPasses(getPassCount(user?.id));
-    return onSquadPassesChange(() => setSquadPasses(getPassCount(user?.id)));
-  }, [user?.id]);
 
   // 🗳️ Staff elections button. Behind the backend switch (RTDB
   // /elections_enabled): OFF it is hidden and makes no calls. ON it opens
@@ -699,27 +690,22 @@ const HomeTabScreen = ({ selectedTheme }) => {
             <FontAwesome name="chevron-right" size={14} color="#fff" />
           </TouchableOpacity>
 
-          {/* ═══ SQUAD ═══ */}
+          {/* ═══ PET RUNWAY: design-a-pet-card game (Phase 1, works signed out too). Took the Squad
+               card's place 2026-10-31 (owner); Squad still opens from the Elections screen. ═══ */}
           <TouchableOpacity
-            style={[styles.tradeMatchCard, { backgroundColor: '#0EA5E9' }]}
-            onPress={() => requireSignIn(() => navigation.navigate('Squad'), t('squad.sign_in'))}
+            style={[styles.tradeMatchCard, { backgroundColor: '#FF4F9A' }]}
+            onPress={() => navigation.navigate('PetRunway')}
             activeOpacity={0.85}
           >
-            <HomeCardArt name="squad" />
+            <Image resizeMethod="resize" source={GAME_ICONS.runway} style={styles.miniGamesIcon} resizeMode="contain" />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.tradeMatchTitle}>{t('squad.title')}</Text>
+                <Text style={styles.tradeMatchTitle}>{t('mini_games.runway_name')}</Text>
                 <View style={styles.tradeMatchNew}>
-                  <Text style={[styles.tradeMatchNewText, { color: '#0369A1' }]}>{t('home_tab.new')}</Text>
+                  <Text style={[styles.tradeMatchNewText, { color: '#BE185D' }]}>{t('home_tab.new')}</Text>
                 </View>
               </View>
-              <Text style={styles.tradeMatchSub} numberOfLines={2}>
-                {squadPasses > 0
-                  ? t('squad.home_passes', { count: squadPasses })
-                  : canStillJoin(user?.id, user?.createdAt)
-                    ? t('squad.home_have_code')
-                    : t('squad.home_sub')}
-              </Text>
+              <Text style={styles.tradeMatchSub} numberOfLines={2}>{t('mini_games.runway_desc')}</Text>
             </View>
             <FontAwesome name="chevron-right" size={14} color="#fff" />
           </TouchableOpacity>
