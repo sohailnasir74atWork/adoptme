@@ -68,6 +68,37 @@ describe('matcher', () => {
   });
 });
 
+describe('owner photo of a PC trade window (2026-11-01)', () => {
+  // Phone photo of the monitor, uneven light, faint badges; stored as raw RGB
+  // at 1000 px wide (gzip). Your side: Giraffe MFR. Their side: Owl MFR,
+  // Giraffe NFR, Owl FR, Dodo MFR, Golden Unicorn NFR + one item not in the
+  // catalogue art (must stay a "?", never a confident guess).
+  it('reads every pet and badge', () => {
+    const fs = require('fs');
+    const zlib = require('zlib');
+    const rgb = zlib.gunzipSync(fs.readFileSync(require('path').join(__dirname, 'fixtures/trade-photo-pink.rgb.gz')));
+    const w = 1000;
+    const h = 418;
+    const px = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) { px[i * 4] = rgb[i * 3]; px[i * 4 + 1] = rgb[i * 3 + 1]; px[i * 4 + 2] = rgb[i * 3 + 2]; px[i * 4 + 3] = 255; }
+    const sigs = matcher.loadTemplates(require('../Code/TradeScanner/itemSignatures.json'));
+    const got = matcher.scan(px, w, h, sigs).map((s) => `${s.candidates[0].name} ${s.variant}${s.fly ? 'F' : ''}${s.ride ? 'R' : ''}`);
+    expect(got.slice(0, 6)).toEqual(['Giraffe mFR', 'Owl mFR', 'Giraffe nFR', 'Owl dFR', 'Dodo mFR', 'Golden Unicorn nFR']);
+  });
+});
+
+describe('matcher drops what is not an item', () => {
+  it('skips empty white slots and merges a tile split in two', () => {
+    const { px, tile } = canvas(700, 300);
+    tile(20, 20, 100);
+    // An empty white slot (some window themes) next to it.
+    for (let y = 20; y < 120; y++) for (let x = 140; x < 240; x++) { const p = (y * 700 + x) * 4; px[p] = 244; px[p + 1] = 254; px[p + 2] = 244; }
+    const sigs = matcher.loadTemplates(require('../Code/TradeScanner/itemSignatures.json'));
+    const found = matcher.scan(px, 700, 300, sigs);
+    expect(found.map((t) => t.x0)).toEqual([20]);
+  });
+});
+
 describe('buildTrade', () => {
   const catalog = new Map([['Frost Dragon', 'pets'], ['Turtle', 'pets'], ['Cracked Egg', 'eggs'], ['Kitsune', 'pets']]
     .map(([name, type]) => [normalize(name), { name, type }]));
@@ -80,14 +111,33 @@ describe('buildTrade', () => {
       t(670, [{ name: 'Turtle', d: 0.2 }]),
     ];
     const trade = buildTrade({ tiles, lines: [{ text: 'TRADE', x: 420, y: 60, w: 100, h: 30 }], width: 1000, catalog });
-    expect(trade.mine).toEqual([{ name: 'Frost Dragon', variant: 'm', fly: true, ride: true, sure: true, alternatives: ['Kitsune'] }]);
+    expect(trade.mine).toEqual([{ name: 'Frost Dragon', variant: 'm', fly: true, ride: true, sure: true, seen: { variant: 'm', fly: true, ride: true }, alternatives: ['Kitsune'] }]);
     expect(trade.theirs.map((p) => [p.name, p.variant, p.fly, p.sure])).toEqual([['Cracked Egg', 'd', false, true], ['Turtle', 'd', false, false]]);
+  });
+
+  it('a badged tile can only be a pet', () => {
+    const cat = new Map([...catalog, [normalize("Crow's Nest Propeller"), { name: "Crow's Nest Propeller", type: 'toys' }], [normalize('Giraffe'), { name: 'Giraffe', type: 'pets' }]]);
+    const tiles = [t(20, [{ name: "Crow's Nest Propeller", d: 0.262 }, { name: 'Giraffe', d: 0.263 }], { variant: 'm', fly: true, ride: true })];
+    const trade = buildTrade({ tiles, width: 500, catalog: cat });
+    expect(trade.mine[0]).toMatchObject({ name: 'Giraffe', variant: 'm', fly: true, ride: true });
   });
 
   it('marks a pick unsure when an overlay hid its badges', () => {
     const trade = buildTrade({ tiles: [t(20, [{ name: 'Turtle', d: 0.02 }], { badgesUnsure: true })], width: 500, catalog });
     expect(trade.mine[0].sure).toBe(false);
     expect(PICTURE_SURE).toBeLessThan(0.2);
+  });
+
+  it('reports no window when the text reader finds no TRADE label (backpack, lists)', () => {
+    const tiles = [t(20, [{ name: 'Turtle', d: 0.02 }])];
+    const lines = [{ text: 'BACKPACK', x: 10, y: 5, w: 120, h: 30 }, { text: 'FOOD', x: 10, y: 50, w: 50, h: 20 }];
+    expect(buildTrade({ tiles, lines, width: 800, catalog })).toEqual({ mine: [], theirs: [], foundWindow: false });
+  });
+
+  it('ignores tiles far from the two grids beside the label', () => {
+    const tiles = [t(300, [{ name: 'Turtle', d: 0.02 }]), t(600, [{ name: 'Kitsune', d: 0.02 }]), { ...t(300, [{ name: 'Frost Dragon', d: 0.02 }]), y0: 1500, y1: 1600 }];
+    const trade = buildTrade({ tiles, lines: [{ text: 'TRADE', x: 420, y: 60, w: 100, h: 30 }], width: 1000, catalog });
+    expect([...trade.mine, ...trade.theirs].map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
   });
 
   it('without the label, splits on the gap between the two grids', () => {

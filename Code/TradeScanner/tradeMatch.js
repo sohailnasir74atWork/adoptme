@@ -11,6 +11,9 @@
  */
 
 export const PICTURE_SURE = 0.15;
+// Photos of a screen use shape-heavy distances (matcher.js PHOTO_W) and are
+// noisier: only a very close match counts as sure.
+export const PHOTO_SURE = 0.08;
 
 export const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -41,14 +44,34 @@ export function sideDivider(tiles, lines, width) {
  * tiles: from the WebView matcher (image pixels). lines: [{ text, x, y, w, h }]
  * or []. catalog: Map normalized name -> record ({ name, type, ... }).
  * Returns { mine: [pick], theirs: [pick], foundWindow } where
- * pick = { name, variant: 'd'|'n'|'m', fly, ride, sure, alternatives: [name] }.
+ * pick = { name, variant: 'd'|'n'|'m', fly, ride, sure, seen, alternatives: [name] }.
  */
-export function buildTrade({ tiles, lines = [], width, catalog }) {
+export function buildTrade({ tiles: allTiles, lines = [], width, catalog }) {
+  let tiles = allTiles;
+  // The window always says TRADE between the two offers. When the text reader
+  // worked and finds no such word, this is not a trade window (the backpack,
+  // a value list...): report nothing rather than guess.
+  const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
+  if (lines.length && !label) return { mine: [], theirs: [], foundWindow: false };
+  if (label && tiles.length) {
+    // Only the two grids beside the label count.
+    const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);
+    const size = sides[Math.floor(sides.length / 2)];
+    const lx = label.x + label.w / 2;
+    const ly = label.y + label.h / 2;
+    tiles = tiles.filter((t) => Math.abs(center(t) - lx) < size * 6.5 && Math.abs((t.y0 + t.y1) / 2 - ly) < size * 4.5);
+  }
   const divider = sideDivider(tiles, lines, width);
   const mine = [];
   const theirs = [];
   for (const t of tiles) {
-    const pictures = (t.candidates || []).filter((c) => catalog.has(normalize(c.name)));
+    let pictures = (t.candidates || []).filter((c) => catalog.has(normalize(c.name)));
+    // Only pets wear N / M / F / R badges: a tile with any badge is a pet.
+    const badged = (t.variant && t.variant !== 'd') || t.fly || t.ride;
+    if (badged) {
+      const pets = pictures.filter((c) => String(catalog.get(normalize(c.name))?.type || '').toLowerCase() === 'pets');
+      if (pets.length) pictures = pets;
+    }
     if (!pictures.length) continue;
     const best = pictures[0];
     const rec = catalog.get(normalize(best.name));
@@ -59,7 +82,9 @@ export function buildTrade({ tiles, lines = [], width, catalog }) {
       variant: isPet ? t.variant || 'd' : 'd',
       fly: isPet && Boolean(t.fly),
       ride: isPet && Boolean(t.ride),
-      sure: best.d < PICTURE_SURE && !t.badgesUnsure,
+      sure: best.d < (t.photo ? PHOTO_SURE : PICTURE_SURE) && !t.badgesUnsure,
+      // What the badges said, kept so a fix to another pet restores them.
+      seen: { variant: t.variant || 'd', fly: Boolean(t.fly), ride: Boolean(t.ride) },
       alternatives: pictures.slice(1, 5).map((c) => catalog.get(normalize(c.name))?.name || c.name),
     };
     (center(t) < divider ? mine : theirs).push(pick);

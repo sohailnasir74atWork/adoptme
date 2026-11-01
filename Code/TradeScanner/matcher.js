@@ -19,6 +19,11 @@
   var N = 16;                 // signature edge; set from itemSignatures.json
   var BG = [244, 254, 244];   // tile colour, must match build_signatures.py
   var FG_DIFF = 45;           // |rgb - tile| above this = icon pixel
+  // colour / shape / hue weights in distance(). A camera shifts colours far
+  // more than shapes, so photos lean on shape (measured 2026-11-01: photos
+  // 14/21 -> 18/21 right; screenshots stay on SHOT_W, 95.9% top-1).
+  var SHOT_W = [1, 0.5, 0.2], PHOTO_W = [0.5, 0.5, 0.05];
+  var W = SHOT_W;
 
   function hsv(r, g, b) {
     var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
@@ -43,6 +48,9 @@
     return [30, 50, 70].map(function (d) { return { min: Math.max(150, top - d), spread: 42 }; });
   }
 
+  // The bright green tick the game draws over an accepted offer.
+  function isTick(r, g, b) { var c = hsv(r, g, b); return c[0] > 95 && c[0] < 145 && c[1] > 0.5 && c[2] > 150; }
+
   // Badge colours (hue ranges in degrees, read from game screenshots).
   var BADGES = [
   // N is a light lime green, so it gets a lower saturation floor.
@@ -51,11 +59,15 @@
     { key: 'F', h0: 186, h1: 224, s: 0.35 },
     { key: 'R', h0: 316, h1: 354, s: 0.3 },
   ];
-  function badgeAt(r, g, b) {
+  // loose: photo mode, where the camera washes the badge colours out and
+  // shifts them (Fly blue towards cyan, Neon green towards yellow).
+  function badgeAt(r, g, b, loose) {
     var c = hsv(r, g, b);
     if (c[2] < 90) return -1;
     for (var i = 0; i < BADGES.length; i++) {
-      if (c[0] >= BADGES[i].h0 && c[0] < BADGES[i].h1 && c[1] >= BADGES[i].s) return i;
+      var h0 = !loose ? BADGES[i].h0 : BADGES[i].key === 'F' ? 172 : BADGES[i].key === 'N' ? 60 : BADGES[i].h0;
+      var sMin = loose ? BADGES[i].s * 0.65 : BADGES[i].s;
+      if (c[0] >= h0 && c[0] < BADGES[i].h1 && c[1] >= sMin) return i;
     }
     return -1;
   }
@@ -132,6 +144,17 @@
     tiles = tiles.filter(function (t) {
       return !tiles.some(function (o) { return o !== t && o.x0 <= t.x0 && o.y0 <= t.y0 && o.x1 >= t.x1 && o.y1 >= t.y1; });
     });
+    // An overlay (the green "accepted" tick) can split one tile's white into
+    // two overlapping blobs: keep the bigger one only.
+    function area(t) { return (t.x1 - t.x0) * (t.y1 - t.y0); }
+    tiles = tiles.filter(function (t) {
+      return !tiles.some(function (o) {
+        if (o === t || area(o) < area(t)) return false;
+        if (area(o) === area(t) && (o.y0 > t.y0 || (o.y0 === t.y0 && o.x0 >= t.x0))) return false;
+        var ix = Math.min(t.x1, o.x1) - Math.max(t.x0, o.x0), iy = Math.min(t.y1, o.y1) - Math.max(t.y0, o.y0);
+        return ix > 0 && iy > 0 && ix * iy > 0.25 * area(t);
+      });
+    });
     // Trade tiles sit in grids: keep tiles that share a row or a column with
     // another tile of similar size, or are alone (a 1-item offer).
     if (tiles.length > 1) {
@@ -161,7 +184,7 @@
    * fly, ride, unsure, boxes: [{x0,y0,x1,y1}] } (boxes in image pixels, masked out of
    * the icon signature).
    */
-  function readBadges(px, w, t) {
+  function readBadges(px, w, t, loose) {
     var side = t.x1 - t.x0;
     var bx0 = t.x0 + Math.round(side * 0.3), bx1 = t.x1;
     var by0 = t.y0 + Math.round(side * 0.62), by1 = t.y1;
@@ -170,7 +193,7 @@
     for (var y = 0; y < bh; y++) {
       for (var x = 0; x < bw; x++) {
         var p = ((by0 + y) * w + bx0 + x) * 4;
-        cls[y * bw + x] = badgeAt(px[p], px[p + 1], px[p + 2]);
+        cls[y * bw + x] = badgeAt(px[p], px[p + 1], px[p + 2], loose);
       }
     }
     var found = { variant: 'd', fly: false, ride: false, unsure: false, boxes: [] };
@@ -193,7 +216,9 @@
         // is empty at both, the square M badge full at both).
         if (b.x1 >= bw - 1 && b.y1 >= bh - 1 && mask[(b.y1 - 1) * bw + b.x1 - 1] && !mask[b.y0 * bw + b.x0]) return;
         // ~10-20% of the tile, roughly square, ring/disc around a white letter.
-        if (hh < side * 0.07 || hh > side * 0.24 || ww < side * 0.07 || ww > side * 0.24) return;
+        // A photo blurs a badge into the pixels around it, so it reads bigger.
+        var maxB = loose ? 0.34 : 0.24;
+        if (hh < side * 0.07 || hh > side * maxB || ww < side * 0.07 || ww > side * maxB) return;
         if (ww / hh < 0.7 || ww / hh > 1.4) return;
         var fill = b.n / (ww * hh);
         if (fill < 0.4 || fill > 0.97) return;
@@ -226,8 +251,50 @@
     return found;
   }
 
+  /**
+   * Photo-mode badge reader. In a camera photo a badge bleeds into the pet
+   * above it, so blobs are unreliable; but the game always draws the badge
+   * row in the same place: right-aligned on the tile's bottom edge, one badge
+   * every ~0.215 tile widths. Sample a small disc at each slot from the right
+   * and classify its colour; stop at the first slot with no badge.
+   */
+  function readBadgeSlots(px, w, t) {
+    var side = t.x1 - t.x0, found = { variant: 'd', fly: false, ride: false, unsure: false, boxes: [] };
+    var rad = Math.max(2, Math.round(side * 0.05));
+    for (var k = 0; k < 3; k++) {
+      var best = -1, bestShare = 0;
+      // The row sits a little higher or lower depending on the window: try
+      // three heights and keep the clearest reading.
+      [0.13, 0.16, 0.19].forEach(function (fromBottom) {
+        var cx = Math.round(t.x1 - side * (0.135 + 0.215 * k)), cy = Math.round(t.y1 - side * fromBottom);
+        var counts = [0, 0, 0, 0], all = 0;
+        for (var dy = -rad; dy <= rad; dy++) {
+          for (var dx = -rad; dx <= rad; dx++) {
+            if (dx * dx + dy * dy > rad * rad) continue;
+            var x = cx + dx, y = cy + dy;
+            if (x < 0 || y < 0 || x >= w) continue;
+            var p = (y * w + x) * 4;
+            var c = badgeAt(px[p], px[p + 1], px[p + 2], true);
+            all++;
+            if (c >= 0) counts[c]++;
+          }
+        }
+        for (var i = 0; i < 4; i++) {
+          if (all && counts[i] / all > bestShare) { bestShare = counts[i] / all; best = i; }
+        }
+      });
+      if (best < 0 || bestShare < 0.4) break;
+      var key = BADGES[best].key;
+      if (key === 'M') found.variant = 'm';
+      else if (key === 'N' && found.variant !== 'm') found.variant = 'n';
+      else if (key === 'F') found.fly = true;
+      else if (key === 'R') found.ride = true;
+    }
+    return found;
+  }
+
   /** Signature of a tile's icon (badges masked out). */
-  function tileSignature(px, w, t, boxes) {
+  function tileSignature(px, w, t, boxes, loose) {
     var side = t.x1 - t.x0;
     var pad = Math.max(2, Math.round(side * 0.05));
     var x0 = t.x0 + pad, x1 = t.x1 - pad, y0 = t.y0 + pad, y1 = t.y1 - pad;
@@ -262,6 +329,29 @@
       }
     }
     if (bx1 < 0) return null;
+    var fgCount = 0, tick = 0, tickEdge = false, rim = 0;
+    var bandX = Math.round(cw * 0.1), bandY = Math.round(ch * 0.1);
+    for (var yy2 = 0; yy2 < ch; yy2++) {
+      for (var xx2 = 0; xx2 < cw; xx2++) {
+        if (!fg[yy2 * cw + xx2]) continue;
+        fgCount++;
+        if (xx2 < bandX || yy2 < bandY || xx2 >= cw - bandX || yy2 >= ch - bandY) rim++;
+        var q2 = ((y0 + yy2) * w + x0 + xx2) * 4;
+        if (isTick(px[q2], px[q2 + 1], px[q2 + 2])) {
+          tick++;
+          if (xx2 < 3 || yy2 < 3 || xx2 >= cw - 3 || yy2 >= ch - 3) tickEdge = true;
+        }
+      }
+    }
+    // An empty slot (white in some window themes) with a speck on it.
+    // (A photo's evened-out lighting leaves faint shading in empty slots.)
+    if (fgCount < (loose ? 0.1 : 0.05) * cw * ch) return null;
+    // Only the grid frame showing at the rounded corners: an empty slot.
+    if (rim > 0.7 * fgCount) return null;
+    // An empty slot under the game's green "accepted" tick: nearly all the
+    // "icon" is that bright green and it runs off the tile. (A green pet
+    // never reaches the tile edge.)
+    if (tickEdge && tick > 0.6 * fgCount) return null;
     // Re-colour to the reference tile white so photo tint does not count.
     var gain = [BG[0] / Math.max(1, tb[0]), BG[1] / Math.max(1, tb[1]), BG[2] / Math.max(1, tb[2])];
     return boxSignature(function (gx, gy) {
@@ -319,7 +409,7 @@
       shape += Math.abs(q.a[o] - t.a[o]);
     }
     for (var k = 0; k < 12; k++) hue += Math.abs(q.hue[k] - t.hue[k]);
-    return num / (den * 765 + 1e-6) + 0.5 * (shape / (N * N)) + 0.2 * hue;
+    return W[0] * num / (den * 765 + 1e-6) + W[1] * (shape / (N * N)) + W[2] * hue;
   }
 
   // Per-channel levels stretch (1st..99th percentile -> 0..255) for photos.
@@ -337,6 +427,33 @@
     var out = new Uint8Array(w * h * 4);
     for (var q = 0; q < w * h * 4; q += 4) {
       out[q] = lut[0][px[q]]; out[q + 1] = lut[1][px[q + 1]]; out[q + 2] = lut[2][px[q + 2]]; out[q + 3] = 255;
+    }
+    return out;
+  }
+
+  // Even out a photo's lighting (a monitor shot is bright in the middle and
+  // dark at the edges): divide by the local mean brightness, measured over a
+  // fifth of the picture, so a white tile is white wherever it sits.
+  function flatField(px, w, h) {
+    var r = Math.max(8, Math.round(Math.min(w, h) / 5));
+    var sum = new Float64Array((w + 1) * (h + 1));
+    for (var y = 0; y < h; y++) {
+      var row = 0;
+      for (var x = 0; x < w; x++) {
+        var p = (y * w + x) * 4;
+        row += (px[p] + px[p + 1] + px[p + 2]) / 3;
+        sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
+      }
+    }
+    var out = new Uint8Array(w * h * 4);
+    for (var yy = 0; yy < h; yy++) {
+      var ya = Math.max(0, yy - r), yb = Math.min(h, yy + r + 1);
+      for (var xx = 0; xx < w; xx++) {
+        var xa = Math.max(0, xx - r), xb = Math.min(w, xx + r + 1);
+        var mean = (sum[yb * (w + 1) + xb] - sum[ya * (w + 1) + xb] - sum[yb * (w + 1) + xa] + sum[ya * (w + 1) + xa]) / ((yb - ya) * (xb - xa));
+        var k = 200 / Math.max(20, mean), q = (yy * w + xx) * 4;
+        out[q] = Math.min(255, px[q] * k); out[q + 1] = Math.min(255, px[q + 1] * k); out[q + 2] = Math.min(255, px[q + 2] * k); out[q + 3] = 255;
+      }
     }
     return out;
   }
@@ -399,17 +516,38 @@
 
   // findPx: where tiles are looked for (blurred for photos); px: what badges
   // and icons are read from.
+  // Best picture distance above this = not an item we know (an empty slot
+  // under an overlay, a UI box): the tile is dropped, not guessed.
+  var NO_MATCH = 0.6;
+
   function scanWith(px, w, h, templates, findPx, loose) {
     var tiles = findTiles(findPx, w, h, loose);
     return tiles.map(function (t) {
-      var badges = readBadges(px, w, t);
-      var sig = tileSignature(px, w, t, badges.boxes);
+      var badges = loose ? readBadgeSlots(px, w, t) : readBadges(px, w, t, false);
+      // A photo's badge boxes are blurred and oversized: masking them would
+      // cut into the pet, so photos keep the badge pixels in the picture.
+      var sig = tileSignature(px, w, t, loose ? [] : badges.boxes, loose);
+      W = loose ? PHOTO_W : SHOT_W;
       return {
         x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1,
         variant: badges.variant, fly: badges.fly, ride: badges.ride, badgesUnsure: badges.unsure,
         candidates: sig ? rank(sig, templates, 5) : [],
       };
-    });
+    }).filter(function (t) { return t.candidates.length && t.candidates[0].d < NO_MATCH; });
+  }
+
+  // How white a tile's own background is: brightness times (1 - 2 x
+  // saturation), median over its border band.
+  function whiteness(px, w, t) {
+    var vals = [], side = t.x1 - t.x0, inset = Math.max(2, Math.round(side * 0.06));
+    function take(x, y) {
+      var p = (y * w + x) * 4, c = hsv(px[p], px[p + 1], px[p + 2]);
+      vals.push(c[2] * Math.max(0, 1 - 2 * c[1]));
+    }
+    for (var x = t.x0 + inset; x < t.x1 - inset; x += 2) { take(x, t.y0 + inset); take(x, t.y1 - 1 - inset); }
+    for (var y = t.y0 + inset; y < t.y1 - inset; y += 2) { take(t.x0 + inset, y); take(t.x1 - 1 - inset, y); }
+    vals.sort(function (m, n) { return m - n; });
+    return vals.length ? vals[Math.floor(vals.length * 0.6)] : 0;
   }
 
   /**
@@ -417,16 +555,29 @@
    * finds more tiles (a camera photo of a PC screen) that one is used.
    */
   function scan(px, w, h, templates) {
-    var plain = scanWith(px, w, h, templates, px, false);
-    var normPx = normalizeColors(px, w, h);
+    var normPx = flatField(normalizeColors(px, w, h), w, h);
     var soft = blur(normPx, w, h, Math.max(1, Math.round(Math.min(w, h) / 350)));
-    if (findTiles(soft, w, h, true).length <= plain.length) return plain;
-    return scanWith(normPx, w, h, templates, soft, true).map(function (s) { s.photo = true; return s; });
+    var plain = scanWith(px, w, h, templates, px, false);
+    // The plain pass sees the window clearly (a screenshot): trust it, empty
+    // slots and all.
+    var plainTiles = findTiles(px, w, h, false).length;
+    if (plainTiles >= 2) return plain;
+    if (findTiles(soft, w, h, true).length <= plainTiles) return plain;
+    // Evening out the light also turns a grey or tinted empty slot white.
+    // Real item tiles are the whitest squares in the original picture, so a
+    // square much less white than the whitest one is dropped.
+    var levels = normalizeColors(px, w, h);
+    var photo = scanWith(normPx, w, h, templates, soft, true);
+    var white = photo.map(function (t) { return whiteness(levels, w, t); });
+    var top = Math.max.apply(null, white.concat([0]));
+    photo = photo.filter(function (t, i) { return white[i] >= 0.6 * top; });
+    if (photo.length <= plain.length) return plain;
+    return photo.map(function (s) { s.photo = true; return s; });
   }
 
   var api = {
     N: N, BG: BG, FG_DIFF: FG_DIFF, findTiles: findTiles, readBadges: readBadges, tileSignature: tileSignature,
-    normalizeColors: normalizeColors, blur: blur, loadTemplates: loadTemplates, rank: rank, scan: scan,
+    normalizeColors: normalizeColors, flatField: flatField, blur: blur, loadTemplates: loadTemplates, rank: rank, scan: scan,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TradeMatcher = api;

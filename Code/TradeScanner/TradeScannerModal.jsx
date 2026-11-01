@@ -190,9 +190,10 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         ...old,
         name,
         sure: true,
-        variant: isPet ? old.variant : 'd',
-        fly: isPet && old.fly,
-        ride: isPet && old.ride,
+        // Back to what the badges said when the fix is a pet.
+        variant: isPet ? (old.seen?.variant ?? old.variant) : 'd',
+        fly: isPet && (old.seen ? old.seen.fly : old.fly),
+        ride: isPet && (old.seen ? old.seen.ride : old.ride),
         alternatives: [old.name, ...old.alternatives.filter((n) => n !== name)].slice(0, 4),
       };
       return { ...prev, [side]: list };
