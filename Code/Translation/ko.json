@@ -4114,6 +4114,16 @@
     "beta": "테스트 중: 이 스캐너는 아직 테스트 중이라 틀릴 수 있어요. 거래 전에 모든 아이템을 확인하세요.",
     "crop_tip": "모서리를 끌어 거래 창만 감싸세요: 양쪽 제안과 TRADE 제목. 나머지는 모두 잘라내세요.",
     "retake": "다시 선택",
-    "scan_area": "이 영역 스캔"
+    "scan_area": "이 영역 스캔",
+    "feedback_q": "스캔 결과가 맞았나요?",
+    "yes": "네",
+    "no": "아니요",
+    "feedback_what": "무엇이 틀렸나요?",
+    "feedback_thanks": "감사합니다! 스캐너 개선에 도움이 돼요.",
+    "reason_wrong_item": "펫이 틀림",
+    "reason_missed": "빠진 아이템",
+    "reason_extra": "추가된 아이템",
+    "reason_sides": "양쪽이 바뀜",
+    "reason_badges": "N/M/F/R 틀림"
   }
 }

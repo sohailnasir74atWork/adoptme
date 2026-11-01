@@ -4212,6 +4212,16 @@
         "beta": "Prueba: este escáner aún está en pruebas y puede equivocarse. Revisa cada objeto antes de tradear.",
         "crop_tip": "Arrastra las esquinas solo alrededor de la ventana de trade: las dos ofertas y el título TRADE. Recorta todo lo demás.",
         "retake": "Elegir otra",
-        "scan_area": "Escanear esta zona"
+        "scan_area": "Escanear esta zona",
+        "feedback_q": "¿El escaneo acertó?",
+        "yes": "Sí",
+        "no": "No",
+        "feedback_what": "¿Qué estuvo mal?",
+        "feedback_thanks": "¡Gracias! Esto nos ayuda a mejorar el escáner.",
+        "reason_wrong_item": "Mascota incorrecta",
+        "reason_missed": "Faltan objetos",
+        "reason_extra": "Objetos de más",
+        "reason_sides": "Lados incorrectos",
+        "reason_badges": "N/M/F/R incorrecto"
     }
 }

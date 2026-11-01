@@ -4109,6 +4109,16 @@
         "beta": "Test: Dieser Scanner wird noch getestet und kann Fehler machen. Prüfe jedes Item, bevor du tradest.",
         "crop_tip": "Ziehe die Ecken nur um das Trade-Fenster: beide Angebote und den Titel TRADE. Schneide alles andere weg.",
         "retake": "Neu wählen",
-        "scan_area": "Diesen Bereich scannen"
+        "scan_area": "Diesen Bereich scannen",
+        "feedback_q": "Hat der Scan gestimmt?",
+        "yes": "Ja",
+        "no": "Nein",
+        "feedback_what": "Was war falsch?",
+        "feedback_thanks": "Danke! Das hilft uns, den Scanner zu verbessern.",
+        "reason_wrong_item": "Falsches Haustier",
+        "reason_missed": "Fehlende Items",
+        "reason_extra": "Zusätzliche Items",
+        "reason_sides": "Falsche Seiten",
+        "reason_badges": "Falsches N/M/F/R"
     }
 }
