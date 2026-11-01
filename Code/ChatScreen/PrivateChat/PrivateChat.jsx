@@ -35,7 +35,7 @@ import { showMessage } from 'react-native-flash-message';
 import { validateContent } from '../../Helper/ContentModeration';
 import BannerAdComponent from '../../Ads/bannerAds';
 import TranslateTip from '../TranslateTip';
-import InterstitialAdManager from '../../Ads/IntAd';
+import PostAdManager from '../../Ads/PostAd';
 import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -140,6 +140,10 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [canRate, setCanRate] = useState(false);
   const [hasRated, setHasRated] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  // Warm the review ad while the user writes, so it is ready on submit.
+  useEffect(() => {
+    if (showRatingModal) PostAdManager.prepare('review');
+  }, [showRatingModal]);
   const [rating, setRating] = useState(0);
   const [petModalVisible, setPetModalVisible] = useState(false);
   const [selectedFruits, setSelectedFruits] = useState([]);
@@ -459,10 +463,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       }
       setStartRating(false);
 
-      // ✅ Show interstitial ad after review/rating submission (non-Pro only)
-      if (!localState?.isPro) {
-        InterstitialAdManager.showAd();
-      }
+      // ✅ Review ad: always shown after a saved rating/review, like a posted
+      // trade (PostAd.js; it skips Pro users itself).
+      PostAdManager.show('review');
 
     } catch (error) {
       console.error("Rating error:", error);

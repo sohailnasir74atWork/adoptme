@@ -928,7 +928,7 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
     };
 
     if (!hasAdBeenShown && !localState.isPro) {
-      InterstitialAdManager.showAd(callbackfunction);
+      InterstitialAdManager.showAd(callbackfunction, undefined, 'value_drawer');
     }
     else {
       if (isMountedRef.current) {

@@ -16,6 +16,7 @@ export const watchGameAd = () =>
       () => resolve('earned'),
       () => resolve('closed'),
       () => resolve('unavailable'),
+      'mini_game',
     );
   });
 

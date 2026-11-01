@@ -346,7 +346,7 @@ const PrivateMessageInput = ({
       const newCount = prevCount + 1;
       if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === CHAT_MESSAGES_PER_AD - 1) InterstitialAdManager.prepare();
       if (!localState?.isPro && newCount % CHAT_MESSAGES_PER_AD === 0) {
-        InterstitialAdManager.showAd(() => { });
+        InterstitialAdManager.showAd(() => { }, undefined, 'private_chat');
       }
       return newCount;
     });

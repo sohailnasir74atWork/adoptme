@@ -21,7 +21,7 @@ import {
   INTERSTITIAL_COOLDOWN_MS,
 } from './adPolicy';
 import { createFullscreenSource, takeWithin, safeDestroy } from './fullscreenSource';
-import { adLog, logAdRevenue } from './adTelemetry';
+import { adLog, startAdAttempt } from './adTelemetry';
 
 const interstitialAdUnitId = getAdUnitId('interstitial');
 const source = createFullscreenSource('interstitial', interstitialAdUnitId);
@@ -110,13 +110,15 @@ class InterstitialAdManager {
   }
 
   // ✅ Show ad. Same contract as before: the caller's callback always runs,
-  // and content is never gated on ad availability. `placement` only labels
-  // the revenue event.
+  // and content is never gated on ad availability. `placement` labels the
+  // show-funnel and revenue events (adTelemetry.js).
   static showAd(onAdClosedCallback, onAdUnavailableCallback, placement = 'action') {
+    const attempt = startAdAttempt('interstitial', placement, 'interstitial', interstitialAdUnitId);
     // ✅ Pro gate, here rather than trusting callers: not every call site
     // checks Pro, and a Pro user would otherwise sit out the full wait (no ad
     // is ever loaded for Pro) before their action ran.
     if (noAdsForUser()) {
+      attempt.skip('pro');
       run(onAdClosedCallback);
       return;
     }
@@ -124,13 +126,19 @@ class InterstitialAdManager {
 
     // ✅ Another show is in flight (or waiting for a fill) — never double-show.
     if (this.isShowing) {
+      attempt.skip('busy');
       run(onAdClosedCallback);
       return;
     }
 
     // ✅ Global frequency cap, and never right after an app-open or rewarded.
-    if (Date.now() - this.lastShownAt < Math.max(this.COOLDOWN_MS, POST_SHOW_RELOAD_MS) ||
-        this._blockedByOtherFormat()) {
+    if (Date.now() - this.lastShownAt < Math.max(this.COOLDOWN_MS, POST_SHOW_RELOAD_MS)) {
+      attempt.skip('cooldown');
+      run(onAdClosedCallback);
+      return;
+    }
+    if (this._blockedByOtherFormat()) {
+      attempt.skip('other_ad');
       run(onAdClosedCallback);
       return;
     }
@@ -140,6 +148,7 @@ class InterstitialAdManager {
     // Nothing warm, and the auction said "no fill" within the last minute: a
     // wait would hold the user's action and then give up anyway.
     if (!source.isReady() && source.recentNoFill()) {
+      attempt.skip('no_fill');
       unavailable();
       return;
     }
@@ -152,12 +161,14 @@ class InterstitialAdManager {
     takeWithin(source, this.WAIT_TIMEOUT_MS).then((ad) => {
       if (!ad) {
         this.isShowing = false;
+        attempt.skip('not_ready');
         unavailable();
         return;
       }
-      this._show(ad, onAdClosedCallback, placement);
+      this._show(ad, onAdClosedCallback, attempt);
     }, () => {
       this.isShowing = false;
+      attempt.skip('load_error');
       unavailable();
     });
   }
@@ -185,8 +196,12 @@ class InterstitialAdManager {
       : this._blockedByOtherFormat()) return false;
     if (this.isShowing || isFullScreenAdVisible()) return false;
 
+    // Only a break that passed every cap counts as a request: tab switches
+    // inside the caps are not ad opportunities, and would flood the funnel.
+    const attempt = startAdAttempt('interstitial', placement, 'interstitial', interstitialAdUnitId);
     if (!source.isReady()) {
       // Not ready: warm one for the next break rather than stall this one.
+      attempt.skip('not_ready');
       source.prepare(true);
       return false;
     }
@@ -197,22 +212,26 @@ class InterstitialAdManager {
       if (!ad) {
         this.isShowing = false;
         this.naturalBreakShows -= 1;
+        attempt.skip('not_ready');
         return;
       }
-      this._show(ad, () => {}, placement);
-    }, () => { this.isShowing = false; });
+      this._show(ad, () => {}, attempt);
+    }, () => {
+      this.isShowing = false;
+      attempt.skip('load_error');
+    });
     return true;
   }
 
-  static _show(ad, onAdClosedCallback, placement) {
+  static _show(ad, onAdClosedCallback, attempt) {
     // ✅ Never present while a modal is mid-transition. On iOS the ad is
     // presented from the topmost view controller, and UIKit refuses to
     // present from a controller that is itself animating. Synchronous when
     // nothing is animating, so the common path is unchanged.
-    whenModalSettled(() => this._present(ad, onAdClosedCallback, placement));
+    whenModalSettled(() => this._present(ad, onAdClosedCallback, attempt));
   }
 
-  static _present(ad, onAdClosedCallback, placement) {
+  static _present(ad, onAdClosedCallback, attempt) {
     this.isShowing = true;
     this.lastShownAt = Date.now();
     setFullScreenAdVisible(true);
@@ -233,6 +252,8 @@ class InterstitialAdManager {
       // destroying it then would pull it out from under the user.
       if (why !== 'watchdog') safeDestroy(ad);
       adLog(`interstitial ${didShow ? 'closed' : `failed ${why || ''}`}`);
+      if (didShow) attempt.closed();
+      else attempt.skip(`show_failed:${why || 'unknown'}`);
       if (!didShow) {
         // Nothing reached the screen, so nothing was consumed: don't burn the
         // cooldown on an impression the user never saw.
@@ -253,7 +274,8 @@ class InterstitialAdManager {
     // moment the other formats start their cross-format gap from.
     unsubs.push(ad.addAdEventListener(AdEventType.OPENED, () => {
       markFullScreenAdShown('interstitial');
-      adLog(`interstitial opened ${placement}`);
+      attempt.shown();
+      adLog(`interstitial opened ${attempt.placement}`);
       if (watchdog) {
         clearTimeout(watchdog);
         watchdog = null;
@@ -262,8 +284,8 @@ class InterstitialAdManager {
     unsubs.push(ad.addAdEventListener(AdEventType.CLOSED, () => finish(true)));
     // 17.x: Android now reports a refused present as ERROR (phase 'show').
     unsubs.push(ad.addAdEventListener(AdEventType.ERROR, (e) => finish(false, e?.reason)));
-    unsubs.push(ad.addAdEventListener(AdEventType.PAID, (paid) =>
-      logAdRevenue('interstitial', placement, paid, interstitialAdUnitId)));
+    unsubs.push(ad.addAdEventListener(AdEventType.CLICKED, () => attempt.clicked()));
+    unsubs.push(ad.addAdEventListener(AdEventType.PAID, (paid) => attempt.paid(paid)));
 
     // A presentation UIKit refuses fires neither OPENED nor CLOSED. Before
     // this watchdog that meant the caller's callback never ran at all.

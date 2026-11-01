@@ -447,7 +447,7 @@ const HDWallpaperScreen = () => {
 
     if (!localState.isPro && isEvenClick) {
       try {
-        InterstitialAdManager.showAd(showNextPage);
+        InterstitialAdManager.showAd(showNextPage, undefined, 'wallpaper_more');
       } catch (err) {
         console.warn("[AdManager] Failed to show ad:", err);
         showNextPage();

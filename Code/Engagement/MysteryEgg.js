@@ -675,7 +675,7 @@ const MysteryEggScreen = ({ navigation }) => {
                 onPress={async () => {
                   if (adLoading) return;
                   setAdLoading(true);
-                  const earned = await RewardedAdManager.show();
+                  const earned = await RewardedAdManager.show('mystery_egg');
                   setAdLoading(false);
                   if (earned) {
                     setUsedFreeHatch(true);
@@ -807,7 +807,7 @@ const MysteryEggScreen = ({ navigation }) => {
                   onPress={async () => {
                     if (adLoading) return;
                     setAdLoading(true);
-                    const earned = await RewardedAdManager.show();
+                    const earned = await RewardedAdManager.show('mystery_egg_free_hatch');
                     setAdLoading(false);
                     if (earned) {
                       setUsedFreeHatch(true);

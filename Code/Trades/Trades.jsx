@@ -683,7 +683,8 @@ const TradeList = ({ route }) => {
                     defaultValue: "No video is available at the moment. Please try again in a few minutes.",
                   })
                 );
-              }
+              },
+              'trade_feature',
             );
           },
         },
