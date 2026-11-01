@@ -4,6 +4,7 @@
  */
 import scannerHtml from '../Code/TradeScanner/scannerHtml';
 import { buildTrade, sideDivider, normalize, PICTURE_SURE } from '../Code/TradeScanner/tradeMatch';
+import { cropLines } from '../Code/TradeScanner/textReader';
 
 const matcher = require('../Code/TradeScanner/matcher');
 const { build } = require('../scripts/trade-scanner/build-html');
@@ -85,6 +86,25 @@ describe('owner photo of a PC trade window (2026-11-01)', () => {
     const got = matcher.scan(px, w, h, sigs).map((s) => `${s.candidates[0].name} ${s.variant}${s.fly ? 'F' : ''}${s.ride ? 'R' : ''}`);
     expect(got.slice(0, 6)).toEqual(['Giraffe mFR', 'Owl mFR', 'Giraffe nFR', 'Owl dFR', 'Dodo mFR', 'Golden Unicorn nFR']);
   });
+
+  it('reads the same owner photo after the crop step', () => {
+    const fs = require('fs');
+    const zlib = require('zlib');
+    const rgb = zlib.gunzipSync(fs.readFileSync(require('path').join(__dirname, 'fixtures/trade-photo-pink.rgb.gz')));
+    const W = 1000;
+    // A user frame a bit inside the photo, as the CropBox would give it.
+    const x0 = 40; const y0 = 20; const w = 920; const h = 380;
+    const px = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y0 + y) * W + x0 + x; const o = (y * w + x) * 4;
+        px[o] = rgb[i * 3]; px[o + 1] = rgb[i * 3 + 1]; px[o + 2] = rgb[i * 3 + 2]; px[o + 3] = 255;
+      }
+    }
+    const sigs = matcher.loadTemplates(require('../Code/TradeScanner/itemSignatures.json'));
+    const got = matcher.scan(px, w, h, sigs).map((s) => `${s.candidates[0].name} ${s.variant}${s.fly ? 'F' : ''}${s.ride ? 'R' : ''}`);
+    expect(got.slice(0, 6)).toEqual(['Giraffe mFR', 'Owl mFR', 'Giraffe nFR', 'Owl dFR', 'Dodo mFR', 'Golden Unicorn nFR']);
+  });
 });
 
 describe('matcher drops what is not an item', () => {
@@ -144,5 +164,15 @@ describe('buildTrade', () => {
     const tiles = [t(20, []), t(130, []), t(600, [])];
     expect(sideDivider(tiles, [], 2000)).toBeGreaterThan(230);
     expect(sideDivider(tiles, [], 2000)).toBeLessThan(600);
+  });
+});
+
+describe('cropLines', () => {
+  it('keeps text inside the frame and moves it into frame pixels', () => {
+    const lines = [{ text: 'TRADE', x: 480, y: 90, w: 60, h: 20 }, { text: 'Chat', x: 10, y: 380, w: 40, h: 15 }];
+    const out = cropLines(lines, 1000, 400, { x: 0.1, y: 0.1, w: 0.8, h: 0.6 });
+    expect(out.width).toBe(800);
+    expect(out.height).toBe(240);
+    expect(out.lines).toEqual([{ text: 'TRADE', x: 380, y: 50, w: 60, h: 20 }]);
   });
 });

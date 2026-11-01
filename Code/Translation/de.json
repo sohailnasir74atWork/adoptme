@@ -4105,6 +4105,10 @@
         "neon": "Neon",
         "mega": "Mega",
         "check": "Prüfen",
-        "correct": "Stimmt"
+        "correct": "Stimmt",
+        "beta": "Test: Dieser Scanner wird noch getestet und kann Fehler machen. Prüfe jedes Item, bevor du tradest.",
+        "crop_tip": "Ziehe die Ecken nur um das Trade-Fenster: beide Angebote und den Titel TRADE. Schneide alles andere weg.",
+        "retake": "Neu wählen",
+        "scan_area": "Diesen Bereich scannen"
     }
 }

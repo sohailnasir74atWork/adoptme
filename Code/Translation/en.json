@@ -4123,6 +4123,10 @@
         "neon": "Neon",
         "mega": "Mega",
         "check": "Check",
-        "correct": "Correct"
+        "correct": "Correct",
+        "beta": "Testing: this scanner is still being tested and can make mistakes. Check every item before you trade.",
+        "crop_tip": "Drag the corners around the trade window only: both offers and the TRADE title. Cut away everything else.",
+        "retake": "Pick again",
+        "scan_area": "Scan this area"
     }
 }
