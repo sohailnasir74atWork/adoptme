@@ -25,6 +25,7 @@ import PostAdManager from '../Ads/PostAd';
 import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
+import TradeScannerModal from '../TradeScanner/TradeScannerModal';
 import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { buildVariantTags } from '../Trades/tradeHelpers';
 import { verifiedRobloxName, readVerifiedRobloxName, robloxFieldsForTrade } from '../Helper/robloxIdentity';
@@ -135,6 +136,7 @@ const HomeScreen = ({ selectedTheme }) => {
   const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
   const [showTips, setShowTips] = useState(true);
   const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -515,6 +517,52 @@ const HomeScreen = ({ selectedTheme }) => {
     ]
   );
 
+
+  // Trade Scanner (Code/TradeScanner): rows are { record, variant, fly, ride }
+  // read off the in-game trade window. Built exactly like selectItem() builds
+  // a picked item, then both sides replace the calculator's.
+  const scannedValue = useCallback(
+    (record, variant, fly, ride) => getItemValue(record, variant, fly, ride, isSharkMode, factor, valueSource),
+    [isSharkMode, factor, valueSource]
+  );
+
+  const applyScannedTrade = useCallback(({ mine, theirs }) => {
+    const maxSide = GRID_STEPS[GRID_STEPS.length - 1];
+    const toItems = (rows) => rows.slice(0, maxSide).map(({ record, variant, fly, ride }) => ({
+      ...record,
+      selectedValue: scannedValue(record, variant, fly, ride),
+      valueSource,
+      isSharkMode: toLegacyMode(valueSource, isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK),
+      valueType: variant,
+      isFly: fly,
+      isRide: ride,
+    }));
+    const has = toItems(mine);
+    const wants = toItems(theirs);
+    const step = Math.max(0, GRID_STEPS.findIndex((n) => n >= Math.max(has.length, wants.length)));
+    const size = GRID_STEPS[step];
+    const pad = (items) => [...items, ...createEmptySlots(size - items.length)];
+    const sum = (items) => items.reduce((acc, it) => acc + (Number(it.selectedValue) || 0), 0);
+    setSelectedSection(null);
+    setGridStepIndex(step);
+    setHasItems(pad(has));
+    setWantsItems(pad(wants));
+    setHasTotal(sum(has));
+    setWantsTotal(sum(wants));
+    setScannerVisible(false);
+  }, [scannedValue, valueSource, isSharkMode]);
+
+  const scannerImage = useCallback((record) => getImageUrl(record, localState.imgurl), [getImageUrl, localState.imgurl]);
+
+  const renderScanButton = () => (
+    <TouchableOpacity style={styles.scanButton} onPress={() => { triggerHapticFeedback('impactLight'); setScannerVisible(true); }} activeOpacity={0.8}>
+      <Icon name="camera" size={18} color="white" />
+      <Text style={styles.scanButtonText}>{t('trade_scanner.button', { defaultValue: 'Scan a trade with camera' })}</Text>
+      <View style={styles.scanNewBadge}>
+        <Text style={styles.scanNewText}>{t('trade_scanner.new', { defaultValue: 'NEW' })}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   const handleCellPress = useCallback((index, isHas) => {
     const items = isHas ? hasItems : wantsItems;
@@ -1554,6 +1602,7 @@ const HomeScreen = ({ selectedTheme }) => {
       <View style={styles.flexOne} collapsable={false}>
         <View style={styles.container} key={language} collapsable={false}>
           <ScrollView showsVerticalScrollIndicator={false}>
+            {renderScanButton()}
             <ViewShot ref={viewRef} style={styles.screenshotView}>
               {config.isNoman && (
                 <View style={styles.summaryContainer}>
@@ -2208,6 +2257,18 @@ const HomeScreen = ({ selectedTheme }) => {
       <View collapsable={false}>
         {!localState.isPro && <BannerAdComponent collapsible />}
       </View>
+      <TradeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onApply={applyScannedTrade}
+        records={fruitRecords}
+        maxPerSide={GRID_STEPS[GRID_STEPS.length - 1]}
+        isDarkMode={isDarkMode}
+        imageFor={scannerImage}
+        valueFor={scannedValue}
+        verdictFor={wflStatus}
+        formatValue={formatValue}
+      />
       <ShareTradeModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}
@@ -2744,6 +2805,33 @@ const getStyles = (isDarkMode, c) => {
     screenshotView: {
       padding: 10,
       flex: 1,
+    },
+    scanButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: config.colors.secondary,
+      borderRadius: 12,
+      paddingVertical: 11,
+      marginHorizontal: 10, // lines up with screenshotView's padding below
+      marginTop: 10,
+    },
+    scanButtonText: {
+      color: 'white',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    scanNewBadge: {
+      backgroundColor: '#29AB87',
+      borderRadius: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+    },
+    scanNewText: {
+      color: 'white',
+      fontSize: 10,
+      fontWeight: '800',
     },
 
 

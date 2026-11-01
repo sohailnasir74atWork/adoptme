@@ -1,0 +1,68 @@
+/**
+ * Adopt Me Trade Scanner: turn the pixel matcher's tiles (+ the text reader's
+ * lines, used only to find the window's centre) into "your side" / "their
+ * side" picks (2026-11-01).
+ *
+ * The game prints no item names, so the picture decides the item and the
+ * badges decide Normal / Neon / Mega and Fly / Ride. A pick is "sure" only
+ * when the picture match is close enough to have been right every time in the
+ * benchmark (scripts/trade-scanner: 2,110 items on synthetic trade windows,
+ * distance < 0.15 -> 98-100% right) and no overlay hid the badges.
+ */
+
+export const PICTURE_SURE = 0.15;
+
+export const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const center = (b) => (b.x0 + b.x1) / 2;
+
+/**
+ * x position that separates the two offers: the "TRADE" label between the
+ * grids, else the widest gap between tile columns, else the picture's middle.
+ */
+export function sideDivider(tiles, lines, width) {
+  const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
+  if (label) return label.x + label.w / 2;
+  const xs = [...new Set(tiles.map((t) => Math.round(center(t))))].sort((a, b) => a - b);
+  if (xs.length > 1) {
+    const side = tiles.reduce((acc, t) => acc + (t.x1 - t.x0), 0) / tiles.length;
+    let best = 0;
+    let at = width / 2;
+    for (let i = 1; i < xs.length; i++) {
+      const gap = xs[i] - xs[i - 1];
+      if (gap > best) { best = gap; at = (xs[i] + xs[i - 1]) / 2; }
+    }
+    if (best > side * 1.6) return at;
+  }
+  return width / 2;
+}
+
+/**
+ * tiles: from the WebView matcher (image pixels). lines: [{ text, x, y, w, h }]
+ * or []. catalog: Map normalized name -> record ({ name, type, ... }).
+ * Returns { mine: [pick], theirs: [pick], foundWindow } where
+ * pick = { name, variant: 'd'|'n'|'m', fly, ride, sure, alternatives: [name] }.
+ */
+export function buildTrade({ tiles, lines = [], width, catalog }) {
+  const divider = sideDivider(tiles, lines, width);
+  const mine = [];
+  const theirs = [];
+  for (const t of tiles) {
+    const pictures = (t.candidates || []).filter((c) => catalog.has(normalize(c.name)));
+    if (!pictures.length) continue;
+    const best = pictures[0];
+    const rec = catalog.get(normalize(best.name));
+    // Only pets carry Neon / Mega / Fly / Ride.
+    const isPet = String(rec?.type || '').toLowerCase() === 'pets';
+    const pick = {
+      name: rec?.name || best.name,
+      variant: isPet ? t.variant || 'd' : 'd',
+      fly: isPet && Boolean(t.fly),
+      ride: isPet && Boolean(t.ride),
+      sure: best.d < PICTURE_SURE && !t.badgesUnsure,
+      alternatives: pictures.slice(1, 5).map((c) => catalog.get(normalize(c.name))?.name || c.name),
+    };
+    (center(t) < divider ? mine : theirs).push(pick);
+  }
+  return { mine, theirs, foundWindow: tiles.length > 0 };
+}

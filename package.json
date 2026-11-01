@@ -9,6 +9,7 @@
     "start": "react-native start",
     "test": "jest",
     "postinstall": "patch-package"
+    "scanner:build": "node scripts/trade-scanner/build-html.js",
   },
   "dependencies": {
     "@invertase/react-native-apple-authentication": "^2.4.0",
