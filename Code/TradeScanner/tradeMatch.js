@@ -41,7 +41,8 @@ export function sideDivider(tiles, lines, width) {
     }
     if (best > side * 1.6) return at;
   }
-  return width / 2;
+  // One block of tiles (an inventory, one offer): all of it is the user's.
+  return Infinity;
 }
 
 /**
@@ -52,11 +53,10 @@ export function sideDivider(tiles, lines, width) {
  */
 export function buildTrade({ tiles: allTiles, lines = [], width, catalog }) {
   let tiles = allTiles;
-  // The window always says TRADE between the two offers. When the text reader
-  // worked and finds no such word, this is not a trade window (the backpack,
-  // a value list...): report nothing rather than guess.
+  // The window says TRADE between the two offers. Without it (the backpack,
+  // one offer, a value list) the tiles are not dropped: sideDivider splits two
+  // separate grids on their gap, and one block goes to the user's side.
   const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
-  if (lines.length && !label) return { mine: [], theirs: [], foundWindow: false };
   if (label && tiles.length) {
     // Only the two grids beside the label count.
     const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);

@@ -173,10 +173,13 @@ describe('buildTrade', () => {
     expect(PICTURE_SURE).toBeLessThan(0.2);
   });
 
-  it('reports no window when the text reader finds no TRADE label (backpack, lists)', () => {
-    const tiles = [t(20, [{ name: 'Turtle', d: 0.02 }])];
+  it('puts a picture without a TRADE label (backpack, one offer) on the user side', () => {
+    const tiles = [t(20, [{ name: 'Turtle', d: 0.02 }]), t(130, [{ name: 'Kitsune', d: 0.02 }]), t(240, [{ name: 'Frost Dragon', d: 0.02 }]), t(350, [{ name: 'Turtle', d: 0.02 }])];
     const lines = [{ text: 'BACKPACK', x: 10, y: 5, w: 120, h: 30 }, { text: 'FOOD', x: 10, y: 50, w: 50, h: 20 }];
-    expect(buildTrade({ tiles, lines, width: 800, catalog })).toEqual({ mine: [], theirs: [], foundWindow: false });
+    const trade = buildTrade({ tiles, lines, width: 800, catalog });
+    expect(trade.mine.map((p) => p.name)).toEqual(['Turtle', 'Kitsune', 'Frost Dragon', 'Turtle']);
+    expect(trade.theirs).toEqual([]);
+    expect(trade.foundWindow).toBe(true);
   });
 
   it('ignores tiles far from the two grids beside the label', () => {
