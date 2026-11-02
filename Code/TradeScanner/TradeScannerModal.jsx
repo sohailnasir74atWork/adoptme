@@ -25,6 +25,7 @@ import { trackGrowthEvent } from '../Helper/growthAnalytics';
 import scannerHtml from './scannerHtml';
 import CropBox, { FULL_CROP } from './CropBox';
 import { readTextLines } from './textReader';
+import { classifyTiles } from './tileModel';
 import { buildTrade, normalize } from './tradeMatch';
 
 const SCAN_TIMEOUT_MS = 25000;
@@ -170,7 +171,11 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
     try {
       const dataUrl = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
       const [pixels, text] = await Promise.all([scanPixels(dataUrl, frame), readTextLines(asset.uri, frame)]);
-      const trade = buildTrade({ tiles: pixels.tiles, lines: text.lines, width: pixels.width, catalog });
+      // The trained model names the tiles the matcher found; the matcher's own
+      // picture match stays as the fallback (iOS, no Play services TFLite).
+      const named = await classifyTiles(asset.uri, frame, pixels.tiles);
+      const tiles = named ? pixels.tiles.map((tile, i) => ({ ...tile, candidates: named[i], model: true })) : pixels.tiles;
+      const trade = buildTrade({ tiles, lines: text.lines, width: pixels.width, catalog });
       const all = [...trade.mine, ...trade.theirs];
       trackGrowthEvent('trade_scan', {
         source,
@@ -179,6 +184,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         found: all.length,
         unsure: all.filter((p) => !p.sure).length,
         text_reader: text.ok ? 1 : 0,
+        model: named ? 1 : 0,
         crop_area: Math.round(frame.w * frame.h * 100),
       });
       if (!all.length) { setStage('none'); return; }

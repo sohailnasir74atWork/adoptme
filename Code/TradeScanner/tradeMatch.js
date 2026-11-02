@@ -14,6 +14,10 @@ export const PICTURE_SURE = 0.15;
 // Photos of a screen use shape-heavy distances (matcher.js PHOTO_W) and are
 // noisier: only a very close match counts as sure.
 export const PHOTO_SURE = 0.08;
+// The trained tile model (tileModel.js): a pick is sure at score >= 0.5
+// (d = 1 - score). On 484 hand-checked real tiles every wrong first pick
+// scored below 0.45 (RunningApps/_scanner_ml, 2026-11-02).
+export const MODEL_SURE = 0.5;
 
 export const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -82,7 +86,7 @@ export function buildTrade({ tiles: allTiles, lines = [], width, catalog }) {
       variant: isPet ? t.variant || 'd' : 'd',
       fly: isPet && Boolean(t.fly),
       ride: isPet && Boolean(t.ride),
-      sure: best.d < (t.photo ? PHOTO_SURE : PICTURE_SURE) && !t.badgesUnsure,
+      sure: best.d < (t.model ? MODEL_SURE : t.photo ? PHOTO_SURE : PICTURE_SURE) && !t.badgesUnsure,
       // What the badges said, kept so a fix to another pet restores them.
       seen: { variant: t.variant || 'd', fly: Boolean(t.fly), ride: Boolean(t.ride) },
       alternatives: pictures.slice(1, 5).map((c) => catalog.get(normalize(c.name))?.name || c.name),

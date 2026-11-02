@@ -1,17 +1,32 @@
 package com.adoptmevaluescalc.tradeocr;
 
+import android.content.ContentResolver;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.net.Uri;
 
 import androidx.annotation.NonNull;
+import androidx.exifinterface.media.ExifInterface;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
+import org.tensorflow.lite.InterpreterApi;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -72,5 +87,125 @@ public class TradeOcrModule extends ReactContextBaseJavaModule {
           // UNAVAILABLE while Play services is still downloading the model.
           promise.reject("ocr_failed", e.getMessage(), e);
         });
+  }
+
+  // ── Tile recogniser (2026-11-02) ──
+  // assets/trade_tiles.tflite: MobileNetV3 trained on every catalogue item as
+  // screenshots and fake phone photos (RunningApps/_scanner_ml). Input one
+  // 128x128 RGB tile, 0..255; output one cosine score per item, in the order
+  // of Code/TradeScanner/tileModelNames.json.
+  private static final int SIZE = 128;
+  private static final int TOP = 5;
+  private final ExecutorService worker = Executors.newSingleThreadExecutor();
+  private InterpreterApi interpreter;
+
+  private synchronized InterpreterApi model() throws Exception {
+    if (interpreter != null) return interpreter;
+    ByteBuffer file;
+    try (InputStream in = getReactApplicationContext().getAssets().open("trade_tiles.tflite")) {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      byte[] chunk = new byte[1 << 16];
+      for (int n; (n = in.read(chunk)) > 0; ) out.write(chunk, 0, n);
+      byte[] bytes = out.toByteArray();
+      file = ByteBuffer.allocateDirect(bytes.length).order(ByteOrder.nativeOrder());
+      file.put(bytes).rewind();
+    }
+    interpreter = InterpreterApi.create(file,
+        new InterpreterApi.Options().setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_APPLICATION_ONLY).setNumThreads(2));
+    return interpreter;
+  }
+
+  private Bitmap decode(Uri uri) throws Exception {
+    ContentResolver cr = getReactApplicationContext().getContentResolver();
+    Bitmap bmp;
+    try (InputStream in = cr.openInputStream(uri)) {
+      bmp = BitmapFactory.decodeStream(in);
+    }
+    if (bmp == null) throw new IllegalStateException("decode");
+    int deg = 0;
+    try (InputStream in = cr.openInputStream(uri)) {
+      int o = new ExifInterface(in).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+      deg = o == ExifInterface.ORIENTATION_ROTATE_90 ? 90 : o == ExifInterface.ORIENTATION_ROTATE_180 ? 180 : o == ExifInterface.ORIENTATION_ROTATE_270 ? 270 : 0;
+    } catch (Exception ignored) {
+      // No EXIF: as decoded.
+    }
+    if (deg == 0) return bmp;
+    Matrix m = new Matrix();
+    m.postRotate(deg);
+    return Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), m, true);
+  }
+
+  /**
+   * uri: the picked picture. crop: the CropBox frame {x, y, w, h} as shares of
+   * the picture. boxes: [[x0, y0, x1, y1]] in the frame's pixels (what the
+   * WebView matcher returns). Resolves one array per box of the best items:
+   * [{ i: item index, s: score 0..1 }].
+   */
+  @ReactMethod
+  public void classifyTiles(String uri, ReadableMap crop, ReadableArray boxes, Promise promise) {
+    worker.execute(() -> {
+      try {
+        InterpreterApi net = model();
+        int classes = net.getOutputTensor(0).shape()[1];
+        Bitmap bmp = decode(Uri.parse(uri));
+        double ox = crop.getDouble("x") * bmp.getWidth();
+        double oy = crop.getDouble("y") * bmp.getHeight();
+        ByteBuffer input = ByteBuffer.allocateDirect(SIZE * SIZE * 3 * 4).order(ByteOrder.nativeOrder());
+        float[][] output = new float[1][classes];
+        int[] px = new int[SIZE * SIZE];
+        WritableArray all = Arguments.createArray();
+        for (int k = 0; k < boxes.size(); k++) {
+          ReadableArray b = boxes.getArray(k);
+          int x0 = clamp((int) Math.round(ox + b.getDouble(0)), 0, bmp.getWidth() - 2);
+          int y0 = clamp((int) Math.round(oy + b.getDouble(1)), 0, bmp.getHeight() - 2);
+          int x1 = clamp((int) Math.round(ox + b.getDouble(2)), x0 + 1, bmp.getWidth());
+          int y1 = clamp((int) Math.round(oy + b.getDouble(3)), y0 + 1, bmp.getHeight());
+          Bitmap tile = Bitmap.createScaledBitmap(Bitmap.createBitmap(bmp, x0, y0, x1 - x0, y1 - y0), SIZE, SIZE, true);
+          tile.getPixels(px, 0, SIZE, 0, 0, SIZE, SIZE);
+          input.rewind();
+          for (int p : px) {
+            input.putFloat((p >> 16) & 0xFF);
+            input.putFloat((p >> 8) & 0xFF);
+            input.putFloat(p & 0xFF);
+          }
+          input.rewind();
+          net.run(input, output);
+          all.pushArray(top(output[0]));
+        }
+        promise.resolve(all);
+      } catch (Throwable e) {
+        // Model missing, unreadable picture: the scanner falls back to its
+        // picture matcher.
+        android.util.Log.w("TradeOcr", "classifyTiles failed", e);
+        promise.reject("classify_failed", String.valueOf(e.getMessage()), e);
+      }
+    });
+  }
+
+  private static int clamp(int v, int lo, int hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  private static WritableArray top(float[] scores) {
+    int[] best = new int[TOP];
+    java.util.Arrays.fill(best, -1);
+    for (int i = 0; i < scores.length; i++) {
+      for (int r = 0; r < TOP; r++) {
+        if (best[r] < 0 || scores[i] > scores[best[r]]) {
+          System.arraycopy(best, r, best, r + 1, TOP - r - 1);
+          best[r] = i;
+          break;
+        }
+      }
+    }
+    WritableArray out = Arguments.createArray();
+    for (int i : best) {
+      if (i < 0) continue;
+      WritableMap m = Arguments.createMap();
+      m.putInt("i", i);
+      m.putDouble("s", scores[i]);
+      out.pushMap(m);
+    }
+    return out;
   }
 }
