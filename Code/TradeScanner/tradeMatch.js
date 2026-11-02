@@ -64,6 +64,8 @@ export function buildTrade({ tiles: allTiles, lines = [], width, catalog }) {
     const lx = label.x + label.w / 2;
     const ly = label.y + label.h / 2;
     tiles = tiles.filter((t) => Math.abs(center(t) - lx) < size * 6.5 && Math.abs((t.y0 + t.y1) / 2 - ly) < size * 4.5);
+    // Nothing offered sits under the label: a square there is the swap arrow.
+    tiles = tiles.filter((t) => !(t.x0 < lx && t.x1 > lx));
   }
   const divider = sideDivider(tiles, lines, width);
   const mine = [];

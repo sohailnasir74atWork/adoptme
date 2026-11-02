@@ -185,6 +185,12 @@ describe('buildTrade', () => {
     expect([...trade.mine, ...trade.theirs].map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
   });
 
+  it('drops the swap arrow under the TRADE label (photo of a screen)', () => {
+    const tiles = [t(20, [{ name: 'Turtle', d: 0.02 }]), t(420, [{ name: 'Kitsune', d: 0.3 }]), t(700, [{ name: 'Frost Dragon', d: 0.02 }])];
+    const trade = buildTrade({ tiles, lines: [{ text: 'TRADE', x: 420, y: 60, w: 100, h: 30 }], width: 1000, catalog });
+    expect([...trade.mine, ...trade.theirs].map((p) => p.name)).toEqual(['Turtle', 'Frost Dragon']);
+  });
+
   it('without the label, splits on the gap between the two grids', () => {
     const tiles = [t(20, []), t(130, []), t(600, [])];
     expect(sideDivider(tiles, [], 2000)).toBeGreaterThan(230);

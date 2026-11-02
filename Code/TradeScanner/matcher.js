@@ -33,7 +33,7 @@
   }
   // The tile: very light and nearly grey (a faint green tint in the game).
   var tileMin = 214, tileSpread = 34;
-  var PINK_RG = 8, PINK_BG = -8, pinkWindow = true;
+  var PINK_RG = 8, PINK_BG = -8, pinkWindow = true, yellowTiles = true;
   // Some tiles are a yellow gradient instead (white at the top, orange-yellow
   // at the bottom): red bright, green a little lower, blue lowest.
   function isTile(r, g, b) {
@@ -42,7 +42,7 @@
     // camera tints white tiles pink too.
     if (pinkWindow && r - g > PINK_RG && b - g > PINK_BG) return false;
     if (Math.min(r, g, b) > tileMin && Math.max(r, g, b) - Math.min(r, g, b) < tileSpread) return true;
-    return r > tileMin && g <= r + 4 && g > 0.7 * r && r - b > 0.12 * r;
+    return yellowTiles && r > tileMin && g <= r + 4 && g > 0.7 * r && r - b > 0.12 * r;
   }
   // A photo of a monitor never reaches pure white: call "tile" whatever is
   // within reach of the brightest near-grey pixels in the picture.
@@ -124,7 +124,18 @@
    * to bottom, left to right).
    */
   function findTiles(px, w, h, loose) {
-    if (!loose) return findTilesAt(px, w, h, { min: 214, spread: 34 }, false);
+    if (!loose) {
+      // Yellow counts as tile colour, but then the gold "favourite" frame
+      // joins its tile into one square too big to keep: a second pass with
+      // white tiles only adds what the first one lost.
+      var lv = { min: 214, spread: 34 };
+      var found = findTilesAt(px, w, h, lv, false);
+      yellowTiles = false;
+      var white = findTilesAt(px, w, h, lv, false);
+      yellowTiles = true;
+      white.forEach(function (t) { if (!found.some(function (o) { return overlap(o, t) > 0.3; })) found.push(t); });
+      return readingOrder(found);
+    }
     var best = [];
     photoTileLevels(px, w, h).forEach(function (lv) {
       var t = findTilesAt(px, w, h, lv, true);
@@ -187,7 +198,12 @@
         }) || (s >= 0.6 * maxSide && tiles.every(function (o) { return o === t || Math.abs((o.x1 - o.x0) - s) > 0.25 * s; }));
       });
     }
-    tiles.sort(function (m, n) { return m.y0 - n.y0; });
+    return readingOrder(tiles);
+  }
+
+  // Rows top to bottom, left to right in each row.
+  function readingOrder(tiles) {
+    tiles = tiles.slice().sort(function (m, n) { return m.y0 - n.y0; });
     var rows = [];
     tiles.forEach(function (t) {
       var row = rows[rows.length - 1];
