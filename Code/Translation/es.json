@@ -4307,6 +4307,7 @@
         "reason_missed": "Faltan objetos",
         "reason_extra": "Objetos de más",
         "reason_sides": "Lados incorrectos",
-        "reason_badges": "N/M/F/R incorrecto"
+        "reason_badges": "N/M/F/R incorrecto",
+        "no_value": "Sin valor"
     }
 }

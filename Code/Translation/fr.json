@@ -4307,6 +4307,7 @@
         "reason_missed": "Objets manquants",
         "reason_extra": "Objets en trop",
         "reason_sides": "Côtés inversés",
-        "reason_badges": "Mauvais N/M/F/R"
+        "reason_badges": "Mauvais N/M/F/R",
+        "no_value": "Sans valeur"
     }
 }

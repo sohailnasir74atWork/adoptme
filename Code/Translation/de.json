@@ -4204,6 +4204,7 @@
         "reason_missed": "Fehlende Items",
         "reason_extra": "Zusätzliche Items",
         "reason_sides": "Falsche Seiten",
-        "reason_badges": "Falsches N/M/F/R"
+        "reason_badges": "Falsches N/M/F/R",
+        "no_value": "Kein Wert"
     }
 }

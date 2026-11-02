@@ -27,6 +27,7 @@ import CropBox, { FULL_CROP } from './CropBox';
 import { readTextLines } from './textReader';
 import { classifyTiles } from './tileModel';
 import { buildTrade, normalize } from './tradeMatch';
+import petWear from './petWear.json';
 
 const SCAN_TIMEOUT_MS = 25000;
 const PICK_OPTIONS = { mediaType: 'photo', includeBase64: true, maxWidth: 2000, maxHeight: 2000, quality: 0.9 };
@@ -86,6 +87,9 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
   const catalog = useMemo(() => {
     const map = new Map();
     (records || []).forEach((r) => { if (r?.name) map.set(normalize(r.name), r); });
+    // Pet wear the tile model knows but the values list does not carry: shown
+    // by name with no value, never put in the calculator.
+    petWear.forEach((name) => { if (!map.has(normalize(name))) map.set(normalize(name), { name, type: 'petwear', petWear: true }); });
     return map;
   }, [records]);
 
@@ -206,7 +210,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
   const recordOf = useCallback((p) => catalog.get(normalize(p.name)), [catalog]);
   const pickValue = useCallback((p) => {
     const rec = recordOf(p);
-    return rec ? Number(valueFor(rec, p.variant, p.fly, p.ride)) || 0 : 0;
+    return rec && !rec.petWear ? Number(valueFor(rec, p.variant, p.fly, p.ride)) || 0 : 0;
   }, [recordOf, valueFor]);
 
   const totals = useMemo(() => {
@@ -286,7 +290,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
   const apply = () => {
     const toRows = (list) => list
       .map((p) => ({ record: recordOf(p), variant: p.variant, fly: p.fly, ride: p.ride }))
-      .filter((r) => r.record);
+      .filter((r) => r.record && !r.record.petWear);
     trackGrowthEvent('trade_scan_apply', { mine: result.mine.length, theirs: result.theirs.length, ...scanStats(result) });
     onApply({ mine: toRows(result.mine), theirs: toRows(result.theirs) });
   };
@@ -347,9 +351,11 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         onPress={() => setOpenPick(selected ? null : key)}
         activeOpacity={0.7}
       >
-        {rec ? <Image source={{ uri: imageFor(rec) }} style={styles.tileImage} resizeMethod="resize" /> : null}
+        {rec?.petWear ? <Icon name="shirt-outline" size={22} color={sub} /> : rec ? <Image source={{ uri: imageFor(rec) }} style={styles.tileImage} resizeMethod="resize" /> : null}
         <Text style={[styles.tileName, { color: fg }]} numberOfLines={1}>{p.name}</Text>
-        <Text style={[styles.tileValue, { color: accent }]} numberOfLines={1}>{formatValue(pickValue(p))}</Text>
+        <Text style={[styles.tileValue, { color: rec?.petWear ? sub : accent }]} numberOfLines={1}>
+          {rec?.petWear ? t('trade_scanner.no_value', { defaultValue: 'No value' }) : formatValue(pickValue(p))}
+        </Text>
         {badgeChips(p)}
         {!p.sure && (
           <View style={styles.unsure}>
@@ -510,7 +516,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
                       const rec = catalog.get(normalize(n));
                       return (
                         <TouchableOpacity key={n} style={[styles.chip, { borderColor: sub }]} onPress={() => replacePick(open.side, open.index, n)}>
-                          {rec ? <Image source={{ uri: imageFor(rec) }} style={styles.chipImage} resizeMethod="resize" /> : null}
+                          {rec?.petWear ? <Icon name="shirt-outline" size={15} color={sub} /> : rec ? <Image source={{ uri: imageFor(rec) }} style={styles.chipImage} resizeMethod="resize" /> : null}
                           <Text style={[styles.chipText, { color: fg }]} numberOfLines={1}>{n}</Text>
                         </TouchableOpacity>
                       );
