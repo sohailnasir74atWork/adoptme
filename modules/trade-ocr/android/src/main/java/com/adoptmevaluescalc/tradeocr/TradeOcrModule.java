@@ -98,11 +98,18 @@ public class TradeOcrModule extends ReactContextBaseJavaModule {
   private static final int TOP = 5;
   private final ExecutorService worker = Executors.newSingleThreadExecutor();
   private InterpreterApi interpreter;
+  // "" = the bundled assets/trade_tiles.tflite; otherwise a model file the
+  // app downloaded from the CDN (scannerUpdate.js, checked by sha256).
+  private String interpreterPath;
 
-  private synchronized InterpreterApi model() throws Exception {
-    if (interpreter != null) return interpreter;
+  private synchronized InterpreterApi model(String path) throws Exception {
+    String key = path == null ? "" : path;
+    if (interpreter != null && key.equals(interpreterPath)) return interpreter;
+    if (interpreter != null) { interpreter.close(); interpreter = null; }
     ByteBuffer file;
-    try (InputStream in = getReactApplicationContext().getAssets().open("trade_tiles.tflite")) {
+    try (InputStream in = key.isEmpty()
+        ? getReactApplicationContext().getAssets().open("trade_tiles.tflite")
+        : new java.io.FileInputStream(key)) {
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       byte[] chunk = new byte[1 << 16];
       for (int n; (n = in.read(chunk)) > 0; ) out.write(chunk, 0, n);
@@ -112,6 +119,7 @@ public class TradeOcrModule extends ReactContextBaseJavaModule {
     }
     interpreter = InterpreterApi.create(file,
         new InterpreterApi.Options().setRuntime(InterpreterApi.Options.TfLiteRuntime.FROM_APPLICATION_ONLY).setNumThreads(2));
+    interpreterPath = key;
     return interpreter;
   }
 
@@ -138,14 +146,15 @@ public class TradeOcrModule extends ReactContextBaseJavaModule {
   /**
    * uri: the picked picture. crop: the CropBox frame {x, y, w, h} as shares of
    * the picture. boxes: [[x0, y0, x1, y1]] in the frame's pixels (what the
-   * WebView matcher returns). Resolves one array per box of the best items:
-   * [{ i: item index, s: score 0..1 }].
+   * WebView matcher returns). modelPath: a downloaded model file, or null for
+   * the bundled one. Resolves { classes: item count of the model, tiles: one
+   * array per box of the best items [{ i: item index, s: score 0..1 }] }.
    */
   @ReactMethod
-  public void classifyTiles(String uri, ReadableMap crop, ReadableArray boxes, Promise promise) {
+  public void classifyTiles(String uri, ReadableMap crop, ReadableArray boxes, String modelPath, Promise promise) {
     worker.execute(() -> {
       try {
-        InterpreterApi net = model();
+        InterpreterApi net = model(modelPath);
         int classes = net.getOutputTensor(0).shape()[1];
         Bitmap bmp = decode(Uri.parse(uri));
         double ox = crop.getDouble("x") * bmp.getWidth();
@@ -172,7 +181,10 @@ public class TradeOcrModule extends ReactContextBaseJavaModule {
           net.run(input, output);
           all.pushArray(top(output[0]));
         }
-        promise.resolve(all);
+        WritableMap out = Arguments.createMap();
+        out.putInt("classes", classes);
+        out.putArray("tiles", all);
+        promise.resolve(out);
       } catch (Throwable e) {
         // Model missing, unreadable picture: the scanner falls back to its
         // picture matcher.

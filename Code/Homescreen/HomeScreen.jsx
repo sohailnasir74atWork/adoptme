@@ -2268,6 +2268,7 @@ const HomeScreen = ({ selectedTheme }) => {
         valueFor={scannedValue}
         verdictFor={wflStatus}
         formatValue={formatValue}
+        tester={!!(user?.admin || user?.isModerator || user?.isBabyMod)}
       />
       <ShareTradeModal
         visible={isShareModalVisible}

@@ -29,6 +29,7 @@ import { classifyTiles } from './tileModel';
 import { buildTrade, normalize } from './tradeMatch';
 import DeviceInfo from 'react-native-device-info';
 import { uploadScanReport } from '../Helper/modEvidenceUpload';
+import { activeScanner, activeScannerHtml, checkScannerUpdate } from './scannerUpdate';
 
 const SCAN_TIMEOUT_MS = 25000;
 const ITEM_MIN = 0.4;
@@ -70,7 +71,7 @@ const scanStats = (r) => {
   };
 };
 
-export default function TradeScannerModal({ visible, onClose, onApply, records, maxPerSide, isDarkMode, imageFor, valueFor, verdictFor, formatValue }) {
+export default function TradeScannerModal({ visible, onClose, onApply, records, maxPerSide, isDarkMode, imageFor, valueFor, verdictFor, formatValue, tester }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
@@ -95,6 +96,19 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
     (records || []).forEach((r) => { if (r?.name) map.set(normalize(r.name), r); });
     return map;
   }, [records]);
+
+  // Scanner page: a downloaded one (scannerUpdate.js) when there is one.
+  const [pageHtml, setPageHtml] = useState(scannerHtml);
+  useEffect(() => {
+    if (!visible) return;
+    checkScannerUpdate({ tester: !!tester });
+    let live = true;
+    activeScannerHtml().then((html) => {
+      if (live && html && html !== pageHtml) { ready.current = false; setPageHtml(html); }
+    });
+    return () => { live = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, tester]);
 
   useEffect(() => {
     if (!visible) {
@@ -199,6 +213,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         width: pixels.width,
         height: pixels.height,
         model: named ? 1 : 0,
+        scannerVersion: activeScanner()?.version || 0,
         textReader: text.ok ? 1 : 0,
         tiles: pixels.tiles.map((tile, i) => ({
           box: [tile.x0, tile.y0, tile.x1, tile.y1].map(Math.round),
@@ -219,6 +234,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         unsure: all.filter((p) => !p.sure).length,
         text_reader: text.ok ? 1 : 0,
         model: named ? 1 : 0,
+        scanner_v: activeScanner()?.version || 0,
         crop_area: Math.round(frame.w * frame.h * 100),
       });
       if (!all.length) { setStage('none'); return; }
@@ -503,7 +519,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
             // it takes half the sheet.
             containerStyle={styles.hiddenWeb}
             style={styles.hiddenWebInner}
-            source={{ html: scannerHtml }}
+            source={{ html: pageHtml }}
             originWhitelist={['*']}
             onMessage={onMessage}
             javaScriptEnabled
