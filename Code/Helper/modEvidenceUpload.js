@@ -107,13 +107,13 @@ export const pickEvidenceImages = async (alreadyPicked = 0) => {
  * '[object Object]'. Every attach failed with ENOENT. Unwrap `.uri`, the way
  * all eight other call sites in the app do.
  */
-const uploadOne = async (uri, folder) => {
+const uploadOne = async (uri, folder, id = uuidv4()) => {
   // returnableOutputType matches the other call sites: safeCompressImage only
   // checks that the compressor returned *a string*, so base64 would sail
   // through its guard and be used as a path.
   const compressed = await safeCompressImage(uri, { returnableOutputType: 'uri' }).catch(() => null);
   const local = compressed?.uri || uri;
-  const remotePath = `${folder}/${uuidv4()}.jpg`;
+  const remotePath = `${folder}/${id}.jpg`;
 
   const base64 = await RNFS.readFile(String(local).replace('file://', ''), 'base64');
   // global.atob, not bare atob: it exists at runtime (UploadModal relies on
@@ -151,6 +151,23 @@ const uploadOne = async (uri, folder) => {
  * `folder` is the bare-UUID prefix: player reports use 'report-images' (the
  * /user_reports rule only accepts URLs under it).
  */
+/**
+ * Trade Scanner reports (2026-11-02): the user's picture and a JSON of what
+ * the scan read, under one bare UUID in `scan-reports/`, for retraining.
+ * Throws on failure (the caller shows "Could not send").
+ */
+export const uploadScanReport = async (uri, meta) => {
+  const id = uuidv4();
+  await uploadOne(uri, 'scan-reports', id);
+  const res = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/scan-reports/${id}.json`, {
+    method: 'PUT',
+    headers: { AccessKey: BUNNY_ACCESS_KEY, 'Content-Type': 'application/octet-stream' },
+    body: JSON.stringify(meta),
+  });
+  if (!res.ok) throw new Error(`Bunny upload failed ${res.status}`);
+  return id;
+};
+
 export const uploadEvidence = async (uris = [], onProgress, folder = 'mod-evidence') => {
   const list = (Array.isArray(uris) ? uris : []).filter(Boolean).slice(0, MAX_EVIDENCE_IMAGES);
   if (list.length === 0) return [];

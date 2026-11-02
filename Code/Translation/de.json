@@ -4204,6 +4204,11 @@
         "reason_missed": "Fehlende Items",
         "reason_extra": "Zusätzliche Items",
         "reason_sides": "Falsche Seiten",
-        "reason_badges": "Falsches N/M/F/R"
+        "reason_badges": "Falsches N/M/F/R",
+        "report_note": "Schick uns dieses Bild und was der Scanner gelesen hat, damit wir es beheben können. Sende nur Bilder ohne private Infos.",
+        "report_send": "Bild senden",
+        "report_retry": "Erneut versuchen",
+        "report_sent": "Gesendet. Danke, wir nutzen es, um den Scanner zu verbessern.",
+        "privacy_send": "Fotos werden auf deinem Handy gelesen. Nichts wird hochgeladen, außer du tippst auf Bild senden."
     }
 }

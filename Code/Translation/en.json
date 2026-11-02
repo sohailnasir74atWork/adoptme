@@ -4222,6 +4222,11 @@
         "reason_missed": "Missed items",
         "reason_extra": "Extra items",
         "reason_sides": "Wrong sides",
-        "reason_badges": "Wrong N/M/F/R"
+        "reason_badges": "Wrong N/M/F/R",
+        "report_note": "Send us this picture and what the scan read, so we can fix it. Only send pictures without private info.",
+        "report_send": "Send picture",
+        "report_retry": "Try again",
+        "report_sent": "Sent. Thank you, we will use it to fix the scanner.",
+        "privacy_send": "Photos are read on your phone. Nothing is uploaded unless you tap Send picture."
     }
 }

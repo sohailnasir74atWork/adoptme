@@ -4209,6 +4209,11 @@
     "reason_missed": "빠진 아이템",
     "reason_extra": "추가된 아이템",
     "reason_sides": "양쪽이 바뀜",
-    "reason_badges": "N/M/F/R 틀림"
+    "reason_badges": "N/M/F/R 틀림",
+    "report_note": "이 사진과 스캔 결과를 보내 주시면 고칠 수 있어요. 개인 정보가 없는 사진만 보내 주세요.",
+    "report_send": "사진 보내기",
+    "report_retry": "다시 시도",
+    "report_sent": "전송했어요. 고마워요, 스캐너 개선에 쓸게요.",
+    "privacy_send": "사진은 휴대폰에서 읽혀요. 사진 보내기를 누르지 않으면 아무것도 올라가지 않아요."
   }
 }
