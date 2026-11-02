@@ -45,7 +45,7 @@
           return {
             x0: s.x0 / scale, y0: s.y0 / scale, x1: s.x1 / scale, y1: s.y1 / scale,
             variant: s.variant, fly: s.fly, ride: s.ride, badgesUnsure: s.badgesUnsure,
-            photo: !!s.photo, candidates: s.candidates,
+            photo: !!s.photo, weak: !!s.weak, flat: !!s.flat, candidates: s.candidates,
           };
         });
         post({ type: 'result', id: id, width: w, height: h, tiles: tiles });

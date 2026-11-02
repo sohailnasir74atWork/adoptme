@@ -594,7 +594,20 @@
         variant: badges.variant, fly: badges.fly, ride: badges.ride, badgesUnsure: badges.unsure,
         candidates: sig ? rank(sig, templates, 5) : [],
       };
-    }).filter(function (t) { return t.candidates.length && t.candidates[0].d < NO_MATCH; });
+    }).map(function (t) {
+      // No picture match (pet wear and stickers are not in the signatures, a
+      // pale item has no signature): the square is kept for the tile model
+      // with no candidates, so without the model it is still dropped.
+      if (!t.candidates.length || t.candidates[0].d >= NO_MATCH) { t.candidates = []; t.weak = true; }
+      // Looks like a flat empty slot: the app drops it unless the tile model
+      // is fairly sure there is an item (a pale pet on a white tile).
+      t.flat = emptySlot(badgePx, w, t);
+      return t;
+    }).filter(function (t) {
+      // An unmatched square that is one flat colour is an empty slot. (Only
+      // unmatched ones: a pale pet on a white tile can look flat too.)
+      return !t.weak || !t.flat;
+    });
   }
 
   // ── Photo grid (2026-11-02) ──
@@ -610,12 +623,29 @@
     return i / ((a.x1 - a.x0) * (a.y1 - a.y0) + (b.x1 - b.x0) * (b.y1 - b.y0) - i);
   }
 
+  // Shared area over the smaller square's area.
+  function inside(a, b) {
+    var ix = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), iy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ix <= 0 || iy <= 0) return 0;
+    return ix * iy / Math.min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0));
+  }
+
   function photoCandidates(px, soft, w, h) {
     var all = [];
     photoTileLevels(soft, w, h).forEach(function (lv) { all = all.concat(findTilesAt(soft, w, h, lv, true)); });
+    // White tiles only: a gold "favourite" frame joins its tile otherwise.
+    yellowTiles = false;
+    photoTileLevels(soft, w, h).forEach(function (lv) { all = all.concat(findTilesAt(soft, w, h, lv, true)); });
+    yellowTiles = true;
     photoTileLevels(px, w, h).forEach(function (lv) { all = all.concat(findTilesAt(px, w, h, lv, true)); });
+    // One square per tile: where squares overlap (the white top of a yellow
+    // tile, a tile with and without its frame) keep the one closest to the
+    // usual tile size.
+    if (!all.length) return all;
+    var mid = median(all.map(function (t) { return t.x1 - t.x0; }));
+    all.sort(function (m, n) { return Math.abs(m.x1 - m.x0 - mid) - Math.abs(n.x1 - n.x0 - mid); });
     var out = [];
-    all.forEach(function (t) { if (!out.some(function (o) { return overlap(o, t) > 0.5; })) out.push(t); });
+    all.forEach(function (t) { if (!out.some(function (o) { return inside(o, t) > 0.5; })) out.push(t); });
     return out;
   }
 
@@ -624,7 +654,36 @@
   // tiles of one size that line up in rows and columns -> every cell of
   // each grid, in reading order. Squares that fit no grid are kept as they
   // are (a 1-item offer).
+  // Tiles of one grid are linked to neighbours at most this many steps away
+  // (1 = touching, diagonals included); further would bridge the gap between
+  // the two offers and fill cells on the TRADE label.
+  var LINK = 1.6;
+  // The two offers can use different cell sizes (a 3x3 grid beside a 2x2
+  // one): each size is rebuilt as its own grid.
   function gridCells(tiles, w, h) {
+    var sorted = tiles.slice().sort(function (m, n) { return (m.x1 - m.x0) - (n.x1 - n.x0); });
+    var groups = [];
+    sorted.forEach(function (t) {
+      var g = groups[groups.length - 1];
+      if (g && t.x1 - t.x0 <= 1.25 * (g[0].x1 - g[0].x0)) g.push(t);
+      else groups.push([t]);
+    });
+    // A lone square much smaller than the main grid's tiles is part of a
+    // slot (glare, a half-lit empty slot), never a slot of its own.
+    var main = groups.reduce(function (m, g) { return g.length > m.length ? g : m; }, []);
+    var mainSide = main.length ? median(main.map(function (t) { return t.x1 - t.x0; })) : 0;
+    groups = groups.filter(function (g) { return g.length > 1 || g === main || g[0].x1 - g[0].x0 >= 0.75 * mainSide; });
+    var cells = [].concat.apply([], groups.map(function (g) { return gridOf(g, w, h); }));
+    // A cell added from one grid never sits on a found tile or on a cell
+    // another grid added first.
+    var kept = cells.filter(function (c) { return !c.filled; });
+    cells.filter(function (c) { return c.filled; }).forEach(function (c) {
+      if (!kept.some(function (o) { return inside(o, c) > 0.3; })) kept.push(c);
+    });
+    return readingOrder(kept);
+  }
+
+  function gridOf(tiles, w, h) {
     if (tiles.length < 2) return tiles;
     var s = median(tiles.map(function (t) { return t.x1 - t.x0; }));
     var same = tiles.filter(function (t) { return Math.abs(t.x1 - t.x0 - s) < 0.2 * s; });
@@ -645,7 +704,7 @@
       same.forEach(function (b, j) {
         var dx = Math.abs(b.x0 - a.x0) / step, dy = Math.abs(b.y0 - a.y0) / step;
         var gx = Math.abs(dx - Math.round(dx)), gy = Math.abs(dy - Math.round(dy));
-        if (i < j && dx < 2.3 && dy < 2.3 && gx < 0.2 && gy < 0.2) group[root(i)] = root(j);
+        if (i < j && dx < LINK && dy < LINK && gx < 0.2 && gy < 0.2) group[root(i)] = root(j);
       });
     });
     // Squares of another size are not trade slots once a grid is known.
@@ -661,12 +720,15 @@
       // Each column's left edge / each row's top edge: measured where a tile
       // was found, else stepped from the grid's first one.
       var xs = [], ys = [];
+      // Only tiles of the usual size place a column or row: a square cut
+      // short (glare, a tick) has its edge in the wrong place.
+      var fit = function (t) { return Math.abs(t.x1 - t.x0 - s) < 0.1 * s; };
       for (var c = 0; c < cols; c++) {
-        var inCol = g.filter(function (t) { return col(t) === c; }).map(function (t) { return t.x0; });
+        var inCol = g.filter(function (t) { return col(t) === c && fit(t); }).map(function (t) { return t.x0; });
         xs.push(inCol.length ? median(inCol) : ox + c * step);
       }
       for (var r = 0; r < rows; r++) {
-        var inRow = g.filter(function (t) { return row(t) === r; }).map(function (t) { return t.y0; });
+        var inRow = g.filter(function (t) { return row(t) === r && fit(t); }).map(function (t) { return t.y0; });
         ys.push(inRow.length ? median(inRow) : oy + r * step);
       }
       for (r = 0; r < rows; r++) {
@@ -744,11 +806,10 @@
     var normPx = flatField(normalizeColors(px, w, h), w, h);
     var soft = blur(normPx, w, h, Math.max(1, Math.round(Math.min(w, h) / 350)));
     var plain = scanWith(px, w, h, templates, px, false);
-    // The plain pass sees the window clearly (a screenshot): trust it, empty
-    // slots and all.
-    var plainTiles = findTiles(px, w, h, false).length;
-    if (plainTiles >= 2) return plain;
-    if (findTiles(soft, w, h, true).length <= plainTiles) return plain;
+    // Both passes always run: a phone photo of a screen can show a few clean
+    // white tiles (the plain pass then sees "a screenshot") while the photo
+    // pass, with the grid rebuilt, finds every slot. The one that finds more
+    // wins; a tie stays with the plain pass.
     // Evening out the light also turns a grey or tinted empty slot white.
     // Real item tiles are the whitest squares in the original picture, so a
     // square much less white than the whitest one is dropped. A cell added

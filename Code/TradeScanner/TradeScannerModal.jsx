@@ -29,6 +29,7 @@ import { classifyTiles } from './tileModel';
 import { buildTrade, normalize } from './tradeMatch';
 
 const SCAN_TIMEOUT_MS = 25000;
+const ITEM_MIN = 0.4;
 const PICK_OPTIONS = { mediaType: 'photo', includeBase64: true, maxWidth: 2000, maxHeight: 2000, quality: 0.9 };
 // A photo of a monitor needs more pixels: the trade window fills less of it.
 const CAMERA_OPTIONS = { ...PICK_OPTIONS, maxWidth: 2600, maxHeight: 2600, saveToPhotos: false, cameraType: 'back' };
@@ -174,7 +175,14 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
       // The trained model names the tiles the matcher found; the matcher's own
       // picture match stays as the fallback (iOS, no Play services TFLite).
       const named = await classifyTiles(asset.uri, frame, pixels.tiles);
-      const tiles = named ? pixels.tiles.map((tile, i) => ({ ...tile, candidates: named[i], model: true })) : pixels.tiles;
+      // A square the picture matcher could not name (weak) or that looks like
+      // a flat empty slot is kept only when the tile model is fairly sure it
+      // holds an item. A low score on a square with an item in it stays, as
+      // a "?" pick for the user to check.
+      const tiles = named
+        ? pixels.tiles.map((tile, i) => ({ ...tile, candidates: named[i], model: true }))
+          .filter((tile) => !(tile.weak || tile.flat) || (tile.candidates[0]?.score || 0) >= ITEM_MIN)
+        : pixels.tiles;
       const trade = buildTrade({ tiles, lines: text.lines, width: pixels.width, catalog });
       const all = [...trade.mine, ...trade.theirs];
       trackGrowthEvent('trade_scan', {
