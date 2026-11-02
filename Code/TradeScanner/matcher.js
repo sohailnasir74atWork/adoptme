@@ -205,7 +205,9 @@
   function readBadges(px, w, t, loose) {
     var side = t.x1 - t.x0;
     var bx0 = t.x0 + Math.round(side * 0.3), bx1 = t.x1;
-    var by0 = t.y0 + Math.round(side * 0.62), by1 = t.y1;
+    // From the bottom edge: a tile cut off at the top of the picture is
+    // shorter than wide, its badges still sit on its bottom edge.
+    var by0 = Math.max(t.y0, t.y1 - Math.round(side * 0.38)), by1 = t.y1;
     var bw = bx1 - bx0, bh = by1 - by0;
     var cls = new Int8Array(bw * bh).fill(-1);
     for (var y = 0; y < bh; y++) {
@@ -561,6 +563,12 @@
   function scanTiles(px, w, templates, tiles, loose, badgePx) {
     return tiles.map(function (t) {
       var badges = loose ? readBadgeSlots(badgePx, w, t) : readBadges(px, w, t, false);
+      // A green pet hides a green N badge from the blob reader (one blob too
+      // big to be a badge): ask the badge spots too, for Neon / Mega only.
+      if (!loose && badges.variant === 'd') {
+        var spots = readBadgeSlots(px, w, t);
+        if (spots.variant !== 'd') { badges.variant = spots.variant; badges.fly = badges.fly || spots.fly; badges.ride = badges.ride || spots.ride; }
+      }
       // A photo's badge boxes are blurred and oversized: masking them would
       // cut into the pet, so photos keep the badge pixels in the picture.
       var sig = tileSignature(px, w, t, loose ? [] : badges.boxes, loose);
