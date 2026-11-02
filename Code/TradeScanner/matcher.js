@@ -33,7 +33,17 @@
   }
   // The tile: very light and nearly grey (a faint green tint in the game).
   var tileMin = 214, tileSpread = 34;
-  function isTile(r, g, b) { return Math.min(r, g, b) > tileMin && Math.max(r, g, b) - Math.min(r, g, b) < tileSpread; }
+  var PINK_RG = 8, PINK_BG = -8, pinkWindow = true;
+  // Some tiles are a yellow gradient instead (white at the top, orange-yellow
+  // at the bottom): red bright, green a little lower, blue lowest.
+  function isTile(r, g, b) {
+    // The pink inventory window around the tiles is nearly as light: green
+    // clearly the lowest channel is pink, never a tile. Screenshots only: a
+    // camera tints white tiles pink too.
+    if (pinkWindow && r - g > PINK_RG && b - g > PINK_BG) return false;
+    if (Math.min(r, g, b) > tileMin && Math.max(r, g, b) - Math.min(r, g, b) < tileSpread) return true;
+    return r > tileMin && g <= r + 4 && g > 0.7 * r && r - b > 0.12 * r;
+  }
   // A photo of a monitor never reaches pure white: call "tile" whatever is
   // within reach of the brightest near-grey pixels in the picture.
   function photoTileLevels(px, w, h) {
@@ -124,7 +134,7 @@
   }
 
   function findTilesAt(px, w, h, lv, loose) {
-    tileMin = lv.min; tileSpread = lv.spread;
+    tileMin = lv.min; tileSpread = lv.spread; pinkWindow = !loose;
     var mask = new Uint8Array(w * h);
     for (var i = 0, p = 0; i < w * h; i++, p += 4) if (isTile(px[p], px[p + 1], px[p + 2])) mask[i] = 1;
     var minSide = Math.max(18, Math.round(Math.min(w, h) * (loose ? 0.05 : 0.035)));
