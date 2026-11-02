@@ -4259,7 +4259,6 @@
         "reason_missed": "Пропущены предметы",
         "reason_extra": "Лишние предметы",
         "reason_sides": "Стороны перепутаны",
-        "reason_badges": "Неверные N/M/F/R",
-        "no_value": "Без цены"
+        "reason_badges": "Неверные N/M/F/R"
     }
 }

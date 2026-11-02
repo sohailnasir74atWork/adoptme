@@ -4653,7 +4653,6 @@
         "reason_missed": "عناصر ناقصة",
         "reason_extra": "عناصر زائدة",
         "reason_sides": "الجانبان معكوسان",
-        "reason_badges": "N/M/F/R خاطئة",
-        "no_value": "بلا قيمة"
+        "reason_badges": "N/M/F/R خاطئة"
     }
 }

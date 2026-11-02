@@ -188,8 +188,8 @@ describe('buildTrade', () => {
     expect([...trade.mine, ...trade.theirs].map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
   });
 
-  it('keeps pet wear (no value, never badged) when the catalogue lists it', () => {
-    const cat = new Map([...catalog, [normalize('Angel Wings'), { name: 'Angel Wings', type: 'petwear', petWear: true }]]);
+  it('keeps pet wear from the catalogue, never badged', () => {
+    const cat = new Map([...catalog, [normalize('Angel Wings'), { name: 'Angel Wings', type: 'pet wear' }]]);
     const trade = buildTrade({ tiles: [t(20, [{ name: 'Angel Wings', d: 0.2 }], { model: true, variant: 'n', fly: true })], width: 500, catalog: cat });
     expect(trade.mine).toMatchObject([{ name: 'Angel Wings', variant: 'd', fly: false, ride: false, sure: true }]);
   });

@@ -4209,7 +4209,6 @@
     "reason_missed": "빠진 아이템",
     "reason_extra": "추가된 아이템",
     "reason_sides": "양쪽이 바뀜",
-    "reason_badges": "N/M/F/R 틀림",
-    "no_value": "가치 없음"
+    "reason_badges": "N/M/F/R 틀림"
   }
 }

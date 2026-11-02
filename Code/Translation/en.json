@@ -4222,7 +4222,6 @@
         "reason_missed": "Missed items",
         "reason_extra": "Extra items",
         "reason_sides": "Wrong sides",
-        "reason_badges": "Wrong N/M/F/R",
-        "no_value": "No value"
+        "reason_badges": "Wrong N/M/F/R"
     }
 }
