@@ -133,12 +133,20 @@
       var bw = b.x1 - b.x0, bh = b.y1 - b.y0;
       if (bw < minSide || bh < minSide) return;
       if (bw / bh < 0.82 || bw / bh > 1.22) return;
-      if (bw > Math.min(w, h) * 0.6) return;
+      if (bw > Math.min(w, h) * 0.95) return;
       if (b.n < (loose ? 0.15 : 0.22) * bw * bh) return;
       var t = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 };
       if (ringWhite(px, w, t) < (loose ? 0.55 : 0.7)) return;
       tiles.push(t);
     });
+    // A tight crop can make one tile most of the picture, so size alone does
+    // not rule a square out; a square far bigger than the others (a white
+    // panel, tiles merged by glare) does.
+    if (tiles.length > 2) {
+      var sides = tiles.map(function (t) { return t.x1 - t.x0; }).sort(function (m, n) { return m - n; });
+      var mid = sides[Math.floor(sides.length / 2)];
+      tiles = tiles.filter(function (t) { return t.x1 - t.x0 < 1.5 * mid; });
+    }
     // A tile is never inside another one (a white pet part inside a tile is
     // already part of the tile blob, but keep the outer one to be safe).
     tiles = tiles.filter(function (t) {
@@ -260,36 +268,50 @@
    */
   function readBadgeSlots(px, w, t) {
     var side = t.x1 - t.x0, found = { variant: 'd', fly: false, ride: false, unsure: false, boxes: [] };
-    var rad = Math.max(2, Math.round(side * 0.05));
-    for (var k = 0; k < 3; k++) {
-      var best = -1, bestShare = 0;
-      // The row sits a little higher or lower depending on the window: try
-      // three heights and keep the clearest reading.
-      [0.13, 0.16, 0.19].forEach(function (fromBottom) {
-        var cx = Math.round(t.x1 - side * (0.135 + 0.215 * k)), cy = Math.round(t.y1 - side * fromBottom);
-        var counts = [0, 0, 0, 0], all = 0;
-        for (var dy = -rad; dy <= rad; dy++) {
-          for (var dx = -rad; dx <= rad; dx++) {
-            if (dx * dx + dy * dy > rad * rad) continue;
-            var x = cx + dx, y = cy + dy;
-            if (x < 0 || y < 0 || x >= w) continue;
-            var p = (y * w + x) * 4;
-            var c = badgeAt(px[p], px[p + 1], px[p + 2], true);
-            all++;
-            if (c >= 0) counts[c]++;
+    // Sample a ring, not the middle: the letter is white, and some pictures
+    // draw the badges as coloured rings with a pale middle.
+    var rad = Math.max(3, Math.round(side * 0.08)), hole = Math.round(side * 0.04);
+    function sample(cx, cy) {
+      var counts = [0, 0, 0, 0], all = 0, best = -1, share = 0;
+      for (var dy = -rad; dy <= rad; dy++) {
+        for (var dx = -rad; dx <= rad; dx++) {
+          if (dx * dx + dy * dy > rad * rad || dx * dx + dy * dy < hole * hole) continue;
+          var x = cx + dx, y = cy + dy;
+          if (x < 0 || y < 0 || x >= w) continue;
+          var p = (y * w + x) * 4;
+          var c = badgeAt(px[p], px[p + 1], px[p + 2], true);
+          all++;
+          if (c >= 0) counts[c]++;
+        }
+      }
+      for (var i = 0; i < 4; i++) if (all && counts[i] / all > share) { share = counts[i] / all; best = i; }
+      return { best: best, share: share };
+    }
+    // The row sits a little higher or lower, further left and wider apart
+    // depending on the window and how well the tile box fits (a cell added
+    // from the grid is placed by its neighbours): try a few placements and
+    // keep the one whose badges read clearest.
+    var bestRead = [], bestScore = 0;
+    [0, 0.02, 0.04].forEach(function (shift) {
+      [0.215, 0.235].forEach(function (pitch) {
+        [0.13, 0.16, 0.19].forEach(function (fromBottom) {
+          var read = [], score = 0;
+          for (var k = 0; k < 3; k++) {
+            var r = sample(Math.round(t.x1 - side * (0.135 + shift + pitch * k)), Math.round(t.y1 - side * fromBottom));
+            if (r.best < 0 || r.share < 0.4) break;
+            read.push(r.best); score += r.share;
           }
-        }
-        for (var i = 0; i < 4; i++) {
-          if (all && counts[i] / all > bestShare) { bestShare = counts[i] / all; best = i; }
-        }
+          if (score > bestScore) { bestScore = score; bestRead = read; }
+        });
       });
-      if (best < 0 || bestShare < 0.4) break;
+    });
+    bestRead.forEach(function (best) {
       var key = BADGES[best].key;
       if (key === 'M') found.variant = 'm';
       else if (key === 'N' && found.variant !== 'm') found.variant = 'n';
       else if (key === 'F') found.fly = true;
       else if (key === 'R') found.ride = true;
-    }
+    });
     return found;
   }
 
@@ -521,19 +543,149 @@
   var NO_MATCH = 0.6;
 
   function scanWith(px, w, h, templates, findPx, loose) {
-    var tiles = findTiles(findPx, w, h, loose);
+    return scanTiles(px, w, templates, findTiles(findPx, w, h, loose), loose, px);
+  }
+
+  // badgePx: the picture the badges are read from. For a photo that is the
+  // original: evening out the light clips pale badges to plain white.
+  function scanTiles(px, w, templates, tiles, loose, badgePx) {
     return tiles.map(function (t) {
-      var badges = loose ? readBadgeSlots(px, w, t) : readBadges(px, w, t, false);
+      var badges = loose ? readBadgeSlots(badgePx, w, t) : readBadges(px, w, t, false);
       // A photo's badge boxes are blurred and oversized: masking them would
       // cut into the pet, so photos keep the badge pixels in the picture.
       var sig = tileSignature(px, w, t, loose ? [] : badges.boxes, loose);
       W = loose ? PHOTO_W : SHOT_W;
       return {
-        x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1,
+        x0: t.x0, y0: t.y0, x1: t.x1, y1: t.y1, filled: !!t.filled,
         variant: badges.variant, fly: badges.fly, ride: badges.ride, badgesUnsure: badges.unsure,
         candidates: sig ? rank(sig, templates, 5) : [],
       };
     }).filter(function (t) { return t.candidates.length && t.candidates[0].d < NO_MATCH; });
+  }
+
+  // ── Photo grid (2026-11-02) ──
+  // One white level never finds every tile of a photo: a pet filling its tile
+  // or the glare across the screen splits the white. Squares found at any
+  // level are pooled (photoCandidates), then the trade grid they sit in is
+  // rebuilt and its missing cells added (gridCells). Empty slots and the
+  // green "+" are dropped by look (emptySlot), not by colour level.
+  function overlap(a, b) {
+    var ix = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), iy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ix <= 0 || iy <= 0) return 0;
+    var i = ix * iy;
+    return i / ((a.x1 - a.x0) * (a.y1 - a.y0) + (b.x1 - b.x0) * (b.y1 - b.y0) - i);
+  }
+
+  function photoCandidates(px, soft, w, h) {
+    var all = [];
+    photoTileLevels(soft, w, h).forEach(function (lv) { all = all.concat(findTilesAt(soft, w, h, lv, true)); });
+    photoTileLevels(px, w, h).forEach(function (lv) { all = all.concat(findTilesAt(px, w, h, lv, true)); });
+    var out = [];
+    all.forEach(function (t) { if (!out.some(function (o) { return overlap(o, t) > 0.5; })) out.push(t); });
+    return out;
+  }
+
+  function median(v) { v = v.slice().sort(function (m, n) { return m - n; }); return v[Math.floor(v.length / 2)]; }
+
+  // tiles of one size that line up in rows and columns -> every cell of
+  // each grid, in reading order. Squares that fit no grid are kept as they
+  // are (a 1-item offer).
+  function gridCells(tiles, w, h) {
+    if (tiles.length < 2) return tiles;
+    var s = median(tiles.map(function (t) { return t.x1 - t.x0; }));
+    var same = tiles.filter(function (t) { return Math.abs(t.x1 - t.x0 - s) < 0.2 * s; });
+    var steps = [];
+    same.forEach(function (a) {
+      same.forEach(function (b) {
+        var dx = b.x0 - a.x0, dy = b.y0 - a.y0;
+        if (Math.abs(dy) < 0.25 * s && dx > 0.95 * s && dx < 1.5 * s) steps.push(dx);
+        if (Math.abs(dx) < 0.25 * s && dy > 0.95 * s && dy < 1.5 * s) steps.push(dy);
+      });
+    });
+    if (!steps.length) return tiles;
+    var step = median(steps);
+    // Grids: tiles chained by neighbours one step apart.
+    var group = same.map(function (t, i) { return i; });
+    function root(i) { while (group[i] !== i) i = group[i] = group[group[i]]; return i; }
+    same.forEach(function (a, i) {
+      same.forEach(function (b, j) {
+        var dx = Math.abs(b.x0 - a.x0) / step, dy = Math.abs(b.y0 - a.y0) / step;
+        var gx = Math.abs(dx - Math.round(dx)), gy = Math.abs(dy - Math.round(dy));
+        if (i < j && dx < 2.3 && dy < 2.3 && gx < 0.2 && gy < 0.2) group[root(i)] = root(j);
+      });
+    });
+    // Squares of another size are not trade slots once a grid is known.
+    var out = [];
+    var grids = {};
+    same.forEach(function (t, i) { (grids[root(i)] = grids[root(i)] || []).push(t); });
+    Object.keys(grids).forEach(function (k) {
+      var g = grids[k];
+      var ox = Math.min.apply(null, g.map(function (t) { return t.x0; })), oy = Math.min.apply(null, g.map(function (t) { return t.y0; }));
+      var col = function (t) { return Math.round((t.x0 - ox) / step); }, row = function (t) { return Math.round((t.y0 - oy) / step); };
+      var cols = 1 + Math.max.apply(null, g.map(col)), rows = 1 + Math.max.apply(null, g.map(row));
+      if (g.length < 2 || cols * rows > 36) { out = out.concat(g); return; }
+      // Each column's left edge / each row's top edge: measured where a tile
+      // was found, else stepped from the grid's first one.
+      var xs = [], ys = [];
+      for (var c = 0; c < cols; c++) {
+        var inCol = g.filter(function (t) { return col(t) === c; }).map(function (t) { return t.x0; });
+        xs.push(inCol.length ? median(inCol) : ox + c * step);
+      }
+      for (var r = 0; r < rows; r++) {
+        var inRow = g.filter(function (t) { return row(t) === r; }).map(function (t) { return t.y0; });
+        ys.push(inRow.length ? median(inRow) : oy + r * step);
+      }
+      for (r = 0; r < rows; r++) {
+        for (c = 0; c < cols; c++) {
+          var have = g.filter(function (t) { return col(t) === c && row(t) === r; })[0];
+          var x0 = Math.round(xs[c]), y0 = Math.round(ys[r]);
+          var cell = have || { x0: x0, y0: y0, x1: Math.min(w, x0 + Math.round(s)), y1: Math.min(h, y0 + Math.round(s)), filled: true };
+          if (cell.x1 - cell.x0 > 0.8 * s && cell.y1 - cell.y0 > 0.8 * s) out.push(cell);
+        }
+      }
+    });
+    out.sort(function (m, n) { return m.y0 - n.y0; });
+    var lines = [];
+    out.forEach(function (t) {
+      var line = lines[lines.length - 1];
+      if (line && t.y0 - line[0].y0 < 0.5 * s) line.push(t);
+      else lines.push([t]);
+    });
+    return [].concat.apply([], lines.map(function (line) { return line.sort(function (m, n) { return m.x0 - n.x0; }); }));
+  }
+
+  // An empty slot is one flat colour, maybe with a soft glare gradient and
+  // the camera's moire stripes; a pet or egg has sharp outlines. Colours are
+  // averaged over a small window first (that removes the stripes, whatever
+  // their pitch), then counted: share of sampled points in the inner 70% of
+  // the cell with a sharp step to the point a few px right or below. The
+  // "+" button is mostly bright green.
+  var EMPTY_EDGES = 0.05;
+  function emptySlot(px, w, t) {
+    var side = t.x1 - t.x0, inset = Math.round(side * 0.15), r = Math.max(1, Math.round(side * 0.02));
+    var k = Math.max(2, Math.round(side * 0.04)), edges = 0, green = 0, n = 0;
+    function mean(x, y) {
+      var c = [0, 0, 0], m = 0;
+      for (var dy = -r; dy <= r; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+          var p = ((y + dy) * w + x + dx) * 4;
+          c[0] += px[p]; c[1] += px[p + 1]; c[2] += px[p + 2]; m++;
+        }
+      }
+      return [c[0] / m, c[1] / m, c[2] / m];
+    }
+    function diff(m, o) { return Math.abs(m[0] - o[0]) + Math.abs(m[1] - o[1]) + Math.abs(m[2] - o[2]); }
+    for (var y = t.y0 + inset; y < t.y1 - inset - k; y += 3) {
+      for (var x = t.x0 + inset; x < t.x1 - inset - k; x += 3) {
+        var here = mean(x, y);
+        if (Math.max(diff(here, mean(x + k, y)), diff(here, mean(x, y + k))) > 80) edges++;
+        var c = hsv(here[0], here[1], here[2]);
+        if (c[0] > 80 && c[0] < 150 && c[1] > 0.4 && c[2] > 90) green++;
+        n++;
+      }
+    }
+    if (!n || green > 0.35 * n) return true;
+    return edges < EMPTY_EDGES * n;
   }
 
   // How white a tile's own background is: brightness times (1 - 2 x
@@ -565,18 +717,21 @@
     if (findTiles(soft, w, h, true).length <= plainTiles) return plain;
     // Evening out the light also turns a grey or tinted empty slot white.
     // Real item tiles are the whitest squares in the original picture, so a
-    // square much less white than the whitest one is dropped.
+    // square much less white than the whitest one is dropped. A cell added
+    // from the grid is placed by its neighbours and can sit a little off its
+    // tile (the frame then shows in its border): emptySlot() judged it.
     var levels = normalizeColors(px, w, h);
-    var photo = scanWith(normPx, w, h, templates, soft, true);
+    var cells = gridCells(photoCandidates(px, soft, w, h), w, h).filter(function (t) { return !emptySlot(px, w, t); });
+    var photo = scanTiles(normPx, w, templates, cells, true, px);
     var white = photo.map(function (t) { return whiteness(levels, w, t); });
     var top = Math.max.apply(null, white.concat([0]));
-    photo = photo.filter(function (t, i) { return white[i] >= 0.6 * top; });
+    photo = photo.filter(function (t, i) { return t.filled || white[i] >= 0.6 * top; });
     if (photo.length <= plain.length) return plain;
     return photo.map(function (s) { s.photo = true; return s; });
   }
 
   var api = {
-    N: N, BG: BG, FG_DIFF: FG_DIFF, findTiles: findTiles, readBadges: readBadges, tileSignature: tileSignature,
+    N: N, BG: BG, FG_DIFF: FG_DIFF, findTiles: findTiles, gridCells: gridCells, emptySlot: emptySlot, readBadges: readBadges, tileSignature: tileSignature,
     normalizeColors: normalizeColors, flatField: flatField, blur: blur, loadTemplates: loadTemplates, rank: rank, scan: scan,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

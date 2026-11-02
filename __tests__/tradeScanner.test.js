@@ -107,6 +107,27 @@ describe('owner photo of a PC trade window (2026-11-01)', () => {
   });
 });
 
+describe('mod photo of a grey trade window (2026-11-02)', () => {
+  // Phone photo of a monitor, cropped to the window, 1000 px wide (gzip).
+  // Your side: Bat Dragon MFR, the green "+", 7 empty grey slots with moire
+  // stripes. Their side: 9 pets, most filling their tile. Every pet is found
+  // (cells the white level misses come from the grid), no empty slot or "+"
+  // is, and the pale ring badges read right.
+  it('finds the 10 pets and their badges, nothing else', () => {
+    const rgb = require('zlib').gunzipSync(require('fs').readFileSync(require('path').join(__dirname, 'fixtures/trade-photo-grey.rgb.gz')));
+    const w = 1000;
+    const h = 594;
+    const px = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) { px[i * 4] = rgb[i * 3]; px[i * 4 + 1] = rgb[i * 3 + 1]; px[i * 4 + 2] = rgb[i * 3 + 2]; px[i * 4 + 3] = 255; }
+    const sigs = matcher.loadTemplates(require('../Code/TradeScanner/itemSignatures.json'));
+    const got = matcher.scan(px, w, h, sigs);
+    expect(got.map((s) => `${s.variant}${s.fly ? 'F' : ''}${s.ride ? 'R' : ''}`))
+      .toEqual(['mFR', 'mFR', 'nFR', 'mFR', 'nFR', 'mFR', 'dFR', 'dFR', 'dFR', 'dF']);
+    // Bat Dragon alone on the left of the window.
+    expect(got.filter((s) => s.x1 < w * 0.45)).toHaveLength(1);
+  });
+});
+
 describe('matcher drops what is not an item', () => {
   it('skips empty white slots and merges a tile split in two', () => {
     const { px, tile } = canvas(700, 300);
