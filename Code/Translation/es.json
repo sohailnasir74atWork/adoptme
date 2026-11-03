@@ -4312,6 +4312,20 @@
         "report_send": "Enviar imagen",
         "report_retry": "Reintentar",
         "report_sent": "Enviada. ¡Gracias! La usaremos para mejorar el escáner.",
-        "privacy_send": "Las fotos se leen en tu teléfono. No se sube nada salvo que toques Enviar imagen."
+        "privacy_send": "Las fotos se leen en tu teléfono. No se sube nada salvo que toques Enviar imagen.",
+        "checking": "Buscando el escáner…",
+        "ai_missing_title": "La IA del escáner no está descargada",
+        "ai_missing_text": "Descárgala una vez (unos {{mb}} MB) para leer intercambios en tu teléfono.",
+        "download": "Descargar",
+        "downloading": "Descargando el escáner v{{v}}… {{pct}}%",
+        "download_failed": "La descarga falló. Revisa tu internet e inténtalo de nuevo.",
+        "unavailable": "Ahora no se puede descargar el escáner. Revisa tu internet e inténtalo de nuevo.",
+        "retry": "Reintentar",
+        "update_title": "Tienes una versión antigua del escáner (v{{cur}})",
+        "update_text": "La versión {{v}} ya está disponible y lee los intercambios con más precisión. Actualiza para tener las correcciones.",
+        "update": "Actualizar",
+        "up_to_date": "Escáner v{{v}} · actualizado",
+        "updated": "Escáner actualizado a v{{v}}",
+        "version": "Escáner v{{v}}"
     }
 }
