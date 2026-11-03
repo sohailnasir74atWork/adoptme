@@ -735,6 +735,9 @@
         for (c = 0; c < cols; c++) {
           var have = g.filter(function (t) { return col(t) === c && row(t) === r; })[0];
           var x0 = Math.round(xs[c]), y0 = Math.round(ys[r]);
+          // A square cut short (only the white inside a gold "favourite"
+          // frame) still marks a slot: the grid places it.
+          if (have && (have.x1 - have.x0 <= 0.8 * s || have.y1 - have.y0 <= 0.8 * s)) have = null;
           var cell = have || { x0: x0, y0: y0, x1: Math.min(w, x0 + Math.round(s)), y1: Math.min(h, y0 + Math.round(s)), filled: true };
           if (cell.x1 - cell.x0 > 0.8 * s && cell.y1 - cell.y0 > 0.8 * s) out.push(cell);
         }
@@ -785,9 +788,15 @@
   }
 
   // How white a tile's own background is: brightness times (1 - 2 x
-  // saturation), median over its border band.
+  // saturation), median over its border band. A square taken with its gold
+  // "favourite" frame has the frame in that band: a band further in, past
+  // the frame, counts too (a grey empty slot is grey there as well).
   function whiteness(px, w, t) {
-    var vals = [], side = t.x1 - t.x0, inset = Math.max(2, Math.round(side * 0.06));
+    return Math.max(whiteBand(px, w, t, 0.06), whiteBand(px, w, t, 0.15));
+  }
+
+  function whiteBand(px, w, t, share) {
+    var vals = [], side = t.x1 - t.x0, inset = Math.max(2, Math.round(side * share));
     function take(x, y) {
       var p = (y * w + x) * 4, c = hsv(px[p], px[p + 1], px[p + 2]);
       vals.push(c[2] * Math.max(0, 1 - 2 * c[1]));

@@ -132,6 +132,31 @@ describe('mod photo of a grey trade window (2026-11-02)', () => {
   });
 });
 
+describe('tester photo with a gold "favourite" frame (Send picture a896c64d, 2026-11-02)', () => {
+  // Phone photo of an orange Trading Hub window, the app's crop, 1000 x 750
+  // (gzip). Your side: Phantom Dragon R, a gold-framed pet R, Mochi Meow NR;
+  // their side: Phantom Dragon NFR. 195 missed the gold-framed pet.
+  // Soft copy: only the white inside the frame is a square, a little under
+  // the slot size (the grid places the slot). Sharpened copy (closer to the
+  // phone's full-size picture): the square takes the frame, whose gold band
+  // must not count as a tinted empty slot.
+  ['trade-photo-gold.rgb.gz', 'trade-photo-gold-sharp.rgb.gz'].forEach((file) => {
+    it(`finds all four pets in ${file}`, () => {
+      const rgb = require('zlib').gunzipSync(require('fs').readFileSync(require('path').join(__dirname, 'fixtures', file)));
+      const w = 1000;
+      const h = 750;
+      const px = new Uint8Array(w * h * 4);
+      for (let i = 0; i < w * h; i++) { px[i * 4] = rgb[i * 3]; px[i * 4 + 1] = rgb[i * 3 + 1]; px[i * 4 + 2] = rgb[i * 3 + 2]; px[i * 4 + 3] = 255; }
+      const sigs = matcher.loadTemplates(require('../Code/TradeScanner/itemSignatures.json'));
+      const got = matcher.scan(px, w, h, sigs);
+      expect(got.map((s) => `${s.variant}${s.fly ? 'F' : ''}${s.ride ? 'R' : ''}`)).toEqual(['dR', 'dR', 'nR', 'nFR']);
+      // The gold-framed pet sits between the two others on your side.
+      expect(got[1].x0).toBeGreaterThan(got[0].x0);
+      expect(got[1].x1).toBeLessThan(got[2].x1);
+    });
+  });
+});
+
 describe('matcher drops what is not an item', () => {
   it('skips empty white slots and merges a tile split in two', () => {
     const { px, tile } = canvas(700, 300);
