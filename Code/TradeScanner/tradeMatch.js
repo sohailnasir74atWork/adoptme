@@ -30,6 +30,15 @@ const center = (b) => (b.x0 + b.x1) / 2;
 export function sideDivider(tiles, lines, width) {
   const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
   if (label) return label.x + label.w / 2;
+  // My Listings / Offers / trade history: "You" and "Them" sit over the
+  // left edge of each offer, so the other offer starts at "Them" — even when
+  // only one grid was found (2026-11-06, iOS report 9766960c put every
+  // "Them" pet on the user's side).
+  const them = lines.find((l) => /^\s*them\s*$/i.test(l.text));
+  if (them && tiles.length) {
+    const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);
+    return them.x - sides[Math.floor(sides.length / 2)] * 0.3;
+  }
   const xs = [...new Set(tiles.map((t) => Math.round(center(t))))].sort((a, b) => a - b);
   if (xs.length > 1) {
     const side = tiles.reduce((acc, t) => acc + (t.x1 - t.x0), 0) / tiles.length;

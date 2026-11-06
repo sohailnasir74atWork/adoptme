@@ -158,6 +158,26 @@ describe('tester photo with a gold "favourite" frame (Send picture a896c64d, 202
   });
 });
 
+describe('offers with different cell sizes (iOS reports 2026-11-06)', () => {
+  it('keeps a 1-item offer whose cells are ~1.6x the other grid\'s (My Listings / Offers)', () => {
+    const { px, tile } = canvas(900, 400);
+    [20, 110, 200].forEach((x) => [20, 110, 200].forEach((y) => tile(x, y, 80)));
+    tile(500, 20, 130, ['M', 'F', 'R']);
+    const tiles = matcher.findTiles(px, 900, 400);
+    expect(tiles.length).toBe(10);
+    expect(tiles.some((t) => t.x0 === 500)).toBe(true);
+  });
+
+  it('keeps a lone tile of the other offer that sits lower than the user\'s rows', () => {
+    const { px, tile } = canvas(900, 400);
+    [20, 130].forEach((x) => [80, 190].forEach((y) => tile(x, y, 100)));
+    tile(600, 20, 110);
+    const tiles = matcher.findTiles(px, 900, 400);
+    expect(tiles.some((t) => t.x0 === 600)).toBe(true);
+    expect(tiles.length).toBe(5);
+  });
+});
+
 describe('matcher drops what is not an item', () => {
   it('skips empty white slots and merges a tile split in two', () => {
     const { px, tile } = canvas(700, 300);
@@ -224,6 +244,16 @@ describe('buildTrade', () => {
     const tiles = [t(20, [{ name: 'Turtle', d: 0.02 }]), t(420, [{ name: 'Kitsune', d: 0.3 }]), t(700, [{ name: 'Frost Dragon', d: 0.02 }])];
     const trade = buildTrade({ tiles, lines: [{ text: 'TRADE', x: 420, y: 60, w: 100, h: 30 }], width: 1000, catalog });
     expect([...trade.mine, ...trade.theirs].map((p) => p.name)).toEqual(['Turtle', 'Frost Dragon']);
+  });
+
+  it('Offers / My Listings: everything right of "Them" is theirs, even with one grid found (report 9766960c)', () => {
+    const tiles = [t(560, [{ name: 'Turtle', d: 0.02 }]), t(670, [{ name: 'Kitsune', d: 0.02 }])];
+    const lines = [{ text: 'You', x: 30, y: 0, w: 60, h: 20 }, { text: 'Them', x: 550, y: 0, w: 80, h: 20 }];
+    const trade = buildTrade({ tiles, lines, width: 1000, catalog });
+    expect(trade.mine).toEqual([]);
+    expect(trade.theirs.map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
+    const both = buildTrade({ tiles: [t(20, [{ name: 'Frost Dragon', d: 0.02 }]), ...tiles], lines, width: 1000, catalog });
+    expect(both.mine.map((p) => p.name)).toEqual(['Frost Dragon']);
   });
 
   it('without the label, splits on the gap between the two grids', () => {

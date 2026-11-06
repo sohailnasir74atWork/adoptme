@@ -162,11 +162,15 @@
     });
     // A tight crop can make one tile most of the picture, so size alone does
     // not rule a square out; a square far bigger than the others (a white
-    // panel, tiles merged by glare) does.
+    // panel, tiles merged by glare) does. The other offer's grid can use
+    // cells ~1.6x the size of the user's (My Listings, Offers: a 2x2 "You"
+    // beside a 3x3 "Them"), so only squares 1.9x the usual size go
+    // (2026-11-06, iOS reports 1e298206 / 9766960c). Four tiles merged into
+    // one square are 2x+.
     if (tiles.length > 2) {
       var sides = tiles.map(function (t) { return t.x1 - t.x0; }).sort(function (m, n) { return m - n; });
       var mid = sides[Math.floor(sides.length / 2)];
-      tiles = tiles.filter(function (t) { return t.x1 - t.x0 < 1.5 * mid; });
+      tiles = tiles.filter(function (t) { return t.x1 - t.x0 < 1.9 * mid; });
     }
     // A tile is never inside another one (a white pet part inside a tile is
     // already part of the tile blob, but keep the outer one to be safe).
@@ -185,7 +189,10 @@
       });
     });
     // Trade tiles sit in grids: keep tiles that share a row or a column with
-    // another tile of similar size, or are alone (a 1-item offer).
+    // another tile of similar size, or are alone (a 1-item offer): a size no
+    // other tile has, or a grid of its own, at least 1.6 tiles clear of every
+    // other tile sideways (the other offer's grid can sit higher or lower in
+    // a photo; 2026-11-06, iOS report c2cb2e55).
     if (tiles.length > 1) {
       var maxSide = Math.max.apply(null, tiles.map(function (t) { return t.x1 - t.x0; }));
       tiles = tiles.filter(function (t) {
@@ -195,7 +202,9 @@
           var so = o.x1 - o.x0;
           if (Math.abs(so - s) > 0.25 * s) return false;
           return Math.abs(o.y0 - t.y0) < 0.2 * s || Math.abs(o.x0 - t.x0) < 0.2 * s;
-        }) || (s >= 0.6 * maxSide && tiles.every(function (o) { return o === t || Math.abs((o.x1 - o.x0) - s) > 0.25 * s; }));
+        }) || (s >= 0.6 * maxSide && tiles.every(function (o) {
+          return o === t || Math.abs((o.x1 - o.x0) - s) > 0.25 * s || Math.max(o.x0 - t.x1, t.x0 - o.x1) > 0.6 * s;
+        }));
       });
     }
     return readingOrder(tiles);
