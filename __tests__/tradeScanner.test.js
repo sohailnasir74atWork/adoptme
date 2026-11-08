@@ -168,6 +168,23 @@ describe('offers with different cell sizes (iOS reports 2026-11-06)', () => {
     expect(tiles.some((t) => t.x0 === 500)).toBe(true);
   });
 
+  it('white button letters do not push the real tiles out (Search screenshot 5489ccca, 2026-11-08)', () => {
+    const { px, tile } = canvas(900, 400);
+    tile(500, 20, 140, ['R']);
+    tile(660, 20, 140, ['N', 'R']);
+    [300, 340, 380, 420, 460].forEach((x) => tile(x, 320, 30));
+    const tiles = matcher.findTiles(px, 900, 400);
+    expect(tiles.map((t) => t.x0)).toEqual([500, 660]);
+  });
+
+  it('a 1-item offer beside button letters keeps its tile (a54a2ca5 / 515be8e6)', () => {
+    const { px, tile } = canvas(900, 400);
+    tile(500, 20, 150, ['N']);
+    [300, 340, 380].forEach((x) => tile(x, 320, 22));
+    const tiles = matcher.findTiles(px, 900, 400);
+    expect(tiles.map((t) => t.x0)).toEqual([500]);
+  });
+
   it('keeps a lone tile of the other offer that sits lower than the user\'s rows', () => {
     const { px, tile } = canvas(900, 400);
     [20, 130].forEach((x) => [80, 190].forEach((y) => tile(x, y, 100)));

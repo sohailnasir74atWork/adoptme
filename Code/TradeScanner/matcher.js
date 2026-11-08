@@ -160,6 +160,7 @@
       if (ringWhite(px, w, t) < (loose ? 0.55 : 0.7)) return;
       tiles.push(t);
     });
+    tiles = dropSmall(tiles, w, h);
     // A tight crop can make one tile most of the picture, so size alone does
     // not rule a square out; a square far bigger than the others (a white
     // panel, tiles merged by glare) does. The other offer's grid can use
@@ -208,6 +209,25 @@
       });
     }
     return readingOrder(tiles);
+  }
+
+  // White letters on the CANCEL / MAKE OFFER buttons and on headings ("You
+  // Give", "Todos") pass as small squares. With several of them the median
+  // size is a letter's, and the size check below then dropped the real item
+  // tiles as "too big" (2026-11-08: clean Search / My Listings screenshots
+  // 5489ccca, 870a2de1, a54a2ca5, 862a33c1 found letters only). Real trade
+  // cells are never under 0.4x the size of another real cell (the other
+  // offer's cells are ~1.6x), so a square under 0.4x the second biggest goes.
+  // The second biggest, not the biggest: one white panel must not set it.
+  // A 1-item offer next to letters has one real square only: when the biggest
+  // is 3.5x+ the rest and the rest are letter-sized (under 6% of the short
+  // side), the biggest sets it (a54a2ca5, 515be8e6).
+  function dropSmall(tiles, w, h) {
+    if (tiles.length < 2) return tiles;
+    var sides = tiles.map(function (t) { return t.x1 - t.x0; }).sort(function (m, n) { return n - m; });
+    var ref = sides[1];
+    if (sides[0] >= 3.5 * sides[1] && sides[1] < 0.06 * Math.min(w, h)) ref = sides[0];
+    return tiles.filter(function (t) { return t.x1 - t.x0 >= 0.4 * ref; });
   }
 
   // Rows top to bottom, left to right in each row.
@@ -839,6 +859,7 @@
     var white = photo.map(function (t) { return whiteness(levels, w, t); });
     var top = Math.max.apply(null, white.concat([0]));
     photo = photo.filter(function (t, i) { return t.filled || white[i] >= 0.6 * top; });
+    photo = dropSmall(photo, w, h);
     if (photo.length <= plain.length) return plain;
     return photo.map(function (s) { s.photo = true; return s; });
   }
