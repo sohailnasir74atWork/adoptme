@@ -107,13 +107,13 @@ const categoryLabel = (type, t) => {
 
 // ── Extracted sub-components (outside main component to prevent unmount/remount on every state change) ──
 
-const LockedOverlay = memo(({ message, onPress, styles }) => {
+const LockedOverlay = memo(({ message, onPress, trigger, styles }) => {
   const { t } = useTranslation();
   return (
     <TouchableOpacity
       style={styles.lockedOverlay}
       activeOpacity={0.9}
-      onPress={onPress}
+      onPress={() => onPress?.(trigger)}
     >
       <View style={styles.lockedContent}>
         <Text style={{ fontSize: 24 }}>{'\u{1F512}'}</Text>
@@ -364,6 +364,8 @@ const AnalyticsScreen = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(route?.params?.tab || 'overview');
   const [showOfferwall, setShowOfferwall] = useState(false);
+  // Which spot opened the wall (paywall_trigger in growthAnalytics.js).
+  const [offerTrigger, setOfferTrigger] = useState(null);
   const [valueChanges, setValueChanges] = useState(null);
   const [valueChangesLoading, setValueChangesLoading] = useState(false);
   const [changesFilter, setChangesFilter] = useState('all'); // 'all', 'increased', 'decreased'
@@ -585,8 +587,11 @@ const AnalyticsScreen = ({ navigation, route }) => {
     }
   };
 
-  // Stable callback for LockedOverlay press
-  const handleShowOfferwall = useCallback(() => setShowOfferwall(true), []);
+  // Stable callback for LockedOverlay press; `spot` = the card's trigger.
+  const handleShowOfferwall = useCallback((spot) => {
+    setOfferTrigger(spot || 'analytics_locked');
+    setShowOfferwall(true);
+  }, []);
 
   const getTimeAgo = useCallback((dateStr) => {
     if (!dateStr) return '';
@@ -636,7 +641,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
         t('analytics.search_pro_title') || 'Pro Feature',
         t('analytics.search_pro_message') || 'You need to get Pro to use search!',
         [
-          { text: t('analytics.upgrade') || 'Go Pro', onPress: () => setShowOfferwall(true) },
+          { text: t('analytics.upgrade') || 'Go Pro', onPress: () => handleShowOfferwall('analytics_search') },
           { text: t('analytics.maybe_later') || 'Maybe Later', style: 'cancel' },
         ]
       );
@@ -1041,7 +1046,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                 );
               })()}
               {!isPro && !searchQuery && (analytics.topMovers || []).length > 3 && (
-                <LockedOverlay message={t('analytics.see_all_movers')} onPress={handleShowOfferwall} styles={styles} />
+                <LockedOverlay message={t('analytics.see_all_movers')} trigger="analytics_all_movers" onPress={handleShowOfferwall} styles={styles} />
               )}
               {searchQuery && filteredMovers.rising.length === 0 && (
                 <Text style={styles.noSearchResults}>{t('analytics.no_rising_found')}</Text>
@@ -1073,7 +1078,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                 );
               })()}
               {!isPro && !searchQuery && (analytics.topLosers || []).length > 3 && (
-                <LockedOverlay message={t('analytics.see_all_losers')} onPress={handleShowOfferwall} styles={styles} />
+                <LockedOverlay message={t('analytics.see_all_losers')} trigger="analytics_all_losers" onPress={handleShowOfferwall} styles={styles} />
               )}
               {searchQuery && filteredMovers.falling.length === 0 && (
                 <Text style={styles.noSearchResults}>{t('analytics.no_falling_found')}</Text>
@@ -1110,7 +1115,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                 );
               })()}
               {!isPro && !searchQuery && (analytics.topWanted || []).length > 5 && (
-                <LockedOverlay message={t('analytics.see_full_demand')} onPress={handleShowOfferwall} styles={styles} />
+                <LockedOverlay message={t('analytics.see_full_demand')} trigger="analytics_full_demand" onPress={handleShowOfferwall} styles={styles} />
               )}
               {searchQuery && filteredDemand.wanted.length === 0 && (
                 <Text style={styles.noSearchResults}>{t('analytics.no_wanted_found')}</Text>
@@ -1142,7 +1147,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                 );
               })()}
               {!isPro && !searchQuery && (analytics.topOffered || []).length > 5 && (
-                <LockedOverlay message={t('analytics.see_full_supply')} onPress={handleShowOfferwall} styles={styles} />
+                <LockedOverlay message={t('analytics.see_full_supply')} trigger="analytics_full_supply" onPress={handleShowOfferwall} styles={styles} />
               )}
               {searchQuery && filteredDemand.offered.length === 0 && (
                 <Text style={styles.noSearchResults}>{t('analytics.no_offered_found')}</Text>
@@ -1181,7 +1186,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
               <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: FUN_COLORS.purple }]}>
                 <SectionHeader icon="scale-balanced" title={t('analytics.demand_vs_supply')} locked emoji={'\u{2696}\u{FE0F}'} styles={styles} />
                 <View style={{ height: 120, justifyContent: 'center' }}>
-                  <LockedOverlay message={t('analytics.unlock_ds')} onPress={handleShowOfferwall} styles={styles} />
+                  <LockedOverlay message={t('analytics.unlock_ds')} trigger="analytics_demand_supply" onPress={handleShowOfferwall} styles={styles} />
                 </View>
               </View>
             )}
@@ -1302,7 +1307,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
                       </View>
                     ));
                   })()}
-                  <LockedOverlay message={t('analytics.unlock_predictions')} onPress={handleShowOfferwall} styles={styles} />
+                  <LockedOverlay message={t('analytics.unlock_predictions')} trigger="analytics_predictions" onPress={handleShowOfferwall} styles={styles} />
                 </View>
               </>
             )}
@@ -1335,6 +1340,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
 
       <ScreenBottomBanner background={c.bg} collapsible />
       <SubscriptionScreen
+        trigger={offerTrigger}
         visible={showOfferwall}
         onClose={() => setShowOfferwall(false)}
         track='Analytics'

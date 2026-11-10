@@ -7,7 +7,7 @@ import config from './Helper/Environment';
 import { useTranslation } from 'react-i18next';
 import { showErrorMessage, showSuccessMessage } from './Helper/MessageHelper';
 import { preloadOfferings } from './SettingScreen/PayWall';
-import { trackProPurchase } from './Helper/growthAnalytics';
+import { trackProPurchase, trackPurchaseStart, trackPurchaseFail } from './Helper/growthAnalytics';
 import { serverNowMs } from './Helper/serverTime';
 import { isSquadProActive, onSquadProChange } from './Helper/squad';
 import { isProGrantActive, onProGrantChange, startProGrants } from './Helper/proGrant';
@@ -103,6 +103,9 @@ export const LocalStateProvider = ({ children }) => {
     favorites: safeParseJSON('favorites', []),
     ownedPets: safeParseJSON('ownedPets', []),
     wishlistPets: safeParseJSON('wishlistPets', []),
+    // The calculator picker's RECENT chip: the last 12 distinct items added to
+    // a trade slot, newest first, as { id, name, type }. Device-only.
+    recentPicks: safeParseJSON('recentPicks', []),
     imgurl: storage.getString('imgurl') || 'https://elvebredd.com',
     // The calculator's value mode, stored as its two axes because the price
     // maths needs them apart — see Code/Helper/valueSources.js. The UI pairs
@@ -415,9 +418,10 @@ export const LocalStateProvider = ({ children }) => {
   }, [applyPro]);
 
   // Handle in-app purchase
-  const purchaseProduct = useCallback(async (packageToPurchase, setLoading, track) => {
+  const purchaseProduct = useCallback(async (packageToPurchase, setLoading, track, trigger) => {
     setLoading(true);
     try {
+      trackPurchaseStart(packageToPurchase, track, trigger);
       // Coming back from the store sheet must not open an App Open ad on
       // someone who was just buying ad-free.
       require('./Ads/openApp').default.skipNextForeground();
@@ -438,10 +442,12 @@ export const LocalStateProvider = ({ children }) => {
           : []
       );
 
-      if (proStatus) trackProPurchase(packageToPurchase, track);
+      if (proStatus) trackProPurchase(packageToPurchase, track, trigger, customerInfo);
+      else trackPurchaseFail(packageToPurchase, track, trigger, null);
 
       showSuccessMessage(t('alert.success'), t('alert.purchase_success'));
     } catch (error) {
+      trackPurchaseFail(packageToPurchase, track, trigger, error);
       if (!error.userCancelled) {
         showErrorMessage(t('alert.error'), t('alert.purchase_failed'));
       }

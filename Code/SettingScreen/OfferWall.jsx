@@ -166,7 +166,8 @@ const Backdrop = ({ P }) => (
   </Svg>
 );
 
-const SubscriptionScreen = ({ visible, onClose, track, inline }) => {
+// `trigger` names the exact spot that opened the wall (growthAnalytics.js).
+const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
   const insets = useSafeAreaInsets();
   const { packages, purchaseProduct, restorePurchases, localState } = useLocalState();
   const { theme } = useGlobalState();
@@ -271,7 +272,7 @@ const SubscriptionScreen = ({ visible, onClose, track, inline }) => {
 
   // ── Analytics: one view per open ──
   useEffect(() => {
-    if (visible) trackPaywallView(track);
+    if (visible) trackPaywallView(track, trigger);
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Close once Pro arrives (purchase or restore) ──
@@ -373,9 +374,9 @@ const SubscriptionScreen = ({ visible, onClose, track, inline }) => {
   }, [visible]);
 
   const handleClose = useCallback(() => {
-    trackPaywallClose(track);
+    trackPaywallClose(track, trigger);
     onCloseRef.current?.();
-  }, [track]);
+  }, [track, trigger]);
 
   const handleSelect = useCallback((pkg) => {
     triggerHapticFeedback('impactLight');
@@ -386,9 +387,9 @@ const SubscriptionScreen = ({ visible, onClose, track, inline }) => {
     if (!selectedPkg || loading) return;
     triggerHapticFeedback('impactMedium');
     // Success flips localState.isPro, and the effect above closes the wall.
-    // purchaseProduct logs pro_purchase with `track`.
-    await purchaseProduct(selectedPkg, setLoading, track);
-  }, [selectedPkg, loading, purchaseProduct, track, triggerHapticFeedback]);
+    // purchaseProduct logs paywall_purchase_start / _fail and pro_purchase.
+    await purchaseProduct(selectedPkg, setLoading, track, trigger);
+  }, [selectedPkg, loading, purchaseProduct, track, trigger, triggerHapticFeedback]);
 
   // restorePurchases() swallows its result, so ask RevenueCat afterwards: a
   // Restore tap that silently does nothing reads as a broken button. A
