@@ -2266,6 +2266,10 @@
         "per_day_short": "{{value}}/jour"
     },
     "paywall": {
+        "exit_badge": "OFFRE UNIQUE",
+        "exit_title": "Attends ! -{{percent}} %, juste cette fois",
+        "exit_subtitle": "Ce prix n'apparaît qu'une seule fois. Si tu fermes, il disparaît.",
+        "exit_cta": "Profiter de la réduction",
         "title": "Deviens Pro",
         "subtitle": "Zéro pub. Tes échanges tout en haut. Un badge doré à côté de ton pseudo.",
         "what_you_get": "Ce que tu débloques",

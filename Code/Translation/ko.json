@@ -2225,6 +2225,10 @@
     "per_day_short": "하루 {{value}}개"
   },
   "paywall": {
+    "exit_badge": "1회 한정 혜택",
+    "exit_title": "잠깐! 이번 한 번만 {{percent}}% 할인",
+    "exit_subtitle": "이 가격은 한 번만 표시돼요. 닫으면 사라져요.",
+    "exit_cta": "할인 받기",
     "title": "Pro 회원 되기",
     "subtitle": "광고는 없고, 내 거래는 맨 위로, 이름 옆엔 골드 배지까지.",
     "what_you_get": "Pro 혜택",

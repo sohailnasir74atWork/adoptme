@@ -2227,6 +2227,10 @@
         "per_day_short": "{{value}}/day"
     },
     "paywall": {
+        "exit_badge": "ONE-TIME OFFER",
+        "exit_title": "Wait! {{percent}}% off, just this once",
+        "exit_subtitle": "This price is only shown once. Close it and it's gone.",
+        "exit_cta": "Claim my discount",
         "title": "Be a Pro",
         "subtitle": "No ads. Your trades on top. Gold badge by your name.",
         "what_you_get": "What you get",

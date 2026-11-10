@@ -2266,6 +2266,10 @@
         "per_day_short": "{{value}}/día"
     },
     "paywall": {
+        "exit_badge": "OFERTA ÚNICA",
+        "exit_title": "¡Espera! {{percent}}% de descuento, solo esta vez",
+        "exit_subtitle": "Este precio solo se muestra una vez. Si lo cierras, desaparece.",
+        "exit_cta": "Quiero mi descuento",
         "title": "Sé Pro",
         "subtitle": "Sin anuncios. Tus tradeos hasta arriba. Insignia dorada junto a tu nombre.",
         "what_you_get": "Lo que incluye",

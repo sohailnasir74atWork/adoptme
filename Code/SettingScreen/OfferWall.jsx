@@ -6,15 +6,18 @@
 //   2. show all three prices side by side so nothing is hidden,
 //   3. make the yearly plan's 58% discount impossible to miss.
 //
-// The catalog is three subscriptions and no free trials:
-//   $1.99 / month · $4.99 / 3 months · $9.99 / year
-// A year bought month-by-month costs $23.88, so the yearly plan really is 58%
-// off. Every discount on this screen is arithmetic on live store prices — never
-// hardcoded — so it stays true in every currency and if pricing ever changes.
+// The catalog (2026-11-10): 'pro_full' = $9.99 / month · $19.99 / 3 months ·
+// $49.99 / year, with a 3-day free trial for new subscribers; 'pro_offer' = the
+// same at 50% off. Every discount on this screen is arithmetic on live store
+// prices — never hardcoded — so it stays true in every currency and if pricing
+// ever changes.
 //
-// ONE wall, the current offering ('default'). Owner's call (2026-10-11): no
-// second "discount" wall after closing this one. Callers still pass
-// `showoffer` and `oneWallOnly`; both are ignored.
+// TWO STEPS (owner, 2026-11-10 — replaces the 2026-10-11 "one wall" call):
+//   1. the full-price wall, 'pro_full', falling back to 'default';
+//   2. closed without buying → the SAME screen turns into a one-time offer,
+//      'pro_offer' (50% off), shown once per install, never again.
+// See proOfferings.js. Callers still pass `showoffer` and `oneWallOnly`; both
+// are ignored.
 //
 // It LOOKS LIKE ONBOARDING, on purpose. The first-run flow is welcome → sign
 // in → this wall, and the old dark "game shop" at step three read as leaving
@@ -39,6 +42,10 @@ import { useGlobalState } from '../GlobelStats';
 import { setNavBarColor, setThemedNavBar } from '../Helper/systemNavBar';
 import { paywallPlacement, trackPaywallView, trackPaywallClose } from '../Helper/growthAnalytics';
 import config from '../Helper/Environment';
+import {
+  loadWallOfferings, fullWallPackages, exitWallPackages, isNewPricing,
+  trialEligibility, matchByPeriod, EXIT_OFFER_SHOWN_KEY, EXIT_OFFER_TRIGGER,
+} from './proOfferings';
 
 const { width, height } = Dimensions.get('window');
 const SMALL = height < 700;
@@ -51,6 +58,9 @@ const LOGO = config.isNoman ? require('../../assets/splashscreen.webp') : requir
 // the end of onboarding (was 7), 5 s everywhere else.
 const CLOSE_DELAY_ONBOARDING = 8;
 const CLOSE_DELAY = 5;
+// The one-time offer follows a close the person already chose; 3 s is enough
+// to read it without feeling trapped a second time.
+const CLOSE_DELAY_EXIT = 3;
 
 // ── Palette ──
 const BRAND = '#FF6666';   // config.colors.hasBlockGreen — onboarding's Continue button
@@ -169,7 +179,7 @@ const Backdrop = ({ P }) => (
 // `trigger` names the exact spot that opened the wall (growthAnalytics.js).
 const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
   const insets = useSafeAreaInsets();
-  const { packages, purchaseProduct, restorePurchases, localState } = useLocalState();
+  const { packages, purchaseProduct, restorePurchases, localState, updateLocalState } = useLocalState();
   const { theme } = useGlobalState();
   const { triggerHapticFeedback } = useHaptic();
   const { t } = useTranslation();
@@ -178,7 +188,20 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
   const P = useMemo(() => makePalette(isDark), [isDark]);
   const s = useMemo(() => makeStyles(P), [P]);
 
-  const closeDelay = paywallPlacement(track) === 'onboarding' ? CLOSE_DELAY_ONBOARDING : CLOSE_DELAY;
+  // 'full' = the full-price wall; 'exit' = the one-time 50% offer it turns
+  // into when closed unbought (once per install).
+  const [phase, setPhase] = useState('full');
+  const isExit = phase === 'exit';
+  // What analytics and RevenueCat attributes call this spot.
+  const activeTrigger = isExit ? EXIT_OFFER_TRIGGER : trigger;
+  // iOS: { productId: eligible for the free trial } (Android: always {}).
+  const [eligible, setEligible] = useState({});
+  // offerings.all; null while loading.
+  const [offerings, setOfferings] = useState(null);
+
+  const closeDelay = isExit
+    ? CLOSE_DELAY_EXIT
+    : (paywallPlacement(track) === 'onboarding' ? CLOSE_DELAY_ONBOARDING : CLOSE_DELAY);
 
   // Callers pass inline arrows, so a fresh onClose arrives every render. The
   // effects below must call the latest one without re-running for it.
@@ -196,14 +219,44 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const closeFade = useRef(new Animated.Value(0)).current;
 
+  // ── Offerings: loaded on open (proOfferings.js caches them) ──
+  useEffect(() => {
+    if (!visible) return;
+    setPhase('full');
+    let alive = true;
+    loadWallOfferings().then((all) => { if (alive) setOfferings(all); });
+    return () => { alive = false; };
+  }, [visible]);
+
+  // Full wall: 'pro_full', else 'default', else the current offering
+  // LocalGlobelStats loaded at launch. Exit offer: 'pro_offer'.
+  const wallPackages = useMemo(() => {
+    if (!offerings) return [];
+    return isExit ? exitWallPackages(offerings) : fullWallPackages(offerings, packages);
+  }, [offerings, packages, isExit]);
+
+  // The full-price plan of each billing period — the exit offer's "was" price.
+  const fullByType = useMemo(
+    () => (isExit && offerings ? matchByPeriod(fullWallPackages(offerings, packages), (p) => p.packageType) : {}),
+    [isExit, offerings, packages]
+  );
+
+  // iOS trial eligibility for the plans on screen (Android needs none).
+  useEffect(() => {
+    if (!visible || isExit || !wallPackages.length) return;
+    let alive = true;
+    trialEligibility(wallPackages).then((m) => { if (alive) setEligible(m); });
+    return () => { alive = false; };
+  }, [visible, isExit, wallPackages]);
+
   // ── Pricing: every plan measured against the priciest per-month rate ──
   //
   // The anchor is what the same stretch of time would cost on the most
   // expensive plan (in practice, monthly). Comparing to it produces both the
-  // savings percentage and the amount saved. `packages` is the current
-  // offering ('default'), loaded by LocalGlobelStats at launch.
+  // savings percentage and the amount saved. On the exit offer the saving is
+  // against the same plan at full price instead.
   const plans = useMemo(() => {
-    const list = (packages || []).slice().sort(
+    const list = wallPackages.slice().sort(
       (a, b) => (PLAN_ORDER[a.packageType] ?? 9) - (PLAN_ORDER[b.packageType] ?? 9)
     );
     const monthlyRate = (p) => {
@@ -218,6 +271,17 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
       const months = MONTHS_IN_PERIOD[pkg.packageType];
       const price = pkg.product?.price;
       const rate = monthlyRate(pkg);
+
+      // Exit offer: the saving is against the SAME plan at full price, read
+      // live from the store — never a made-up "was" price.
+      if (isExit) {
+        const full = fullByType[pkg.packageType];
+        const wasPrice = full?.product?.price;
+        const off = (wasPrice > 0 && price > 0 && wasPrice > price) ? Math.round((1 - price / wasPrice) * 100) : 0;
+        const savings = off >= 5 ? off : 0;
+        return { pkg, rate, savings, saved: savings ? wasPrice - price : 0, freeMonths: 0, wasPkg: savings ? full : null };
+      }
+
       const anchorTotal = (anchorRate && months) ? anchorRate * months : null;
 
       // Only claim a saving when it is real and worth saying — anything under
@@ -233,9 +297,9 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
       // kids' app that store reviewers read closely.
       const freeMonths = (savings && anchorRate) ? Math.floor(saved / anchorRate) : 0;
 
-      return { pkg, rate, savings, saved, freeMonths };
+      return { pkg, rate, savings, saved, freeMonths, wasPkg: null };
     });
-  }, [packages]);
+  }, [wallPackages, isExit, fullByType]);
 
   // Best value = biggest real saving; ties go to the longest plan (list is sorted).
   const recommended = useMemo(() => {
@@ -248,9 +312,13 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
     [plans, selectedPkg]
   );
 
-  // ── Free trial, if the store ever offers one (none configured today) ──
+  // ── Free trial (pro_full: 3 days, new subscribers only) ──
+  // iOS lists the intro offer on every product, eligible or not, so only
+  // promise it when Apple confirmed eligibility. Play only returns offers the
+  // person can actually get.
   const getTrial = (pkg) => {
     const product = pkg?.product;
+    if (Platform.OS === 'ios' && eligible[product?.identifier] !== true) return null;
     const intro = product?.introPrice;
     if (intro && intro.price === 0 && intro.periodNumberOfUnits > 0) {
       return { count: intro.periodNumberOfUnits, unit: String(intro.periodUnit || '').toUpperCase() };
@@ -270,10 +338,10 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
 
   const trial = trialLabel(getTrial(selectedPkg));
 
-  // ── Analytics: one view per open ──
+  // ── Analytics: one view per open, one more when the exit offer appears ──
   useEffect(() => {
-    if (visible) trackPaywallView(track, trigger);
-  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (visible) trackPaywallView(track, activeTrigger);
+  }, [visible, isExit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Close once Pro arrives (purchase or restore) ──
   // Watching the state instead of checking it after `await purchaseProduct()`:
@@ -299,7 +367,7 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
       Animated.timing(closeFade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     }, closeDelay * 1000);
     return () => clearTimeout(timer);
-  }, [visible, closeDelay, closeFade]);
+  }, [visible, isExit, closeDelay, closeFade]);
 
   // ── Android system nav bar: match the wall, restore the app on exit ──
   //
@@ -341,7 +409,7 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
       Animated.timing(riseAnim, { toValue: 0, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, [visible, fadeAnim, riseAnim]);
+  }, [visible, isExit, fadeAnim, riseAnim]);
 
   // ── CTA breathing ──
   useEffect(() => {
@@ -365,18 +433,34 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
     }
   }, [visible, recommended, selectedPkg, plans]);
 
-  // Reset on close
+  // Reset on close — back to the full-price step, so the next open never
+  // starts (or logs a view) as the exit offer.
   useEffect(() => {
     if (!visible) {
       setSelectedPkg(null);
       setLoading(false);
+      setPhase('full');
     }
   }, [visible]);
 
+  // Closing the full-price wall unbought turns it into the one-time offer —
+  // once per install, only on the new prices, only if the offer loaded.
+  // Closing the offer (or the wall a second time ever) really closes.
   const handleClose = useCallback(() => {
-    trackPaywallClose(track, trigger);
+    trackPaywallClose(track, activeTrigger);
+    const offerReady = !isExit
+      && !localState?.isPro
+      && !localState?.[EXIT_OFFER_SHOWN_KEY]
+      && isNewPricing(offerings)
+      && exitWallPackages(offerings).length > 0;
+    if (offerReady) {
+      updateLocalState(EXIT_OFFER_SHOWN_KEY, true);
+      setSelectedPkg(null);
+      setPhase('exit');
+      return;
+    }
     onCloseRef.current?.();
-  }, [track, trigger]);
+  }, [track, activeTrigger, isExit, localState, offerings, updateLocalState]);
 
   const handleSelect = useCallback((pkg) => {
     triggerHapticFeedback('impactLight');
@@ -388,8 +472,8 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
     triggerHapticFeedback('impactMedium');
     // Success flips localState.isPro, and the effect above closes the wall.
     // purchaseProduct logs paywall_purchase_start / _fail and pro_purchase.
-    await purchaseProduct(selectedPkg, setLoading, track, trigger);
-  }, [selectedPkg, loading, purchaseProduct, track, trigger, triggerHapticFeedback]);
+    await purchaseProduct(selectedPkg, setLoading, track, activeTrigger);
+  }, [selectedPkg, loading, purchaseProduct, track, activeTrigger, triggerHapticFeedback]);
 
   // restorePurchases() swallows its result, so ask RevenueCat afterwards: a
   // Restore tap that silently does nothing reads as a broken button. A
@@ -412,7 +496,13 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
   // It never repeats the price: the selected tile already shows it, and the
   // line under the button states exactly what gets charged — a third copy on
   // the button itself only gives the eye one more number to stop and re-check.
-  const ctaLabel = t('paywall.cta');
+  // With a trial the button says so; the one-time offer names the deal.
+  const ctaLabel = isExit
+    ? t('paywall.exit_cta')
+    : (trial ? t('paywall.cta_trial') : t('paywall.cta'));
+
+  // Biggest real % off on the exit offer (the hero promises no more than this).
+  const exitPercent = isExit ? Math.max(0, ...plans.map(p => p.savings)) : 0;
 
   // ── And the line under it says exactly what is charged, and when. ──
   const ctaSubtitle = (() => {
@@ -442,8 +532,15 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
           {/* ── Hero: onboarding's logo, so step three still reads as the same app ── */}
           <View style={s.hero}>
             <Image resizeMethod="resize" source={LOGO} style={s.logo} resizeMode="contain" />
-            <Text style={s.title}>{t('paywall.title')}</Text>
-            <Text style={s.subtitle}>{t('paywall.subtitle')}</Text>
+            {isExit && (
+              <View style={s.exitBadge}>
+                <Text style={s.exitBadgeText}>{t('paywall.exit_badge')}</Text>
+              </View>
+            )}
+            <Text style={s.title}>
+              {isExit && exitPercent > 0 ? t('paywall.exit_title', { percent: exitPercent }) : t('paywall.title')}
+            </Text>
+            <Text style={s.subtitle}>{isExit ? t('paywall.exit_subtitle') : t('paywall.subtitle')}</Text>
           </View>
 
           {/* ── One card, three promises, no scrolling to find them ── */}
@@ -495,7 +592,7 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
         {plans.length > 0 ? (
           <>
             <View style={s.tiles}>
-              {plans.map(({ pkg, rate, savings }, i) => {
+              {plans.map(({ pkg, rate, savings, wasPkg }, i) => {
                 const isSelected = selectedPkg?.identifier === pkg.identifier;
                 const isBest = plans.length > 1 && recommended?.identifier === pkg.identifier;
                 const planKey = PLAN_KEY[pkg.packageType];
@@ -530,14 +627,17 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
                       {pkg.product?.priceString || '—'}
                     </Text>
 
-                    {/* Reserved line so all three tiles stay the same height */}
+                    {/* Reserved line so all three tiles stay the same height. On
+                        the exit offer it carries the real full price, crossed out. */}
                     <Text
-                      style={[s.tilePerMonth, isSelected && s.tilePerMonthOn]}
+                      style={[s.tilePerMonth, isSelected && s.tilePerMonthOn, !!wasPkg && s.wasPrice]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.7}
                     >
-                      {showPerMonth ? t('paywall.per_month', { price: formatMoney(pkg, rate) }) : ' '}
+                      {wasPkg
+                        ? wasPkg.product?.priceString
+                        : (showPerMonth ? t('paywall.per_month', { price: formatMoney(pkg, rate) }) : ' ')}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -777,6 +877,25 @@ const makeStyles = (P) => StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '900',
     letterSpacing: 0.3,
+  },
+
+  // ── Exit offer: the badge over the title, the crossed-out full price ──
+  exitBadge: {
+    alignSelf: 'center',
+    backgroundColor: GOLD,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+  },
+  exitBadgeText: {
+    color: '#3A2600',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  wasPrice: {
+    textDecorationLine: 'line-through',
   },
   bestLabel: {
     color: P.BRAND_TEXT,

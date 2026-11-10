@@ -2218,6 +2218,10 @@
         "per_day_short": "{{value}}/Tag"
     },
     "paywall": {
+        "exit_badge": "EINMALIGES ANGEBOT",
+        "exit_title": "Warte! {{percent}} % Rabatt – nur dieses eine Mal",
+        "exit_subtitle": "Dieser Preis wird nur einmal angezeigt. Schließt du ihn, ist er weg.",
+        "exit_cta": "Rabatt sichern",
         "title": "Werde Pro",
         "subtitle": "Keine Werbung. Deine Trades ganz oben. Goldenes Abzeichen neben deinem Namen.",
         "what_you_get": "Das bekommst du",
