@@ -6,6 +6,7 @@ import scannerHtml from '../Code/TradeScanner/scannerHtml';
 import { buildTrade, sideDivider, normalize, PICTURE_SURE } from '../Code/TradeScanner/tradeMatch';
 import { cropLines } from '../Code/TradeScanner/textReader';
 import { pickRelease, downloadBytes, scannerState } from '../Code/TradeScanner/scannerRelease';
+import { meanTopScore, pickTurn, rotateScript, shouldTryTurns, turnFrame } from '../Code/TradeScanner/rotation';
 
 const matcher = require('../Code/TradeScanner/matcher');
 const { build } = require('../scripts/trade-scanner/build-html');
@@ -334,5 +335,47 @@ describe('scanner download and updates (build 196)', () => {
     expect(scannerState({ version: 3 }, release(3))).toBe('current');
     // Offline or nothing published: what is installed keeps working.
     expect(scannerState({ version: 3 }, null)).toBe('installed');
+  });
+});
+
+describe('sideways photos (rotation.js, iOS camera reports 2026-11-08 → 11-10)', () => {
+  const named = (...scores) => scores.map((score) => [{ name: 'x', score }]);
+
+  it('scores a scan by its mean top model score', () => {
+    expect(meanTopScore(null)).toBe(0);
+    expect(meanTopScore([])).toBe(0);
+    expect(meanTopScore(named(0.8, 0.6))).toBeCloseTo(0.7);
+  });
+
+  it('turns a sideways photo and leaves upright ones (measured scores)', () => {
+    // cebd9c28 sideways: 0.32 as it is, 0.71 turned ccw, 0.35 turned cw.
+    expect(shouldTryTurns(0.32)).toBe(true);
+    expect(pickTurn(0.32, [{ turn: 'ccw', score: 0.71 }, { turn: 'cw', score: 0.35 }])).toBe('ccw');
+    // 2a5b7279 upright: 0.77, never tries.
+    expect(shouldTryTurns(0.77)).toBe(false);
+    // ae3f4c25 upright but unsure (0.47): the turns are worse, it stays.
+    expect(pickTurn(0.47, [{ turn: 'ccw', score: 0.39 }, { turn: 'cw', score: 0.36 }])).toBeNull();
+    // bf178406: one tile, every way unsure — no turn on weak evidence.
+    expect(pickTurn(0.29, [{ turn: 'ccw', score: 0.33 }, { turn: 'cw', score: 0.4 }])).toBeNull();
+    // Nothing found as it is (0), found and sure turned: turn.
+    expect(pickTurn(0, [{ turn: 'cw', score: 0.66 }])).toBe('cw');
+    expect(pickTurn(0.3, [])).toBeNull();
+  });
+
+  it('turns the crop frame with the picture', () => {
+    const f = { x: 0.1, y: 0.2, w: 0.5, h: 0.3 };
+    const ccw = turnFrame(f, 'ccw');
+    expect(ccw.x).toBeCloseTo(0.2); expect(ccw.y).toBeCloseTo(0.4); expect(ccw.w).toBeCloseTo(0.3); expect(ccw.h).toBeCloseTo(0.5);
+    const back = turnFrame(ccw, 'cw');
+    ['x', 'y', 'w', 'h'].forEach((k) => expect(back[k]).toBeCloseTo(f[k]));
+    expect(turnFrame({ x: 0, y: 0, w: 1, h: 1 }, 'cw')).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+  });
+
+  it('builds a page script that defines the rotator once and posts back', () => {
+    const js = rotateScript('turn1', 'data:image/jpeg;base64,AAA', 'ccw');
+    expect(js).toContain('window.__tradeRotate');
+    expect(js).toContain('"turn1"');
+    expect(js).toContain("type: 'rotated'");
+    expect(js.trim().endsWith('true;')).toBe(true);
   });
 });

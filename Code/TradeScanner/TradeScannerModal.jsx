@@ -18,6 +18,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, ScrollView, Platform, PermissionsAndroid, Pressable, useWindowDimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
+import RNFS from 'react-native-fs';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
@@ -32,8 +33,10 @@ import DeviceInfo from 'react-native-device-info';
 import { uploadScanReport } from '../Helper/modEvidenceUpload';
 import { activeScanner, activeScannerHtml, fetchLatestScanner, installScanner, loadInstalledScanner, NEEDS_MODEL } from './scannerUpdate';
 import { downloadBytes, scannerState } from './scannerRelease';
+import { TURNS, meanTopScore, pickTurn, rotateScript, shouldTryTurns, turnFrame } from './rotation';
 
 const SCAN_TIMEOUT_MS = 25000;
+const dataUrlOf = (asset) => `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
 const ITEM_MIN = 0.4;
 const PICK_OPTIONS = { mediaType: 'photo', includeBase64: true, maxWidth: 2000, maxHeight: 2000, quality: 0.9 };
 // A photo of a monitor needs more pixels: the trade window fills less of it.
@@ -92,6 +95,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
   const lastScan = useRef(null);
   const wrongReason = useRef(null);
   const [cameraDenied, setCameraDenied] = useState(false);
+  const [turning, setTurning] = useState(false);
 
   const catalog = useMemo(() => {
     const map = new Map();
@@ -185,9 +189,38 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
     if (!p || msg.id !== p.id) return;
     clearTimeout(p.timer);
     pending.current = null;
-    if (msg.type === 'result') p.resolve(msg);
+    if (msg.type === 'result' || msg.type === 'rotated') p.resolve(msg);
     else p.reject(new Error(msg.message || 'scan'));
   }, [send]);
+
+  // A quarter turn of the picture on the scanner page's canvas (rotation.js),
+  // saved as a file: the text reader and the tile model read files.
+  const rotatePicture = useCallback((asset, turn) => new Promise((resolve, reject) => {
+    if (!ready.current || !web.current) { reject(new Error('page')); return; }
+    const id = `turn${Date.now()}`;
+    const timer = setTimeout(() => { pending.current = null; reject(new Error('timeout')); }, SCAN_TIMEOUT_MS);
+    pending.current = { id, resolve, reject, timer };
+    web.current.injectJavaScript(rotateScript(id, dataUrlOf(asset), turn));
+  }).then(async (msg) => {
+    const path = `${RNFS.CachesDirectoryPath}/trade-scan-${msg.id}.jpg`;
+    await RNFS.writeFile(path, msg.base64, 'base64');
+    return { ...asset, uri: `file://${path}`, base64: msg.base64, width: msg.width, height: msg.height, type: 'image/jpeg' };
+  }), []);
+
+  // The crop step's rotate button: a quarter turn clockwise per tap.
+  const turnPicked = useCallback(async () => {
+    if (!picked || turning) return;
+    setTurning(true);
+    try {
+      const asset = await rotatePicture(picked.asset, 'cw');
+      crop.current = FULL_CROP;
+      setPicked((prev) => (prev ? { ...prev, asset } : prev));
+      trackGrowthEvent('trade_scan_turn', { auto: 0 });
+    } catch {
+      // The page is not up yet: the button just does nothing.
+    }
+    setTurning(false);
+  }, [picked, turning, rotatePicture]);
 
   const askCamera = async () => {
     if (Platform.OS !== 'android') return true;
@@ -228,15 +261,43 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
 
   const scanCropped = useCallback(async () => {
     if (!picked) return;
-    const { asset, source } = picked;
-    const frame = crop.current;
+    const { source } = picked;
+    let { asset } = picked;
+    let frame = crop.current;
+    let turned = null;
     setStage('working');
     try {
-      const dataUrl = `data:${asset.type || 'image/jpeg'};base64,${asset.base64}`;
-      const [pixels, text] = await Promise.all([scanPixels(dataUrl, frame), readTextLines(asset.uri, frame)]);
+      let [pixels, text] = await Promise.all([scanPixels(dataUrlOf(asset), frame), readTextLines(asset.uri, frame)]);
       // The trained model names the tiles the matcher found; the matcher's own
       // picture match stays as the fallback (iOS, no Play services TFLite).
-      const named = await classifyTiles(asset.uri, frame, pixels.tiles);
+      let named = await classifyTiles(asset.uri, frame, pixels.tiles);
+      // Sideways photo (rotation.js): an unsure model tries the picture a
+      // quarter turn each way and keeps a turn only when it is clearly surer.
+      const base = meanTopScore(named);
+      if (activeScanner()?.modelPath && shouldTryTurns(base)) {
+        const tries = [];
+        for (const turn of TURNS) {
+          try {
+            const a = await rotatePicture(asset, turn);
+            const f = turnFrame(frame, turn);
+            const px = await scanPixels(dataUrlOf(a), f);
+            const nm = await classifyTiles(a.uri, f, px.tiles);
+            tries.push({ turn, score: meanTopScore(nm), asset: a, frame: f, pixels: px, named: nm });
+          } catch {
+            // This turn could not be read; the others still count.
+          }
+        }
+        const win = tries.find((x) => x.turn === pickTurn(base, tries));
+        if (win) {
+          ({ asset, frame, pixels, named } = win);
+          turned = win.turn;
+          text = await readTextLines(asset.uri, frame);
+          // Send picture uploads what was scanned.
+          crop.current = frame;
+          setPicked((prev) => (prev ? { ...prev, asset } : prev));
+          trackGrowthEvent('trade_scan_turn', { auto: 1 });
+        }
+      }
       // A square the picture matcher could not name (weak) or that looks like
       // a flat empty slot is kept only when the tile model is fairly sure it
       // holds an item. A low score on a square with an item in it stays, as
@@ -254,6 +315,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         model: named ? 1 : 0,
         scannerVersion: activeScanner()?.version || 0,
         textReader: text.ok ? 1 : 0,
+        turned,
         tiles: pixels.tiles.map((tile, i) => ({
           box: [tile.x0, tile.y0, tile.x1, tile.y1].map(Math.round),
           badges: `${tile.variant || 'd'}${tile.fly ? 'F' : ''}${tile.ride ? 'R' : ''}`,
@@ -275,6 +337,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
         model: named ? 1 : 0,
         scanner_v: activeScanner()?.version || 0,
         crop_area: Math.round(frame.w * frame.h * 100),
+        turned: turned ? 1 : 0,
       });
       if (!all.length) { setStage('none'); return; }
       setResult({
@@ -292,7 +355,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
       setReport(null);
       setStage('none');
     }
-  }, [picked, scanPixels, catalog, maxPerSide]);
+  }, [picked, scanPixels, rotatePicture, catalog, maxPerSide]);
 
   const recordOf = useCallback((p) => catalog.get(normalize(p.name)), [catalog]);
   const pickValue = useCallback((p) => {
@@ -710,6 +773,7 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
               {t('trade_scanner.crop_tip', { defaultValue: 'Drag the corners around the trade window only: both offers and the TRADE title. Cut away everything else.' })}
             </Text>
             <CropBox
+              key={picked.asset.uri}
               uri={picked.asset.uri}
               imageWidth={picked.asset.width}
               imageHeight={picked.asset.height}
@@ -720,6 +784,9 @@ export default function TradeScannerModal({ visible, onClose, onApply, records, 
             <View style={styles.footer}>
               <TouchableOpacity style={[styles.iconBtn, { borderColor: sub }]} onPress={() => captureAndScan(picked.source)} accessibilityLabel={t('trade_scanner.retake', { defaultValue: 'Pick again' })}>
                 <Icon name={picked.source === 'camera' ? 'camera-outline' : 'image-outline'} size={20} color={fg} />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.iconBtn, { borderColor: sub, opacity: turning ? 0.5 : 1 }]} onPress={turnPicked} disabled={turning} accessibilityLabel={t('trade_scanner.rotate', { defaultValue: 'Rotate picture' })}>
+                <Icon name="refresh-outline" size={20} color={fg} />
               </TouchableOpacity>
               <TouchableOpacity style={[styles.btn, styles.grow, { backgroundColor: accent }]} onPress={scanCropped} activeOpacity={0.8}>
                 <Icon name="crop" size={17} color="#fff" />
