@@ -1,4 +1,36 @@
 {
+    "counter_offer": {
+        "counter": "Контроффер",
+        "banner_title": "Контроффер для {{name}}",
+        "banner_cancel": "Отмена",
+        "send": "Отправить контроффер",
+        "replace_title": "Заменить текущий обмен?",
+        "replace_body": "Контроффер заменит предметы в калькуляторе.",
+        "replace_keep": "Оставить мой",
+        "replace_confirm": "Заменить",
+        "card_title": "Контроффер",
+        "you_give": "Вы отдаёте",
+        "you_get": "Вы получаете",
+        "verdict_them": "Для них: {{verdict}}",
+        "waiting": "Ожидание…",
+        "accept": "Принять",
+        "decline": "Отклонить",
+        "cancel_offer": "Отменить",
+        "mark_completed": "Обмен состоялся",
+        "didnt_happen": "Не состоялся",
+        "status_pending": "Ожидает",
+        "status_trading": "Идёт обмен",
+        "status_declined": "Отклонён",
+        "status_cancelled": "Отменён",
+        "status_completed": "Завершён",
+        "status_failed": "Не удался",
+        "preview": "🔁 Контроффер",
+        "fallback_text": "🔁 Контроффер · Отдаю: {{give}} · Хочу: {{get}} · Обновите приложение, чтобы ответить",
+        "nothing": "ничего",
+        "safe_chat_blocked": "В этом чате нельзя отправлять контрофферы.",
+        "already_changed": "Это предложение уже обновлено.",
+        "update_failed": "Не удалось обновить предложение. Попробуйте ещё раз."
+    },
     "settings": {
         "login_register": "Войти / Регистрация",
         "login_description": "Войди, чтобы получать уведомления, трейдить, общаться в чате и не только",
@@ -454,6 +486,7 @@
         "lose": "НЕВЫГОДНО",
         "updated_prefix": "Обновлено ",
         "categories": {
+            "recent": "НЕДАВНИЕ",
             "inventory": "ИНВЕНТАРЬ",
             "my_stuff": "МОИ ВЕЩИ",
             "all": "ВСЕ",
@@ -1958,6 +1991,12 @@
         }
     },
     "trending": {
+        "market": "Рынок",
+        "values_changed": "Цены изменились",
+        "trades_24h": "Обмены (24ч)",
+        "trades_7d": "Обмены (7д)",
+        "rising": "Растут",
+        "falling": "Падают",
         "hot": "Растут",
         "dropping": "Падают",
         "locked_teaser": "Смотри, какие предметы дорожают, а какие дешевеют"
@@ -4279,5 +4318,21 @@
         "up_to_date": "Сканер v{{v}} · последняя версия",
         "updated": "Сканер обновлён до v{{v}}",
         "version": "Сканер v{{v}}"
+    },
+    "slot_sheet": {
+        "close": "Закрыть",
+        "value": "Ценность",
+        "details": "Подробнее",
+        "add_another": "Добавить ещё",
+        "move": "На другую сторону",
+        "remove": "Убрать",
+        "side_full": "Эта сторона заполнена.",
+        "swap_sides": "Поменять стороны"
+    },
+    "history_range": {
+        "all": "Всё",
+        "high": "Макс.",
+        "low": "Мин.",
+        "change": "Изменение"
     }
 }

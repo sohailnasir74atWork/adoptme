@@ -1,4 +1,36 @@
 {
+    "counter_offer": {
+        "counter": "Contraoferta",
+        "banner_title": "Contraoferta para {{name}}",
+        "banner_cancel": "Cancelar",
+        "send": "Enviar contraoferta",
+        "replace_title": "¿Reemplazar tu intercambio actual?",
+        "replace_body": "La contraoferta reemplazará los objetos de tu calculadora.",
+        "replace_keep": "Mantener el mío",
+        "replace_confirm": "Reemplazar",
+        "card_title": "Contraoferta",
+        "you_give": "Tú das",
+        "you_get": "Tú recibes",
+        "verdict_them": "Para él/ella: {{verdict}}",
+        "waiting": "Esperando…",
+        "accept": "Aceptar",
+        "decline": "Rechazar",
+        "cancel_offer": "Cancelar",
+        "mark_completed": "Marcar como completado",
+        "didnt_happen": "No se hizo",
+        "status_pending": "Pendiente",
+        "status_trading": "Intercambiando",
+        "status_declined": "Rechazada",
+        "status_cancelled": "Cancelada",
+        "status_completed": "Completado",
+        "status_failed": "Fallido",
+        "preview": "🔁 Contraoferta",
+        "fallback_text": "🔁 Contraoferta · Doy: {{give}} · Quiero: {{get}} · Actualiza la app para responder",
+        "nothing": "nada",
+        "safe_chat_blocked": "No se pueden enviar contraofertas en este chat.",
+        "already_changed": "Esta oferta ya se actualizó.",
+        "update_failed": "No se pudo actualizar la oferta. Inténtalo de nuevo."
+    },
     "settings": {
         "login_register": "Iniciar sesión / Registrarse",
         "login_description": "Inicia sesión para recibir notificaciones, tradear, chatear y mucho más",
@@ -474,6 +506,7 @@
         "lose": "PIERDES",
         "updated_prefix": "Actualizado ",
         "categories": {
+            "recent": "RECIENTES",
             "inventory": "INVENTARIO",
             "my_stuff": "MIS COSAS",
             "all": "TODO",
@@ -2075,6 +2108,12 @@
         }
     },
     "trending": {
+        "market": "Mercado",
+        "values_changed": "Valores cambiados",
+        "trades_24h": "Tradeos (24h)",
+        "trades_7d": "Tradeos (7d)",
+        "rising": "Suben",
+        "falling": "Bajan",
         "market_overview": "Resumen del Mercado",
         "full_analytics": "Análisis Completo",
         "hot": "Subiendo",
@@ -4327,5 +4366,21 @@
         "up_to_date": "Escáner v{{v}} · actualizado",
         "updated": "Escáner actualizado a v{{v}}",
         "version": "Escáner v{{v}}"
+    },
+    "slot_sheet": {
+        "close": "Cerrar",
+        "value": "Valor",
+        "details": "Detalles",
+        "add_another": "Añadir otro",
+        "move": "Mover al otro lado",
+        "remove": "Quitar",
+        "side_full": "Ese lado está lleno.",
+        "swap_sides": "Intercambiar lados"
+    },
+    "history_range": {
+        "all": "Todo",
+        "high": "Máximo",
+        "low": "Mínimo",
+        "change": "Cambio"
     }
 }

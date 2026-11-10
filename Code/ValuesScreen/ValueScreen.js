@@ -309,7 +309,7 @@ const ListItem = React.memo(({ item, itemSelection, onBadgePress, getItemValue, 
   );
 });
 
-const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSelectedFruits, onRequestClose, fromSetting, ownedPets, setOwnedPets, wishlistPets, setWishlistPets, owned }) => {
+const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSelectedFruits, onRequestClose, fromSetting, ownedPets, setOwnedPets, wishlistPets, setWishlistPets, owned, inTab }) => {
   const [searchText, setSearchText] = useState('');
 
   // Value range filter — "show me everything worth X to Y". Kept as strings so
@@ -1293,7 +1293,9 @@ const ValueScreen = React.memo(({ selectedTheme, fromChat, selectedFruits, setSe
       </GestureHandlerRootView>
       {/* Browse mode is the full-screen Pet Values page (no tab bar); the
           picker modes live inside a drawer that pads itself. */}
-      {isBrowseMode
+      {/* inTab: shown inside the Calculator tab (CalculatorTab.jsx), where the
+          tab bar already sits above the nav bar — a plain banner, like any tab. */}
+      {isBrowseMode && !inTab
         ? <ScreenBottomBanner background={getThemeColors(isDarkMode).bg} collapsible />
         : !localState.isPro && !fromChat && <BannerAdComponent collapsible />}
     </>

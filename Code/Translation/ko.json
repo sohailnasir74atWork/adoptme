@@ -1,4 +1,36 @@
 {
+  "counter_offer": {
+    "counter": "역제안",
+    "banner_title": "{{name}}님에게 역제안",
+    "banner_cancel": "취소",
+    "send": "역제안 보내기",
+    "replace_title": "현재 트레이드를 바꿀까요?",
+    "replace_body": "역제안이 계산기에 있는 아이템을 대체합니다.",
+    "replace_keep": "내 것 유지",
+    "replace_confirm": "바꾸기",
+    "card_title": "역제안",
+    "you_give": "내가 주는 것",
+    "you_get": "내가 받는 것",
+    "verdict_them": "상대: {{verdict}}",
+    "waiting": "대기 중…",
+    "accept": "수락",
+    "decline": "거절",
+    "cancel_offer": "취소",
+    "mark_completed": "완료로 표시",
+    "didnt_happen": "성사 안 됨",
+    "status_pending": "대기 중",
+    "status_trading": "트레이드 중",
+    "status_declined": "거절됨",
+    "status_cancelled": "취소됨",
+    "status_completed": "완료",
+    "status_failed": "실패",
+    "preview": "🔁 역제안",
+    "fallback_text": "🔁 역제안 · 내가 줄 것: {{give}} · 원하는 것: {{get}} · 답하려면 앱을 업데이트하세요",
+    "nothing": "없음",
+    "safe_chat_blocked": "이 채팅에서는 역제안을 보낼 수 없습니다.",
+    "already_changed": "이 제안은 이미 업데이트되었습니다.",
+    "update_failed": "제안을 업데이트하지 못했습니다. 다시 시도하세요."
+  },
   "settings": {
     "login_register": "로그인 / 회원가입",
     "login_description": "로그인하면 알림, 거래, 채팅 같은 기능을 모두 쓸 수 있어요",
@@ -461,6 +493,7 @@
     "lose": "손해",
     "updated_prefix": "업데이트: ",
     "categories": {
+      "recent": "최근",
       "inventory": "인벤토리",
       "my_stuff": "내 물건",
       "all": "전체",
@@ -2042,6 +2075,12 @@
     }
   },
   "trending": {
+    "market": "마켓",
+    "values_changed": "값 변경",
+    "trades_24h": "거래 (24시간)",
+    "trades_7d": "거래 (7일)",
+    "rising": "상승",
+    "falling": "하락",
     "market_overview": "시장 한눈에 보기",
     "full_analytics": "전체 분석 보기",
     "hot": "오르는 중",
@@ -4229,5 +4268,21 @@
     "up_to_date": "스캐너 v{{v}} · 최신 버전",
     "updated": "스캐너 v{{v}}(으)로 업데이트됨",
     "version": "스캐너 v{{v}}"
+  },
+    "slot_sheet": {
+        "close": "닫기",
+        "value": "가치",
+        "details": "상세",
+        "add_another": "하나 더",
+        "move": "반대쪽으로",
+        "remove": "삭제",
+        "side_full": "그쪽이 가득 찼어요.",
+        "swap_sides": "양쪽 바꾸기"
+    },
+  "history_range": {
+    "all": "전체",
+    "high": "최고",
+    "low": "최저",
+    "change": "변동"
   }
 }

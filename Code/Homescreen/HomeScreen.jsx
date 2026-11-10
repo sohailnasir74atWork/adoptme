@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, TextInput, Image, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, FlatList, TextInput, Image, Pressable, Platform, ActivityIndicator, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ViewShot from 'react-native-view-shot';
 import { useNavigation } from '@react-navigation/native';
@@ -26,6 +26,17 @@ import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 import TradeScannerModal from '../TradeScanner/TradeScannerModal';
+import SlotActionSheet from './SlotActionSheet';
+import CounterOfferBanner from '../CounterOffer/CounterOfferBanner';
+import {
+  takeCounterRequest,
+  subscribeCounterRequest,
+  subscribeCounterSent,
+  mirrorTradeForCounter,
+  buildTradeOffer,
+} from '../CounterOffer/counterOffer';
+import { uuidv4 } from '../Supabase/uuid';
+import ValueHistoryModal from '../ValuesScreen/ValueHistoryModal';
 import { addDoc, collection, serverTimestamp, doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import { buildVariantTags } from '../Trades/tradeHelpers';
 import { verifiedRobloxName, readVerifiedRobloxName, robloxFieldsForTrade } from '../Helper/robloxIdentity';
@@ -43,6 +54,7 @@ import {
   toLegacyMode,
   categoriesFor,
   resolveItemImage,
+  normalizeName,
 } from '../Helper/valueSources';
 
 const GRID_STEPS = [9, 12, 15, 18];
@@ -53,6 +65,10 @@ const createEmptySlots = (count) => Array(count).fill(null);
 
 // const CATEGORIES = ['ALL', 'PETS', 'EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'FAVORITES'];
 const VALUE_TYPES = ['D', 'N', 'M'];
+// Picker RECENT chip (batch 2): last N distinct items added to a slot.
+const RECENT_LIMIT = 12;
+const recentKeyOf = (item) =>
+  `${String(item?.name || '').toLowerCase().trim()}|${String(item?.type || '').toLowerCase().trim()}`;
 const MODIFIERS = ['F', 'R'];
 const hideBadge = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'STICKERS'];
 
@@ -130,7 +146,7 @@ const getTradeStatus = (hasTotal, wantsTotal) => {
   return wflStatus(hasTotal, wantsTotal);
 };
 
-const HomeScreen = ({ selectedTheme }) => {
+const HomeScreen = ({ selectedTheme, hideBanner = false }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { theme, user, setUser, firestoreDB, single_offer_wall, reload, appdatabase, isUserBlocked, strikeInfo, deviceBanInfo } = useGlobalState();
@@ -222,7 +238,14 @@ const HomeScreen = ({ selectedTheme }) => {
   const [factor, setFactor] = useState(null);
   const [showofferwall, setShowofferwall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdatedTime, setLastUpdatedTime] = useState(new Date());
+  // When the values were really downloaded (GlobelStats writes fetchDataTime on
+  // every network fetch), not when this screen mounted — that read "just now"
+  // on every visit however old the cached values were.
+  const fetchedRaw = localState?.fetchDataTime;
+  const lastUpdatedTime = useMemo(() => {
+    const d = fetchedRaw ? new Date(Number(fetchedRaw) || fetchedRaw) : null;
+    return d && Number.isFinite(d.getTime()) ? d : null;
+  }, [fetchedRaw]);
   const [rawAnalyticsMaps, setAnalyticsMaps] = useState({ demandMap: {}, hotMap: {} });
   // Value movers come from Elvebredd's diff. In GG mode the numbers on screen
   // are GG's, so an Elvebredd "+X%" beside them would be someone else's move.
@@ -280,9 +303,30 @@ const HomeScreen = ({ selectedTheme }) => {
    * fails silently both ways: a new type gets no filter and its items become
    * unreachable, and a type the active feed lacks shows an empty filter.
    */
+  // RECENT: the catalogue rows behind localState.recentPicks, newest first.
+  // Resolved by id, then name + type, so a row the catalogue dropped is skipped.
+  const recentRecords = useMemo(() => {
+    const picks = Array.isArray(localState?.recentPicks) ? localState.recentPicks : [];
+    if (!picks.length || !fruitRecords.length) return [];
+    const byId = new Map();
+    const byKey = new Map();
+    fruitRecords.forEach((r) => {
+      if (!r) return;
+      if (r.id != null) byId.set(String(r.id), r);
+      byKey.set(recentKeyOf(r), r);
+    });
+    const out = [];
+    picks.forEach((p) => {
+      const r = (p?.id != null && byId.get(String(p.id))) || byKey.get(recentKeyOf(p));
+      if (r && !out.includes(r)) out.push(r);
+    });
+    return out;
+  }, [localState?.recentPicks, fruitRecords]);
+  const hasRecent = recentRecords.length > 0;
+
   const CATEGORIES = useMemo(
-    () => categoriesFor(fruitRecords, { prefix: ['MY_STUFF', 'ALL'] }),
-    [fruitRecords]
+    () => categoriesFor(fruitRecords, { prefix: hasRecent ? ['RECENT', 'MY_STUFF', 'ALL'] : ['MY_STUFF', 'ALL'] }),
+    [fruitRecords, hasRecent]
   );
 
   const getCategoryLabel = useCallback((category) => {
@@ -332,6 +376,7 @@ const HomeScreen = ({ selectedTheme }) => {
 
   // ✅ Format last updated time as relative string
   const getLastUpdatedText = useCallback(() => {
+    if (!lastUpdatedTime) return t('home.updated_just_now');
     const now = new Date();
     const diffMs = now - lastUpdatedTime;
     const diffMins = Math.floor(diffMs / 60000);
@@ -354,8 +399,6 @@ const HomeScreen = ({ selectedTheme }) => {
       await reload(); // Re-fetch values data from CDN/Firebase
       // ✅ Check if component is still mounted before updating state
       if (!isMountedRef.current) return;
-      // ✅ Update last refreshed time
-      setLastUpdatedTime(new Date());
       // ✅ Show success message when values are reloaded
       showSuccessMessage(t('home.alert.success'), t('home.alert.values_reloaded'));
     } catch (error) {
@@ -441,6 +484,7 @@ const HomeScreen = ({ selectedTheme }) => {
   );
 
 
+  const recentPicks = localState?.recentPicks;
   const selectItem = useCallback(
     (item) => {
       if (!item || !selectedSection) return;
@@ -499,11 +543,21 @@ const HomeScreen = ({ selectedTheme }) => {
       // This will also expand 9→12→15→18 if needed
       maybeExpandGrid(nextHasItems, nextWantsItems);
 
+      // Remember it for the picker's RECENT chip (newest first, distinct).
+      const pickKey = recentKeyOf(item);
+      const prevPicks = Array.isArray(recentPicks) ? recentPicks : [];
+      updateLocalState('recentPicks', [
+        { id: item.id ?? null, name: item.name, type: item.type },
+        ...prevPicks.filter((p) => recentKeyOf(p) !== pickKey),
+      ].slice(0, RECENT_LIMIT));
+
       setIsDrawerVisible(false);
     },
     [
       hasItems,
       wantsItems,
+      recentPicks,
+      updateLocalState,
       selectedSection,
       selectedValueType,
       isFlySelected,
@@ -554,6 +608,235 @@ const HomeScreen = ({ selectedTheme }) => {
 
   const scannerImage = useCallback((record) => getImageUrl(record, localState.imgurl), [getImageUrl, localState.imgurl]);
 
+  // ── Counter offer (CounterOffer/counterOffer.js) ────────────────────────
+  // A feed "Counter" hands over the poster's trade. It loads mirrored — Me
+  // (I give) = what the poster wants, You (I get) = what the poster offers —
+  // re-priced with the CURRENT source/unit, variants kept. While `counter`
+  // is set a banner names the poster and the three trade buttons become one
+  // "Send counter offer", which opens the DM and posts a trade_offer message.
+  const [counter, setCounter] = useState(null); // { tradeId, poster, trade }
+  const [counterRequest, setCounterRequest] = useState(null);
+  const sentOfferIdRef = useRef(null);
+
+  // Trade rows store name/type/variant/image only, so find the catalogue row
+  // to price them: name + type first, then name alone.
+  const catalogIndex = useMemo(() => {
+    const byKey = new Map();
+    const byName = new Map();
+    fruitRecords.forEach((r) => {
+      if (!r || !r.name) return;
+      const n = normalizeName(r.name);
+      const k = `${n}|${String(r.type || '').toLowerCase()}`;
+      if (!byKey.has(k)) byKey.set(k, r);
+      if (!byName.has(n)) byName.set(n, r);
+    });
+    return { byKey, byName };
+  }, [fruitRecords]);
+
+  const loadSides = useCallback((has, wants) => {
+    const step = Math.max(0, GRID_STEPS.findIndex((n) => n >= Math.max(has.length, wants.length)));
+    const size = GRID_STEPS[step];
+    const pad = (items) => [...items, ...createEmptySlots(size - items.length)];
+    const sum = (items) => items.reduce((acc, it) => acc + (Number(it.selectedValue) || 0), 0);
+    setSelectedSection(null);
+    setGridStepIndex(step);
+    setHasItems(pad(has));
+    setWantsItems(pad(wants));
+    setHasTotal(sum(has));
+    setWantsTotal(sum(wants));
+  }, []);
+
+  const applyCounterRequest = useCallback((req) => {
+    const maxSide = GRID_STEPS[GRID_STEPS.length - 1];
+    const unit = isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK;
+    const toSlot = (tradeItem) => {
+      const n = normalizeName(tradeItem.name || tradeItem.Name);
+      const record = catalogIndex.byKey.get(`${n}|${String(tradeItem.type || '').toLowerCase()}`)
+        || catalogIndex.byName.get(n)
+        || { name: tradeItem.name || tradeItem.Name, type: tradeItem.type, image: tradeItem.image };
+      const vt = tradeItem.valueType || 'd';
+      const fly = !!tradeItem.isFly;
+      const ride = !!tradeItem.isRide;
+      // Built exactly like selectItem() builds a picked item.
+      return {
+        ...record,
+        selectedValue: getItemValue(record, vt, fly, ride, isSharkMode, factor, valueSource),
+        valueSource,
+        isSharkMode: toLegacyMode(valueSource, unit),
+        valueType: vt,
+        isFly: fly,
+        isRide: ride,
+      };
+    };
+    const mirrored = mirrorTradeForCounter(req.trade);
+    loadSides(mirrored.give.slice(0, maxSide).map(toSlot), mirrored.get.slice(0, maxSide).map(toSlot));
+    setCounter({ tradeId: req.trade?.id || null, poster: req.poster, trade: req.trade });
+    triggerHapticFeedback('impactLight');
+  }, [catalogIndex, isSharkMode, factor, valueSource, loadSides, triggerHapticFeedback]);
+
+  // Take the request now (this tab mounts lazily) and whenever a new one comes.
+  useEffect(() => {
+    const take = () => {
+      const req = takeCounterRequest();
+      if (req?.trade) setCounterRequest(req);
+    };
+    take();
+    return subscribeCounterRequest(take);
+  }, []);
+
+  // Waits for the catalogue so the prices are real. Asks before replacing a
+  // trade the user was building.
+  useEffect(() => {
+    if (!counterRequest || fruitRecords.length === 0) return;
+    const req = counterRequest;
+    setCounterRequest(null);
+    if (!hasItems.some(Boolean) && !wantsItems.some(Boolean)) {
+      applyCounterRequest(req);
+      return;
+    }
+    Alert.alert(
+      t('counter_offer.replace_title', { defaultValue: 'Replace your current trade?' }),
+      t('counter_offer.replace_body', { defaultValue: 'The counter offer will replace the items in your calculator.' }),
+      [
+        { text: t('counter_offer.replace_keep', { defaultValue: 'Keep mine' }), style: 'cancel' },
+        { text: t('counter_offer.replace_confirm', { defaultValue: 'Replace' }), style: 'destructive', onPress: () => applyCounterRequest(req) },
+      ],
+    );
+  }, [counterRequest, fruitRecords.length, hasItems, wantsItems, applyCounterRequest, t]);
+
+  // The chat confirmed the offer landed: leave counter mode with a clean calculator.
+  useEffect(() => subscribeCounterSent((offerId) => {
+    if (!offerId || offerId !== sentOfferIdRef.current) return;
+    sentOfferIdRef.current = null;
+    setCounter(null);
+    loadSides([], []);
+  }), [loadSides]);
+
+  // Cancel keeps the items: the user may still post or share them.
+  const cancelCounter = useCallback(() => {
+    triggerHapticFeedback('impactLight');
+    sentOfferIdRef.current = null;
+    setCounter(null);
+  }, [triggerHapticFeedback]);
+
+  const handleSendCounter = useCallback(() => {
+    if (!counter) return;
+    if (!user?.id) {
+      setIsSigninDrawerVisible(true);
+      return;
+    }
+    if (isBanned) {
+      const reason = banDetails?.reason;
+      showErrorMessage(t('chat.access_denied'), reason ? t('home.alert.trade_banned_reason', { reason }) : t('home.alert.trade_banned'));
+      return;
+    }
+    const giveItems = hasItems.filter(Boolean);
+    const getItems = wantsItems.filter(Boolean);
+    if (giveItems.length === 0 && getItems.length === 0) {
+      showErrorMessage(t('home.alert.error'), t('home.alert.missing_items_error'));
+      return;
+    }
+    triggerHapticFeedback('impactMedium');
+    const offer = buildTradeOffer({
+      id: uuidv4(),
+      tradeId: counter.tradeId,
+      give: giveItems,
+      get: getItems,
+      valueSource,
+      valueUnit: isSharkMode === false ? VALUE_UNIT.FROST : VALUE_UNIT.SHARK,
+    });
+    sentOfferIdRef.current = offer.id;
+    // Same door as the feed's Chat button, so the trade-chat switch applies.
+    navigation.navigate('Trade', {
+      screen: 'PrivateChatTrade',
+      initial: false,
+      params: { selectedUser: counter.poster, item: counter.trade, pendingOffer: offer },
+    });
+  }, [counter, user?.id, isBanned, banDetails, hasItems, wantsItems, valueSource, isSharkMode, navigation, t, triggerHapticFeedback]);
+
+  // ── Slot options (SlotActionSheet) ──────────────────────────────────────
+  const [slotSheet, setSlotSheet] = useState(null); // { index, isHas } | null
+  const [historyTarget, setHistoryTarget] = useState(null); // { item, imageUrl }
+  const slotItem = slotSheet ? (slotSheet.isHas ? hasItems : wantsItems)[slotSheet.index] : null;
+  const closeSlotSheet = useCallback(() => setSlotSheet(null), []);
+
+  const removeSlot = useCallback(() => {
+    if (!slotSheet || !slotItem) return;
+    const { index, isHas } = slotSheet;
+    const next = [...(isHas ? hasItems : wantsItems)];
+    next[index] = null;
+    if (isHas) setHasItems(next); else setWantsItems(next);
+    updateTotal(slotItem, isHas ? 'has' : 'wants', false, true);
+    triggerHapticFeedback('impactLight');
+    setSlotSheet(null);
+  }, [slotSheet, slotItem, hasItems, wantsItems, updateTotal, triggerHapticFeedback]);
+
+  // Puts a copy (or the item itself) into the first free slot of a side; the
+  // grid grows 9 → 18 like a normal pick. False when that side is full.
+  const placeInSide = useCallback((item, toHas, fromIndex) => {
+    const nextHas = [...hasItems];
+    const nextWants = [...wantsItems];
+    if (fromIndex != null) (toHas ? nextWants : nextHas)[fromIndex] = null;
+    const target = toHas ? nextHas : nextWants;
+    const free = target.indexOf(null);
+    if (free === -1) return false;
+    target[free] = item;
+    maybeExpandGrid(nextHas, nextWants);
+    return true;
+  }, [hasItems, wantsItems, maybeExpandGrid]);
+
+  const moveSlot = useCallback(() => {
+    if (!slotSheet || !slotItem) return;
+    const { index, isHas } = slotSheet;
+    if (!placeInSide(slotItem, !isHas, index)) {
+      showErrorMessage(t('home.alert.error'), t('slot_sheet.side_full', { defaultValue: 'That side is full.' }));
+      return;
+    }
+    updateTotal(slotItem, isHas ? 'has' : 'wants', false, true);
+    updateTotal(slotItem, isHas ? 'wants' : 'has', true, true);
+    triggerHapticFeedback('impactLight');
+    setSlotSheet(null);
+  }, [slotSheet, slotItem, placeInSide, updateTotal, triggerHapticFeedback, t]);
+
+  const sideHasRoom = useCallback((isHas) => {
+    const side = isHas ? hasItems : wantsItems;
+    return side.includes(null) || gridStepIndex < GRID_STEPS.length - 1;
+  }, [hasItems, wantsItems, gridStepIndex]);
+
+  const addAnotherSlot = useCallback(() => {
+    if (!slotSheet || !slotItem) return;
+    const { isHas } = slotSheet;
+    if (!placeInSide({ ...slotItem }, isHas)) return;
+    updateTotal(slotItem, isHas ? 'has' : 'wants', true, true);
+    triggerHapticFeedback('impactLight');
+    setSlotSheet(null);
+  }, [slotSheet, slotItem, placeInSide, updateTotal, triggerHapticFeedback]);
+
+  const openSlotDetails = useCallback(() => {
+    if (!slotItem) return;
+    setHistoryTarget({ item: slotItem, imageUrl: getImageUrl(slotItem, localState.imgurl) });
+    setSlotSheet(null);
+  }, [slotItem, getImageUrl, localState.imgurl]);
+
+  const swapSides = useCallback(() => {
+    if (!hasItems.some(Boolean) && !wantsItems.some(Boolean)) return;
+    triggerHapticFeedback('impactMedium');
+    setHasItems(wantsItems);
+    setWantsItems(hasItems);
+    setHasTotal(wantsTotal);
+    setWantsTotal(hasTotal);
+  }, [hasItems, wantsItems, hasTotal, wantsTotal, triggerHapticFeedback]);
+
+  const slotBadges = useMemo(() => {
+    if (!slotItem || hideBadge.includes(slotItem.type?.toUpperCase())) return [];
+    const out = [];
+    if (slotItem.valueType === 'n') out.push({ label: 'N', color: '#2ecc71' });
+    if (slotItem.valueType === 'm') out.push({ label: 'M', color: '#9b59b6' });
+    if (slotItem.isFly) out.push({ label: 'F', color: '#3498db' });
+    if (slotItem.isRide) out.push({ label: 'R', color: '#e74c3c' });
+    return out;
+  }, [slotItem]);
+
   const renderScanButton = () => (
     <TouchableOpacity style={styles.scanButton} onPress={() => { triggerHapticFeedback('impactLight'); setScannerVisible(true); }} activeOpacity={0.8}>
       <Icon name="camera" size={18} color="white" />
@@ -571,18 +854,10 @@ const HomeScreen = ({ selectedTheme }) => {
     const callbackfunction = () => { };
 
     if (items[index]) {
+      // A filled slot opens its options (SlotActionSheet) instead of removing
+      // the item outright — one stray tap used to lose a pick.
       triggerHapticFeedback('impactLight');
-      const item = items[index];
-      const updatedItems = [...items];
-      updatedItems[index] = null;
-
-      if (isHas) {
-        setHasItems(updatedItems);
-        updateTotal(item, 'has', false, true);
-      } else {
-        setWantsItems(updatedItems);
-        updateTotal(item, 'wants', false, true);
-      }
+      setSlotSheet({ index, isHas });
     } else {
       triggerHapticFeedback('impactLight');
       setSelectedSection(isHas ? 'has' : 'wants');
@@ -755,6 +1030,13 @@ const HomeScreen = ({ selectedTheme }) => {
         }
       });
       list = Object.values(groupMap);
+    } else if (selectedPetType === 'RECENT') {
+      // Same priced rows as every other chip, in the order they were added.
+      const priced = new Map();
+      fruitRecords.forEach((r, i) => { if (r) priced.set(r, memoizedFruitRecords[i]); });
+      return recentRecords
+        .map((r) => priced.get(r))
+        .filter((item) => item?.type && isMatch(item.name, debouncedSearchText));
     } else {
       list = memoizedFruitRecords;
     }
@@ -776,7 +1058,9 @@ const HomeScreen = ({ selectedTheme }) => {
     isRideSelected,
     isSharkMode,
     localState.ownedPets,
-    factor
+    factor,
+    fruitRecords,
+    recentRecords,
   ]);
   // ✅ Handler for badge presses in favorites (N, M, D, R, F)
   const handleFavoriteBadgePress = useCallback((itemId, badge) => {
@@ -1010,6 +1294,9 @@ const HomeScreen = ({ selectedTheme }) => {
             <Icon name="image-outline" size={30} color={isDarkMode ? '#666' : '#999'} />
           </View>
         )}
+        <Text style={styles.gridItemValue} numberOfLines={1}>
+          {itemValueLabel(item, selectedValueType, isFlySelected, isRideSelected, isSharkMode, valueSource)}
+        </Text>
         {isAddingToFavorites && (
           <TouchableOpacity
             style={styles.favoriteButton}
@@ -1602,7 +1889,13 @@ const HomeScreen = ({ selectedTheme }) => {
       <View style={styles.flexOne} collapsable={false}>
         <View style={styles.container} key={language} collapsable={false}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {renderScanButton()}
+            {counter ? (
+              <CounterOfferBanner
+                name={counter.poster?.sender}
+                onCancel={cancelCounter}
+                isDarkMode={isDarkMode}
+              />
+            ) : renderScanButton()}
             <ViewShot ref={viewRef} style={styles.screenshotView}>
               {config.isNoman && (
                 <View style={styles.summaryContainer}>
@@ -1764,7 +2057,15 @@ const HomeScreen = ({ selectedTheme }) => {
 
               <View style={styles.labelContainer}>
                 <Text style={styles.offerLabel}>{t('home.labels.me')}</Text>
-                <Text style={styles.dividerText}></Text>
+                <TouchableOpacity
+                  style={[styles.swapButton, !(hasItems.some(Boolean) || wantsItems.some(Boolean)) && styles.swapButtonIdle]}
+                  onPress={swapSides}
+                  hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('slot_sheet.swap_sides', { defaultValue: 'Swap sides' })}
+                >
+                  <Icon name="swap-horizontal" size={16} color={config.colors.primary} />
+                </TouchableOpacity>
                 <Text style={styles.offerLabel}>{t('home.labels.you')}</Text>
                 {/* ✅ Modern Refresh Button */}
 
@@ -2008,6 +2309,19 @@ const HomeScreen = ({ selectedTheme }) => {
                 </View>
               )}
             </ViewShot>
+            {counter ? (
+              <View style={styles.counterSendRow}>
+                <TouchableOpacity
+                  style={styles.counterSendButton}
+                  onPress={handleSendCounter}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                >
+                  <Icon name="paper-plane" size={16} color="#ffffff" />
+                  <Text style={styles.counterSendText}>{t('counter_offer.send', { defaultValue: 'Send counter offer' })}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
             <View style={styles.createtrade}>
               <TouchableOpacity
                 style={styles.createtradeButton}
@@ -2031,8 +2345,32 @@ const HomeScreen = ({ selectedTheme }) => {
                 <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{t('home.share_trade')}</Text>
               </TouchableOpacity>
             </View>
+            )}
 
           </ScrollView>
+          <SlotActionSheet
+            visible={!!slotItem}
+            item={slotItem}
+            imageUrl={slotItem ? getImageUrl(slotItem, localState.imgurl) : ''}
+            valueText={slotItem ? formatValue(slotItem.selectedValue) : ''}
+            badges={slotBadges}
+            sideLabel={slotSheet ? t(slotSheet.isHas ? 'home.labels.me' : 'home.labels.you') : ''}
+            isDarkMode={isDarkMode}
+            onClose={closeSlotSheet}
+            onRemove={removeSlot}
+            onMove={moveSlot}
+            onAddAnother={addAnotherSlot}
+            canAddAnother={!!slotSheet && sideHasRoom(slotSheet.isHas)}
+            onDetails={openSlotDetails}
+          />
+          <ValueHistoryModal
+            visible={!!historyTarget}
+            item={historyTarget?.item}
+            imageUrl={historyTarget?.imageUrl}
+            isDarkMode={isDarkMode}
+            liveValues={!isGgMode}
+            onClose={() => setHistoryTarget(null)}
+          />
           <Modal
             visible={isDrawerVisible}
             transparent={true}
@@ -2127,7 +2465,7 @@ const HomeScreen = ({ selectedTheme }) => {
                     getItemLayout={selectedPetType === 'MY_STUFF' ? undefined : getItemLayout}
                   />
                   {selectedPetType === 'MY_STUFF' ? renderFavoritesFooter() : (
-                    (selectedPetType === 'PETS' || selectedPetType === 'ALL') && (
+                    (selectedPetType === 'PETS' || selectedPetType === 'ALL' || selectedPetType === 'RECENT') && (
                       <View style={styles.badgeContainer}>
                         {VALUE_TYPES.map((badge) => (
                           <TouchableOpacity
@@ -2255,7 +2593,8 @@ const HomeScreen = ({ selectedTheme }) => {
       {/* Always-mounted slot so the banner appearing/vanishing never changes
           this level's child count. */}
       <View collapsable={false}>
-        {!localState.isPro && <BannerAdComponent collapsible />}
+        {/* hideBanner: Values is showing in this tab (CalculatorTab.jsx) and has its own banner. */}
+        {!localState.isPro && !hideBanner && <BannerAdComponent collapsible />}
       </View>
       <TradeScannerModal
         visible={scannerVisible}
@@ -2412,6 +2751,18 @@ const getStyles = (isDarkMode, c) => {
       fontSize: 14,
       color: '#999',
       paddingHorizontal: 5,
+    },
+    swapButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      marginBottom: 5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: config.colors.primary + '1A',
+    },
+    swapButtonIdle: {
+      opacity: 0.4,
     },
     refreshButton: {
       position: 'absolute',
@@ -2608,6 +2959,13 @@ const getStyles = (isDarkMode, c) => {
       fontSize: 11,
       marginTop: 4,
       color: c.text,
+    },
+    gridItemValue: {
+      fontSize: 11,
+      fontWeight: '600',
+      marginTop: 3,
+      color: c.textSecondary,
+      maxWidth: 80,
     },
     gridAnalyticsRow: {
       flexDirection: 'row',
@@ -2836,6 +3194,24 @@ const getStyles = (isDarkMode, c) => {
     },
 
 
+    // Counter mode: one primary action in place of Create / Log / Share.
+    counterSendRow: {
+      paddingHorizontal: 16,
+    },
+    counterSendButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 14,
+      backgroundColor: config.colors.primary,
+    },
+    counterSendText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
     createtrade: {
       alignSelf: 'center',
       justifyContent: 'center',

@@ -33,8 +33,11 @@ import ScamSafetyBox from './Scamwarning';
 import { useNavigation } from '@react-navigation/native';
 import config from '../../Helper/Environment';
 import { getCachedProfile } from '../../Helper/profileCache';
-import { sourceStatement, sourceOfItems } from '../../Helper/valueSources';
+import { sourceStatement, sourceOfItems, formatValue, resolveItemImage } from '../../Helper/valueSources';
 import { capMessageText } from '../ChatHelper';
+import TradeOfferCard from '../../CounterOffer/TradeOfferCard';
+import { adoptMeVariantText } from '../../CounterOffer/counterOffer';
+import { tradeStatus as wflStatus } from '../../Helper/tradeStatus';
 
 // Above this many pets a message switches to the compact two-column grid.
 const COMPACT_FRUITS_THRESHOLD = 9;
@@ -69,6 +72,15 @@ const replyPreviewText = (replyTo, t) => {
 
 const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 'STROLLERS', 'GIFTS', 'STICKERS'];
 
+// Counter offer card glue — the Adopt Me specifics TradeOfferCard takes as props.
+// One combined variant chip per tile ("NFR"), coloured by the value type.
+const offerVariantBadge = (item) => {
+  const label = adoptMeVariantText(item);
+  if (!label) return null;
+  const vt = String(item?.valueType || 'd').toLowerCase();
+  return { label, color: vt === 'n' ? '#2ecc71' : vt === 'm' ? '#9b59b6' : '#3498db' };
+};
+
 // One message bubble plus its date separator. Memoized on simple props: a
 // new message, a read receipt or a keystroke in the input used to re-render
 // every bubble on screen, each with its popup menu and time formatting.
@@ -77,7 +89,7 @@ const NON_PET_TYPES = ['EGGS', 'VEHICLES', 'PET WEAR', 'OTHER', 'TOYS', 'FOOD', 
 // freshly parsed object on every read, which would defeat the memo.
 const PrivateMessageRow = memo(({
   item, isMyMessage, highlighted, receipt, dateLabel, bubbleColor, textColor,
-  isDarkMode, c, styles, fruitColors, canDelete, t, actions,
+  isDarkMode, c, styles, fruitColors, canDelete, t, actions, imgBase,
 }) => {
   // Template messages carry their id in `tpl`, so render the phrase in the
   // READER's language instead of the sender's. Rows written before `tpl`
@@ -103,6 +115,89 @@ const PrivateMessageRow = memo(({
   const totalFruitValue = hasFruits
     ? fruits.reduce((sum, f) => sum + (Number(f?.value) || 0), 0)
     : 0;
+
+  const menuOptions = (
+    <MenuOptions
+      customStyles={{
+        optionsContainer: styles.menuoptions,
+        optionWrapper: styles.menuOption,
+        optionText: styles.menuOptionText,
+      }}
+    >
+      <MenuOption onSelect={() => actions.copy(item)}>
+        <Text style={styles.menuOptionText}>{t('chat.copy')}</Text>
+      </MenuOption>
+      <MenuOption onSelect={() => actions.translate(item)}>
+        <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
+      </MenuOption>
+      <MenuOption onSelect={() => actions.reply(item)}>
+        <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
+      </MenuOption>
+      {/* Delete — admin-only; normal users cannot delete messages (not even their own) */}
+      {canDelete && (
+        <MenuOption onSelect={() => actions.deleteMessage(item)}>
+          <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete')}</Text>
+        </MenuOption>
+      )}
+      {!isMyMessage && (
+        <MenuOption onSelect={() => actions.report(item)}>
+          <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
+        </MenuOption>
+      )}
+    </MenuOptions>
+  );
+
+  // Counter offer: a standalone card instead of a text bubble. `text` holds
+  // the fallback for older app versions, so it is not drawn here. Long-press
+  // keeps the usual menu (copy / reply / report).
+  if (item.tradeOffer) {
+    const offer = item.tradeOffer;
+    return (
+      <>
+        <View style={[offerStyles.wrap, isMyMessage ? offerStyles.mine : offerStyles.theirs, highlighted && offerStyles.highlighted]}>
+          <Menu>
+            <MenuTrigger triggerOnLongPress customStyles={{ triggerTouchable: { activeOpacity: 1 } }}>
+              <TradeOfferCard
+                offer={offer}
+                isMine={isMyMessage}
+                isDarkMode={isDarkMode}
+                primaryColor={config.colors.primary}
+                getImageUrl={(it) => resolveItemImage(it, imgBase)}
+                formatValue={formatValue}
+                statusFn={wflStatus}
+                variantBadges={offerVariantBadge}
+                variantText={adoptMeVariantText}
+                footerText={sourceStatement(offer.valueSource || sourceOfItems([]), t)}
+                onAction={(action) => actions.offerAction(item, action)}
+              />
+            </MenuTrigger>
+            {menuOptions}
+          </Menu>
+          <View style={offerStyles.timeRow}>
+            <Text style={[offerStyles.time, isDarkMode ? offerStyles.timeDark : offerStyles.timeLight]}>
+              {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+            </Text>
+            {receipt && (
+              <Icon
+                name="checkmark-done"
+                size={14}
+                color={receipt === 'read' ? (isDarkMode ? '#7FDBFF' : '#1E88E5') : (isDarkMode ? '#ffffff77' : '#00000044')}
+              />
+            )}
+          </View>
+        </View>
+        {dateLabel !== null && (
+          <View style={offerStyles.dateWrap}>
+            <View style={[offerStyles.datePill, { backgroundColor: c.border }]}>
+              <Text style={[offerStyles.dateText, { color: c.textSecondary }]}>
+                {dateLabel}
+              </Text>
+            </View>
+          </View>
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -335,34 +430,7 @@ const PrivateMessageRow = memo(({
           </MenuTrigger>
 
           {/* existing menu options stay the same */}
-          <MenuOptions
-            customStyles={{
-              optionsContainer: styles.menuoptions,
-              optionWrapper: styles.menuOption,
-              optionText: styles.menuOptionText,
-            }}
-          >
-            <MenuOption onSelect={() => actions.copy(item)}>
-              <Text style={styles.menuOptionText}>{t('chat.copy')}</Text>
-            </MenuOption>
-            <MenuOption onSelect={() => actions.translate(item)}>
-              <Text style={styles.menuOptionText}>{t('chat.translate')}</Text>
-            </MenuOption>
-            <MenuOption onSelect={() => actions.reply(item)}>
-              <Text style={styles.menuOptionText}>{t('chat.reply', { defaultValue: 'Reply' })}</Text>
-            </MenuOption>
-            {/* Delete — admin-only; normal users cannot delete messages (not even their own) */}
-            {canDelete && (
-              <MenuOption onSelect={() => actions.deleteMessage(item)}>
-                <Text style={[styles.menuOptionText, { color: '#EF4444' }]}>{t('chat.delete')}</Text>
-              </MenuOption>
-            )}
-            {!isMyMessage && (
-              <MenuOption onSelect={() => actions.report(item)}>
-                <Text style={styles.menuOptionText}>{t('chat.report')}</Text>
-              </MenuOption>
-            )}
-          </MenuOptions>
+          {menuOptions}
         </Menu>
 
           {/* Timestamp + Read receipts inside bubble — WhatsApp style */}
@@ -425,6 +493,7 @@ const PrivateMessageList = ({
   chatKey, // 👈 Add chatKey to construct messagePath for private messages
   otherLastRead, // 👈 Other user's lastRead timestamp for read receipts
   onTradeInvite, // "Trade in game" line in the safety strip (null when the chat is closed)
+  onOfferAction, // (message, action) => Promise — counter offer status buttons
 }) => {
   const { theme, isAdmin, api, freeTranslation } = useGlobalState();
   const isDarkMode = theme === 'dark';
@@ -600,6 +669,7 @@ const PrivateMessageList = ({
     scrollTo: scrollToMessage,
     openImages: (images, initialIndex) => navigation.navigate('ImageViewerScreenChat', { images, initialIndex }),
     haptic: triggerHapticFeedback,
+    offerAction: (item, action) => (onOfferAction ? onOfferAction(item, action) : undefined),
   };
   const actions = useMemo(() => ({
     copy: (m) => actionsRef.current.copy(m),
@@ -610,6 +680,7 @@ const PrivateMessageList = ({
     scrollTo: (id) => actionsRef.current.scrollTo(id),
     openImages: (images, i) => actionsRef.current.openImages(images, i),
     haptic: (type) => actionsRef.current.haptic(type),
+    offerAction: (m, a) => actionsRef.current.offerAction(m, a),
   }), []);
 
   const showReceipts = localState?.showReadReceipts ?? true;
@@ -653,6 +724,7 @@ const PrivateMessageList = ({
         canDelete={canDelete}
         t={t}
         actions={actions}
+        imgBase={localState?.imgurl || ''}
       />
     );
   };
@@ -704,6 +776,21 @@ const PrivateMessageList = ({
     </View>
   );
 };
+// Counter offer row (the card itself styles in CounterOffer/TradeOfferCard).
+const offerStyles = StyleSheet.create({
+  wrap: { marginBottom: 6, marginHorizontal: 8 },
+  mine: { alignSelf: 'flex-end' },
+  theirs: { alignSelf: 'flex-start' },
+  highlighted: { opacity: 0.7 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 2, gap: 3 },
+  time: { fontSize: 9 },
+  timeDark: { color: '#ffffff77' },
+  timeLight: { color: '#00000055' },
+  dateWrap: { alignItems: 'center', marginVertical: 6 },
+  datePill: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3 },
+  dateText: { fontSize: 11, fontWeight: '600' },
+});
+
 export const fruitStyles = StyleSheet.create({
   fruitsWrapper: {
     marginTop: 1,

@@ -19,6 +19,7 @@
 import { supabase } from './client';
 import { uuidv4 } from './uuid';
 import { uniqueTopic } from './chatBackend';
+import { isTradeOffer } from '../CounterOffer/counterOffer';
 
 const PAGE_SIZE_DEFAULT = 15;
 
@@ -72,6 +73,9 @@ export function fromPrivateMessageRow(row) {
     imageUrl: row.image_url ?? null,
     imageUrls: Array.isArray(row.image_urls) ? row.image_urls : (row.image_urls ?? null),
     fruits: Array.isArray(row.fruits) ? row.fruits : [],
+    // A counter offer stores an OBJECT in `fruits` (CounterOffer/counterOffer.js).
+    // Older builds see `fruits: []` and render only the text fallback.
+    tradeOffer: isTradeOffer(row.fruits) ? row.fruits : null,
     replyTo: row.reply_to ?? null,
     OS: row.os ?? null,
     deleted: !!row.deleted,
@@ -330,6 +334,27 @@ export async function sendPrivateChatMeta({
     p_receiver_avatar: receiverAvatar,
   });
   if (error) throw error;
+}
+
+// Counter offer status change (CounterOffer/counterOffer.js): one UPDATE of
+// the offer message's `fruits` object. Either participant may update a row
+// ("private_messages update by participant", 005), so the receiver can write
+// the sender's message. Compare-and-set on the previous status: when both
+// sides tap at once only the first write lands; false means "someone got
+// there first" and the realtime UPDATE brings the real state.
+// Note: trg_aa_chat_ban (045) fires on UPDATE OF fruits, so a chat-banned user
+// cannot change an offer either.
+export async function updatePrivateMessageOffer(messageId, nextOffer, expectedStatus = null) {
+  if (!messageId || !isTradeOffer(nextOffer)) throw new Error('updatePrivateMessageOffer: messageId + offer required');
+  let q = supabase
+    .from('private_messages')
+    .update({ fruits: nextOffer })
+    .eq('id', messageId)
+    .eq('deleted', false);
+  if (expectedStatus) q = q.eq('fruits->>status', expectedStatus);
+  const { data, error } = await q.select('id');
+  if (error) throw error;
+  return Array.isArray(data) && data.length > 0;
 }
 
 // Soft-delete a single message. UI filters deleted rows out via

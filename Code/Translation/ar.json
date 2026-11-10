@@ -1,4 +1,36 @@
 {
+    "counter_offer": {
+        "counter": "عرض مقابل",
+        "banner_title": "عرض مقابل إلى {{name}}",
+        "banner_cancel": "إلغاء",
+        "send": "إرسال العرض المقابل",
+        "replace_title": "استبدال صفقتك الحالية؟",
+        "replace_body": "سيستبدل العرض المقابل العناصر الموجودة في الحاسبة.",
+        "replace_keep": "الإبقاء على صفقتي",
+        "replace_confirm": "استبدال",
+        "card_title": "عرض مقابل",
+        "you_give": "أنت تعطي",
+        "you_get": "أنت تحصل",
+        "verdict_them": "للطرف الآخر: {{verdict}}",
+        "waiting": "بانتظار الرد…",
+        "accept": "قبول",
+        "decline": "رفض",
+        "cancel_offer": "إلغاء",
+        "mark_completed": "تم التبادل",
+        "didnt_happen": "لم يتم",
+        "status_pending": "قيد الانتظار",
+        "status_trading": "جارٍ التبادل",
+        "status_declined": "مرفوض",
+        "status_cancelled": "ملغى",
+        "status_completed": "مكتمل",
+        "status_failed": "فشل",
+        "preview": "🔁 عرض مقابل",
+        "fallback_text": "🔁 عرض مقابل · أعطي: {{give}} · أريد: {{get}} · حدّث التطبيق للرد",
+        "nothing": "لا شيء",
+        "safe_chat_blocked": "لا يمكن إرسال عروض مقابلة في هذه الدردشة.",
+        "already_changed": "تم تحديث هذا العرض بالفعل.",
+        "update_failed": "تعذّر تحديث العرض. حاول مرة أخرى."
+    },
     "settings": {
         "login_register": "تسجيل الدخول / إنشاء حساب",
         "login_description": "سجّل الدخول لتصلك الإشعارات وتتبادل وتدردش، وأكثر",
@@ -511,6 +543,7 @@
         "lose": "خسارة",
         "updated_prefix": "تم التحديث ",
         "categories": {
+            "recent": "الأخيرة",
             "inventory": "المخزون",
             "my_stuff": "أغراضي",
             "all": "الكل",
@@ -2196,6 +2229,12 @@
         }
     },
     "trending": {
+        "market": "السوق",
+        "values_changed": "قيم تغيّرت",
+        "trades_24h": "صفقات (24 س)",
+        "trades_7d": "صفقات (7 أيام)",
+        "rising": "ترتفع",
+        "falling": "تنخفض",
         "market_overview": "نظرة عامة على السوق",
         "full_analytics": "تحليلات كاملة",
         "hot": "رائج",
@@ -4673,5 +4712,21 @@
         "up_to_date": "الماسح v{{v}} · محدّث",
         "updated": "تم التحديث إلى الماسح v{{v}}",
         "version": "الماسح v{{v}}"
+    },
+    "slot_sheet": {
+        "close": "إغلاق",
+        "value": "القيمة",
+        "details": "التفاصيل",
+        "add_another": "إضافة آخر",
+        "move": "نقل للجهة الأخرى",
+        "remove": "إزالة",
+        "side_full": "هذه الجهة ممتلئة.",
+        "swap_sides": "تبديل الجهتين"
+    },
+    "history_range": {
+        "all": "الكل",
+        "high": "الأعلى",
+        "low": "الأدنى",
+        "change": "التغير"
     }
 }

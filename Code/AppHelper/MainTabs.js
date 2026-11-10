@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, TouchableOpacity, View, Text, Modal, FlatList, StyleSheet } from 'react-native';
 import { setThemedNavBar } from '../Helper/systemNavBar';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
-import HomeScreen from '../Homescreen/HomeScreen';
+import CalculatorTab, { CalcValuesSwitch, CALC_VIEW } from '../Homescreen/CalculatorTab';
+import { subscribeCounterRequest } from '../CounterOffer/counterOffer';
 import ValueScreen from '../ValuesScreen/ValueScreen';
 
 import { ChatStack } from '../ChatScreen/ChatNavigator';
@@ -20,21 +21,7 @@ import { setAppLanguage, loadLanguage } from '../../i18n';
 import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
 import { checkDailyStreak, syncReviewBadges } from '../ChatScreen/GroupChat/badgeUtils';
-import InterstitialAdManager from '../Ads/IntAd';
-import { NATURAL_BREAK } from '../Ads/adPolicy';
 
-// Natural-break interstitial: leaving one tab for another is the standard
-// "between screens" moment. The manager applies every cap (Pro, warm-up,
-// per-session ceiling, 3-minute gap since ANY full-screen ad) and never waits
-// for a fill, so the switch itself is never delayed. Pressing the already
-// active tab (scroll-to-top) and entering Chat are not breaks.
-const tabScreenListeners = ({ navigation, route }) => ({
-  tabPress: () => {
-    if (navigation.isFocused()) return;
-    if (NATURAL_BREAK.EXCLUDED_TABS.includes(route.name)) return;
-    InterstitialAdManager.showAtNaturalBreak(`tab:${route.name}`);
-  },
-});
 const Tab = createBottomTabNavigator();
 
 // Glossy tab icons from scripts/tab-icons/make-icons.mjs: colour when selected, soft grey otherwise.
@@ -197,7 +184,11 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
 
   // ✅ PERF: Memoize all tab children with useCallback to prevent remounting on tab switch
   const renderHome = useCallback(() => <HomeTabScreen selectedTheme={selectedTheme} />, [selectedTheme]);
-  const renderCalculator = useCallback(() => <HomeScreen selectedTheme={selectedTheme} />, [selectedTheme]);
+  // Calculator | Values switch lives in the Calculator tab's header (CalculatorTab.jsx).
+  const [calcView, setCalcView] = useState(CALC_VIEW.CALC);
+  // A feed "Counter" lands on the calculator, never on Values.
+  useEffect(() => subscribeCounterRequest(() => setCalcView(CALC_VIEW.CALC)), []);
+  const renderCalculator = useCallback(() => <CalculatorTab view={calcView} selectedTheme={selectedTheme} />, [calcView, selectedTheme]);
   const renderTrade = useCallback(() => (
     <TradeStack
       selectedTheme={selectedTheme}
@@ -219,7 +210,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
 
   return (
     <>
-      <Tab.Navigator screenOptions={screenOptions} screenListeners={tabScreenListeners}>
+      <Tab.Navigator screenOptions={screenOptions}>
         <Tab.Screen
           name="Home"
           options={({ navigation }) => ({
@@ -234,6 +225,10 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
           name="Calculator"
           options={({ navigation }) => ({
             title: t('tabs.calculator'),
+            headerTitleAlign: 'center',
+            headerTitle: () => (
+              <CalcValuesSwitch value={calcView} onChange={setCalcView} isDarkMode={isDarkMode} accent={config.colors.primary} />
+            ),
             headerRight: () => headerRight(navigation),
           })}
         >

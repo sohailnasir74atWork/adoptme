@@ -31,10 +31,10 @@ no placement, so don't sum both.
 |---|---|---|
 | `trade_post` | interstitial · tradePost | trade posted (HomeScreen) — always shows, outside policy |
 | `feed_post` | interstitial · feedPost | design post or status posted — always shows, outside policy |
-| `review` | interstitial · reviewPost | rating/review saved (PrivateChat) — always shows, outside policy (owner, 2026-11-01). Borrows the trade-post AdMob unit until `andriodReviewInterstitial` / `IOsReviewInterstitial` are set in Environment.js |
+| `review` | interstitial · reviewPost | REMOVED 2026-11-04 (owner, revenue LOG "Ad diet"); no longer prepared or shown. |
 | `group_chat` / `private_chat` / `trader_chat` | interstitial · interstitial | every Nth chat message |
 | `trade_share`, `value_drawer`, `wallpaper_more`, `scammer_search`, `scammer_report` | interstitial · interstitial | those actions |
-| `tab:<Route>`, `pet_runway_finish` | interstitial · interstitial | natural breaks (only counted once past the caps) |
+| `tab:<Route>`, `pet_runway_finish` | interstitial · interstitial | natural breaks (only counted once past the caps); tab switches REMOVED 2026-11-04 (owner, revenue LOG "Ad diet"). |
 | `action` | interstitial · interstitial | unlabelled call sites (ArrowGame) |
 | `trade_feature`, `mystery_egg`, `mystery_egg_free_hatch`, `mini_game`, `reward` | rewarded · rewarded | "watch a video" buttons |
 | `launch` / `return` | app_open · openapp | cold start / foreground return (counted at present only) |

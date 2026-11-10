@@ -1,4 +1,36 @@
 {
+    "counter_offer": {
+        "counter": "Counter",
+        "banner_title": "Counter offer to {{name}}",
+        "banner_cancel": "Cancel",
+        "send": "Send counter offer",
+        "replace_title": "Replace your current trade?",
+        "replace_body": "The counter offer will replace the items in your calculator.",
+        "replace_keep": "Keep mine",
+        "replace_confirm": "Replace",
+        "card_title": "Counter offer",
+        "you_give": "You give",
+        "you_get": "You get",
+        "verdict_them": "Them: {{verdict}}",
+        "waiting": "Waiting…",
+        "accept": "Accept",
+        "decline": "Decline",
+        "cancel_offer": "Cancel",
+        "mark_completed": "Mark completed",
+        "didnt_happen": "Didn't happen",
+        "status_pending": "Pending",
+        "status_trading": "Trading",
+        "status_declined": "Declined",
+        "status_cancelled": "Cancelled",
+        "status_completed": "Completed",
+        "status_failed": "Failed",
+        "preview": "🔁 Counter offer",
+        "fallback_text": "🔁 Counter offer · I give: {{give}} · I want: {{get}} · Update the app to answer",
+        "nothing": "nothing",
+        "safe_chat_blocked": "Counter offers can't be sent in this chat.",
+        "already_changed": "This offer was already updated.",
+        "update_failed": "Couldn't update the offer. Try again."
+    },
     "settings": {
         "login_register": "Login / Register",
         "login_description": "Login to access notification, trading, chat and much more",
@@ -462,6 +494,7 @@
         "lose": "LOSE",
         "updated_prefix": "Updated ",
         "categories": {
+            "recent": "RECENT",
             "inventory": "INVENTORY",
             "my_stuff": "MY STUFF",
             "all": "ALL",
@@ -2044,6 +2077,12 @@
         }
     },
     "trending": {
+        "market": "Market",
+        "values_changed": "Values changed",
+        "trades_24h": "Trades (24h)",
+        "trades_7d": "Trades (7d)",
+        "rising": "Rising",
+        "falling": "Falling",
         "market_overview": "Market Overview",
         "full_analytics": "Full Analytics",
         "hot": "Hot",
@@ -4242,5 +4281,21 @@
         "up_to_date": "Scanner v{{v}} · up to date",
         "updated": "Updated to scanner v{{v}}",
         "version": "Scanner v{{v}}"
+    },
+    "slot_sheet": {
+        "close": "Close",
+        "value": "Value",
+        "details": "Details",
+        "add_another": "Add another",
+        "move": "Move to other side",
+        "remove": "Remove",
+        "side_full": "That side is full.",
+        "swap_sides": "Swap sides"
+    },
+    "history_range": {
+        "all": "All",
+        "high": "High",
+        "low": "Low",
+        "change": "Change"
     }
 }

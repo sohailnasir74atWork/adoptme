@@ -8,7 +8,7 @@ import {
   TouchableOpacity, TextInput,
   Platform,
 } from 'react-native';
-import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { getStyles } from '../Style';
 import PrivateMessageInput from './PrivateMessageInput';
 import PrivateMessageList from './PrivateMessageList';
@@ -24,7 +24,15 @@ import {
   subscribeToPrivateMessages,
   softDeletePrivateMessage,
   newClientMsgId,
+  updatePrivateMessageOffer,
 } from '../../Supabase/privateMessagesBackend';
+import {
+  isTradeOffer,
+  offerFallbackText,
+  canApplyOfferAction,
+  applyOfferAction,
+  notifyCounterSent,
+} from '../../CounterOffer/counterOffer';
 import { useLocalState } from '../../LocalGlobelStats';
 // RTDB imports still needed for trade/post/ban subtrees, /activeChats, and
 // per-user side data — chat metadata + message bodies are now on Supabase.
@@ -35,7 +43,6 @@ import { showMessage } from 'react-native-flash-message';
 import { validateContent } from '../../Helper/ContentModeration';
 import BannerAdComponent from '../../Ads/bannerAds';
 import TranslateTip from '../TranslateTip';
-import PostAdManager from '../../Ads/PostAd';
 import config from '../../Helper/Environment';
 import { serverNowMs } from '../../Helper/serverTime';
 import ConditionalKeyboardWrapper from '../../Helper/keyboardAvoidingContainer';
@@ -140,10 +147,6 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
   const [canRate, setCanRate] = useState(false);
   const [hasRated, setHasRated] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
-  // Warm the review ad while the user writes, so it is ready on submit.
-  useEffect(() => {
-    if (showRatingModal) PostAdManager.prepare('review');
-  }, [showRatingModal]);
   const [rating, setRating] = useState(0);
   const [petModalVisible, setPetModalVisible] = useState(false);
   const [selectedFruits, setSelectedFruits] = useState([]);
@@ -463,9 +466,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       }
       setStartRating(false);
 
-      // ✅ Review ad: always shown after a saved rating/review, like a posted
-      // trade (PostAd.js; it skips Pro users itself).
-      PostAdManager.show('review');
+      // No ad after a rating/review (owner decision 2026-11-04, revenue LOG "Ad diet").
 
     } catch (error) {
       console.error("Rating error:", error);
@@ -718,7 +719,12 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
 
   // ✅ Memoize sendMessage
-  const sendMessage = useCallback(async (text, image, fruits, replyToMsg, tpl = null) => {
+  // `offer` (6th arg): a trade_offer payload from the calculator's counter
+  // flow (CounterOffer/counterOffer.js). It travels in `fruits` as an object,
+  // with a readable `text` fallback for app versions that predate it.
+  // Resolves true once the message is stored.
+  const sendMessage = useCallback(async (text, image, fruits, replyToMsg, tpl = null, offer = null) => {
+    const isOffer = isTradeOffer(offer);
     // Server-side guard for the availability switches. The input is already
     // disabled when this door is off, so this only catches a stale screen —
     // e.g. they switched it off while this chat was sitting open.
@@ -740,7 +746,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
       return;
     }
 
-    const trimmedText = (text || '').trim(); // safe guard
+    const trimmedText = isOffer ? offerFallbackText(offer, t) : (text || '').trim(); // safe guard
     // Handle both single image (string) and multiple images (array)
     const hasImage = !!image && (typeof image === 'string' || (Array.isArray(image) && image.length > 0));
     const hasFruits = Array.isArray(fruits) && fruits.length > 0;
@@ -752,7 +758,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     }
 
     // Block only if there's no text, no image AND no fruits
-    if (!trimmedText && !hasImage && !hasFruits) {
+    if (!trimmedText && !hasImage && !hasFruits && !isOffer) {
       showErrorMessage(t("home.alert.error"), t("chat.cannot_empty"));
       return;
     }
@@ -764,6 +770,15 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // The Postgres trigger rejects it regardless; failing here just turns a
     // confusing server error into a clear message.
     if (isSafeChat) {
+      // An offer's item names and text are not vetted templates, so it never
+      // goes into a safe chat (the trigger would reject the text anyway).
+      if (isOffer) {
+        showErrorMessage(
+          t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
+          t('counter_offer.safe_chat_blocked', { defaultValue: "Counter offers can't be sent in this chat." })
+        );
+        return;
+      }
       if (hasImage) {
         showErrorMessage(
           t('chat.safe_mode_title', { defaultValue: 'Safe Chat' }),
@@ -838,7 +853,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // ✅ Content filter backstop (kid-safety) — profanity/abuse/NSFW words.
     // Input box already validates; this guards any other send path. Admins and
     // full moderators (not baby mods) bypass. Links handled at input layer.
-    if (trimmedText) {
+    // An offer's text is built from catalogue names, not typed.
+    if (trimmedText && !isOffer) {
       const canBypassModeration = !!isAdmin || (!!user?.isModerator && !user?.isBabyMod);
       const validation = validateContent(trimmedText, { skipLinkCheck: true, skipAll: canBypassModeration });
       if (!validation.isValid) {
@@ -859,7 +875,8 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     // Currently, blocked users can still send messages (they're just filtered on receiver's side)
     // See BLOCK_FUNCTIONALITY_ANALYSIS.md for details and recommended solution
 
-    setInput(''); // clear input, image & fruits already cleared in PrivateMessageInput
+    // An offer arrives from the calculator; whatever is typed in the box stays.
+    if (!isOffer) setInput(''); // clear input, image & fruits already cleared in PrivateMessageInput
 
     const timestamp = Date.now();
     const chatId = [myUserId, selectedUserId].sort().join('_');
@@ -890,8 +907,9 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
     // What to show as last message in the inbox row.
     const imageCount = Array.isArray(image) ? image.length : (image ? 1 : 0);
-    const lastMessagePreview =
-      (tpl === GAME_ID_TEMPLATE_ID
+    const lastMessagePreview = isOffer
+      ? t('counter_offer.preview', { defaultValue: '🔁 Counter offer' })
+      : (tpl === GAME_ID_TEMPLATE_ID
         ? t('chat.message_preview_game_id', {
           name: trimmedText,
           defaultValue: 'Game ID: {{name}}',
@@ -918,10 +936,12 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
         text: trimmedText || null,
         imageUrl,
         imageUrls,
-        fruits: hasFruits ? fruits : [],
+        fruits: isOffer ? offer : (hasFruits ? fruits : []),
         replyTo: replyToPayload,
         OS: Platform.OS,
-        clientMsgId: newClientMsgId(),
+        // The offer id doubles as the idempotency key, so a retried send of the
+        // same counter offer can never post it twice.
+        clientMsgId: isOffer ? offer.id : newClientMsgId(),
         // Stamp the door so the server can enforce the recipient's chat
         // availability without trusting this client to have done it.
         origin: chatType,
@@ -960,6 +980,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
 
       // 🔥 Update streak (fire-and-forget, non-blocking)
       updateStreak(firestoreDB, myUserId, selectedUserId).catch(() => { });
+      return true;
     } catch (error) {
       // The DB trigger rejects sends through a door the recipient has closed.
       // We only get here if they flipped the switch after this screen loaded —
@@ -1011,6 +1032,52 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
     const tpl = TEMPLATE_BY_ID[TRADE_SERVER_TEMPLATE_ID];
     return sendMessage(tpl.en, null, [], null, tpl.id);
   }, [sendMessage]);
+
+  // ── Counter offer (CounterOffer/counterOffer.js) ─────────────────────────
+  // The calculator opens this chat with route.params.pendingOffer. Sent once,
+  // after the partner's availability has loaded (that read also carries the
+  // safe-chat flag), so a closed door or a safe chat is caught before sending.
+  const navigation = useNavigation();
+  const pendingOffer = route?.params?.pendingOffer;
+  const sentOfferIdsRef = useRef(new Set());
+  useEffect(() => {
+    if (!isTradeOffer(pendingOffer) || !myUserId || !selectedUserId) return;
+    if (theirAvailability === null) return;
+    if (sentOfferIdsRef.current.has(pendingOffer.id)) return;
+    sentOfferIdsRef.current.add(pendingOffer.id);
+    navigation.setParams({ pendingOffer: undefined });
+    sendMessage(null, null, [], null, null, pendingOffer).then((ok) => {
+      if (ok) notifyCounterSent(pendingOffer.id);
+    });
+  }, [pendingOffer, myUserId, selectedUserId, theirAvailability, sendMessage, navigation]);
+
+  // Accept / Decline / Cancel / Mark completed / Didn't happen: one UPDATE of
+  // the offer message, compare-and-set on the status it had on screen.
+  const handleOfferAction = useCallback(async (message, action) => {
+    const offer = message?.tradeOffer;
+    if (!offer || !message?.id || !myUserId) return;
+    const viewerIsSender = message.senderId === myUserId;
+    if (!canApplyOfferAction(offer, action, viewerIsSender)) return;
+    if (isMeBanned) {
+      showErrorMessage(t('chat.access_denied', { defaultValue: 'Access Denied' }), t('chat.banned_message', { defaultValue: 'You are banned.' }));
+      return;
+    }
+    const next = applyOfferAction(offer, action, myUserId);
+    try {
+      const ok = await updatePrivateMessageOffer(message.id, next, offer.status);
+      if (!ok) {
+        showErrorMessage(t('home.alert.error'), t('counter_offer.already_changed', { defaultValue: 'This offer was already updated.' }));
+        return;
+      }
+      // Realtime echoes the same row; painting it now keeps the tap snappy.
+      setMessages((prev) => (Array.isArray(prev)
+        ? prev.map((m) => (String(m?.id) === String(message.id) ? { ...m, tradeOffer: next } : m))
+        : prev));
+    } catch (error) {
+      console.warn('[PrivateChat] offer update failed:', error?.message);
+      showErrorMessage(t('home.alert.error'), t('counter_offer.update_failed', { defaultValue: "Couldn't update the offer. Try again." }));
+    }
+  }, [myUserId, isMeBanned, t]);
 
 
 
@@ -1336,6 +1403,7 @@ const PrivateChatScreen = ({ route, bannedUsers, isDrawerVisible, setIsDrawerVis
                 chatKey={chatKey}
                 otherLastRead={otherLastRead}
                 onTradeInvite={isChatUnavailable ? null : sendTradeInvite}
+                onOfferAction={handleOfferAction}
               />
             )}
 

@@ -38,6 +38,24 @@ const isPetType = (type) => ['PETS', 'PET'].includes(String(type || '').toUpperC
 
 // The feed stores this as a double-encoded string ('"true"'), so a plain
 // truthiness check passes for '"false"' too.
+// Chart ranges (2026-11-05, features LOG batch 3). Points are dated
+// 'YYYY-MM-DD'; a range keeps the points on/after its cutoff plus the one just
+// before it, so the line starts at the value the range opened with.
+const RANGES = [
+  { key: '1m', days: 30, label: '1M' },
+  { key: '3m', days: 91, label: '3M' },
+  { key: '1y', days: 365, label: '1Y' },
+  { key: 'all', days: null, label: null },
+];
+
+const pointsInRange = (points, days) => {
+  if (!days || points.length < 2) return points;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const first = points.findIndex((p) => String(p.date) >= cutoff);
+  if (first === -1) return points.slice(-2);
+  return points.slice(Math.max(0, first - 1));
+};
+
 const hasFlyRide = (item) =>
   String(item?.['fly&ride?'] ?? '').replace(/"/g, '').toLowerCase() === 'true';
 
@@ -103,20 +121,26 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
     fetchHistory();
   }, [fetchHistory]);
 
+  const [rangeKey, setRangeKey] = useState('all');
+  const activeRange = RANGES.find((r) => r.key === rangeKey) || RANGES[RANGES.length - 1];
+  const rangePoints = useMemo(() => pointsInRange(state.points, activeRange.days), [state.points, activeRange]);
   const activeSpec = SERIES.find((s) => s.key === seriesKey) || SERIES[0];
   const chartWidth = Math.min(screenWidth, 560) - 32 - 24; // screen − sheet margin − card padding
 
   const stats = useMemo(() => {
-    const pts = state.points;
+    const pts = rangePoints;
     if (!pts.length) return null;
     const values = pts.map((p) => p.value);
+    const current = (liveValues ? getCurrentValueFor(item, seriesKey) : null) ?? values[values.length - 1];
+    const start = values[0];
     return {
       high: Math.max(...values),
       low: Math.min(...values),
-      current: (liveValues ? getCurrentValueFor(item, seriesKey) : null) ?? values[values.length - 1],
-      count: pts.length,
+      current,
+      change: start > 0 && pts.length > 1 ? ((values[values.length - 1] - start) / start) * 100 : null,
+      count: state.points.length,
     };
-  }, [state.points, item, seriesKey, liveValues]);
+  }, [rangePoints, state.points.length, item, seriesKey, liveValues]);
 
   const renderBody = () => {
     if (state.status === 'loading') {
@@ -130,7 +154,7 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
     if (state.status === 'ok') {
       return (
         <ValueHistoryChart
-          points={state.points}
+          points={rangePoints}
           color={activeSpec.color}
           isDarkMode={isDarkMode}
           width={chartWidth}
@@ -231,10 +255,46 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
 
             {state.status === 'ok' && stats && (
               <>
+                <View style={styles.rangeRow}>
+                  {RANGES.map((r) => {
+                    const on = r.key === rangeKey;
+                    return (
+                      <TouchableOpacity
+                        key={r.key}
+                        style={[styles.rangeBtn, on && styles.rangeBtnActive]}
+                        onPress={() => setRangeKey(r.key)}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                      >
+                        <Text style={[styles.rangeText, on && styles.rangeTextActive]}>
+                          {r.label || t('history_range.all', { defaultValue: 'All' })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
                 <View style={styles.statsRow}>
-                  <Stat label={t('value.history.stat_high', { defaultValue: 'All-time high' })} value={formatValue(stats.high)} styles={styles} />
-                  <Stat label={t('value.history.stat_low', { defaultValue: 'All-time low' })} value={formatValue(stats.low)} styles={styles} />
-                  <Stat label={t('value.history.stat_current', { defaultValue: 'Current' })} value={formatValue(stats.current)} styles={styles} />
+                  <Stat
+                    label={rangeKey === 'all' ? t('value.history.stat_high', { defaultValue: 'All-time high' }) : t('history_range.high', { defaultValue: 'High' })}
+                    value={formatValue(stats.high)}
+                    styles={styles}
+                  />
+                  <Stat
+                    label={rangeKey === 'all' ? t('value.history.stat_low', { defaultValue: 'All-time low' }) : t('history_range.low', { defaultValue: 'Low' })}
+                    value={formatValue(stats.low)}
+                    styles={styles}
+                  />
+                  {rangeKey === 'all' || stats.change == null ? (
+                    <Stat label={t('value.history.stat_current', { defaultValue: 'Current' })} value={formatValue(stats.current)} styles={styles} />
+                  ) : (
+                    <Stat
+                      label={t('history_range.change', { defaultValue: 'Change' })}
+                      value={`${stats.change > 0 ? '+' : ''}${Math.round(stats.change * 10) / 10}%`}
+                      valueStyle={stats.change > 0 ? styles.up : stats.change < 0 ? styles.down : null}
+                      styles={styles}
+                    />
+                  )}
                 </View>
                 <Text style={styles.footnote}>
                   {t('value.history.recorded_prices', { count: stats.count })}
@@ -249,10 +309,10 @@ const ValueHistoryModal = ({ visible, item, imageUrl, isDarkMode, onClose, liveV
   );
 };
 
-const Stat = ({ label, value, styles }) => (
+const Stat = ({ label, value, styles, valueStyle }) => (
   <View style={styles.statBox}>
     <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
-    <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+    <Text style={[styles.statValue, valueStyle]} numberOfLines={1}>{value}</Text>
   </View>
 );
 
@@ -387,6 +447,31 @@ const getStyles = (c) =>
       fontWeight: '700',
       color: c.text,
     },
+    rangeRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 12,
+    },
+    rangeBtn: {
+      flex: 1,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: c.bgAlt,
+      alignItems: 'center',
+    },
+    rangeBtnActive: {
+      backgroundColor: c.textSecondary,
+    },
+    rangeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.textSecondary,
+    },
+    rangeTextActive: {
+      color: c.bgElevated,
+    },
+    up: { color: '#16a34a' },
+    down: { color: '#dc2626' },
     statsRow: {
       flexDirection: 'row',
       gap: 8,
