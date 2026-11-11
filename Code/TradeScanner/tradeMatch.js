@@ -23,12 +23,52 @@ export const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]
 
 const center = (b) => (b.x0 + b.x1) / 2;
 
+// The label between the two offers of the trade window, in the game's
+// language (2026-11-11: Spanish "INTERCAMBIAR" put the other player's pets on
+// the user's side, report 9db03754; Russian "ТОРГОВЛЯ"). Word edges by letter,
+// since \b only knows Latin letters.
+const WORDS = 'trade|intercambiar|intercambio|торговля';
+const TRADE_ONLY = new RegExp(`^\\s*(${WORDS})\\s*$`, 'iu');
+const TRADE_WORD = new RegExp(`(^|[^\\p{L}])(${WORDS})(?=$|[^\\p{L}])`, 'iu');
+const tradeLabel = (lines) => lines.find((l) => TRADE_ONLY.test(l.text)) || lines.find((l) => TRADE_WORD.test(l.text));
+
+/**
+ * Two headings side by side just above the grids, one over each offer, in any
+ * language: "You Give" / "They Give" (Search), "Tú das" / "A cambio de"
+ * (Spanish Offers), "Du" / "Ich erhalte:" (German Offers). Each sits over the
+ * left edge of its offer, so the other offer starts at the right one
+ * (2026-11-11: reports 3336e040, e7f35d18, 31245b17 put a whole offer on the
+ * wrong side). The pair nearest the tiles wins over window titles higher up.
+ * The right heading must line up with the left edge of a tile: player names
+ * over a trade window are centred, and our own Calculator overlay is text
+ * beside the window (reports 3f64f2b3, c87f9aa0).
+ */
+function headingsDivider(tiles, lines) {
+  if (!tiles.length) return undefined;
+  const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);
+  const size = sides[Math.floor(sides.length / 2)];
+  const top = Math.min(...tiles.map((t) => t.y0));
+  const cy = (l) => l.y + l.h / 2;
+  const heads = lines.filter((l) => /\p{L}.*\p{L}/u.test(l.text) && cy(l) < top && cy(l) > top - size * 2.5);
+  let best;
+  for (const a of heads) {
+    for (const b of heads) {
+      if (b.x - a.x < size * 1.5 || Math.abs(cy(a) - cy(b)) > size * 0.6) continue;
+      if (!tiles.some((t) => Math.abs(t.x0 - b.x) < size * 0.5)) continue;
+      const y = (cy(a) + cy(b)) / 2;
+      if (!best || y > best.y) best = { y, right: b };
+    }
+  }
+  return best ? best.right.x - size * 0.3 : undefined;
+}
+
 /**
  * x position that separates the two offers: the "TRADE" label between the
- * grids, else the widest gap between tile columns, else the picture's middle.
+ * grids, else "Them" or the two offer headings, else the widest gap between
+ * tile columns, else everything is the user's.
  */
 export function sideDivider(tiles, lines, width) {
-  const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
+  const label = tradeLabel(lines);
   if (label) return label.x + label.w / 2;
   // My Listings / Offers / trade history: "You" and "Them" sit over the
   // left edge of each offer, so the other offer starts at "Them" — even when
@@ -39,6 +79,8 @@ export function sideDivider(tiles, lines, width) {
     const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);
     return them.x - sides[Math.floor(sides.length / 2)] * 0.3;
   }
+  const byHeadings = headingsDivider(tiles, lines);
+  if (byHeadings !== undefined) return byHeadings;
   const xs = [...new Set(tiles.map((t) => Math.round(center(t))))].sort((a, b) => a - b);
   if (xs.length > 1) {
     const side = tiles.reduce((acc, t) => acc + (t.x1 - t.x0), 0) / tiles.length;
@@ -65,7 +107,7 @@ export function buildTrade({ tiles: allTiles, lines = [], width, catalog }) {
   // The window says TRADE between the two offers. Without it (the backpack,
   // one offer, a value list) the tiles are not dropped: sideDivider splits two
   // separate grids on their gap, and one block goes to the user's side.
-  const label = lines.find((l) => /^\s*trade\s*$/i.test(l.text)) || lines.find((l) => /\btrade\b/i.test(l.text));
+  const label = tradeLabel(lines);
   if (label && tiles.length) {
     // Only the two grids beside the label count.
     const sides = tiles.map((t) => t.x1 - t.x0).sort((a, b) => a - b);

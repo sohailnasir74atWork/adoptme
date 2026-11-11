@@ -274,6 +274,34 @@ describe('buildTrade', () => {
     expect(both.mine.map((p) => p.name)).toEqual(['Frost Dragon']);
   });
 
+  it('splits on the two offer headings in any language (reports 3336e040, 31245b17, e7f35d18)', () => {
+    const tiles = [t(560, [{ name: 'Turtle', d: 0.02 }]), t(670, [{ name: 'Kitsune', d: 0.02 }])];
+    const head = (text, x) => ({ text, x, y: -40, w: 120, h: 24 });
+    // Search with an empty "You Give": their pets are theirs, not the user's.
+    const search = buildTrade({ tiles, lines: [head('You Give', 30), head('They Give', 550)], width: 1000, catalog });
+    expect(search.mine).toEqual([]);
+    expect(search.theirs.map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
+    // German Offers, both offers filled; a window title higher up is ignored.
+    const lines = [{ text: 'ANGEBOTE', x: 0, y: -200, w: 300, h: 40 }, { text: 'EINTRAG 1:1/2', x: 500, y: -190, w: 200, h: 30 }, head('Du', 25), head('Ich erhalte:', 555)];
+    const de = buildTrade({ tiles: [t(20, [{ name: 'Frost Dragon', d: 0.02 }]), ...tiles], lines, width: 1000, catalog });
+    expect(de.mine.map((p) => p.name)).toEqual(['Frost Dragon']);
+    expect(de.theirs.map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
+  });
+
+  it('a heading not over a tile edge does not split (centred player names, our Calculator overlay)', () => {
+    const tiles = [t(20, []), t(130, [])];
+    const lines = [{ text: 'milka673419', x: 40, y: -40, w: 150, h: 24 }, { text: 'Калькулятор', x: 700, y: -40, w: 150, h: 24 }];
+    expect(sideDivider(tiles, lines, 1000)).toBe(Infinity);
+  });
+
+  it('reads the trade label in Spanish and Russian (report 9db03754)', () => {
+    const tiles = [t(560, [{ name: 'Turtle', d: 0.02 }]), t(670, [{ name: 'Kitsune', d: 0.02 }])];
+    for (const text of ['INTERCAMBIAR', 'ТОРГОВЛЯ', 'ЭТО СПРАВЕДЛИВАЯ ТОРГОВЛЯ?']) {
+      const trade = buildTrade({ tiles, lines: [{ text, x: 420, y: 60, w: 100, h: 30 }], width: 1000, catalog });
+      expect(trade.theirs.map((p) => p.name)).toEqual(['Turtle', 'Kitsune']);
+    }
+  });
+
   it('without the label, splits on the gap between the two grids', () => {
     const tiles = [t(20, []), t(130, []), t(600, [])];
     expect(sideDivider(tiles, [], 2000)).toBeGreaterThan(230);
