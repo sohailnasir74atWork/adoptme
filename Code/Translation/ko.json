@@ -4283,18 +4283,30 @@
     "update": "업데이트",
     "up_to_date": "스캐너 v{{v}} · 최신 버전",
     "updated": "스캐너 v{{v}}(으)로 업데이트됨",
-    "version": "스캐너 v{{v}}"
+    "version": "스캐너 v{{v}}",
+    "share": "공유",
+    "share_result": "결과 공유",
+    "share_message": "이거 W야? {{app}} 트레이드 스캐너로 확인했어: {{url}}",
+    "card_kicker": "트레이드 체크",
+    "card_from_photo": "사진에서 스캔함",
+    "card_from_screenshot": "스크린샷에서 스캔함",
+    "card_get_for": "{{give}} 주고 {{get}} 받기",
+    "card_total": "합계",
+    "card_more": "더 보기",
+    "card_tagline": "무료 트레이드 스캐너: 내 트레이드는 W일까 L일까?",
+    "card_fan": "팬 제작. Roblox 및 Uplift Games와 무관합니다.",
+    "close": "닫기"
   },
-    "slot_sheet": {
-        "close": "닫기",
-        "value": "가치",
-        "details": "상세",
-        "add_another": "하나 더",
-        "move": "반대쪽으로",
-        "remove": "삭제",
-        "side_full": "그쪽이 가득 찼어요.",
-        "swap_sides": "양쪽 바꾸기"
-    },
+  "slot_sheet": {
+    "close": "닫기",
+    "value": "가치",
+    "details": "상세",
+    "add_another": "하나 더",
+    "move": "반대쪽으로",
+    "remove": "삭제",
+    "side_full": "그쪽이 가득 찼어요.",
+    "swap_sides": "양쪽 바꾸기"
+  },
   "history_range": {
     "all": "전체",
     "high": "최고",
