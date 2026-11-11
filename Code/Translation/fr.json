@@ -1339,6 +1339,10 @@
         "translate_tip_tap": "Astuce : touche un message pour le traduire."
     },
     "first": {
+        "values_title": "Découvre la valeur de chaque pet",
+        "values_sub": "Des valeurs réelles pour pets, œufs et plus.",
+        "trade_title": "Publie tes échanges, trouve des matchs",
+        "trade_sub": "Connecte-toi pour échanger et discuter.",
         "continue_guest": "Continuer en invité",
         "utility_note": "Compare les valeurs des objets et vérifie tes échanges. Cette appli ne donne aucun objet dans le jeu.",
         "welcome_to": "Bienvenue sur {{app}}",
@@ -2266,6 +2270,13 @@
         "per_day_short": "{{value}}/jour"
     },
     "paywall": {
+        "trial_title": "Essaie Pro gratuitement pendant {{trial}}",
+        "sample_name": "Alex",
+        "on_top": "En tête",
+        "short_noads": "Sans pub",
+        "short_boost": "2 boosts par jour",
+        "short_badge": "Badge doré",
+        "boost_caption": "Pro place tes échanges en tête du fil.",
         "exit_badge": "OFFRE UNIQUE",
         "exit_title": "Attends ! -{{percent}} %, juste cette fois",
         "exit_subtitle": "Ce prix n'apparaît qu'une seule fois. Si tu fermes, il disparaît.",

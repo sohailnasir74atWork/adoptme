@@ -1320,6 +1320,10 @@
         "translate_tip_tap": "Tip: tap any message to translate it."
     },
     "first": {
+        "values_title": "Know what every pet is worth",
+        "values_sub": "Real values for pets, eggs and more.",
+        "trade_title": "Post trades, find matches",
+        "trade_sub": "Sign in to trade and chat with other traders.",
         "continue_guest": "Continue as Guest",
         "utility_note": "Compare item values and check trades. This companion app does not grant in-game items.",
         "welcome_to": "Welcome to {{app}}",
@@ -2227,6 +2231,13 @@
         "per_day_short": "{{value}}/day"
     },
     "paywall": {
+        "trial_title": "Try Pro free for {{trial}}",
+        "sample_name": "Alex",
+        "on_top": "On top",
+        "short_noads": "No ads",
+        "short_boost": "2 boosts a day",
+        "short_badge": "Gold badge",
+        "boost_caption": "Pro puts your trades at the top of the feed.",
         "exit_badge": "ONE-TIME OFFER",
         "exit_title": "Wait! {{percent}}% off, just this once",
         "exit_subtitle": "This price is only shown once. Close it and it's gone.",

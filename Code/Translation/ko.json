@@ -1319,6 +1319,10 @@
     "translate_tip_tap": "팁: 메시지를 누르면 번역할 수 있어요."
   },
   "first": {
+    "values_title": "모든 펫의 가치를 알아보세요",
+    "values_sub": "펫, 알 등의 실제 가치.",
+    "trade_title": "거래를 올리고 상대를 찾아보세요",
+    "trade_sub": "로그인하고 다른 트레이더와 거래하고 채팅하세요.",
     "continue_guest": "게스트로 둘러보기",
     "utility_note": "아이템 가치를 비교하고 거래를 확인하는 앱이에요. 이 앱에서 게임 아이템을 받을 수는 없어요.",
     "welcome_to": "{{app}}에 온 걸 환영해요",
@@ -2225,6 +2229,13 @@
     "per_day_short": "하루 {{value}}개"
   },
   "paywall": {
+    "trial_title": "Pro {{trial}} 무료 체험",
+    "sample_name": "Alex",
+    "on_top": "맨 위",
+    "short_noads": "광고 없음",
+    "short_boost": "하루 2회 부스트",
+    "short_badge": "골드 배지",
+    "boost_caption": "Pro는 내 거래를 피드 맨 위에 올려줘요.",
     "exit_badge": "1회 한정 혜택",
     "exit_title": "잠깐! 이번 한 번만 {{percent}}% 할인",
     "exit_subtitle": "이 가격은 한 번만 표시돼요. 닫으면 사라져요.",

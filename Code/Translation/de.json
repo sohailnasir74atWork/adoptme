@@ -1312,6 +1312,10 @@
         "translate_tip_tap": "Tipp: Tippe auf eine Nachricht, um sie zu übersetzen."
     },
     "first": {
+        "values_title": "Wisse, was jedes Pet wert ist",
+        "values_sub": "Echte Werte für Pets, Eier und mehr.",
+        "trade_title": "Trades posten, Matches finden",
+        "trade_sub": "Melde dich an, um zu traden und zu chatten.",
         "continue_guest": "Als Gast weiter",
         "utility_note": "Vergleiche Item-Werte und checke Trades. Diese Begleit-App gibt dir keine Items im Spiel.",
         "welcome_to": "Willkommen bei {{app}}",
@@ -2218,6 +2222,13 @@
         "per_day_short": "{{value}}/Tag"
     },
     "paywall": {
+        "trial_title": "Teste Pro {{trial}} gratis",
+        "sample_name": "Alex",
+        "on_top": "Ganz oben",
+        "short_noads": "Keine Werbung",
+        "short_boost": "2 Boosts pro Tag",
+        "short_badge": "Gold-Abzeichen",
+        "boost_caption": "Mit Pro stehen deine Trades ganz oben im Feed.",
         "exit_badge": "EINMALIGES ANGEBOT",
         "exit_title": "Warte! {{percent}} % Rabatt – nur dieses eine Mal",
         "exit_subtitle": "Dieser Preis wird nur einmal angezeigt. Schließt du ihn, ist er weg.",

@@ -1,10 +1,14 @@
 // OfferWall.jsx — Adopt Me Values Pro
 //
-// Who buys this: kids, usually with a parent looking over their shoulder. So
-// the screen has exactly three jobs, in this order —
-//   1. say what you get, in words a ten-year-old reads once,
-//   2. show all three prices side by side so nothing is hidden,
-//   3. make the yearly plan's 58% discount impossible to miss.
+// Who buys this: kids, usually with a parent looking over their shoulder. The
+// screen says one thing at a time, top to bottom (layout the owner approved on
+// the MM2 build, 2026-11-10; the three apps share it):
+//   1. the title — the free trial when this person can have one,
+//   2. one picture of the boost: their own trade card, Pro badge, "on top",
+//   3. one line of benefits,
+//   4. the plans side by side, one button, one line saying what is charged.
+// No benefit list, no per-month or "you save" lines: each extra line made the
+// wall read as rushed.
 //
 // The catalog (2026-11-10): 'pro_full' = $9.99 / month · $19.99 / 3 months ·
 // $49.99 / year, with a 3-day free trial for new subscribers; 'pro_offer' = the
@@ -19,17 +23,16 @@
 // See proOfferings.js. Callers still pass `showoffer` and `oneWallOnly`; both
 // are ignored.
 //
-// It LOOKS LIKE ONBOARDING, on purpose. The first-run flow is welcome → sign
-// in → this wall, and the old dark "game shop" at step three read as leaving
-// the app. So it follows the app theme on onboarding's own background, shows
-// the same logo, and its button is onboarding's Continue button: same colour
-// (config.colors.hasBlockGreen), same corners, same word. The MM2 and Blox
-// Fruit walls are this same screen in their own brand colour.
+// It LOOKS LIKE ONBOARDING, on purpose: it is the third of the three first-run
+// steps (OnBoardingScreen.js), on onboarding's own background, with the same
+// logo, progress bar and trade card (onboardingKit.js), and its button is
+// onboarding's Continue button: same colour (config.colors.hasBlockGreen),
+// same corners, same word.
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, Modal, TouchableOpacity, Image,
   StyleSheet, StatusBar, Platform, ActivityIndicator,
-  Dimensions, Linking, Animated, Easing, ScrollView, Alert,
+  Dimensions, Linking, Animated, Easing, ScrollView, Alert, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient as SvgRadial, Stop, Rect, Circle } from 'react-native-svg';
@@ -46,18 +49,21 @@ import {
   loadWallOfferings, fullWallPackages, exitWallPackages, isNewPricing,
   trialEligibility, matchByPeriod, EXIT_OFFER_SHOWN_KEY, EXIT_OFFER_TRIGGER,
 } from './proOfferings';
+import {
+  unitFor, isCompact, FONT_CAP, MAX_COLUMN, ProgressBar, TradeCard, MY_TRADE_ITEMS, OTHER_TRADES,
+} from '../AppHelper/onboardingKit';
 
 const { width, height } = Dimensions.get('window');
-const SMALL = height < 700;
 
 // The logo onboarding shows (OnBoardingScreen.js picks it the same way).
 const LOGO = config.isNoman ? require('../../assets/splashscreen.webp') : require('../../assets/logo.webp');
+const PRO_BADGE = require('../../assets/pro.png');
 
 // Seconds before the × appears. Nothing is shown in its place while it waits;
-// it simply appears. Owner's call (2026-10-12): 8 s on the first-run wall at
-// the end of onboarding (was 7), 5 s everywhere else.
-const CLOSE_DELAY_ONBOARDING = 8;
-const CLOSE_DELAY = 5;
+// it simply appears. Owner's call (2026-11-10): 7 s on the full-price wall
+// wherever it opens (onboarding and in-app), 3 s on the one-time offer.
+const CLOSE_DELAY_ONBOARDING = 7;
+const CLOSE_DELAY = 7;
 // The one-time offer follows a close the person already chose; 3 s is enough
 // to read it without feeling trapped a second time.
 const CLOSE_DELAY_EXIT = 3;
@@ -91,6 +97,7 @@ const makePalette = (isDark) => (isDark
     DOCK_LINE: 'rgba(255,255,255,0.08)',
     FOOTER: 'rgba(255,255,255,0.45)',
     FOOTER_DOT: 'rgba(255,255,255,0.25)',
+    PIN: '#F2C14E',          // the "on top" pin: gold that reads on the dark card
   }
   : {
     BG: '#f2f2f7',          // onboarding's light background
@@ -112,17 +119,19 @@ const makePalette = (isDark) => (isDark
     DOCK_LINE: '#E5E5EA',
     FOOTER: '#8E8E93',
     FOOTER_DOT: '#C7C7CC',
+    PIN: '#946200',
   });
 
 // ── What Pro actually unlocks ──
-// Every line here is a real gate in the code, not a marketing claim:
+// The wall names three things, each a real gate in the code, not a marketing
+// claim:
 //   no ads → BannerAdComponent / InterstitialAdManager skip Pro accounts
 //   boosts → Trades.jsx features 2 trades a day for Pro, 12h each, no video
 //   badge  → assets/pro.png renders beside the name on every trade
 const BENEFITS = [
-  { key: 'noads', icon: 'close-circle', tint: BRAND },
-  { key: 'boost', icon: 'rocket', tint: ACCENT },
-  { key: 'badge', image: require('../../assets/pro.png'), tint: GOLD },
+  { key: 'short_noads', icon: 'close-circle', tint: BRAND },
+  { key: 'short_boost', icon: 'rocket', tint: ACCENT },
+  { key: 'short_badge', image: PRO_BADGE, tint: GOLD },
 ];
 
 // Longest plan first — the best deal should sit under the thumb, on the left,
@@ -142,25 +151,10 @@ const BILLED_KEY = {
   THREE_MONTH: 'billed_3months', SIX_MONTH: 'billed_6months', ANNUAL: 'billed_yearly',
 };
 
-// Rebuild a price string at a different amount, keeping the store's currency
-// symbol and its position (prefix "$4.99" vs suffix "4,99 €").
-const formatMoney = (pkg, amount) => {
-  const currency = pkg?.product?.currencyCode;
-  if (currency) {
-    try {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
-    } catch (e) {
-      // Fall through to the manual formatter below
-    }
-  }
-  const priceString = pkg?.product?.priceString || '';
-  const symbol = priceString.replace(/[\d\s.,]/g, '').trim();
-  const value = amount.toFixed(2);
-  if (!symbol) return value;
-  const firstDigit = priceString.search(/\d/);
-  const symbolIndex = priceString.indexOf(symbol[0]);
-  return (firstDigit !== -1 && symbolIndex > firstDigit) ? `${value} ${symbol}` : `${symbol}${value}`;
-};
+// Play returns a trailing ".00" on every whole price — "Rs 550.00" where the
+// shop itself says "Rs 550". Strip a separator followed by exactly two zeros
+// when no digit follows, so "Rs 1,006.00" keeps its "1,006".
+const trimZeroDecimals = (s) => (typeof s === 'string' ? s.replace(/([.,])00(?!\d)/, '') : s);
 
 // ── Background: onboarding's flat colour, one soft brand glow at the top ──
 const Backdrop = ({ P }) => (
@@ -176,17 +170,22 @@ const Backdrop = ({ P }) => (
   </Svg>
 );
 
+// `progress` ({ step, total }) is passed by onboarding, where this wall is the
+// last of the three first-run steps and carries their progress bar.
 // `trigger` names the exact spot that opened the wall (growthAnalytics.js).
-const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
+const SubscriptionScreen = ({ visible, onClose, track, trigger, inline, progress }) => {
   const insets = useSafeAreaInsets();
   const { packages, purchaseProduct, restorePurchases, localState, updateLocalState } = useLocalState();
-  const { theme } = useGlobalState();
+  const { theme, user } = useGlobalState();
   const { triggerHapticFeedback } = useHaptic();
   const { t } = useTranslation();
 
   const isDark = theme === 'dark';
   const P = useMemo(() => makePalette(isDark), [isDark]);
-  const s = useMemo(() => makeStyles(P), [P]);
+  const { width: winW, height: winH } = useWindowDimensions();
+  const unit = unitFor(winW);
+  const compact = isCompact(winH);
+  const s = useMemo(() => makeStyles(P, unit, compact), [P, unit, compact]);
 
   // 'full' = the full-price wall; 'exit' = the one-time 50% offer it turns
   // into when closed unbought (once per install).
@@ -306,11 +305,6 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
     if (!plans.length) return null;
     return plans.reduce((best, p) => (p.savings > best.savings ? p : best), plans[0]).pkg;
   }, [plans]);
-
-  const selectedPlan = useMemo(
-    () => plans.find(p => p.pkg.identifier === selectedPkg?.identifier) || null,
-    [plans, selectedPkg]
-  );
 
   // ── Free trial (pro_full: 3 days, new subscribers only) ──
   // iOS lists the intro offer on every product, eligible or not, so only
@@ -501,13 +495,22 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
     ? t('paywall.exit_cta')
     : (trial ? t('paywall.cta_trial') : t('paywall.cta'));
 
-  // Biggest real % off on the exit offer (the hero promises no more than this).
+  // Biggest real % off on the exit offer (the title promises no more than this).
   const exitPercent = isExit ? Math.max(0, ...plans.map(p => p.savings)) : 0;
+
+  // ── Title: the trial when this person can have one, else the plain pitch ──
+  const titleText = isExit
+    ? (exitPercent > 0 ? t('paywall.exit_title', { percent: exitPercent }) : t('paywall.title'))
+    : (trial ? t('paywall.trial_title', { trial }) : t('paywall.title'));
+
+  // ── The boosted trade: you when signed in, a sample trader when not ──
+  const previewName = (user?.id && user?.displayName) ? user.displayName : t('paywall.sample_name');
+  const previewAvatar = user?.id ? (user?.avatar || null) : null;
 
   // ── And the line under it says exactly what is charged, and when. ──
   const ctaSubtitle = (() => {
     if (!selectedPkg) return null;
-    const price = selectedPkg.product?.priceString;
+    const price = trimZeroDecimals(selectedPkg.product?.priceString);
     if (!price) return null;
     if (selectedPkg.packageType === 'LIFETIME') return t('paywall.cta_sub_lifetime', { price });
     const billedKey = BILLED_KEY[selectedPkg.packageType];
@@ -521,53 +524,84 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
       <StatusBar barStyle={P.STATUS_STYLE} />
       <Backdrop P={P} />
 
-      {/* ══ TOP: what you get ══ */}
+      {/* ══ TOP: one title, one picture of the boost, one line of benefits ══ */}
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={[s.scrollContent, { paddingTop: insets.top + 18 }]}
+        contentContainerStyle={[s.scrollContent, { paddingTop: insets.top + Math.round(14 * unit) }]}
         showsVerticalScrollIndicator={false}
-        bounces
+        bounces={false}
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: riseAnim }] }}>
-          {/* ── Hero: onboarding's logo, so step three still reads as the same app ── */}
-          <View style={s.hero}>
+        {/* Onboarding's progress bar, in the same place as on steps 1 and 2. */}
+        {!!progress && <ProgressBar step={progress.step} total={progress.total} u={unit} isDark={isDark} />}
+
+        {/* Three blocks spread evenly over whatever height the plans leave,
+            so a tall phone has no empty band and a short one no squeeze. */}
+        <Animated.View style={[s.column, s.spread, { opacity: fadeAnim, transform: [{ translateY: riseAnim }] }]}>
+          <View style={s.head}>
             <Image resizeMethod="resize" source={LOGO} style={s.logo} resizeMode="contain" />
             {isExit && (
               <View style={s.exitBadge}>
-                <Text style={s.exitBadgeText}>{t('paywall.exit_badge')}</Text>
+                <Text style={s.exitBadgeText} numberOfLines={1} maxFontSizeMultiplier={FONT_CAP}>{t('paywall.exit_badge')}</Text>
               </View>
             )}
-            <Text style={s.title}>
-              {isExit && exitPercent > 0 ? t('paywall.exit_title', { percent: exitPercent }) : t('paywall.title')}
+            <Text
+              style={s.title}
+              numberOfLines={isExit ? 2 : 1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              maxFontSizeMultiplier={FONT_CAP}
+            >
+              {titleText}
             </Text>
-            <Text style={s.subtitle}>{isExit ? t('paywall.exit_subtitle') : t('paywall.subtitle')}</Text>
+            <Text style={s.subtitle} numberOfLines={2} maxFontSizeMultiplier={FONT_CAP}>
+              {isExit ? t('paywall.exit_subtitle') : t('paywall.boost_caption')}
+            </Text>
           </View>
 
-          {/* ── One card, three promises, no scrolling to find them ── */}
-          <View style={s.card}>
-            {BENEFITS.map((b, i) => (
-              <View key={b.key} style={[s.benefit, i > 0 && s.benefitDivider]}>
+          {/* The feed, with your trade first: the same card onboarding showed
+              third in the list, now on top. */}
+          <View style={s.feed}>
+            <TradeCard
+              u={unit}
+              isDark={isDark}
+              compact={compact}
+              variant="pro"
+              name={previewName}
+              avatar={previewAvatar}
+              items={MY_TRADE_ITEMS}
+              pinLabel={t('paywall.on_top')}
+            />
+            {!compact && (
+              <TradeCard
+                u={unit}
+                isDark={isDark}
+                dense
+                variant="other"
+                name={OTHER_TRADES[0].name}
+                items={OTHER_TRADES[0].items}
+              />
+            )}
+          </View>
+
+          <View style={s.benefits}>
+            {BENEFITS.map((b) => (
+              <View key={b.key} style={s.benefit}>
                 <View style={[s.benefitIcon, { backgroundColor: tint(b.tint, 0.15) }]}>
                   {b.image
                     ? <Image resizeMethod="resize" source={b.image} style={s.benefitBadge} resizeMode="contain" />
-                    : <Icon name={b.icon} size={19} color={b.tint} />}
+                    : <Icon name={b.icon} size={s.benefitBadge.width} color={b.tint} />}
                 </View>
-                <View style={s.benefitText}>
-                  <Text style={s.benefitTitle}>{t(`paywall.${b.key}_title`)}</Text>
-                  <Text style={s.benefitDesc}>{t(`paywall.${b.key}_desc`)}</Text>
-                </View>
+                <Text
+                  style={s.benefitLabel}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  maxFontSizeMultiplier={FONT_CAP}
+                >
+                  {t(`paywall.${b.key}`)}
+                </Text>
               </View>
             ))}
-
-            <View style={s.extrasRow}>
-              <Icon name="add-circle" size={13} color={P.TEXT_MUTE} />
-              <Text style={s.extras} numberOfLines={2}>
-                {[
-                  t('paywall.extra_translate'), t('paywall.extra_wallpaper'),
-                  t('paywall.extra_scam'), t('paywall.extra_stats'),
-                ].join(' · ')}
-              </Text>
-            </View>
           </View>
         </Animated.View>
       </ScrollView>
@@ -587,77 +621,59 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
         </View>
       )}
 
-      {/* ══ BOTTOM: the three offers, side by side, then one button ══ */}
+      {/* ══ BOTTOM: the plans, side by side, then one button ══ */}
       <View style={[s.dock, { paddingBottom: DOCK_PAD + insets.bottom }]}>
+        <View style={s.column}>
         {plans.length > 0 ? (
-          <>
-            <View style={s.tiles}>
-              {plans.map(({ pkg, rate, savings, wasPkg }, i) => {
-                const isSelected = selectedPkg?.identifier === pkg.identifier;
-                const isBest = plans.length > 1 && recommended?.identifier === pkg.identifier;
-                const planKey = PLAN_KEY[pkg.packageType];
-                const showPerMonth = rate != null
-                  && pkg.packageType !== 'MONTHLY'
-                  && pkg.packageType !== 'LIFETIME';
-                return (
-                  <TouchableOpacity
-                    key={pkg.identifier || i}
-                    onPress={() => handleSelect(pkg)}
-                    activeOpacity={0.9}
-                    style={[s.tile, isSelected && s.tileOn]}
+          <View style={s.tiles}>
+            {plans.map(({ pkg, savings, wasPkg }, i) => {
+              const isSelected = selectedPkg?.identifier === pkg.identifier;
+              const planKey = PLAN_KEY[pkg.packageType];
+              return (
+                <TouchableOpacity
+                  key={pkg.identifier || i}
+                  onPress={() => handleSelect(pkg)}
+                  activeOpacity={0.9}
+                  style={[s.tile, isSelected && s.tileOn]}
+                >
+                  <Text
+                    style={[s.tilePlan, isSelected && s.tilePlanOn]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                    maxFontSizeMultiplier={FONT_CAP}
                   >
-                    {savings > 0 && (
-                      <View style={s.saveTag}>
-                        <Text style={s.saveTagText}>{t('paywall.save', { percent: savings })}</Text>
-                      </View>
-                    )}
+                    {planKey ? t(`paywall.${planKey}`) : (pkg.identifier || t('paywall.plan_default'))}
+                  </Text>
 
-                    {isBest && <Text style={s.bestLabel}>{t('paywall.best_deal')}</Text>}
+                  <Text
+                    style={[s.tilePrice, isSelected && s.tilePriceOn]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.6}
+                    maxFontSizeMultiplier={FONT_CAP}
+                  >
+                    {trimZeroDecimals(pkg.product?.priceString) || '—'}
+                  </Text>
 
-                    <Text style={[s.tilePlan, isSelected && s.tilePlanOn]} numberOfLines={1}>
-                      {planKey ? t(`paywall.${planKey}`) : (pkg.identifier || t('paywall.plan_default'))}
-                    </Text>
-
-                    <Text
-                      style={[s.tilePrice, isSelected && s.tilePriceOn]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.6}
-                    >
-                      {pkg.product?.priceString || '—'}
-                    </Text>
-
-                    {/* Reserved line so all three tiles stay the same height. On
-                        the exit offer it carries the real full price, crossed out. */}
-                    <Text
-                      style={[s.tilePerMonth, isSelected && s.tilePerMonthOn, !!wasPkg && s.wasPrice]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
-                    >
-                      {wasPkg
-                        ? wasPkg.product?.priceString
-                        : (showPerMonth ? t('paywall.per_month', { price: formatMoney(pkg, rate) }) : ' ')}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* The saving, said the way a kid repeats it to a parent */}
-            {!!selectedPlan && selectedPlan.savings > 0 && (
-              <View style={s.savingsBar}>
-                <Text style={s.savingsText} numberOfLines={1}>
-                  {t('paywall.you_save', {
-                    amount: formatMoney(selectedPlan.pkg, selectedPlan.saved),
-                  })}
-                  {selectedPlan.freeMonths >= 1
-                    ? '  ·  ' + t('paywall.free_months', { count: selectedPlan.freeMonths })
-                    : ''}
-                </Text>
-              </View>
-            )}
-          </>
+                  {/* One reserved line so all tiles stay the same height: the
+                      real saving, or on the one-time offer the real full
+                      price, crossed out. */}
+                  <Text
+                    style={[s.tileNote, wasPkg ? s.wasPrice : s.tileSave]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                    maxFontSizeMultiplier={FONT_CAP}
+                  >
+                    {wasPkg
+                      ? trimZeroDecimals(wasPkg.product?.priceString)
+                      : (savings > 0 ? t('paywall.save', { percent: savings }) : ' ')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         ) : (
           <View style={s.loadingWrap}>
             <ActivityIndicator size="small" color={BRAND} />
@@ -676,16 +692,16 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <View style={s.ctaInner}>
-                <Text style={s.ctaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                <Text style={s.ctaText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={FONT_CAP}>
                   {ctaLabel}
                 </Text>
-                <Icon name="arrow-forward" size={19} color="#FFFFFF" style={s.ctaArrow} />
+                <Icon name="arrow-forward" size={s.ctaText.fontSize + 2} color="#FFFFFF" style={s.ctaArrow} />
               </View>
             )}
           </TouchableOpacity>
         </Animated.View>
 
-        {!!ctaSubtitle && <Text style={s.ctaSub} numberOfLines={2}>{ctaSubtitle}</Text>}
+        {!!ctaSubtitle && <Text style={s.ctaSub} numberOfLines={2} maxFontSizeMultiplier={FONT_CAP}>{ctaSubtitle}</Text>}
 
         <View style={s.footer}>
           <TouchableOpacity onPress={handleRestore} disabled={restoring} hitSlop={FOOTER_SLOP}>
@@ -701,6 +717,7 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
           <TouchableOpacity onPress={() => Linking.openURL('https://adoptmevalues.app/privacy')} hitSlop={FOOTER_SLOP}>
             <Text style={s.footerLink}>{t('paywall.privacy')}</Text>
           </TouchableOpacity>
+        </View>
         </View>
       </View>
     </View>
@@ -721,97 +738,61 @@ const SubscriptionScreen = ({ visible, onClose, track, trigger, inline }) => {
 const DOCK_PAD = 10;
 const FOOTER_SLOP = { top: 10, bottom: 10, left: 8, right: 8 };
 
-// Rebuilt whenever the theme flips; memoised by the component.
-const makeStyles = (P) => StyleSheet.create({
+// Rebuilt when the theme or the screen size changes; memoised by the
+// component. `u` scales every size (see unitFor); `compact` is a short screen.
+const makeStyles = (P, u, compact) => {
+  const z = (n) => Math.round(n * u * 2) / 2;
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: P.BG },
 
   scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 10 },
+  scrollContent: { flexGrow: 1, paddingBottom: z(4) },
+  // One centred column; a tablet does not stretch it edge to edge.
+  column: { width: '100%', maxWidth: MAX_COLUMN, alignSelf: 'center', paddingHorizontal: z(20) },
+  // The top blocks share the free height equally (and never touch).
+  spread: { flexGrow: 1, justifyContent: 'space-evenly', rowGap: z(compact ? 10 : 16) },
 
-  // ── Hero ──
-  hero: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: SMALL ? 12 : 16,
-  },
-  logo: {
-    width: SMALL ? 88 : 104,
-    height: SMALL ? 88 : 104,
-    borderRadius: 18,
-  },
+  // ── Head: logo, title, one line under it ──
+  head: { alignItems: 'center' },
+  logo: { width: z(compact ? 52 : 72), height: z(compact ? 52 : 72), borderRadius: z(14) },
   title: {
     color: P.TEXT,
-    fontSize: SMALL ? 27 : 30,
-    fontWeight: '900',
-    letterSpacing: -0.8,
-    marginTop: 12,
+    fontSize: z(28),
+    fontWeight: '800',
+    letterSpacing: -0.5,
     textAlign: 'center',
+    marginTop: z(compact ? 6 : 12),
+    alignSelf: 'stretch',
   },
   subtitle: {
     color: P.TEXT_SUB,
-    fontSize: 13.5,
-    fontWeight: '600',
-    lineHeight: 18,
-    marginTop: 6,
+    fontSize: z(14.5),
+    fontWeight: '500',
+    lineHeight: z(20),
+    marginTop: z(6),
     textAlign: 'center',
   },
 
-  // ── Benefits card ──
-  card: {
-    marginHorizontal: 18,
-    backgroundColor: P.CARD,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: P.CARD_LINE,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  benefit: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  benefitDivider: {
-    borderTopWidth: 1,
-    borderTopColor: P.DIVIDER,
-  },
+  feed: { gap: z(compact ? 8 : 10) },
+
+  // ── Benefits: three icons in a row, one short label each ──
+  benefits: { flexDirection: 'row', justifyContent: 'space-between' },
+  benefit: { flex: 1, alignItems: 'center', paddingHorizontal: z(4) },
   benefitIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: z(compact ? 42 : 52),
+    height: z(compact ? 42 : 52),
+    borderRadius: z(16),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 13,
   },
-  benefitBadge: { width: 23, height: 23 },
-  benefitText: { flex: 1 },
-  benefitTitle: {
+  benefitBadge: { width: z(compact ? 22 : 27), height: z(compact ? 22 : 27) },
+  benefitLabel: {
     color: P.TEXT,
-    fontSize: 15,
+    fontSize: z(13.5),
     fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  benefitDesc: {
-    color: P.TEXT_SUB,
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  extrasRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    borderTopWidth: 1,
-    borderTopColor: P.DIVIDER,
-    paddingVertical: 9,
-  },
-  extras: {
-    flex: 1,
-    color: P.TEXT_MUTE,
-    fontSize: 11.5,
-    fontWeight: '600',
-    lineHeight: 16,
+    marginTop: z(7),
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
 
   // ── Close ──
@@ -831,133 +812,61 @@ const makeStyles = (P) => StyleSheet.create({
   },
 
   // ══ Dock ══
-  dock: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: P.DOCK_LINE,
-    backgroundColor: P.DOCK_BG,
-  },
+  dock: { paddingTop: z(6) },
 
-  // ── Three offers, side by side ──
-  tiles: {
-    flexDirection: 'row',
-    gap: 9,
-    marginTop: 7, // headroom for the SAVE tag sitting on the border
-  },
+  // ── Plans, side by side ──
+  tiles: { flexDirection: 'row', gap: z(9) },
   tile: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 16,
+    borderRadius: z(14),
     borderWidth: 2,
     borderColor: P.CARD_LINE,
     backgroundColor: P.CARD,
-    paddingTop: 13,
-    paddingBottom: 11,
-    paddingHorizontal: 6,
+    paddingVertical: z(compact ? 9 : 12),
+    paddingHorizontal: z(5),
     alignItems: 'center',
   },
   // No elevation: a translucent fill with an Android shadow shows the shadow
   // through as a dark box. The brand border carries the selection.
-  tileOn: {
-    borderColor: BRAND,
-    backgroundColor: P.TILE_ON,
-  },
-  saveTag: {
-    position: 'absolute',
-    top: -9,
-    alignSelf: 'center',
-    backgroundColor: BRAND,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 999,
-  },
-  saveTagText: {
-    color: '#FFFFFF',
-    fontSize: 9.5,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-
-  // ── Exit offer: the badge over the title, the crossed-out full price ──
-  exitBadge: {
-    alignSelf: 'center',
-    backgroundColor: GOLD,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginBottom: 8,
-  },
-  exitBadgeText: {
-    color: '#3A2600',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-  },
-  wasPrice: {
-    textDecorationLine: 'line-through',
-  },
-  bestLabel: {
-    color: P.BRAND_TEXT,
-    fontSize: 8.5,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-    marginBottom: 2,
-  },
-  tilePlan: {
-    color: P.TEXT_SUB,
-    fontSize: 11.5,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
+  tileOn: { borderColor: BRAND, backgroundColor: P.TILE_ON },
+  tilePlan: { color: P.TEXT_SUB, fontSize: z(12.5), fontWeight: '800' },
   tilePlanOn: { color: P.TEXT },
   tilePrice: {
     color: P.TEXT,
-    fontSize: 21,
-    fontWeight: '900',
-    letterSpacing: -0.7,
-    marginTop: 3,
+    fontSize: z(20),
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginTop: z(3),
   },
   tilePriceOn: { color: P.BRAND_TEXT },
-  tilePerMonth: {
-    color: P.TEXT_MUTE,
-    fontSize: 10.5,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  tilePerMonthOn: { color: P.TEXT_SUB },
+  tileNote: { color: P.TEXT_MUTE, fontSize: z(11.5), fontWeight: '800', marginTop: z(3) },
+  tileSave: { color: P.BRAND_TEXT },
+  wasPrice: { textDecorationLine: 'line-through' },
 
-  // ── Savings line ──
-  savingsBar: {
-    marginTop: 9,
+  // ── One-time offer: the badge over the title ──
+  exitBadge: {
     alignSelf: 'center',
-    backgroundColor: P.TILE_ON,
-    borderWidth: 1,
-    borderColor: P.SAVINGS_LINE,
+    backgroundColor: GOLD,
+    paddingHorizontal: z(13),
+    paddingVertical: z(4),
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    maxWidth: '100%',
+    marginTop: z(10),
   },
-  savingsText: {
-    color: P.BRAND_TEXT,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  exitBadgeText: { color: '#1A1300', fontSize: z(11.5), fontWeight: '800', letterSpacing: 0.6 },
 
-  // ── Loading ──
-  loadingWrap: { alignItems: 'center', paddingVertical: 26 },
-  loadingText: { color: P.TEXT_MUTE, fontSize: 12, fontWeight: '600', marginTop: 8 },
+  // ── Loading / unavailable ──
+  loadingWrap: { alignItems: 'center', paddingVertical: z(26), paddingHorizontal: z(12) },
+  loadingText: { color: P.TEXT_MUTE, fontSize: z(12.5), fontWeight: '500', marginTop: z(8), textAlign: 'center' },
 
   // ── CTA: onboarding's Continue button, a little taller ──
   cta: {
-    height: 54,
-    borderRadius: 12,
+    height: z(54),
+    borderRadius: z(13),
     backgroundColor: BRAND,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 11,
+    marginTop: z(compact ? 10 : 14),
     shadowColor: BRAND,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -965,24 +874,15 @@ const makeStyles = (P) => StyleSheet.create({
     elevation: 4,
   },
   ctaOff: { opacity: 0.55 },
-  ctaInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-  },
-  ctaText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  ctaArrow: { marginLeft: 8 },
+  ctaInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: z(18) },
+  ctaText: { color: '#FFFFFF', fontSize: z(17.5), fontWeight: '800', flexShrink: 1 },
+  ctaArrow: { marginLeft: z(8) },
   ctaSub: {
     color: P.TEXT_MUTE,
-    fontSize: 11.5,
-    fontWeight: '600',
+    fontSize: z(12),
+    fontWeight: '500',
     textAlign: 'center',
-    marginTop: 9,
+    marginTop: z(9),
   },
 
   // ── Footer ──
@@ -990,17 +890,18 @@ const makeStyles = (P) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 9,
-    gap: 8,
+    marginTop: z(8),
+    gap: z(8),
     flexWrap: 'wrap',
   },
   footerLink: {
     color: P.FOOTER,
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: z(11.5),
+    fontWeight: '500',
     textDecorationLine: 'underline',
   },
-  footerDot: { color: P.FOOTER_DOT, fontSize: 11 },
-});
+  footerDot: { color: P.FOOTER_DOT, fontSize: z(11.5) },
+  });
+};
 
 export default SubscriptionScreen;
