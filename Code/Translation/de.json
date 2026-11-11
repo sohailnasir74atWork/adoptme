@@ -4219,6 +4219,7 @@
     },
     "trade_scanner": {
         "button": "Trade mit der Kamera scannen",
+        "scan_count": "{{n}} Scans",
         "new": "NEU",
         "title": "Trade scannen",
         "intro": "Richte die Kamera auf das Trade-Fenster auf deinem PC oder wähle einen Screenshot. Wir finden jedes Pet, Neon / Mega und Fly / Ride, und prüfen den Trade.",
@@ -4228,7 +4229,7 @@
         "camera_tip": "Ruhig halten, Trade-Fenster bildfüllend, Spiegelungen vermeiden.",
         "camera_denied": "Kamerazugriff ist aus. Erlaube ihn in den Einstellungen oder wähle einen Screenshot.",
         "working": "Dein Trade wird gelesen…",
-        "none": "Kein Trade-Fenster gefunden. Nimm das ganze Fenster ins Bild und versuch es noch einmal.",
+        "none": "Kein Trade-Fenster gefunden. Nimm das ganze Fenster ins Bild und versuch es noch einmal. Nutze ein Bild des Handelsfensters im Spiel, keinen Screenshot eines Rechners oder Inventars.",
         "you_give": "Du gibst",
         "you_get": "Du bekommst",
         "swap": "Seiten tauschen",

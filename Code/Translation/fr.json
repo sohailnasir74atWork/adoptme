@@ -4322,6 +4322,7 @@
     },
     "trade_scanner": {
         "button": "Scanner un échange avec la caméra",
+        "scan_count": "{{n}} scans",
         "new": "NOUVEAU",
         "title": "Scanner un échange",
         "intro": "Vise la fenêtre d'échange sur ton PC avec la caméra, ou choisis une capture. Nous trouvons chaque animal, son Néon / Méga et Vol / Monture, et vérifions l'échange.",
@@ -4331,7 +4332,7 @@
         "camera_tip": "Tiens bien le téléphone, remplis la photo avec la fenêtre, évite les reflets.",
         "camera_denied": "L'accès à la caméra est désactivé. Autorise-le dans Réglages ou choisis une capture.",
         "working": "Lecture de ton échange…",
-        "none": "Aucune fenêtre d'échange trouvée. Cadre toute la fenêtre et réessaie.",
+        "none": "Aucune fenêtre d'échange trouvée. Cadre toute la fenêtre et réessaie. Utilise une image de la fenêtre d'échange du jeu, pas une capture d'une calculatrice ou de l'inventaire.",
         "you_give": "Tu donnes",
         "you_get": "Tu reçois",
         "swap": "Inverser",

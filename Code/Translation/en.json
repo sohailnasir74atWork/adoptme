@@ -4237,6 +4237,7 @@
     },
     "trade_scanner": {
         "button": "Scan a trade with camera",
+        "scan_count": "{{n}} scans",
         "new": "NEW",
         "title": "Scan a trade",
         "intro": "Point your camera at the trade window on your PC, or pick a screenshot. We find every pet, its Neon / Mega and Fly / Ride, and check the trade.",
@@ -4246,7 +4247,7 @@
         "camera_tip": "Hold steady, fill the photo with the trade window, avoid glare.",
         "camera_denied": "Camera access is off. Allow it in Settings, or pick a screenshot.",
         "working": "Reading your trade…",
-        "none": "No trade window found. Fit the whole trade window in the photo and try again.",
+        "none": "No trade window found. Fit the whole trade window in the photo and try again. Use a picture of the in-game trade window, not a calculator or inventory screenshot.",
         "you_give": "You give",
         "you_get": "You get",
         "swap": "Swap sides",

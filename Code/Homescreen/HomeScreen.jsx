@@ -26,6 +26,7 @@ import BannerAdComponent from '../Ads/bannerAds';
 import Share from 'react-native-share';
 import ShareTradeModal from '../Trades/ShareTradeModal';
 import TradeScannerModal from '../TradeScanner/TradeScannerModal';
+import { readScanCount, formatScanCount, SHOW_SCANS_FROM } from '../Helper/scanCount';
 import SlotActionSheet from './SlotActionSheet';
 import CounterOfferBanner from '../CounterOffer/CounterOfferBanner';
 import {
@@ -153,6 +154,15 @@ const HomeScreen = ({ selectedTheme, hideBanner = false }) => {
   const tradesCollection = collection(firestoreDB, 'trades_new');
   const [gridStepIndex, setGridStepIndex] = useState(0); // 0 -> 9, 1 -> 12, 2 -> 15, 3 -> 18
   const [scannerVisible, setScannerVisible] = useState(false);
+  // Scans by everyone in this app, shown on the scan button (read again each
+  // time the scanner closes, so the user's own scan shows up).
+  const [scanCount, setScanCount] = useState(0);
+  useEffect(() => {
+    if (scannerVisible) return undefined;
+    let alive = true;
+    readScanCount().then((n) => { if (alive) setScanCount(n); });
+    return () => { alive = false; };
+  }, [scannerVisible]);
   const [hasItems, setHasItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
   const [showTips, setShowTips] = useState(true);
   const [wantsItems, setWantsItems] = useState(() => createEmptySlots(GRID_STEPS[0]));
@@ -842,7 +852,11 @@ const HomeScreen = ({ selectedTheme, hideBanner = false }) => {
       <Icon name="camera" size={18} color="white" />
       <Text style={styles.scanButtonText}>{t('trade_scanner.button', { defaultValue: 'Scan a trade with camera' })}</Text>
       <View style={styles.scanNewBadge}>
-        <Text style={styles.scanNewText}>{t('trade_scanner.new', { defaultValue: 'NEW' })}</Text>
+        <Text style={styles.scanNewText}>
+          {scanCount >= SHOW_SCANS_FROM
+            ? t('trade_scanner.scan_count', { n: formatScanCount(scanCount), defaultValue: '{{n}} scans' })
+            : t('trade_scanner.new', { defaultValue: 'NEW' })}
+        </Text>
       </View>
     </TouchableOpacity>
   );

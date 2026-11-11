@@ -4322,6 +4322,7 @@
     },
     "trade_scanner": {
         "button": "Escanear un intercambio con la cámara",
+        "scan_count": "{{n}} escaneos",
         "new": "NUEVO",
         "title": "Escanear intercambio",
         "intro": "Apunta la cámara a la ventana de intercambio en tu PC o elige una captura. Encontramos cada mascota, su Neón / Mega y Volar / Montar, y revisamos el intercambio.",
@@ -4331,7 +4332,7 @@
         "camera_tip": "Mantén el teléfono quieto, llena la foto con la ventana y evita reflejos.",
         "camera_denied": "El acceso a la cámara está desactivado. Actívalo en Ajustes o elige una captura.",
         "working": "Leyendo tu intercambio…",
-        "none": "No se encontró ninguna ventana de intercambio. Encuadra toda la ventana e inténtalo de nuevo.",
+        "none": "No se encontró ninguna ventana de intercambio. Encuadra toda la ventana e inténtalo de nuevo. Usa una imagen de la ventana de intercambio del juego, no una captura de una calculadora o del inventario.",
         "you_give": "Das",
         "you_get": "Recibes",
         "swap": "Cambiar lados",
