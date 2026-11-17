@@ -15,7 +15,7 @@
  *     through Brevo (functions/birthdayEmail.js).
  *
  * Brevo's free plan allows 300 emails a day for the whole account, shared
- * with Blox Fruits (09:00 UTC, up to 120), so one run sends at most
+ * with Blox Fruits (09:00 UTC, up to 80) and MM2 (08:00 UTC, up to 25), so one run sends at most
  * MAX_SENDS. Anyone past the cap that day gets no email (never a late one).
  *
  * 08:00 UTC: the birthday's UTC date is already the local date almost
@@ -28,7 +28,7 @@ const { getSupabaseAdmin } = require('./_supabaseAdmin');
 const { renderBirthdayEmail, sendBrevo, unsubUrl, cleanName } = require('./birthdayEmail');
 
 const CLAIM_BATCH = 100;      // also Firebase Auth's getUsers() limit
-const MAX_SENDS = 150;        // Brevo's free 300/day is shared: Adopt Me 150, Blox 120, rest for tests
+const MAX_SENDS = 180;        // Brevo's free 300/day is shared: Adopt Me 180, Blox 80, MM2 25, rest for tests (rebalanced 2026-11-17: Adopt Me hit 150 on 10-31; Blox peaks ~60, MM2 ~11)
 const CONCURRENCY = 5;
 const SKIP_APPLE_RELAY = true; // until adoptmevalues.app is registered for Sign in with Apple email relay
 
