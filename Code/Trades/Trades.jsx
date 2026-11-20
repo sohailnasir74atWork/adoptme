@@ -191,6 +191,9 @@ const TradeList = ({ route }) => {
   // `pendingVariants` is what the chips show; the committed copy lives in
   // selectedFilters and is what actually filters.
   const [pendingVariants, setPendingVariants] = useState([]);
+  // "Only this pet" search chip (2026-11-20): the searched side holds nothing
+  // but the typed pet. Filters the loaded search results, no refetch.
+  const [searchOnlyThis, setSearchOnlyThis] = useState(false);
 
   // Single token matched against each trade's `variantTags` array in Firestore.
   // Null when no variant chip is active, in which case the clause is left out.
@@ -314,8 +317,9 @@ const TradeList = ({ route }) => {
           return false;
         }
 
-        // ✅ If no filters selected, show all trades
-        if (selectedFilters.length === 0) {
+        // ✅ If no filters selected, show all trades ("Only this pet" counts as
+        // a filter while searching — it is not in selectedFilters)
+        if (selectedFilters.length === 0 && !(isSearchMode && searchOnlyThis)) {
           return true;
         }
 
@@ -363,7 +367,7 @@ const TradeList = ({ route }) => {
             trade,
             searchQuery.trim().toLowerCase(),
             variantFilters,
-            { inHas: searchInHas, inWants: searchInWants }
+            { inHas: searchInHas, inWants: searchInWants, onlyThis: searchOnlyThis }
           );
         } else if (variantIndexUnavailable) {
           matchesVariants = tradeMatchesVariants(trade, variantFilters);
@@ -373,7 +377,7 @@ const TradeList = ({ route }) => {
         return matchesStatus && matchesMyTrades && matchesFollowing && matchesSaved && matchesVariants;
       })
     );
-  }, [trades, selectedFilters, user.id, bannedUsers, followingIds, savedTradeRefs, isSearchMode, variantIndexUnavailable, searchQuery, searchInHas, searchInWants]);
+  }, [trades, selectedFilters, user.id, bannedUsers, followingIds, savedTradeRefs, isSearchMode, variantIndexUnavailable, searchQuery, searchInHas, searchInWants, searchOnlyThis]);
 
   // Variant tag chips. Neon and Mega can't both be true on one pet, so picking
   // one clears the other; Fly and Ride stack freely on top.
@@ -399,6 +403,7 @@ const TradeList = ({ route }) => {
     if (searchQuery.length > 0) return;
     searchRequestedRef.current = false;
     setPendingVariants((prev) => (prev.length ? [] : prev));
+    setSearchOnlyThis(false);
     setSelectedFilters((prev) =>
       prev.some(f => VARIANT_FILTER_KEYS.includes(f))
         ? prev.filter(f => !VARIANT_FILTER_KEYS.includes(f))
@@ -2137,6 +2142,25 @@ const TradeList = ({ route }) => {
               </TouchableOpacity>
             );
           })}
+          <TouchableOpacity
+            onPress={() => { triggerHapticFeedback('impactLight'); setSearchOnlyThis((v) => !v); }}
+            activeOpacity={0.75}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: searchOnlyThis }}
+            style={[
+              styles.variantFilterChip,
+              { flex: 1.7 },
+              searchOnlyThis && { backgroundColor: config.colors.primary, borderColor: config.colors.primary },
+            ]}
+          >
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[styles.variantFilterText, searchOnlyThis && styles.variantFilterTextActive]}
+            >
+              {t('trade.search_only_this', { defaultValue: 'Only this pet' })}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 

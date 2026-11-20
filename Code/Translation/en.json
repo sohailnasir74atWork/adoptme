@@ -648,6 +648,7 @@
         "search": "Search"
     },
     "trade": {
+        "search_only_this": "Only this pet",
         "roblox_verified_locked": "Your verified Roblox name. To change it, verify a new name in Settings.",
         "search_placeholder": "Search",
         "filter_has": "Has",
@@ -1827,6 +1828,8 @@
             "power_decent": "Trading Power: Decent ⚡",
             "power_weak": "Trading Power: Weak",
             "hot": "Hot 🔥",
+            "filter_market": "Market",
+            "tap_tier_hint": "Tap a number to see those pets",
             "rising": "Rising 📈",
             "low": "Low 📉",
             "best_assets": "Best Assets:",

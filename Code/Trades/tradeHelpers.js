@@ -282,17 +282,28 @@ export const tradeMatchesVariants = (trade, filterKeys = []) => {
 // Shadow Dragon and, separately, some unrelated neon pet.
 export const tradeMatchesSearchWithVariants = (trade, searchTermLower, filterKeys = [], sides = {}) => {
   const letters = filterKeys.map((k) => VARIANT_KEY_TO_LETTER[k]).filter(Boolean);
-  const { inHas = true, inWants = true } = sides;
-  const items = [
-    ...(inHas ? (trade?.hasItems || []) : []),
-    ...(inWants ? (trade?.wantsItems || []) : []),
-  ].filter(Boolean);
-
-  return items.some((item) => {
+  // onlyThis (2026-11-20, suggestion 11-15 "looking only for a giraffe rather
+  // than a giraffe and adds"): a searched side must hold nothing but the pet.
+  const { inHas = true, inWants = true, onlyThis = false } = sides;
+  const matchItem = (item) => {
     const name = String(item.name || item.Name || '').toLowerCase();
     if (searchTermLower && !name.includes(searchTermLower)) return false;
     if (!letters.length) return true;
     const own = itemVariantLetters(item);
     return letters.every((l) => own.includes(l));
-  });
+  };
+
+  if (onlyThis) {
+    const sideOnly = (list) => {
+      const l = (list || []).filter(Boolean);
+      return l.length > 0 && l.every(matchItem);
+    };
+    return (inHas && sideOnly(trade?.hasItems)) || (inWants && sideOnly(trade?.wantsItems));
+  }
+
+  const items = [
+    ...(inHas ? (trade?.hasItems || []) : []),
+    ...(inWants ? (trade?.wantsItems || []) : []),
+  ].filter(Boolean);
+  return items.some(matchItem);
 };

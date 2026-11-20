@@ -104,9 +104,29 @@ const petHasVariant = (pet, key) => (
         : key === 'ride' ? !!pet?.isRide
           : false
 );
-const emptyFilters = () => ({ status: new Set(), variant: new Set(), type: new Set(), rarity: new Set() });
+const emptyFilters = () => ({ status: new Set(), variant: new Set(), type: new Set(), rarity: new Set(), market: new Set() });
+
+// Market tier of one pet — the same rule as the Hot / Rising / Low counts on
+// the My Pets card: demand 7+ = hot, else value up this week = rising, else
+// demand 3 or less = low; null = no data. (2026-11-20: players asked to see
+// WHICH pets are hot and low, not only how many — the counts filter the grid.)
+const MARKET_TIERS = [
+  { key: 'hot', labelKey: 'trade_journal.my_pets.hot', color: '#EF4444' },
+  { key: 'rising', labelKey: 'trade_journal.my_pets.rising', color: '#10B981' },
+  { key: 'low', labelKey: 'trade_journal.my_pets.low', color: '#94a3b8' },
+];
+const marketTier = (pet, maps) => {
+  const d = getDemandScore(pet?.name, maps?.demandMap);
+  if (d && d.score >= 7) return 'hot';
+  const h = getHotStatus(pet?.name, maps?.hotMap);
+  if (h && h.isHot) return 'rising';
+  if (d && d.score <= 3) return 'low';
+  return null;
+};
+
 const matchesFilters = (entry, f) => {
   const { pet } = entry;
+  if (f.market?.size && !f.market.has(entry.market)) return false;
   if (f.status.size && !f.status.has(pet.availableForTrade ? 'trade' : 'private')) return false;
   if (f.variant.size) {
     const neonMega = ['neon', 'mega'].filter((k) => f.variant.has(k));
@@ -738,13 +758,15 @@ const TradeJournal = ({
     value: lookupPetValue(pet),
     type: petTypeKey(pet),
     rarity: getPetRarity(pet),
-  })), [ownedPets, lookupPetValue, getPetRarity]);
+    market: marketTier(pet, analyticsMaps),
+  })), [ownedPets, lookupPetValue, getPetRarity, analyticsMaps]);
 
   // Filter options: only what this inventory has, each with its count.
   const filterOptions = useMemo(() => {
-    const counts = { status: new Map(), variant: new Map(), type: new Map(), rarity: new Map() };
+    const counts = { status: new Map(), variant: new Map(), type: new Map(), rarity: new Map(), market: new Map() };
     const bump = (group, key) => counts[group].set(key, (counts[group].get(key) || 0) + 1);
     petEntries.forEach((e) => {
+      if (e.market) bump('market', e.market);
       bump('status', e.pet.availableForTrade ? 'trade' : 'private');
       ['neon', 'mega', 'fly', 'ride'].forEach((k) => { if (petHasVariant(e.pet, k)) bump('variant', k); });
       bump('type', e.type);
@@ -754,6 +776,13 @@ const TradeJournal = ({
       .filter((o) => counts[group].has(o.key))
       .map((o) => ({ ...o, count: counts[group].get(o.key) }));
     return [
+      {
+        key: 'market',
+        title: t('trade_journal.my_pets.filter_market', { defaultValue: 'Market' }),
+        options: opts('market', MARKET_TIERS.map((m) => ({
+          key: m.key, label: t(m.labelKey), color: m.color,
+        }))),
+      },
       {
         key: 'status',
         title: t('trade_journal.my_pets.filter_status', { defaultValue: 'Status' }),
@@ -794,7 +823,8 @@ const TradeJournal = ({
     ].filter((g) => g.options.length > 0);
   }, [petEntries, t]);
 
-  const activeFilterCount = filters.status.size + filters.variant.size + filters.type.size + filters.rarity.size;
+  const activeFilterCount = filters.status.size + filters.variant.size + filters.type.size + filters.rarity.size
+    + (filters.market?.size || 0);
 
   const toggleFilter = useCallback((group, key) => {
     setFilters(prev => {
@@ -927,21 +957,40 @@ const TradeJournal = ({
               : null;
             return (
               <View style={{ marginTop: 10, width: '100%' }}>
-                {/* Demand tier breakdown */}
+                {/* Demand tier breakdown — tap a count to show those pets in the grid */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 6 }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#EF4444' }}>{highDemand.length}</Text>
-                    <Text style={{ fontSize: 9, color: subtextColor }}>{t('trade_journal.my_pets.hot')}</Text>
-                  </View>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#10B981' }}>{risingPets.length}</Text>
-                    <Text style={{ fontSize: 9, color: subtextColor }}>{t('trade_journal.my_pets.rising')}</Text>
-                  </View>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#94a3b8' }}>{lowDemand}</Text>
-                    <Text style={{ fontSize: 9, color: subtextColor }}>{t('trade_journal.my_pets.low')}</Text>
-                  </View>
+                  {MARKET_TIERS.map((m) => {
+                    const n = m.key === 'hot' ? highDemand.length : m.key === 'rising' ? risingPets.length : lowDemand;
+                    const on = filters.market?.has(m.key);
+                    return (
+                      <TouchableOpacity
+                        key={m.key}
+                        disabled={n === 0}
+                        onPress={() => toggleFilter('market', m.key)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: !!on, disabled: n === 0 }}
+                        style={{
+                          alignItems: 'center',
+                          paddingHorizontal: 12,
+                          paddingVertical: 4,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: on ? m.color : 'transparent',
+                          backgroundColor: on ? `${m.color}1F` : 'transparent',
+                        }}
+                      >
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: m.color }}>{n}</Text>
+                        <Text style={{ fontSize: 9, color: subtextColor }}>{t(m.labelKey)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
+                {(highDemand.length + risingPets.length + lowDemand) > 0 && (
+                  <Text style={{ fontSize: 9, color: subtextColor, textAlign: 'center', marginBottom: 4 }}>
+                    {t('trade_journal.my_pets.tap_tier_hint', { defaultValue: 'Tap a number to see those pets' })}
+                  </Text>
+                )}
                 {/* Portfolio strength */}
                 {portfolioStrength && (
                   <Text style={{ fontSize: 11, color: '#3B82F6', textAlign: 'center', fontWeight: '600' }}>
@@ -990,7 +1039,7 @@ const TradeJournal = ({
             );
           })()}
         </View>
-  ), [isDarkMode, subtextColor, textColor, portfolioValue, ownedPets, analyticsMaps, navigation, t]);
+  ), [isDarkMode, subtextColor, textColor, portfolioValue, ownedPets, analyticsMaps, navigation, t, filters, toggleFilter]);
 
   const renderPetItem = useCallback(({ item }) => {
     const demand = getDemandScore(item.pet.name, analyticsMaps.demandMap);

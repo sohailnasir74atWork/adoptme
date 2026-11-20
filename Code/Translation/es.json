@@ -662,6 +662,7 @@
         "search": "Buscar"
     },
     "trade": {
+        "search_only_this": "Solo esta mascota",
         "roblox_verified_locked": "Tu nombre de Roblox verificado. Para cambiarlo, verifica un nombre nuevo en Ajustes.",
         "search_placeholder": "Buscar",
         "filter_has": "Tiene",
@@ -1856,6 +1857,8 @@
             "power_decent": "Poder de tradeo: regular ⚡",
             "power_weak": "Poder de tradeo: débil",
             "hot": "Muy buscadas 🔥",
+            "filter_market": "Mercado",
+            "tap_tier_hint": "Toca un número para ver esas mascotas",
             "rising": "Subiendo 📈",
             "low": "Poco buscadas 📉",
             "best_assets": "Tus joyas:",

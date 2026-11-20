@@ -647,6 +647,7 @@
     "search": "검색"
   },
   "trade": {
+    "search_only_this": "이 펫만",
     "roblox_verified_locked": "인증된 Roblox 이름입니다. 바꾸려면 설정에서 새 이름을 인증하세요.",
     "search_placeholder": "검색",
     "filter_has": "가진 것",
@@ -1826,6 +1827,8 @@
       "power_decent": "거래 파워: 괜찮아요 ⚡",
       "power_weak": "거래 파워: 약해요",
       "hot": "인기 🔥",
+      "filter_market": "시장",
+      "tap_tier_hint": "숫자를 누르면 해당 펫을 볼 수 있어요",
       "rising": "상승 📈",
       "low": "저조 📉",
       "best_assets": "효자 펫:",

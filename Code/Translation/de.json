@@ -646,6 +646,7 @@
         "search": "Suchen"
     },
     "trade": {
+        "search_only_this": "Nur dieses Haustier",
         "roblox_verified_locked": "Dein verifizierter Roblox-Name. Um ihn zu ändern, verifiziere in den Einstellungen einen neuen Namen.",
         "search_placeholder": "Suchen",
         "filter_has": "Hat",
@@ -1819,6 +1820,8 @@
             "power_decent": "Trade-Power: solide ⚡",
             "power_weak": "Trade-Power: schwach",
             "hot": "Gefragt 🔥",
+            "filter_market": "Markt",
+            "tap_tier_hint": "Tippe auf eine Zahl, um diese Haustiere zu sehen",
             "rising": "Steigt 📈",
             "low": "Niedrig 📉",
             "best_assets": "Top-Pets:",

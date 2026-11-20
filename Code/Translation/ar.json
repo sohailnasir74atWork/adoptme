@@ -708,6 +708,7 @@
         "search": "بحث"
     },
     "trade": {
+        "search_only_this": "هذا الحيوان فقط",
         "roblox_verified_locked": "اسمك الموثّق في Roblox. لتغييره، وثّق اسمًا جديدًا من الإعدادات.",
         "search_placeholder": "بحث",
         "filter_has": "لديه",
@@ -1964,6 +1965,8 @@
             "power_decent": "قوة التبادل: جيدة ⚡",
             "power_weak": "قوة التبادل: ضعيفة",
             "hot": "رائج 🔥",
+            "filter_market": "السوق",
+            "tap_tier_hint": "اضغط على رقم لرؤية هذه الحيوانات",
             "rising": "صاعد 📈",
             "low": "منخفض 📉",
             "best_assets": "أقوى حيواناتك:",

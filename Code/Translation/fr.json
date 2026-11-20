@@ -662,6 +662,7 @@
         "search": "Rechercher"
     },
     "trade": {
+        "search_only_this": "Cet animal seul",
         "roblox_verified_locked": "Ton pseudo Roblox vérifié. Pour le changer, vérifie un nouveau pseudo dans les Paramètres.",
         "search_placeholder": "Rechercher",
         "filter_has": "Possède",
@@ -1856,6 +1857,8 @@
             "power_decent": "Pouvoir d'échange : correct ⚡",
             "power_weak": "Pouvoir d'échange : faible",
             "hot": "Demandés 🔥",
+            "filter_market": "Marché",
+            "tap_tier_hint": "Touche un nombre pour voir ces animaux",
             "rising": "En hausse 📈",
             "low": "Peu demandés 📉",
             "best_assets": "Meilleurs atouts :",
