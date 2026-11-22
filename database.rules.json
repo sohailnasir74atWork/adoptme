@@ -160,6 +160,16 @@
       ".write": false,
       ".validate": "newData.isBoolean()"
     },
+    "collapsible_banners_v2": {
+      ".read": true,
+      ".write": false,
+      ".validate": "newData.isBoolean()"
+    },
+    "natural_break_per_session": {
+      ".read": true,
+      ".write": false,
+      ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2"
+    },
     "mod_controls_enabled": {
       ".read": true,
       ".write": "auth != null && (root.child('users').child(auth.uid).child('admin').val() === true || root.child('users').child(auth.uid).child('isAdmin').val() === true || (auth.token.email_verified === true && (auth.token.email === 'thesolanalabs@gmail.com' || auth.token.email === 'sohailnasir74business@gmail.com' || auth.token.email === 'sohailnasir74@gmail.com')))"

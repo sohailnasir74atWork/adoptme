@@ -21,6 +21,23 @@ import { setAppLanguage, loadLanguage } from '../../i18n';
 import { syncMyCosmetics, setCachedUsername, setCachedAvatar } from '../Helper/cosmeticsCache';
 import { useNavigation } from '@react-navigation/native';
 import { checkDailyStreak, syncReviewBadges } from '../ChatScreen/GroupChat/badgeUtils';
+import InterstitialAdManager from '../Ads/IntAd';
+import { NATURAL_BREAK } from '../Ads/adPolicy';
+
+// Natural-break interstitial on a tab switch, gentle form (revenue LOG
+// 2026-11-18, owner approved; removed 2026-11-04 by the "Ad diet"): the
+// manager allows at most one per session (RTDB /natural_break_per_session),
+// never on the first press, not in the first 2 min or a user's first 24 h,
+// 3 min after any full-screen ad, never for Pro, and never waits for a fill,
+// so the switch itself is never delayed. Pressing the already active tab
+// (scroll-to-top) and entering Chat are not breaks.
+const tabScreenListeners = ({ navigation, route }) => ({
+  tabPress: () => {
+    if (navigation.isFocused()) return;
+    if (NATURAL_BREAK.EXCLUDED_TABS.includes(route.name)) return;
+    InterstitialAdManager.showAtNaturalBreak(`tab:${route.name}`);
+  },
+});
 
 const Tab = createBottomTabNavigator();
 
@@ -210,7 +227,7 @@ const MainTabs = React.memo(({ selectedTheme, chatFocused, setChatFocused, modal
 
   return (
     <>
-      <Tab.Navigator screenOptions={screenOptions}>
+      <Tab.Navigator screenOptions={screenOptions} screenListeners={tabScreenListeners}>
         <Tab.Screen
           name="Home"
           options={({ navigation }) => ({
