@@ -11,9 +11,10 @@
  *
  * Tab screens don't need it: the tab bar already sits above the nav bar.
  *
- * Plain banner by default. `collapsible` only where the owner chose it (main
- * screens: Pet Values, Analytics): a collapsible banner's first load expands
- * over half the page, which on every secondary page is too much.
+ * Collapsible by default (owner, 2026-11-22: every banner collapsible except the
+ * chat screens, which use BannerAdComponent directly and stay plain). The banner
+ * can expand only on a screen's first visit, and only when Google returns a
+ * collapsible ad.
  */
 
 import React from 'react';
@@ -22,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BannerAdComponent from './bannerAds';
 import { useLocalState } from '../LocalGlobelStats';
 
-const ScreenBottomBanner = ({ background, ad = true, collapsible = false }) => {
+const ScreenBottomBanner = ({ background, ad = true, collapsible = true }) => {
   const insets = useSafeAreaInsets();
   const { localState } = useLocalState();
   return (

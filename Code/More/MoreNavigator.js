@@ -22,12 +22,12 @@ import { useLocalState } from '../LocalGlobelStats';
 
 const Stack = createNativeStackNavigator();
 
-// Bottom banner for the More screens. Plain, not collapsible: the expanding
-// first load is kept to the main tabs. The tab bar sits under it, so no
+// Bottom banner for the More screens. Collapsible (owner, 2026-11-22: all
+// banners except chat). The tab bar sits under it, so no
 // nav-bar spacer is needed here.
 const MoreBanner = () => {
   const { localState } = useLocalState();
-  return localState.isPro ? null : <BannerAdComponent />;
+  return localState.isPro ? null : <BannerAdComponent collapsible />;
 };
 
 // Theme for the screens below. They are module-level `component`s reading it
